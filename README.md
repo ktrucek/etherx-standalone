@@ -1,80 +1,71 @@
-# EtherX Mobile Browser
+# EtherX Browser - Desktop App
 
-React Native mobile browser app for iOS and Android with Web3 wallet integration.
+**Multi-platform Web3 browser** built with Electron, featuring integrated crypto wallet, privacy controls, and developer tools.
 
-## 🚀 Features
+## 🚀 Download
 
-- ✅ Full web browser with tabs
-- ✅ Web3/Ethereum provider injection
-- ✅ localStorage bridge to AsyncStorage
-- ✅ Native navigation (back/forward/reload)
-- ✅ Multi-tab support
-- ✅ HTTPS support
-- ✅ Mobile-optimized UI
+### Desktop Applications
 
-## 📱 Installation
+- **macOS (Intel)**: [Download DMG](https://github.com/ktrucek/etherx-browser-2/releases/latest/download/EtherX-Browser-1.0.0-x64.dmg)
+- **macOS (Apple Silicon)**: [Download DMG](https://github.com/ktrucek/etherx-browser-2/releases/latest/download/EtherX-Browser-1.0.0-arm64.dmg)
+- **Windows**: [Download EXE](https://github.com/ktrucek/etherx-browser-2/releases/latest/download/EtherX-Browser-Setup-1.0.0.exe)
+- **Linux**: [Download AppImage](https://github.com/ktrucek/etherx-browser-2/releases/latest/download/EtherX-Browser-1.0.0.AppImage)
 
-### Prerequisites
+### Web Version
 
-- Node.js 18+
-- React Native CLI
-- For iOS: Xcode 14+, CocoaPods
-- For Android: Android Studio, JDK 17+
+- **Live Demo**: [https://n8n.kriptoentuzijasti.io/browser.html](https://n8n.kriptoentuzijasti.io/browser.html)
+- Install as PWA: Click "Add to Home Screen" on mobile or use browser's install option
 
-### Setup
+### Mobile Apps
+
+- **React Native**: [https://github.com/ktrucek/etherx-mobile](https://github.com/ktrucek/etherx-mobile)
+
+## ✨ Features
+
+- 🌐 **Full Web Browser** - Multi-tab browsing with modern UI
+- 💰 **Crypto Wallet** - Built-in Ethereum wallet (MetaMask compatible)
+- 🔐 **Privacy First** - Tracking protection, ad blocking, private mode
+- 🛡️ **Security** - Biometric auth, password manager, master password
+- 🎨 **Customizable** - Themes, extensions, appearance settings
+- 🔧 **Developer Tools** - Chrome DevTools integrated
+- 🌍 **Multi-language** - Croatian, English, Spanish, German, French
+
+## 🏗️ Build from Source
 
 ```bash
+# Clone
+git clone https://github.com/ktrucek/etherx-browser-2.git
+cd etherx-browser-2
+
 # Install dependencies
 npm install
 
-# iOS setup
-cd ios && pod install && cd ..
+# Run development
+npm start
 
-# Run on iOS
-npm run ios
-
-# Run on Android
-npm run android
+# Build for your platform
+npm run build:mac    # macOS
+npm run build:win    # Windows
+npm run build:linux  # Linux
 ```
 
-## 🔧 Build for Production
+## 📦 CI/CD
 
-### Android APK
+GitHub Actions automatically builds for all platforms on push to `main` or when creating tags.
+
+Create release:
 
 ```bash
-npm run build:android
-# Output: android/app/build/outputs/apk/release/app-release.apk
+git tag v1.0.0
+git push --tags
 ```
 
-### iOS IPA
+## 📄 License
 
-```bash
-npm run build:ios
-# Archive via Xcode → Product → Archive
-```
+MIT License - see LICENSE file
 
-## 📦 App Structure
+## 🔗 Links
 
-```
-EtherXMobile/
-├── App.tsx                 # Main browser component
-├── package.json
-├── android/                # Android native code
-├── ios/                    # iOS native code
-└── README.md
-```
-
-## 🌐 Web3 Integration
-
-The app injects `window.ethereum` provider into webpages:
-
-```javascript
-// Auto-injected in every webpage
-window.ethereum.request({
-  method: "eth_requestAccounts",
-});
-```
-
-## 📝 License
-
-MIT © kriptoentuzijasti.io
+- **GitHub**: https://github.com/ktrucek/etherx-browser-2
+- **Mobile**: https://github.com/ktrucek/etherx-mobile
+- **Website**: https://kriptoentuzijasti.io

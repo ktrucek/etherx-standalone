@@ -1,4 +1,4 @@
-name: Build EtherX Browser
+name: Build Desktop Apps
 
 on:
   push:
@@ -10,126 +10,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: "17"
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build Android APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: etherx-android-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: android/app/build/outputs/apk/release/app-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-ios:
-    name: Build iOS IPA
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod install
-
-      - name: Build iOS Archive
-        run: |
-          cd ios
-          xcodebuild archive \
-            -workspace EtherXMobile.xcworkspace \
-            -scheme EtherXMobile \
-            -configuration Release \
-            -archivePath $PWD/build/EtherXMobile.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Export IPA
-        run: |
-          cd ios
-          xcodebuild -exportArchive \
-            -archivePath $PWD/build/EtherXMobile.xcarchive \
-            -exportPath $PWD/build \
-            -exportOptionsPlist ExportOptions.plist
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: etherx-ios-ipa
-          path: ios/build/EtherXMobile.ipa
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ios/build/EtherXMobile.ipa
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-web:
-    name: Build Web Version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Copy browser.html to docs
-        run: |
-          mkdir -p docs
-          cp /tmp/etherx-repo/electron-app/src/browser.html docs/index.html || echo "Source not found, skipping"
-
-      - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
-          cname: etherx.kriptoentuzijasti.io
-
-  build-electron-mac:
-    name: Build macOS Electron App
+  build-macos:
+    name: Build macOS (Intel + ARM)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -140,31 +22,35 @@ jobs:
           node-version: "18"
 
       - name: Install dependencies
-        run: |
-          cd electron-app
-          npm install
+        run: npm install
 
-      - name: Build macOS DMG
-        run: |
-          cd electron-app
-          npm run build:mac
+      - name: Build macOS
+        run: npm run build:mac
 
       - name: Upload DMG (Intel)
         uses: actions/upload-artifact@v4
         with:
-          name: etherx-macos-intel-dmg
-          path: electron-app/dist/EtherX-*.dmg
+          name: etherx-browser-macos-intel
+          path: dist/EtherX-Browser-*-x64.dmg
+
+      - name: Upload DMG (ARM)
+        uses: actions/upload-artifact@v4
+        with:
+          name: etherx-browser-macos-arm64
+          path: dist/EtherX-Browser-*-arm64.dmg
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: electron-app/dist/EtherX-*.dmg
+          files: |
+            dist/EtherX-Browser-*-x64.dmg
+            dist/EtherX-Browser-*-arm64.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-electron-windows:
-    name: Build Windows Electron App
+  build-windows:
+    name: Build Windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -175,31 +61,27 @@ jobs:
           node-version: "18"
 
       - name: Install dependencies
-        run: |
-          cd electron-app
-          npm install
+        run: npm install
 
-      - name: Build Windows EXE
-        run: |
-          cd electron-app
-          npm run build:win
+      - name: Build Windows
+        run: npm run build:win
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: etherx-windows-exe
-          path: electron-app/dist/EtherX-Setup-*.exe
+          name: etherx-browser-windows
+          path: dist/EtherX-Browser-Setup-*.exe
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: electron-app/dist/EtherX-Setup-*.exe
+          files: dist/EtherX-Browser-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-electron-linux:
-    name: Build Linux Electron App
+  build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -210,25 +92,21 @@ jobs:
           node-version: "18"
 
       - name: Install dependencies
-        run: |
-          cd electron-app
-          npm install
+        run: npm install
 
-      - name: Build Linux AppImage
-        run: |
-          cd electron-app
-          npm run build:linux
+      - name: Build Linux
+        run: npm run build:linux
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: etherx-linux-appimage
-          path: electron-app/dist/EtherX-*.AppImage
+          name: etherx-browser-linux
+          path: dist/EtherX-Browser-*.AppImage
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: electron-app/dist/EtherX-*.AppImage
+          files: dist/EtherX-Browser-*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

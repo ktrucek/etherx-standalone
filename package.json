@@ -1,51 +1,59 @@
 {
-  "name": "EtherXMobile",
+  "name": "etherx-browser",
   "version": "1.0.0",
-  "private": true,
+  "description": "EtherX Web3 Browser - Chromium-based browser with built-in crypto wallet",
+  "main": "src/main.js",
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
-    "start": "react-native start",
-    "test": "jest",
-    "lint": "eslint .",
-    "build:android": "cd android && ./gradlew assembleRelease",
-    "build:ios": "cd ios && xcodebuild -workspace EtherXMobile.xcworkspace -scheme EtherXMobile -configuration Release"
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
   },
-  "dependencies": {
-    "react": "18.3.1",
-    "react-native": "0.76.0",
-    "react-native-webview": "^13.10.0",
-    "@react-native-async-storage/async-storage": "^1.24.0",
-    "react-native-biometrics": "^3.0.1",
-    "react-native-permissions": "^4.1.5",
-    "react-native-camera": "^4.2.1",
-    "react-native-qrcode-scanner": "^1.5.5",
-    "@react-navigation/native": "^6.1.18",
-    "@react-navigation/bottom-tabs": "^6.6.1",
-    "react-native-safe-area-context": "^4.10.1",
-    "react-native-screens": "^3.31.1",
-    "react-native-gesture-handler": "^2.16.2",
-    "react-native-vector-icons": "^10.1.0"
+  "build": {
+    "appId": "io.kriptoentuzijasti.etherx",
+    "productName": "EtherX Browser",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Network",
+      "icon": "assets/icon.png"
+    }
   },
+  "keywords": [
+    "browser",
+    "web3",
+    "crypto",
+    "ethereum",
+    "wallet"
+  ],
+  "author": "kriptoentuzijasti.io",
+  "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.24.0",
-    "@babel/preset-env": "^7.24.0",
-    "@babel/runtime": "^7.24.0",
-    "@react-native/babel-preset": "0.76.0",
-    "@react-native/eslint-config": "0.76.0",
-    "@react-native/metro-config": "0.76.0",
-    "@react-native/typescript-config": "0.76.0",
-    "@types/react": "^18.3.1",
-    "@types/react-test-renderer": "^18.3.0",
-    "babel-jest": "^29.7.0",
-    "eslint": "^8.57.0",
-    "jest": "^29.7.0",
-    "prettier": "3.2.5",
-    "react-test-renderer": "18.3.1",
-    "typescript": "5.4.5"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "packageManager": "npm@10.8.1"
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  }
 }
