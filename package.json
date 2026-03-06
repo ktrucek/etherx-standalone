@@ -1,14 +1,27 @@
 {
   "name": "etherx-browser",
-  "version": "1.0.0",
-  "description": "EtherX Web3 Browser - Chromium-based browser with built-in crypto wallet",
-  "main": "src/main.js",
+  "version": "2.2.7",
+  "description": "EtherX Browser — Web3-Native Browser with AI, SQLite, TLS 1.3, Ad-Blocker & Password Manager",
+  "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder",
-    "build:mac": "electron-builder --mac",
-    "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux"
+    "start": "electron . --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage",
+    "dev": "electron . --no-sandbox --disable-gpu --inspect=5858",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "author": {
+    "name": "EtherX Team",
+    "email": "info@kriptoentuzijasti.io",
+    "url": "https://kriptoentuzijasti.io"
+  },
+  "homepage": "https://kriptoentuzijasti.io",
+  "license": "MIT",
+  "overrides": {
+    "lzma-native": {
+      "node-addon-api": "^7.1.0"
+    }
   },
   "build": {
     "appId": "io.kriptoentuzijasti.etherx",
@@ -16,13 +29,24 @@
     "directories": {
       "output": "dist"
     },
-    "files": [
-      "src/**/*",
-      "package.json"
-    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "maintainer": "EtherX Team <info@kriptoentuzijasti.io>"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "zip"
+      ],
+      "sign": null,
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false
+    },
     "mac": {
-      "category": "public.app-category.productivity",
-      "icon": "assets/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -39,34 +63,22 @@
           ]
         }
       ]
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "zip"
-      ],
-      "icon": "assets/icon.png"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Network",
-      "icon": "assets/icon.png"
     }
   },
-  "keywords": [
-    "browser",
-    "web3",
-    "crypto",
-    "ethereum",
-    "wallet"
-  ],
-  "author": "kriptoentuzijasti.io",
-  "license": "MIT",
   "devDependencies": {
-    "electron": "^28.1.0",
-    "electron-builder": "^24.9.1"
+    "electron": "^33.4.11",
+    "electron-builder": "^26.8.1",
+    "electron-rebuild": "^3.2.9"
+  },
+  "dependencies": {
+    "@cliqz/adblocker-electron": "^1.26.8",
+    "bcrypt": "^5.1.1",
+    "better-sqlite3": "^12.6.2",
+    "crypto-js": "^4.2.0",
+    "electron-store": "^8.1.0",
+    "ethers": "^6.13.0",
+    "i18next": "^23.11.5",
+    "qrcode": "^1.5.3",
+    "uuid": "^9.0.0"
   }
 }
