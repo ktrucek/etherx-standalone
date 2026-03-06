@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>views</title>
+  <link rel="stylesheet" href="/_stylesheets/@docsearch/style.css">
+  <link rel="stylesheet" href="/_stylesheets/default.css">
+  <link rel="stylesheet" href="/_stylesheets/highlight.js/github.min.css">
+</head>
+<!-- Configure Google Analytics v4 -->
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-24XP4PG02H"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-24XP4PG02H');
+</script>
+
+<header>
+  <a href="/">
+    <img alt="the Chromium logo" src="/_assets/icon-chromium-96.png" width="48" height="48">
+    <h2>The Chromium Projects</h2>
+  </a>
+  <div id="search"></div>
+</header>
+
+<div id="main-wrapper">
+  <nav id="sidebar-left">
+    <section>
+      <a href="/chromium-projects">Home</a>
+      <a href="/Home">Chromium</a>
+      <a href="/chromium-os">ChromiumOS</a>
+    </section>
+    <section>
+      <h4>Quick links</h4>
+      <a href="/for-testers/bug-reporting-guidelines">Report bugs</a>
+      <a href="/developers/discussion-groups">Discuss</a>
+    </section>
+    <section>
+      <h4>Other sites</h4>
+      <a href="https://blog.chromium.org/">Chromium Blog</a>
+      <a href="https://developer.chrome.com/extensions">Google Chrome Extensions</a>
+    </section>
+    <section id="license" role="complementary">
+      Except as otherwise
+      <a href="https://developers.google.com/site-policies.html#restrictions">noted</a>,
+      the content of this page is licensed under a
+      <a href="https://creativecommons.org/licenses/by/2.5/">Creative Commons Attribution 2.5 license</a>,
+      and examples are licensed under the
+      <a href="https://chromium.googlesource.com/chromium/src/+/HEAD/LICENSE">BSD License</a>.
+    </section>
+    <section id="privacy" role="complementary">
+      <a href="https://policies.google.com/privacy">Privacy</a>
+    </section>
+    <a id="edit-this-page" href="https://edit.chromium.org/edit?repo=chromium/website/main&file=site/developers/design-documents/chromeviews/index.md&cloneRepo=chromium/website:refs/heads/main&fullPath=chromium/site/developers/design-documents/chromeviews/index.md">Edit this page</a>
+  </nav>
+  <main>
+    <div class="breadcrumbs">
+      <a href="/developers">For Developers</a> &gt;
+      <a href="/developers/design-documents">Design Documents</a> &gt;
+    </div>
+    <h1>views</h1>
+  <h3 id="overview-and-background" tabindex="-1"><a class="header-anchor" href="#overview-and-background">Overview and background</a></h3>
+<p>Windows provides very primitive tools for building user interfaces. The system
+provides a few basic controls and native window containers, but building a
+custom user interface is difficult. Since we desired a differentiated aesthetic
+for Chromium, we have had to build a framework on Windows to accelerate our
+development of custom UI. This system is called views.</p>
+<p>views is a rendering system not unlike that used in WebKit or Gecko to render
+web pages. The user interface is constructed of a tree of components called
+Views. These Views are responsible for rendering, layout, and event handling.
+Each View in the tree represents a different component of the UI. An analog is
+the hierarchical structure of an HTML document.</p>
+<p>At the root of a View hierarchy is a Widget, which is a native window. The
+native window receives messages from Windows, converts them into something the
+View hierarchy can understand, and then passes them to the RootView. The
+RootView then begins propagation of the event into the View hierarchy.</p>
+<p>Painting and layout are done in a similar way. A View in the View tree has its
+own bounds (often imbued upon it by its containing View's Layout method), and so
+when it is asked to Paint, it paints into a canvas clipped to its bounds, with
+the origin of rendering translated to the View's top left. Rendering for the
+entire View tree is done into a single canvas set up and owned by the Widget
+when it receives a Paint message. Rendering itself is done using a combination
+of Skia and GDI calls — GDI for text and Skia for everything else.</p>
+<p>Several UI controls in Chromium's UI are not rendered using Views, however.
+Rather, they are native Windows controls hosted within a special kind of View
+that knows how to display and size a native widget. These are used for buttons,
+tables, radio buttons, checkboxes, text fields, and other such controls. Since
+they use native controls, these Views are also not especially portable, except
+perhaps in API.</p>
+<p>Barring platform-specific rendering code, code that sizes things based on system
+metrics, and so on, the rest of the View system is not especially unportable,
+since most rendering is done using the cross-platform Skia library. For
+historical reasons, many of View's functions take Windows or ATL types, but we
+have since augmented ui/gfx/ with many platform independent types that we can
+eventually replace these with.</p>
+<h3 id="code-location-and-info" tabindex="-1"><a class="header-anchor" href="#code-location-and-info">Code Location and Info</a></h3>
+<p>The base set of classes and interfaces provided by views can be found in the
+src/ui/views/ directory. All base views classes are in the &quot;views&quot; namespace.</p>
+<h3 id="common-widgets" tabindex="-1"><a class="header-anchor" href="#common-widgets">Common Widgets</a></h3>
+<p>In the views framework:</p>
+<ul>
+<li><strong>WidgetWin</strong>: The base class for all Widgets in views. Provides a
+basic child window control implementation. Subclass this directly if
+you are not making a top-level window or dialog.</li>
+<li><strong>Window</strong>: A top-level window. A subclass of WidgetWin.</li>
+</ul>
+<p>For more information on building dialog boxes and other windowed UI using
+Window, CustomFrameWindow, etc, read <a href="/developers/design-documents/views-windowing">views
+Windowing</a>.</p>
+<p>In the Chromium browser front end:</p>
+<ul>
+<li>BrowserFrame: A subclass of Window that provides additional message
+processing for the Browser window in Chrome. See <a href="/developers/design-documents/browser-window">Browser
+Window</a>.</li>
+<li>ConstrainedWindowImpl: A subclass of Window that provides the frame
+for constrained dialogs such as the HTTP basic auth prompt.</li>
+</ul>
+<h3 id="other-approaches" tabindex="-1"><a class="header-anchor" href="#other-approaches">Other approaches</a></h3>
+<p>At the start of the project, we began building the Chromium browser using native
+windows and the owner-draw approach used in many Windows applications. This
+proved to be unsatisfactory, since native windows don't support transparency
+natively, and handling events requires tedious window subclassing. Some early UI
+elements gravitated towards custom painting and event handling (e.g.
+Autocomplete), but this was very ad-hoc based on the circumstance.</p>
+<p>Existing UI toolkits for Windows are similarly unsatisfying, with limited widget
+sets, unnatural aesthetics, or awkward programming models.</p>
+<h3 id="limitationsissues" tabindex="-1"><a class="header-anchor" href="#limitationsissues">Limitations/issues</a></h3>
+<p>By and large, views makes it relatively easy to build complex custom UIs.
+However it has a few rough edges that can be improved over time:</p>
+<ul>
+<li>The Event types currently are occasionally problematic - they crack
+the native windows message parameters and then discard them.
+Sometimes this information is useful.</li>
+<li>Some ad-hoc message processing.</li>
+<li>Mix of native controls that don't work properly until inserted into
+a View hierarchy attached to a Widget with a valid HWND. Many of our
+native controls have API methods that require them to exist within a
+window hierarchy. This means that they cannot be fully initialized
+until they are inserted. The View API will eventually be improved to
+make this clearer (<a href="https://crbug.com/5191">bug 5191</a>).</li>
+<li>The base Widget interface itself is somewhat frozen in time. Some
+improvement and consolidation would be worthwhile.</li>
+</ul>
+
+  </main>
+</div>
+<script>
+// Configure Algolia search.
+let s = document.createElement('script');
+s.src = '/_scripts/@docsearch/index.js';
+document.head.append(s);
+
+window.addEventListener('load', () => {
+  // Add the Algolia search widget.
+  docsearch({
+    container: '#search',
+    appId: 'RZDQYCCABX',
+    apiKey: '98b0eabafeb13fe3e1af693d5713d8b4',
+    indexName: 'chromium'
+  });
+});
+
+// Configure Google Universal Analytics (the predecessor to GA4, we should
+// delete this when we don't need it any more).
+s = document.createElement('script');
+s.src = 'https://www.googletagmanager.com/gtag/js?id=UA-5484340-1'
+s.async = true;
+document.head.append(s)
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-5484340-1');
+
+// Configure consent bar.
+s = document.createElement('script');
+s.src = 'https://www.gstatic.com/brandstudio/kato/cookie_choice_component/cookie_consent_bar.v3.js'
+s.dataset.autoloadCookieConsentBar = true;
+s.dataset.autoloadCookieContentBarIntlCode = '';
+document.head.append(s);</script>

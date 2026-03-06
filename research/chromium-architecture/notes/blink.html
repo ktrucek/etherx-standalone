@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>Blink (Rendering Engine)</title>
+  <link rel="stylesheet" href="/_stylesheets/@docsearch/style.css">
+  <link rel="stylesheet" href="/_stylesheets/default.css">
+  <link rel="stylesheet" href="/_stylesheets/highlight.js/github.min.css">
+</head>
+<!-- Configure Google Analytics v4 -->
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-24XP4PG02H"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-24XP4PG02H');
+</script>
+
+<header>
+  <a href="/">
+    <img alt="the Chromium logo" src="/_assets/icon-chromium-96.png" width="48" height="48">
+    <h2>The Chromium Projects</h2>
+  </a>
+  <div id="search"></div>
+</header>
+
+<div id="main-wrapper">
+  <nav id="sidebar-left">
+    <section>
+      <a href="/chromium-projects">Home</a>
+      <a href="/Home">Chromium</a>
+      <a href="/chromium-os">ChromiumOS</a>
+    </section>
+    <section>
+      <h4>Quick links</h4>
+      <a href="/for-testers/bug-reporting-guidelines">Report bugs</a>
+      <a href="/developers/discussion-groups">Discuss</a>
+    </section>
+    <section>
+      <h4>Other sites</h4>
+      <a href="https://blog.chromium.org/">Chromium Blog</a>
+      <a href="https://developer.chrome.com/extensions">Google Chrome Extensions</a>
+    </section>
+    <section id="license" role="complementary">
+      Except as otherwise
+      <a href="https://developers.google.com/site-policies.html#restrictions">noted</a>,
+      the content of this page is licensed under a
+      <a href="https://creativecommons.org/licenses/by/2.5/">Creative Commons Attribution 2.5 license</a>,
+      and examples are licensed under the
+      <a href="https://chromium.googlesource.com/chromium/src/+/HEAD/LICENSE">BSD License</a>.
+    </section>
+    <section id="privacy" role="complementary">
+      <a href="https://policies.google.com/privacy">Privacy</a>
+    </section>
+    <a id="edit-this-page" href="https://edit.chromium.org/edit?repo=chromium/website/main&file=site/blink/index.md&cloneRepo=chromium/website:refs/heads/main&fullPath=chromium/site/blink/index.md">Edit this page</a>
+  </nav>
+  <main>
+    <div class="breadcrumbs">
+    </div>
+    <h1>Blink (Rendering Engine)</h1>
+  <nav class="table-of-contents"><ol><li><a href="#mission">Mission</a></li><li><a href="#what-is-blink">What is Blink?</a></li><li><a href="#participating">Participating</a><ol><li><a href="#discussions">Discussions</a></li><li><a href="#reporting-issues">Reporting Issues</a></li><li><a href="#tracking-features">Tracking features</a></li></ol></li><li><a href="#developing">Developing</a><ol><li><a href="#learning-about-blink-development">Learning about Blink Development</a></li><li><a href="#committing-and-reviewing-code">Committing and reviewing code</a></li><li><a href="#launching-and-removing-features">Launching and Removing Features</a></li><li><a href="#page-directory">Page Directory</a></li></ol></li></ol></nav><h2 id="mission" tabindex="-1"><a class="header-anchor" href="#mission">Mission</a></h2>
+<p>Make the Web the premier platform for experiencing the world’s information and
+deliver the world’s best implementation of the Web platform.</p>
+<h2 id="what-is-blink" tabindex="-1"><a class="header-anchor" href="#what-is-blink">What is Blink?</a></h2>
+<p>Blink is the name of the <a href="https://en.wikipedia.org/wiki/Web_browser_engine">rendering
+engine</a> used by Chromium and
+particularly refers to the code living under
+<em><strong><a href="https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/">src/third_party/blink</a>.</strong></em></p>
+<h2 id="participating" tabindex="-1"><a class="header-anchor" href="#participating">Participating</a></h2>
+<p><a href="/">Chromium</a> is an
+<a href="https://chromium.googlesource.com/chromium/src/+/HEAD/CODE_OF_CONDUCT.md">inclusive</a>
+open-source community that values fostering a supportive culture.</p>
+<h3 id="discussions" tabindex="-1"><a class="header-anchor" href="#discussions">Discussions</a></h3>
+<p>We value transparency and open collaboration. Our goal is for everyone to be
+able to participate, regardless of organizational affiliation. There are several
+areas where developer discussions take place:</p>
+<ul>
+<li><a href="https://groups.google.com/a/chromium.org/group/blink-dev/topics">blink-dev@chromium.org</a>
+is the general list for discussions relevant to the design and
+implementation of web platform features.</li>
+<li>Technical Discussion Groups -
+<a href="/developers/technical-discussion-groups">Groups</a> dedicated to the
+discussion of specific areas of the codebase.</li>
+<li>Slack (#blink): We hang out on the #blink channel on
+<a href="https://chromium.slack.com">chromium.slack.com</a> to have quick,
+informal discussions and answer questions.</li>
+</ul>
+<h3 id="reporting-issues" tabindex="-1"><a class="header-anchor" href="#reporting-issues">Reporting Issues</a></h3>
+<p>We use Chromium's <a href="https://bugs.chromium.org/p/chromium/issues/list">issue
+tracker</a> (aka
+<a href="https://crbug.com">crbug.com</a>). Web Platform issues live under components in
+<a href="https://bugs.chromium.org/p/chromium/issues/list?q=component%3Ablink&amp;can=2">Blink</a>
+and
+<a href="https://bugs.chromium.org/p/chromium/issues/list?q=component%3Ainternals&amp;can=2">Internals</a>.</p>
+<h3 id="tracking-features" tabindex="-1"><a class="header-anchor" href="#tracking-features">Tracking features</a></h3>
+<p>For developers interested in tracking new features, there are several dedicated
+channels for staying up-to-date:</p>
+<ul>
+<li><a href="https://blog.chromium.org/search/label/beta">Beta Blog Posts</a>: For
+each new Chrome Beta release (~every six weeks), the Chrome team
+publishes <a href="https://blog.chromium.org/search/label/beta">blog posts</a>
+outlining the changes to the web platform and the Chrome Apps &amp;
+Extensions APIs.</li>
+<li>Chrome Developer Relations: Chrome DevRel posts about new features
+on <a href="https://web.dev/">web.dev</a>, Twitter
+(<a href="https://twitter.com/ChromiumDev">@ChromiumDev</a>), and
+<a href="https://youtube.com/user/ChromeDevelopers/">YouTube</a> (Google
+Chrome Developers channel).</li>
+<li><a href="https://www.chromestatus.com/">chromestatus.com</a>: A dashboard where
+we track new feature development.</li>
+<li><a href="https://bit.ly/blinkintents">bit.ly/blinkintents</a>: A Google
+Spreadsheet that lists all <a href="/blink#TOC-Web-Platform-Changes:-Process">&quot;Intent&quot;
+threads</a> and their
+approval status.</li>
+</ul>
+<h2 id="developing" tabindex="-1"><a class="header-anchor" href="#developing">Developing</a></h2>
+<h3 id="learning-about-blink-development" tabindex="-1"><a class="header-anchor" href="#learning-about-blink-development">Learning about Blink Development</a></h3>
+<p>Blink is implemented on top of an abstract platform and thus cannot be run by
+itself. The <a href="/developers/content-module">Chromium Content module</a> provides the
+implementation of this abstract platform required for running Blink.</p>
+<ul>
+<li><a href="https://docs.google.com/document/d/1aitSOucL0VHZa9Z2vbRJSyAIsAz24kX8LFByQ5xQnUg">How Blink
+works</a>
+is a high-level overview of Blink architecture.</li>
+<li><a href="/developers/content-module">Chromium Content module</a> - Details on
+the abstract platform required to run Blink.</li>
+<li><a href="/blink/getting-started-with-blink-debugging">Getting Started with Blink
+Debugging</a> - Best
+practices on how to debug Blink (using Content Shell).</li>
+<li><a href="/developers">Chromium Development</a> - Guides and best practices for
+Chromium development</li>
+<li>YouTube (<a href="https://youtube.com/playlist?list=PLNYkxOF6rcICgS7eFJrGDhMBwWtdTgzpx">Chrome
+University</a>
+Playlist) - Introductory lessons that cover the fundamental concepts
+for Chromium development.</li>
+</ul>
+<h3 id="committing-and-reviewing-code" tabindex="-1"><a class="header-anchor" href="#committing-and-reviewing-code">Committing and reviewing code</a></h3>
+<p>Blink follows all standard <a href="/developers">Chromium</a> practices, including those on
+<a href="https://chromium.googlesource.com/chromium/src/+/HEAD/docs/contributing.md">contributing
+code</a>
+and <a href="/getting-involved/become-a-committer">becoming a committer</a>. Code living in
+<em><a href="https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/">src/third_party/blink</a></em>
+follows the <a href="/blink/coding-style">Blink Coding Style Guidelines</a>.</p>
+<h3 id="launching-and-removing-features" tabindex="-1"><a class="header-anchor" href="#launching-and-removing-features">Launching and Removing Features</a></h3>
+<ul>
+<li><a href="/blink/guidelines/web-platform-changes-guidelines">How we think about making changes to the
+platform</a></li>
+<li><a href="/blink/launching-features">Launching a Web Platform Feature</a></li>
+<li><a href="/blink/launching-features#feature-deprecations">Removing a Web Platform Feature</a></li>
+<li>(Video) <a href="https://youtube.com/watch?v=y3EZx_b-7tk">Intent to Explain: Demystifying the Blink shipping
+process</a></li>
+</ul>
+<h3 id="page-directory" tabindex="-1"><a class="header-anchor" href="#page-directory">Page Directory</a></h3>
+<nav class="subpage-listing">
+  <h4>Subpage Listing</h4>
+  <ul>
+    <li>
+      <a href="/blink/intent-security-triage">"Intent to {Implement,Ship}" Security Triage</a>
+    <li>
+      <a href="/blink/activedomobject">ActiveDOMObject</a>
+    <li>
+      <a href="/blink/blink-api-owners-requirements">Blink API OWNERS Requirements</a>
+    <li>
+      <details open>
+        <summary><a href="/blink/coding-style">Blink Coding Style Guidelines</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/coding-style/layout-test-style-guidelines">Web Test Style Guidelines</a>
+        </ul>
+      </details>
+    <li>
+      <a href="/blink/blink-gardening">Blink gardening</a>
+    <li>
+      <a href="/blink/blink-network-stack">Blink Networking APIs</a>
+    <li>
+      <a href="/blink/blink-post-merge-faq">Blink post-merge FAQ</a>
+    <li>
+      <a href="/blink/blink-testing-and-the-w3c">Blink, Testing, and the W3C</a>
+    <li>
+      <a href="/blink/blink-in-js">Blink-in-JavaScript</a>
+    <li>
+      <a href="/blink/removing-features">Breaking changes</a>
+    <li>
+      <a href="/blink/spec-mentors">Chromium Specification Mentors</a>
+    <li>
+      <a href="/blink/blink-triaging">Component:Blink bug labeling rotation</a>
+    <li>
+      <a href="/blink/deprecating-features">Deprecating Features</a>
+    <li>
+      <a href="/blink/developer-faq">Developer FAQ - Why Blink?</a>
+    <li>
+      <a href="/blink/directory-dependency-in-blink">Directory dependency in Blink (Still DRAFT)</a>
+    <li>
+      <a href="/blink/dom-exceptions">DOM Exceptions</a>
+    <li>
+      <a href="/blink/blink-gc">Garbage Collection for Blink C++ objects (a.k.a. Oilpan)</a>
+    <li>
+      <a href="/blink/getting-started-with-blink-debugging">Getting Started with Blink Debugging</a>
+    <li>
+      <details open>
+        <summary><a href="/blink/guidelines">Guidelines and Policies</a></summary>
+        <ul>
+          <li>
+            <details open>
+              <summary><a href="/blink/guidelines/api-owners">Blink API owners</a></summary>
+              <ul>
+                <li>
+                  <a href="/blink/guidelines/api-owners/procedures">Blink API owner procedures</a>
+                <li>
+                  <a href="/blink/guidelines/api-owners/requirements">Blink API owner requirements</a>
+                <li>
+                  <a href="/blink/guidelines/api-owners/process-exceptions">Exceptions to the feature-launching process</a>
+              </ul>
+            </details>
+          <li>
+            <a href="/blink/guidelines/blink-api-owners-requirements">Blink API OWNERS Requirements</a>
+          <li>
+            <a href="/blink/guidelines/web-platform-changes-guidelines">Blink Values in Practice</a>
+          <li>
+            <a href="/blink/guidelines/values">Core Values of Blink</a>
+          <li>
+            <a href="/blink/guidelines/web-exposed">Definition of a web-exposed change to Chromium</a>
+          <li>
+            <a href="/blink/guidelines/web-platform-changes-process">Web Platform Changes: Process</a>
+        </ul>
+      </details>
+    <li>
+      <details open>
+        <summary><a href="/blink/sheriffing">Handling Blink failures</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/sheriffing/triaging-gasper-alerts">Triaging Gasper Alerts</a>
+        </ul>
+      </details>
+    <li>
+      <a href="/blink/how-repaint-works">How repaint works</a>
+    <li>
+      <details open>
+        <summary><a href="/blink/launching-features">Launching Features</a></summary>
+        <ul>
+          <li>
+            <details open>
+              <summary><a href="/blink/launching-features/wide-review">Getting Wide Review</a></summary>
+              <ul>
+                <li>
+                  <a href="/blink/launching-features/wide-review/web-developers">Documenting Review from Web and Framework Developers</a>
+              </ul>
+            </details>
+          <li>
+            <a href="/blink/launching-features/how-chrome-status-communicates">How Chrome Status Communicates with Web Developers</a>
+          <li>
+            <a href="/blink/launching-features/isolated-web-apps">Launching Isolated Web Apps-specific APIs</a>
+          <li>
+            <a href="/blink/launching-features/let-developers-know">Let Web Developers Know about New Features</a>
+          <li>
+            <a href="/blink/launching-features/old-process">old-process</a>
+          <li>
+            <a href="/blink/launching-features/webview-deprecations">Web Platform Deprecations with Associated WebView APIs</a>
+        </ul>
+      </details>
+    <li>
+      <a href="/blink/layoutng">LayoutNG</a>
+    <li>
+      <a href="/blink/memory-team">Memory Team</a>
+    <li>
+      <details open>
+        <summary><a href="/blink/origin-trials">Origin Trials</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/origin-trials/portals">Portals</a>
+          <li>
+            <a href="/blink/origin-trials/running-an-origin-trial">Running an Origin Trial</a>
+        </ul>
+      </details>
+    <li>
+      <a href="/blink/public-c-api">Public C++ API</a>
+    <li>
+      <a href="/blink/runtime-enabled-features">Runtime Enabled Features</a>
+    <li>
+      <details open>
+        <summary><a href="/blink/serviceworker">Service workers</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/serviceworker/getting-started">Getting Started</a>
+          <li>
+            <a href="/blink/serviceworker/service-worker-faq">Service Worker Debugging</a>
+          <li>
+            <a href="/blink/serviceworker/testing">Service Worker Testing</a>
+        </ul>
+      </details>
+    <li>
+      <details open>
+        <summary><a href="/blink/slimming-paint">Slimming Paint (a.k.a. Redesigning Painting and Compositing)</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/slimming-paint/historical-documents">Historical documents</a>
+        </ul>
+      </details>
+    <li>
+      <a href="/blink/unittesting">Unit Testing in Blink</a>
+    <li>
+      <a href="/blink/v8-bindings">V8 Bindings, Promises</a>
+    <li>
+      <details open>
+        <summary><a href="/blink/webidl">Web IDL in Blink</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/webidl/blink-idl-extended-attributes">Blink IDL Extended Attributes</a>
+        </ul>
+      </details>
+    <li>
+      <details open>
+        <summary><a href="/blink/platform-predictability">Web Platform Predictability</a></summary>
+        <ul>
+          <li>
+            <a href="/blink/platform-predictability/objectives">Objectives</a>
+          <li>
+            <a href="/blink/platform-predictability/compat-tools">Web compat analysis tools</a>
+        </ul>
+      </details>
+    <li>
+      <a href="/blink/web-workers">Web Workers</a>
+    <li>
+      <a href="/blink/webcrypto">WebCrypto</a>
+    <li>
+      <a href="/blink/when-will-a-fix-ship-in-chrome-stable-or-canary">When will a fix ship in Chrome (stable or canary)?</a>
+    <li>
+      <a href="/blink/importing-the-w3c-tests">Working with web-platform-tests in blink</a>
+  </ul>
+</nav>
+
+  </main>
+</div>
+<script>
+// Configure Algolia search.
+let s = document.createElement('script');
+s.src = '/_scripts/@docsearch/index.js';
+document.head.append(s);
+
+window.addEventListener('load', () => {
+  // Add the Algolia search widget.
+  docsearch({
+    container: '#search',
+    appId: 'RZDQYCCABX',
+    apiKey: '98b0eabafeb13fe3e1af693d5713d8b4',
+    indexName: 'chromium'
+  });
+});
+
+// Configure Google Universal Analytics (the predecessor to GA4, we should
+// delete this when we don't need it any more).
+s = document.createElement('script');
+s.src = 'https://www.googletagmanager.com/gtag/js?id=UA-5484340-1'
+s.async = true;
+document.head.append(s)
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'UA-5484340-1');
+
+// Configure consent bar.
+s = document.createElement('script');
+s.src = 'https://www.gstatic.com/brandstudio/kato/cookie_choice_component/cookie_consent_bar.v3.js'
+s.dataset.autoloadCookieConsentBar = true;
+s.dataset.autoloadCookieContentBarIntlCode = '';
+document.head.append(s);</script>
