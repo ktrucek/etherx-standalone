@@ -50,7 +50,6 @@
         "portable",
         "zip"
       ],
-      "sign": null,
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false
     },
@@ -69,9 +68,6 @@
           ]
         }
       ]
-    },
-    "dmg": {
-      "sign": false
     }
   },
   "devDependencies": {
