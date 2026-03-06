@@ -29,6 +29,14 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
     "linux": {
       "target": [
         "AppImage",
@@ -51,21 +59,23 @@
         {
           "target": "dmg",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "x64",
-            "arm64"
+            "x64"
           ]
         }
       ]
+    },
+    "dmg": {
+      "sign": false
     }
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "electron": "^33.4.11",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9"

@@ -49,13 +49,14 @@ jobs:
             rpm \
             libsecret-1-dev
 
-      - name: 📦 Install npm packages (runs electron-rebuild via postinstall)
-        run: npm ci
+      - name: 📦 Install npm packages
+        run: npm ci --ignore-scripts
+
+      - name: 🔧 Rebuild native modules (better-sqlite3)
+        run: npx @electron/rebuild -f -w better-sqlite3
         env:
           npm_config_build_from_source: true
           CXXFLAGS: -std=c++20
-
-      - name: 🔨 Build Linux packages
         run: npx electron-builder --linux --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,13 +90,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 📦 Install npm packages (runs electron-rebuild via postinstall)
-        run: npm ci
+      - name: 📦 Install npm packages
+        run: npm ci --ignore-scripts
+
+      - name: 🔧 Rebuild native modules (better-sqlite3)
+        run: npx @electron/rebuild -f -w better-sqlite3
         env:
           npm_config_msvs_version: 2022
           CXXFLAGS: /std:c++20
-
-      - name: 🔨 Build Windows packages
         run: npx electron-builder --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -130,7 +132,10 @@ jobs:
         run: brew install python-setuptools || true
 
       - name: 📦 Install npm packages
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: 🔧 Rebuild native modules (better-sqlite3)
+        run: npx @electron/rebuild -f -w better-sqlite3
         env:
           CXXFLAGS: -std=c++20
 
@@ -168,7 +173,10 @@ jobs:
         run: brew install python-setuptools || true
 
       - name: 📦 Install npm packages
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: 🔧 Rebuild native modules (better-sqlite3)
+        run: npx @electron/rebuild -f -w better-sqlite3
         env:
           CXXFLAGS: -std=c++20
 
