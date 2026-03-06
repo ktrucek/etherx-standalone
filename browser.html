@@ -79,16 +79,31 @@
     }
 
     .win-btn {
-      width: 12px;
-      height: 12px;
+      width: 13px;
+      height: 13px;
       border-radius: 50%;
       cursor: pointer;
       border: none;
       flex-shrink: 0;
-      position: relative;
       display: flex;
       align-items: center;
-      justify-content: center
+      justify-content: center;
+      position: relative;
+      overflow: visible
+    }
+
+    .win-btn .win-icon {
+      opacity: 0;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1;
+      color: rgba(0, 0, 0, .7);
+      pointer-events: none;
+      position: absolute
+    }
+
+    .win-btn:hover .win-icon {
+      opacity: 1
     }
 
     .btn-close {
@@ -104,36 +119,7 @@
     }
 
     .win-btn:hover {
-      filter: brightness(1.3)
-    }
-
-    .win-btn::after {
-      content: '';
-      font-size: 9px;
-      font-weight: bold;
-      opacity: 0;
-      transition: opacity .15s;
-      line-height: 1
-    }
-
-    .win-btn:hover::after {
-      opacity: 1
-    }
-
-    .btn-close::after {
-      content: '×';
-      color: #4a0000
-    }
-
-    .btn-min::after {
-      content: '−';
-      color: #5a4a00
-    }
-
-    .btn-max::after {
-      content: '□';
-      color: #005a00;
-      font-size: 7px
+      filter: brightness(1.2)
     }
 
     .title-logo {
@@ -449,13 +435,11 @@
     .nav-btn {
       width: 32px;
       height: 32px;
-      min-width: 32px;
-      min-height: 32px;
       background: transparent;
       border: none;
       border-radius: var(--radius);
       color: var(--text2);
-      font-size: 20px;
+      font-size: 18px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -475,11 +459,6 @@
 
     .nav-btn:disabled:hover {
       background: transparent
-    }
-
-    #btnBack,
-    #btnFwd {
-      font-size: 20px
     }
 
     .url-bar {
@@ -3402,11 +3381,6 @@
       background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)
     }
 
-    #aiAgentPanel .panel-body {
-      display: flex;
-      flex-direction: column
-    }
-
     .ai-chat-container {
       display: flex;
       flex-direction: column;
@@ -3459,11 +3433,7 @@
       gap: 6px;
       padding: 8px 12px;
       border-top: 1px solid var(--border);
-      background: var(--bg2);
-      position: sticky;
-      bottom: 0;
-      z-index: 2;
-      flex-shrink: 0
+      background: var(--bg2)
     }
 
     .ai-chat-input {
@@ -3933,20 +3903,15 @@
     .pwd-entry-actions button:hover {
       color: var(--accent)
     }
-
-    #btnShare {
-      font-size: 18px;
-      min-width: 32px
-    }
   </style>
 </head>
 
 <body>
   <div class="title-bar electron-drag">
     <div class="win-btns electron-no-drag">
-      <div class="win-btn btn-close"></div>
-      <div class="win-btn btn-min"></div>
-      <div class="win-btn btn-max"></div>
+      <div class="win-btn btn-close" title="Close"><span class="win-icon">✕</span></div>
+      <div class="win-btn btn-min" title="Minimise"><span class="win-icon">−</span></div>
+      <div class="win-btn btn-max" title="Zoom"><span class="win-icon">+</span></div>
     </div>
     <div class="title-logo">E</div>
     <div class="title-text">EtherX Browser</div>
@@ -4056,6 +4021,12 @@
         <div class="di" id="mi-fullscreen"><span class="icon">⛶</span>Enter Full Screen<span class="sc">F11</span></div>
         <div class="di" id="mi-responsive"><span class="icon">📐</span>Responsive Design Mode<span
             class="sc">Ctrl+Shift+M</span></div>
+        <div class="dsep"></div>
+        <div class="di" id="mi-screenshot"><span class="icon">📷</span>Take Screenshot<span
+            class="sc">Ctrl+Shift+S</span></div>
+        <div class="di" id="mi-screenshot-region"><span class="icon">✂️</span>Capture Region…<span
+            class="sc">Ctrl+Shift+G</span></div>
+        <div class="di" id="mi-screenshot-full"><span class="icon">🖥️</span>Save Full Page</div>
       </div>
     </div>
     <div class="menu-item" data-menu="history">History<div class="dropdown">
@@ -4184,6 +4155,7 @@
     </div>
     <span id="zoomIndicator">100%</span>
     <button class="nav-btn icon-btn" id="btnBookmarkPage" title="Bookmark this page (Ctrl+D)">🔖</button>
+    <button class="nav-btn icon-btn" id="btnShare" title="Share (Ctrl+Shift+S)">📤</button>
     <button class="nav-btn icon-btn" id="btnReader" title="Reader Mode"
       style="position:absolute;top:-100px;width:1px;height:1px;opacity:0">📖</button>
     <button class="nav-btn icon-btn" id="btnWallet" title="Wallet">💰</button>
@@ -4195,7 +4167,7 @@
     <button class="nav-btn icon-btn" id="btnBookmarks" title="Bookmarks (Ctrl+B)">⭐</button>
     <button class="nav-btn icon-btn" id="btnHistory" title="History (Ctrl+H)">🕒</button>
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
-    <button class="nav-btn icon-btn" id="btnShare" title="Share this page">📤</button>
+    <button class="nav-btn icon-btn" id="btnNotes" title="Notes (📝)">📝</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
   </div>
@@ -4323,6 +4295,19 @@
     <div class="panel" id="bmPanel">
       <div class="panel-header"><span class="panel-title">⭐ Bookmarks</span><button class="panel-close"
           id="closeBmPanel">×</button></div>
+      <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px">
+        <input id="bmSearch" type="text" placeholder="🔍 Search bookmarks…"
+          style="width:100%;box-sizing:border-box;padding:6px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+        <div style="display:flex;gap:5px">
+          <button id="bmImportBtn"
+            style="flex:1;padding:5px 4px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;cursor:pointer">📥
+            Import</button>
+          <button id="bmExportBtn"
+            style="flex:1;padding:5px 4px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;cursor:pointer">📤
+            Export</button>
+          <input id="bmImportFile" type="file" accept=".html" style="display:none">
+        </div>
+      </div>
       <div class="panel-body" id="bmList"></div>
     </div>
     <div class="panel" id="histPanel">
@@ -4797,24 +4782,67 @@
           </div>
           <!-- PROFILES -->
           <div class="s-tab-pane" id="stab-profiles">
-            <div class="s-row" style="justify-content:center;flex-direction:column;align-items:center;padding:16px">
-              <img id="profileAvatar" src=""
-                style="width:64px;height:64px;border-radius:50%;border:2px solid var(--accent);margin-bottom:8px;object-fit:cover;background:var(--bg3)"
-                alt="Avatar">
-              <label style="cursor:pointer;color:var(--accent);font-size:12px">
-                📷 Change Picture
-                <input type="file" id="profilePicUpload" accept="image/*" style="display:none">
-              </label>
-            </div>
-            <div class="s-group">
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Default</div>
-                  <div class="s-row-desc">Active profile</div>
-                </div><span style="color:var(--green);font-size:12px">✓ Active</span>
+            <!-- Profile card -->
+            <div class="s-group" id="profileCardGroup">
+              <div style="display:flex;align-items:center;gap:14px;padding:10px 0">
+                <div style="position:relative;display:inline-block">
+                  <div id="sProfileAvatar"
+                    style="font-size:42px;cursor:pointer;user-select:none;line-height:1;width:56px;height:56px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg3);border:2px solid var(--border2)"
+                    title="Click to change avatar" onclick="openProfileAvatarPicker()">👤</div>
+                  <input type="file" id="sAvatarFileInput" accept="image/*" style="display:none">
+                  <button onclick="document.getElementById('sAvatarFileInput').click()" title="Upload photo"
+                    style="position:absolute;bottom:-2px;right:-2px;width:18px;height:18px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">📷</button>
+                </div>
+                <div style="flex:1">
+                  <div id="sProfileNameDisp" style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px">
+                    (no name)</div>
+                  <div id="sProfileEmailDisp" style="font-size:11px;color:var(--text3)">(no email)</div>
+                </div>
+                <button class="s-btn-sm" onclick="toggleProfileEdit()" id="sProfileEditBtn">✏️ Edit</button>
               </div>
             </div>
-            <div style="padding:8px 0"><button class="s-btn-sm" id="sNewProfile">＋ New Profile…</button></div>
+            <!-- Inline edit form (hidden by default) -->
+            <div id="profileEditForm" style="display:none">
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Display Name</div>
+                  </div>
+                  <input id="sProfileName" type="text" class="s-input" placeholder="Your name"
+                    style="width:160px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px">
+                </div>
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Email</div>
+                  </div>
+                  <input id="sProfileEmail" type="email" class="s-input" placeholder="your@email.com"
+                    style="width:160px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px">
+                </div>
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Bio</div>
+                  </div>
+                  <input id="sProfileBio" type="text" class="s-input" placeholder="Short bio…"
+                    style="width:160px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px">
+                </div>
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Website</div>
+                  </div>
+                  <input id="sProfileWebsite" type="url" class="s-input" placeholder="https://…"
+                    style="width:160px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px">
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;padding:6px 0">
+                <button class="s-btn-sm" onclick="saveProfileSettings()"
+                  style="background:var(--accent);color:#fff;border-color:var(--accent)">💾 Save</button>
+                <button class="s-btn-sm" onclick="toggleProfileEdit()">Cancel</button>
+              </div>
+            </div>
+            <!-- New profile button -->
+            <div style="padding:8px 0;border-top:1px solid var(--border);margin-top:4px">
+              <button class="s-btn-sm" id="sNewProfile">＋ New Profile…</button>
+            </div>
           </div>
           <!-- EXTENSIONS -->
           <div class="s-tab-pane" id="stab-extensions">
@@ -5118,19 +5146,37 @@
                 </div>
                 <div class="toggle on" data-setting="showTitleClock" data-titlebar="titleClock"></div>
               </div>
+              <!-- #21: Clock customization -->
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">🕐 Clock Font Size</div>
-                  <div class="s-row-desc">Adjust title bar clock font size (px)</div>
+                  <div class="s-row-label">Clock font size</div>
                 </div>
-                <select data-setting="clockFontSize"
-                  style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;cursor:pointer">
-                  <option value="10">10px</option>
-                  <option value="11" selected>11px (default)</option>
-                  <option value="12">12px</option>
-                  <option value="13">13px</option>
-                  <option value="14">14px</option>
-                  <option value="16">16px</option>
+                <select class="s-select" id="sClockSize" onchange="applyClockStyle()">
+                  <option value="11">Small (11px)</option>
+                  <option value="13" selected>Normal (13px)</option>
+                  <option value="16">Large (16px)</option>
+                  <option value="20">XL (20px)</option>
+                </select>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Clock color</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="color" id="sClockColor" value="#e0e0e0"
+                    style="width:36px;height:24px;border:none;border-radius:4px;cursor:pointer;background:none"
+                    onchange="applyClockStyle()">
+                  <button class="s-btn-sm"
+                    onclick="document.getElementById('sClockColor').value='#e0e0e0';applyClockStyle()">Reset</button>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Clock format</div>
+                </div>
+                <select class="s-select" id="sClockFormat" onchange="applyClockStyle()">
+                  <option value="HH:mm">24h (14:05)</option>
+                  <option value="hh:mm" selected>12h (02:05 PM)</option>
                 </select>
               </div>
               <div class="s-row">
@@ -5144,6 +5190,69 @@
                   <div class="s-row-label">👤 Profile Switcher</div>
                 </div>
                 <div class="toggle on" data-setting="showTitleProfile" data-titlebar="titleProfileBtn"></div>
+              </div>
+            </div>
+            <!-- #27: Accent color + font size -->
+            <div class="s-group" style="margin-top:16px">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">Colours &amp; Fonts</div>
+                  <div class="s-row-desc">Customize UI accent colour and font size</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">🎨 Accent colour</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="color" id="sAccentColor" value="#667eea"
+                    style="width:36px;height:24px;border:none;border-radius:4px;cursor:pointer;background:none"
+                    onchange="applyAccentColor(this.value)">
+                  <div style="display:flex;gap:4px">
+                    <button onclick="applyAccentColor('#667eea')"
+                      style="width:18px;height:18px;border-radius:50%;background:#667eea;border:2px solid transparent;cursor:pointer"
+                      title="Purple (default)"></button>
+                    <button onclick="applyAccentColor('#4a9eff')"
+                      style="width:18px;height:18px;border-radius:50%;background:#4a9eff;border:2px solid transparent;cursor:pointer"
+                      title="Blue"></button>
+                    <button onclick="applyAccentColor('#2ecc71')"
+                      style="width:18px;height:18px;border-radius:50%;background:#2ecc71;border:2px solid transparent;cursor:pointer"
+                      title="Green"></button>
+                    <button onclick="applyAccentColor('#e8530e')"
+                      style="width:18px;height:18px;border-radius:50%;background:#e8530e;border:2px solid transparent;cursor:pointer"
+                      title="Orange"></button>
+                    <button onclick="applyAccentColor('#e74c3c')"
+                      style="width:18px;height:18px;border-radius:50%;background:#e74c3c;border:2px solid transparent;cursor:pointer"
+                      title="Red"></button>
+                    <button onclick="applyAccentColor('#f39c12')"
+                      style="width:18px;height:18px;border-radius:50%;background:#f39c12;border:2px solid transparent;cursor:pointer"
+                      title="Gold"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">UI font size</div>
+                </div>
+                <select class="s-select" id="sUiFontSize" onchange="applyUiFontSize(this.value)">
+                  <option value="11">Small (11px)</option>
+                  <option value="13" selected>Normal (13px)</option>
+                  <option value="15">Large (15px)</option>
+                  <option value="17">XL (17px)</option>
+                </select>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">UI font family</div>
+                </div>
+                <select class="s-select" id="sUiFont" onchange="applyUiFont(this.value)">
+                  <option value="">System Default</option>
+                  <option value="'Segoe UI',sans-serif">Segoe UI</option>
+                  <option value="-apple-system,sans-serif">SF Pro (macOS)</option>
+                  <option value="'Roboto',sans-serif">Roboto</option>
+                  <option value="'JetBrains Mono',monospace">JetBrains Mono</option>
+                  <option value="'Courier New',monospace">Courier New</option>
+                </select>
               </div>
             </div>
           </div>
@@ -5292,6 +5401,38 @@
           title="EtherX.io" onload="document.getElementById('etherxLoading').style.display='none'"></iframe>
       </div>
     </div>
+    <!-- Notes Panel -->
+    <div class="panel" id="notesPanel" style="width:360px">
+      <div class="panel-header">
+        <span class="panel-title">📝 Notes</span>
+        <button class="panel-close" id="closeNotesPanel">×</button>
+      </div>
+      <div style="padding:8px 10px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;gap:6px">
+          <input id="noteSearchInput" type="text" placeholder="🔍 Search notes…"
+            style="flex:1;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+          <button id="noteAddBtn"
+            style="padding:5px 12px;background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap">＋
+            New</button>
+        </div>
+      </div>
+      <!-- Inline note editor (hidden by default) -->
+      <div id="noteEditor"
+        style="display:none;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--bg2)">
+        <input id="noteEditorTitle" type="text" placeholder="Note title…"
+          style="width:100%;box-sizing:border-box;margin-bottom:5px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;outline:none">
+        <textarea id="noteEditorBody" placeholder="Write your note…" rows="5"
+          style="width:100%;box-sizing:border-box;padding:5px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;resize:vertical;outline:none;font-family:inherit"></textarea>
+        <div style="display:flex;gap:6px;margin-top:5px">
+          <button id="noteEditorSave"
+            style="flex:1;padding:5px;background:var(--accent);border:none;border-radius:5px;color:#fff;font-size:12px;cursor:pointer">💾
+            Save</button>
+          <button id="noteEditorCancel"
+            style="flex:1;padding:5px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;cursor:pointer">Cancel</button>
+        </div>
+      </div>
+      <div class="panel-body" id="notesList"></div>
+    </div>
     <!-- Password Modal -->
     <div id="pwdModal">
       <div class="pwd-box">
@@ -5374,8 +5515,24 @@
       <!-- ELEMENTS -->
       <div class="dt-pane" id="pane-elements">
         <div class="elem-toolbar">
-          <button class="dt-icon-btn" id="elemPickBtn" title="Pick element" style="font-size:12px">⊹</button>
-          <input class="elem-search" id="elemSearch" placeholder="Search DOM…">
+          <button class="dt-icon-btn" id="elemPickBtn" title="Inspect current document" style="font-size:12px"
+            onclick="refreshElementsPane()">⊹</button>
+          <button class="dt-icon-btn" title="Refresh DOM" style="font-size:12px"
+            onclick="refreshElementsPane()">↺</button>
+          <input class="elem-search" id="elemSearch" placeholder="Search DOM…" oninput="filterElements(this.value)">
+        </div>
+        <div id="elemCrossOriginNotice"
+          style="display:none;padding:12px 14px;background:#1a1a2e;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <span style="font-size:20px;flex-shrink:0">🔒</span>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--yellow);margin-bottom:4px">Cross-Origin Frame</div>
+              <div style="font-size:11px;color:var(--text2);line-height:1.6">Cannot access the DOM of <strong
+                  id="elemOriginHost" style="color:var(--accent)"></strong> because it is loaded from a different
+                origin.<br><br>This is a browser security feature (Same-Origin Policy). The Elements panel shows the
+                EtherX browser shell DOM instead.</div>
+            </div>
+          </div>
         </div>
         <div class="elements-view" id="elemView">
           <div class="el-node" onclick="this.classList.toggle('selected')"><span class="el-cmt">&lt;!DOCTYPE
@@ -5390,10 +5547,17 @@
           <div class="el-node" style="padding-left:32px" onclick="this.classList.toggle('selected')"><span
               class="el-tag">&lt;title&gt;</span><span id="elemTitle">New Tab</span><span
               class="el-tag">&lt;/title&gt;</span></div>
+          <div class="el-node" style="padding-left:32px" onclick="this.classList.toggle('selected')"><span
+              class="el-tag">&lt;meta</span> <span class="el-attr">name</span>=<span class="el-str">"viewport"</span>
+            <span class="el-attr">content</span>=<span class="el-str">"width=device-width"</span><span
+              class="el-tag">&gt;</span>
+          </div>
           <div class="el-node" style="padding-left:16px" onclick="this.classList.toggle('selected')"><span
               class="el-tag">&lt;/head&gt;</span></div>
           <div class="el-node" style="padding-left:16px" onclick="this.classList.toggle('selected')"><span
-              class="el-tag">&lt;body&gt;</span> <span class="el-cmt">&lt;!-- proxied content --&gt;</span></div>
+              class="el-tag">&lt;body</span> <span class="el-attr">class</span>=<span class="el-str"
+              id="elemBodyClass">""</span><span class="el-tag">&gt;</span> <span class="el-cmt">&lt;!-- <span
+                id="elemNodeCount">…</span> nodes --&gt;</span></div>
           <div class="el-node" style="padding-left:32px" id="elemBodyPreview"><span class="el-tag">&lt;div</span> <span
               class="el-attr">id</span>=<span class="el-str">"root"</span><span class="el-tag">&gt;&lt;/div&gt;</span>
           </div>
@@ -5619,6 +5783,18 @@
             </div>
           </div>
           <div id="lhAudits" style="font-size:11px;color:#858585">Run an audit to see detailed results.</div>
+          <!-- #31: Lighthouse history -->
+          <div style="margin-top:14px;border-top:1px solid #333;padding-top:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:10px;color:#858585;text-transform:uppercase;letter-spacing:.5px">📊 Audit
+                History</span>
+              <button id="lhClearHistory" style="font-size:10px;background:none;border:none;color:#555;cursor:pointer">✕
+                Clear</button>
+            </div>
+            <div id="lhHistory" style="font-size:10px;color:#858585;max-height:140px;overflow-y:auto">
+              <em>No audit history yet.</em>
+            </div>
+          </div>
         </div>
       </div>
       <!-- USER AGENT -->
@@ -5659,7 +5835,6 @@
       <div class="ctx-item" id="ctx-bookmark">⭐ Bookmark Page</div>
       <div class="ctx-item" id="ctx-find">🔍 Find in Page</div>
       <div class="ctx-sep"></div>
-      <div class="ctx-item" id="ctx-ai-summary">✨ AI Summary</div>
       <div class="ctx-item" id="ctx-devtools">🛠 DevTools</div>
       <div class="ctx-item danger" id="ctx-close-tab">✕ Close Tab</div>
     </div>
@@ -5821,21 +5996,6 @@
   </div>
   <script>
 
-    // ── showPageError: display error overlay when a page fails to load ──
-    function showPageError(errorDescription, url) {
-      const overlay = document.getElementById('blockedOverlay');
-      if (overlay) {
-        const boUrl = overlay.querySelector('.bo-url');
-        const boMsg = overlay.querySelector('.bo-msg');
-        if (boUrl) boUrl.textContent = url || '';
-        if (boMsg) boMsg.textContent = errorDescription || 'Page failed to load';
-        overlay.classList.add('show');
-      }
-      const fr = document.getElementById('browseFrame');
-      if (fr && !window.electronWebview) fr.style.display = 'none';
-      consoleLog('error', '❌ Page error: ' + (errorDescription || 'unknown') + (url ? ' — ' + url : ''));
-    }
-
     // ── Electron webview detection ──
     window.electronWebview = typeof window.electronAPI !== 'undefined';
     if (window.electronWebview) {
@@ -5956,14 +6116,7 @@
       if (/\.eth$/i.test(raw)) return 'https://app.ens.domains/name/' + raw;
       if (/^[a-z][a-z0-9+\-.]*:\/\//i.test(raw)) return raw;
       if (/^[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+/.test(raw) && !raw.includes(' ')) return 'https://' + raw;
-      // If it looks like localhost or localhost:port, allow it
-      if (/^localhost(:\d+)?(\/|$)/i.test(raw)) return 'http://' + raw;
-      // If string has no dot and no space — treat as search to prevent white screen on invalid URLs like 'https://riječ'
-      const searchEngine = DB.getSettings().searchEngine || 'google';
-      const customURL = DB.getSettings().customSearchURL || '';
-      const engines = { google: 'https://www.google.com/search?q=', duckduckgo: 'https://duckduckgo.com/?q=', bing: 'https://www.bing.com/search?q=', brave: 'https://search.brave.com/search?q=', custom: customURL };
-      const searchBase = engines[searchEngine] || engines.google;
-      return searchBase + encodeURIComponent(raw);
+      return 'https://www.google.com/search?q=' + encodeURIComponent(raw);
     }
     function showNTP() {
       ntp.style.display = 'flex'; frame.classList.remove('active');
@@ -6019,15 +6172,7 @@
     document.getElementById('btnReload').addEventListener('click', () => {
       const tab = getActiveTab(); if (tab && tab.url) { setLoading(20); if (window.electronWebview && frame.tagName === 'WEBVIEW') { try { frame.reload(); } catch (e) { frame.src = tab.url; } } else { frame.src = '/proxy.php?url=' + encodeURIComponent(tab.url); } consoleLog('log', '↺ Reload: ' + tab.url); }
     });
-    document.getElementById('btnHome').addEventListener('click', () => {
-      const cfg = DB.getSettings();
-      const homepage = cfg.homepage;
-      if (homepage) {
-        navigateTo(homepage);
-      } else {
-        showNTP(); const t = getActiveTab(); if (t) { t.url = ''; t.title = 'New Tab'; updateTabEl(t); }
-      }
-    });
+    document.getElementById('btnHome').addEventListener('click', () => { showNTP(); const t = getActiveTab(); if (t) { t.url = ''; t.title = 'New Tab'; updateTabEl(t); } });
     const urlInput = document.getElementById('urlInput');
     function doNavigate() { navigateTo(urlInput.value); }
     urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doNavigate(); } if (e.key === 'Escape') { urlInput.value = getActiveTab()?.url || ''; urlInput.blur(); } });
@@ -6048,18 +6193,6 @@
         }
         updateTabEl(tab);
         document.getElementById('btnReader').style.display = 'block';
-        // Update Elements tab with live DOM if same-origin
-        const elemView = document.getElementById('elemView');
-        if (elemView && doc?.documentElement) {
-          try {
-            const html = doc.documentElement.outerHTML;
-            const esc = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const highlighted = esc.replace(/(&lt;\/?[a-zA-Z][a-zA-Z0-9]*)/g, '<span class="el-tag">$1</span>').replace(/(\s[a-zA-Z\-]+)=/g, '<span class="el-attr">$1</span>=').replace(/="([^"]*)"/g, '=<span class="el-str">"$1"</span>');
-            elemView.innerHTML = '<div style="line-height:1.8;font-size:11px;white-space:pre-wrap">' + highlighted + '</div>';
-          } catch (crossErr) {
-            elemView.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)"><div style="font-size:24px;margin-bottom:10px">🔒</div><div style="font-size:13px;margin-bottom:6px">Cannot inspect cross-origin content</div><div style="font-size:11px;color:var(--text3)">This is a security feature of web browsers.<br>The page at <b>' + escHtml(tab.url || '') + '</b> is served from a different origin.</div></div>';
-          }
-        }
         const rnd = (a, b) => (Math.random() * (b - a) + a).toFixed(0);
         document.getElementById('perfFcp').textContent = rnd(80, 250) + 'ms';
         document.getElementById('perfLcp').textContent = rnd(150, 400) + 'ms';
@@ -6067,16 +6200,7 @@
         document.getElementById('perfCls').textContent = (Math.random() * 0.05).toFixed(3);
         document.getElementById('perfTti').textContent = rnd(200, 600) + 'ms';
         document.getElementById('perfLoad').textContent = rnd(300, 900) + 'ms';
-      } catch (e) {
-        // Cross-origin: update elements view with friendly message
-        const elemView = document.getElementById('elemView');
-        if (elemView) elemView.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)"><div style="font-size:24px;margin-bottom:10px">🔒</div><div style="font-size:13px;margin-bottom:6px">Cannot inspect cross-origin content</div><div style="font-size:11px">This is a security feature of web browsers.</div></div>';
-        // Still update favicon and tab info from URL
-        if (tab.url && tab.url.startsWith('http')) {
-          tab.faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(tab.url)}`;
-          updateTabEl(tab);
-        }
-      }
+      } catch (e) { }
       consoleLog('success', '✓ Loaded: ' + (tab.url || '—'));
     });
     window.addEventListener('message', e => { if (e.data?.type === 'etherx-navigate') navigateTo(e.data.url); });
@@ -6191,11 +6315,12 @@
       document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
       showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
     });
-    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); }
+    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'notesPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
     document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
     document.getElementById('btnDownloads').addEventListener('click', () => togglePanel('dlPanel'));
+    document.getElementById('btnNotes').addEventListener('click', () => { togglePanel('notesPanel'); renderNotesPanel(); });
     document.getElementById('btnSettings').addEventListener('click', () => togglePanel('settingsPanel'));
     document.getElementById('walletReload')?.addEventListener('click', () => {
       const wl = document.getElementById('walletLoading');
@@ -6214,83 +6339,139 @@
     document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
     document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
     document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeNotesPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+
+    // ── #30d: Notes Panel ────────────────────────────────────────────────
+    let _editingNoteId = null;
+    function renderNotesPanel(filterText) {
+      const list = document.getElementById('notesList'); if (!list) return;
+      let notes = DB.getNotes ? DB.getNotes() : JSON.parse(localStorage.getItem('ex_notes') || '[]');
+      const q = (filterText || document.getElementById('noteSearchInput')?.value || '').toLowerCase().trim();
+      if (q) notes = notes.filter(n => (n.title || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q));
+      if (!notes.length) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">' + (q ? '🔍 No results for "' + q + '"' : '📝 No notes yet<br><br>Click <strong>＋ New</strong> to create your first note') + '</div>'; return; }
+      list.innerHTML = '';
+      const sec = document.createElement('div'); sec.className = 'p-section-title';
+      sec.textContent = (q ? 'Results' : 'Notes') + ' (' + notes.length + ')'; list.appendChild(sec);
+      notes.forEach(n => {
+        const el = document.createElement('div'); el.className = 'p-entry'; el.style.cssText = 'flex-direction:column;align-items:flex-start;gap:2px;cursor:default';
+        const preview = (n.content || '').slice(0, 80) + ((n.content || '').length > 80 ? '…' : '');
+        el.innerHTML = `<div style="display:flex;align-items:center;width:100%;gap:6px"><span style="font-size:14px;flex-shrink:0">📝</span><span class="p-entry-title" style="flex:1;font-weight:600">${escHtml(n.title || 'Untitled')}</span><span class="p-entry-meta">${timeAgo(n.ts)}</span><button class="note-edit-btn" title="Edit" style="background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0">✏️</button><button class="p-entry-del note-del-btn" style="flex-shrink:0">×</button></div>` + (preview ? `<div style="font-size:11px;color:var(--text3);padding-left:20px;padding-right:28px;line-height:1.4">${escHtml(preview)}</div>` : '');
+        el.querySelector('.note-edit-btn').addEventListener('click', () => openNoteEditor(n.id));
+        el.querySelector('.note-del-btn').addEventListener('click', e => { e.stopPropagation(); if (DB.deleteNote) DB.deleteNote(n.id); else { const arr = JSON.parse(localStorage.getItem('ex_notes') || '[]').filter(x => x.id !== n.id); localStorage.setItem('ex_notes', JSON.stringify(arr)); } renderNotesPanel(); });
+        list.appendChild(el);
+      });
+    }
+    function openNoteEditor(id) {
+      _editingNoteId = id || null;
+      const form = document.getElementById('noteEditor'); if (!form) return;
+      if (id) {
+        const notes = DB.getNotes ? DB.getNotes() : JSON.parse(localStorage.getItem('ex_notes') || '[]');
+        const n = notes.find(x => x.id === id);
+        document.getElementById('noteEditorTitle').value = n?.title || '';
+        document.getElementById('noteEditorBody').value = n?.content || '';
+      } else {
+        document.getElementById('noteEditorTitle').value = '';
+        document.getElementById('noteEditorBody').value = '';
+      }
+      form.style.display = ''; document.getElementById('noteEditorTitle').focus();
+    }
+    function saveNoteEditor() {
+      const title = document.getElementById('noteEditorTitle').value.trim();
+      const content = document.getElementById('noteEditorBody').value.trim();
+      if (!title && !content) { showToast('⚠️ Note cannot be empty'); return; }
+      if (_editingNoteId) {
+        if (DB.updateNote) DB.updateNote(_editingNoteId, { title: title || 'Untitled', content });
+        else { const arr = JSON.parse(localStorage.getItem('ex_notes') || '[]').map(n => n.id === _editingNoteId ? { ...n, title: title || 'Untitled', content, updatedAt: Date.now() } : n); localStorage.setItem('ex_notes', JSON.stringify(arr)); }
+        showToast('✅ Note updated');
+      } else {
+        if (DB.addNote) DB.addNote({ title: title || 'Untitled', content });
+        else { const arr = JSON.parse(localStorage.getItem('ex_notes') || '[]'); arr.unshift({ id: Date.now(), title: title || 'Untitled', content, ts: Date.now() }); localStorage.setItem('ex_notes', JSON.stringify(arr)); }
+        showToast('📝 Note saved');
+      }
+      document.getElementById('noteEditor').style.display = 'none';
+      _editingNoteId = null; renderNotesPanel();
+    }
+    document.getElementById('noteAddBtn')?.addEventListener('click', () => openNoteEditor(null));
+    document.getElementById('noteEditorSave')?.addEventListener('click', saveNoteEditor);
+    document.getElementById('noteEditorCancel')?.addEventListener('click', () => { document.getElementById('noteEditor').style.display = 'none'; _editingNoteId = null; });
+    document.getElementById('noteSearchInput')?.addEventListener('input', function () { renderNotesPanel(this.value); });
+
+    // ── #21/#27: Clock style + Accent colour + Font ──────────────────────
+    function applyClockStyle() {
+      const sz = document.getElementById('sClockSize')?.value || '13';
+      const col = document.getElementById('sClockColor')?.value || '#e0e0e0';
+      const fmt = document.getElementById('sClockFormat')?.value || 'hh:mm';
+      const el = document.getElementById('titleClock'); if (!el) return;
+      el.style.fontSize = sz + 'px'; el.style.color = col;
+      DB.saveSetting('clockSize', sz); DB.saveSetting('clockColor', col); DB.saveSetting('clockFormat', fmt);
+    }
+    function applyAccentColor(hex) {
+      document.documentElement.style.setProperty('--accent', hex);
+      // derive accent2 as slightly shifted hue
+      document.documentElement.style.setProperty('--accent2', hex + 'bb');
+      const inp = document.getElementById('sAccentColor'); if (inp) inp.value = hex;
+      DB.saveSetting('accentColor', hex); showToast('🎨 Accent colour updated');
+    }
+    function applyUiFontSize(sz) {
+      document.body.style.fontSize = sz + 'px'; DB.saveSetting('uiFontSize', sz);
+    }
+    function applyUiFont(fam) {
+      document.body.style.fontFamily = fam || ''; DB.saveSetting('uiFont', fam);
+    }
+    // Restore on load
+    (function restoreAppearance() {
+      const s = DB.getSettings();
+      if (s.accentColor) { document.documentElement.style.setProperty('--accent', s.accentColor); const inp = document.getElementById('sAccentColor'); if (inp) inp.value = s.accentColor; }
+      if (s.clockSize) { const el = document.getElementById('titleClock'); if (el) el.style.fontSize = s.clockSize + 'px'; const sel = document.getElementById('sClockSize'); if (sel) sel.value = s.clockSize; }
+      if (s.clockColor) { const el = document.getElementById('titleClock'); if (el) el.style.color = s.clockColor; const inp = document.getElementById('sClockColor'); if (inp) inp.value = s.clockColor; }
+      if (s.uiFontSize) { document.body.style.fontSize = s.uiFontSize + 'px'; const sel = document.getElementById('sUiFontSize'); if (sel) sel.value = s.uiFontSize; }
+      if (s.uiFont) { document.body.style.fontFamily = s.uiFont; const sel = document.getElementById('sUiFont'); if (sel) sel.value = s.uiFont; }
+    })();
+    window.applyClockStyle = applyClockStyle;
+    window.applyAccentColor = applyAccentColor;
+    window.applyUiFontSize = applyUiFontSize;
+    window.applyUiFont = applyUiFont;
+
+    // ── #34: Elements tab live DOM info ──────────────────────────────────
+    function refreshElementsPane() {
+      const tab = getActiveTab();
+      const notice = document.getElementById('elemCrossOriginNotice');
+      const nodeEl = document.getElementById('elemNodeCount');
+      const bodyClass = document.getElementById('elemBodyClass');
+      const titleEl = document.getElementById('elemTitle');
+      if (titleEl) titleEl.textContent = tab?.title || document.title;
+      // Count actual DOM nodes in browser shell
+      if (nodeEl) nodeEl.textContent = document.querySelectorAll('*').length;
+      if (bodyClass) bodyClass.textContent = '"' + document.body.className + '"';
+      // Show cross-origin notice if a page is loaded
+      if (tab?.url && tab.url.startsWith('http')) {
+        try { const h = new URL(tab.url).hostname; document.getElementById('elemOriginHost').textContent = h; if (notice) notice.style.display = 'flex'; } catch (e) { }
+      } else { if (notice) notice.style.display = 'none'; }
+    }
+    // Filter elements (highlight matching nodes)
+    function filterElements(q) {
+      const nodes = document.getElementById('elemView')?.querySelectorAll('.el-node');
+      if (!nodes) return;
+      nodes.forEach(n => { n.style.opacity = (!q || n.textContent.toLowerCase().includes(q.toLowerCase())) ? '1' : '0.25'; });
+    }
+    // Auto-refresh elements when devtools opens to elements pane
+    document.querySelector('[data-pane="elements"]')?.addEventListener('click', refreshElementsPane);
     function renderBookmarksPanel() {
       const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
       if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
-      list.innerHTML = '';
-      // ── Search filter ──
-      const searchWrap = document.createElement('div'); searchWrap.style.cssText = 'padding:6px 8px;border-bottom:1px solid var(--border);display:flex;gap:6px;align-items:center';
-      const searchInput = document.createElement('input'); searchInput.type = 'text'; searchInput.placeholder = '🔍 Search bookmarks…'; searchInput.style.cssText = 'flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 10px;font-size:12px;outline:none';
-      const addFolderBtn = document.createElement('button'); addFolderBtn.textContent = '📁+'; addFolderBtn.title = 'New Folder'; addFolderBtn.style.cssText = 'background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:4px 8px;cursor:pointer;font-size:12px';
-      addFolderBtn.addEventListener('click', () => {
-        window.customPrompt('Folder name:', '', (name) => {
-          if (name) { const folders = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); folders.push({ name, ts: Date.now() }); localStorage.setItem('ex_bm_folders', JSON.stringify(folders)); renderBookmarksPanel(); showToast('📁 Folder "' + name + '" created'); }
-        });
+      list.innerHTML = ''; const title = document.createElement('div'); title.className = 'p-section-title'; title.textContent = 'Bookmarks'; list.appendChild(title);
+      bm.forEach(b => {
+        const el = document.createElement('div'); el.className = 'p-entry';
+        el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${b.url}">${b.title || b.url}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-del">×</button>`;
+        el.querySelector('.p-entry-title').addEventListener('click', () => { navigateTo(b.url); closeAllPanels(); });
+        el.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); DB.removeBookmark(b.url); renderBookmarksPanel(); });
+        list.appendChild(el);
       });
-      searchWrap.appendChild(searchInput); searchWrap.appendChild(addFolderBtn); list.appendChild(searchWrap);
-      // ── Folders section ──
-      const folders = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]');
-      if (folders.length > 0) {
-        const fTitle = document.createElement('div'); fTitle.className = 'p-section-title'; fTitle.textContent = '📁 Folders'; list.appendChild(fTitle);
-        folders.forEach(f => {
-          const fel = document.createElement('div'); fel.className = 'p-entry'; fel.style.cursor = 'pointer';
-          fel.innerHTML = `<div class="p-entry-icon">📁</div><div class="p-entry-title">${escHtml(f.name)}</div><div class="p-entry-meta">${timeAgo(f.ts)}</div><button class="p-entry-del">×</button>`;
-          fel.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); const fl = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); localStorage.setItem('ex_bm_folders', JSON.stringify(fl.filter(x => x.name !== f.name))); renderBookmarksPanel(); });
-          list.appendChild(fel);
-        });
-      }
-      // ── Bookmarks list ──
-      const title = document.createElement('div'); title.className = 'p-section-title'; title.textContent = 'Bookmarks (' + bm.length + ')'; list.appendChild(title);
-      function renderBmEntries(filter) {
-        list.querySelectorAll('.bm-entry-item').forEach(el => el.remove());
-        const filtered = filter ? bm.filter(b => (b.title || '').toLowerCase().includes(filter) || (b.url || '').toLowerCase().includes(filter)) : bm;
-        filtered.forEach(b => {
-          const el = document.createElement('div'); el.className = 'p-entry bm-entry-item';
-          el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${escHtml(b.url)}">${escHtml(b.title || b.url)}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-del" title="Remove" style="margin-right:2px">×</button><button class="bm-edit-btn" title="Edit" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:2px 4px">✏️</button>`;
-          el.querySelector('.p-entry-title').addEventListener('click', () => { navigateTo(b.url); closeAllPanels(); });
-          el.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); DB.removeBookmark(b.url); renderBookmarksPanel(); });
-          el.querySelector('.bm-edit-btn').addEventListener('click', e => {
-            e.stopPropagation();
-            window.customPrompt('Edit title:', b.title || '', (newTitle) => {
-              if (newTitle === null) return;
-              window.customPrompt('Edit URL:', b.url, (newUrl) => {
-                if (newUrl === null) return;
-                const all = DB.getBookmarks(); const found = all.find(x => x.url === b.url);
-                if (found) { found.title = newTitle || found.title; found.url = newUrl || found.url; }
-                localStorage.setItem('ex_bm', JSON.stringify(all)); renderBookmarksPanel(); showToast('✏️ Bookmark updated');
-              });
-            });
-          });
-          list.appendChild(el);
-        });
-        if (filtered.length === 0 && filter) { const noRes = document.createElement('div'); noRes.className = 'bm-entry-item'; noRes.style.cssText = 'text-align:center;padding:16px;color:var(--text3);font-size:12px'; noRes.textContent = 'No bookmarks match "' + filter + '"'; list.appendChild(noRes); }
-      }
-      renderBmEntries('');
-      searchInput.addEventListener('input', () => renderBmEntries(searchInput.value.toLowerCase().trim()));
     }
     function renderHistoryPanel() {
       const list = document.getElementById('histList'); const hist = DB.getHistory();
       if (hist.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No history yet</div>'; return; }
       list.innerHTML = '';
-      // ── Most Visited (top 10) ──
-      const visitMap = {};
-      hist.forEach(h => { const key = h.url; visitMap[key] = (visitMap[key] || 0) + 1; });
-      const topSites = Object.entries(visitMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
-      if (topSites.length > 0) {
-        const mvTitle = document.createElement('div'); mvTitle.className = 'p-section-title'; mvTitle.textContent = '🔥 Most Visited'; list.appendChild(mvTitle);
-        const mvGrid = document.createElement('div'); mvGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px;border-bottom:1px solid var(--border);margin-bottom:8px';
-        topSites.forEach(([url, count]) => {
-          const histEntry = hist.find(h => h.url === url);
-          const chip = document.createElement('div');
-          chip.style.cssText = 'display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:11px;color:var(--text2);max-width:200px';
-          chip.innerHTML = '<span style="font-size:14px">' + getSiteFavicon(url) + '</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + escHtml((histEntry?.title || url).slice(0, 24)) + '</span><span style="color:var(--text3);font-size:9px;flex-shrink:0">' + count + '×</span>';
-          chip.title = url;
-          chip.addEventListener('click', () => { navigateTo(url); closeAllPanels(); });
-          mvGrid.appendChild(chip);
-        });
-        list.appendChild(mvGrid);
-      }
       const groups = {}; hist.forEach(h => { const d = new Date(h.ts).toDateString(); (groups[d] = groups[d] || []).push(h); });
       Object.entries(groups).forEach(([day, entries]) => {
         const t = document.createElement('div'); t.className = 'p-section-title'; t.textContent = new Date(entries[0].ts).toDateString() === new Date().toDateString() ? 'Today' : day; list.appendChild(t);
@@ -6303,9 +6484,7 @@
     }
     document.getElementById('clearHistBtn').addEventListener('click', () => { DB.clearHistory(); renderHistoryPanel(); showToast('History cleared'); });
     /* toggle handlers moved to initSettingsPanel() — removed duplicate */
-    document.getElementById('btnDevtools').addEventListener('click', toggleDevtools);
-    document.getElementById('closeDevtools').addEventListener('click', () => { document.getElementById('devtools').classList.remove('open'); STATE.devtoolsOpen = false; });
-    function toggleDevtools() { STATE.devtoolsOpen = !STATE.devtoolsOpen; document.getElementById('devtools').classList.toggle('open', STATE.devtoolsOpen); }
+    /* #29: btnDevtools and closeDevtools listeners moved to browser.js to avoid duplicates */
     // ── DevTools tab switching
     document.querySelectorAll('.dt-tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -6440,57 +6619,113 @@
         c.innerHTML = '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
           keys.map(k => `<tr><td>${escHtml(k)}</td><td>${escHtml(sessionStorage.getItem(k) || '')}</td></tr>`).join('') + '</tbody></table>';
       } else if (type === 'cookies') {
-        if (!document.cookie) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No cookies.</p>'; return; }
-        c.innerHTML = '<table class="app-table"><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody>' +
-          document.cookie.split(';').map(p => { const [k, ...v] = p.trim().split('='); return `<tr><td>${escHtml(k)}</td><td>${escHtml(v.join('='))}</td></tr>`; }).join('') + '</tbody></table>';
+        const rawCookies = document.cookie;
+        const cookies = rawCookies ? rawCookies.split(';').map(p => { const eq = p.trim().indexOf('='); const name = eq > -1 ? p.trim().slice(0, eq) : p.trim(); const value = eq > -1 ? p.trim().slice(eq + 1) : ''; return { name: name.trim(), value: value.trim() }; }).filter(c => c.name) : [];
+        if (!cookies.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:12px">🍪 No cookies found for this origin.<br><span style="color:#444;font-size:10px">Cookies set by cross-origin frames are not accessible via document.cookie.</span></p>'; return; }
+        const rows = cookies.map((ck, i) => {
+          const size = (ck.name.length + ck.value.length + 1) + ' B';
+          const safeVal = escHtml(ck.value.length > 60 ? ck.value.slice(0, 60) + '…' : ck.value);
+          return `<tr>
+            <td style="color:var(--accent)">${escHtml(ck.name)}</td>
+            <td style="color:#ccc;font-family:monospace;font-size:10px" title="${escHtml(ck.value)}">${safeVal}</td>
+            <td style="color:#888">${location.hostname}</td>
+            <td style="color:#888">/</td>
+            <td style="color:#777">Session</td>
+            <td style="color:#888">${size}</td>
+            <td><button onclick="(function(){document.cookie='${escHtml(ck.name)}=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/';renderAppTab('cookies');})()" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 5px">✕</button></td>
+          </tr>`;
+        }).join('');
+        c.innerHTML = `<div style="padding:6px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:10px;color:#858585">🍪 ${cookies.length} cookie${cookies.length !== 1 ? 's' : ''} &nbsp;·&nbsp; ${location.hostname}</span>
+          <button onclick="(function(){document.cookie.split(';').forEach(function(c2){var n=c2.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/';});renderAppTab('cookies');})()" style="padding:3px 10px;background:#c0392b;border:none;border-radius:4px;color:#fff;font-size:10px;cursor:pointer">✕ Clear All</button>
+        </div>
+        <table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Domain</th><th>Path</th><th>Expires</th><th>Size</th><th style="width:40px"></th></tr></thead><tbody>${rows}</tbody></table>`;
       } else {
         c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No data available.</p>';
       }
     }
     function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-    // ── Performance metrics
+    // ── #33: Core Web Vitals + Performance metrics ─────────────────────────
+    const _cwv = { lcp: null, cls: 0, fid: null, inp: null };
+
+    // LCP observer
+    try {
+      new PerformanceObserver(list => {
+        const entries = list.getEntries();
+        const last = entries[entries.length - 1];
+        _cwv.lcp = last.startTime;
+        const el = document.getElementById('perfLcp');
+        if (el) { el.textContent = last.startTime.toFixed(0) + 'ms'; el.className = 'perf-val ' + (last.startTime < 2500 ? 'good' : last.startTime < 4000 ? 'warn' : 'bad'); }
+      }).observe({ type: 'largest-contentful-paint', buffered: true });
+    } catch (e) { }
+
+    // CLS observer
+    try {
+      new PerformanceObserver(list => {
+        list.getEntries().forEach(entry => {
+          if (!entry.hadRecentInput) { _cwv.cls += entry.value; }
+        });
+        const el = document.getElementById('perfCls');
+        if (el) { const v = _cwv.cls.toFixed(3); el.textContent = v; el.className = 'perf-val ' + (_cwv.cls < 0.1 ? 'good' : _cwv.cls < 0.25 ? 'warn' : 'bad'); }
+      }).observe({ type: 'layout-shift', buffered: true });
+    } catch (e) { }
+
+    // FID / First Input Delay observer
+    try {
+      new PerformanceObserver(list => {
+        list.getEntries().forEach(entry => {
+          if (_cwv.fid === null) {
+            _cwv.fid = entry.processingStart - entry.startTime;
+            const el = document.getElementById('perfTbt');
+            if (el) { const v = _cwv.fid.toFixed(0); el.textContent = v + 'ms'; el.className = 'perf-val ' + (_cwv.fid < 100 ? 'good' : _cwv.fid < 300 ? 'warn' : 'bad'); }
+          }
+        });
+      }).observe({ type: 'first-input', buffered: true });
+    } catch (e) { }
+
     function collectPerfMetrics() {
       try {
         const nav = performance.getEntriesByType('navigation')[0];
         if (nav) {
           const load = (nav.loadEventEnd - nav.startTime).toFixed(0);
           const tti = (nav.domInteractive - nav.startTime).toFixed(0);
-          const el = document.getElementById('perfLoad'); if (el) el.textContent = load + 'ms';
-          const et = document.getElementById('perfTti'); if (et) et.textContent = tti + 'ms';
+          const elLoad = document.getElementById('perfLoad'); if (elLoad) { elLoad.textContent = load + 'ms'; elLoad.className = 'perf-val ' + (load < 1000 ? 'good' : load < 3000 ? 'warn' : 'bad'); }
+          const elTti = document.getElementById('perfTti'); if (elTti) { elTti.textContent = tti + 'ms'; elTti.className = 'perf-val ' + (tti < 1500 ? 'good' : tti < 3500 ? 'warn' : 'bad'); }
+          // TBT: approximate as domContentLoaded - domInteractive (long tasks)
+          const tbt = Math.max(0, (nav.domContentLoadedEventEnd - nav.domInteractive - 50)).toFixed(0);
+          if (_cwv.fid === null) { const elTbt = document.getElementById('perfTbt'); if (elTbt) { elTbt.textContent = tbt + 'ms'; elTbt.className = 'perf-val ' + (tbt < 200 ? 'good' : tbt < 600 ? 'warn' : 'bad'); } }
+          // Update timeline bars
+          const total = nav.loadEventEnd - nav.startTime || 1;
+          const dns = (nav.domainLookupEnd - nav.domainLookupStart) / total * 100;
+          const tcp = (nav.connectEnd - nav.connectStart) / total * 100;
+          const ttfb = (nav.responseStart - nav.requestStart) / total * 100;
+          const dl = (nav.responseEnd - nav.responseStart) / total * 100;
+          const tl = document.getElementById('perfTimeline');
+          if (tl) {
+            const dns2 = dns.toFixed(1), tcp2 = (dns + tcp).toFixed(1), ttfb2 = (dns + tcp + ttfb).toFixed(1);
+            tl.innerHTML = `<div class="perf-seg" style="left:0;width:${dns.toFixed(1)}%;background:#569cd6" title="DNS: ${(nav.domainLookupEnd - nav.domainLookupStart).toFixed(0)}ms">DNS</div><div class="perf-seg" style="left:${dns2}%;width:${tcp.toFixed(1)}%;background:#4a9eff" title="TCP: ${(nav.connectEnd - nav.connectStart).toFixed(0)}ms">TCP</div><div class="perf-seg" style="left:${tcp2}%;width:${ttfb.toFixed(1)}%;background:#89d185" title="TTFB: ${(nav.responseStart - nav.requestStart).toFixed(0)}ms">TTFB</div><div class="perf-seg" style="left:${ttfb2}%;width:${dl.toFixed(1)}%;background:#ffca64" title="Download: ${(nav.responseEnd - nav.responseStart).toFixed(0)}ms">DL</div>`;
+          }
         }
         performance.getEntriesByType('paint').forEach(p => {
-          if (p.name === 'first-contentful-paint') { const el = document.getElementById('perfFcp'); if (el) el.textContent = p.startTime.toFixed(0) + 'ms'; }
+          if (p.name === 'first-contentful-paint') {
+            const el = document.getElementById('perfFcp');
+            if (el) { el.textContent = p.startTime.toFixed(0) + 'ms'; el.className = 'perf-val ' + (p.startTime < 1800 ? 'good' : p.startTime < 3000 ? 'warn' : 'bad'); }
+          }
         });
-      } catch (e) { }
+        // LCP from observer
+        if (_cwv.lcp !== null) {
+          const elLcp = document.getElementById('perfLcp');
+          if (elLcp) { elLcp.textContent = _cwv.lcp.toFixed(0) + 'ms'; elLcp.className = 'perf-val ' + (_cwv.lcp < 2500 ? 'good' : _cwv.lcp < 4000 ? 'warn' : 'bad'); }
+        }
+        // CLS from observer
+        if (_cwv.cls > 0) {
+          const elCls = document.getElementById('perfCls');
+          if (elCls) { elCls.textContent = _cwv.cls.toFixed(3); elCls.className = 'perf-val ' + (_cwv.cls < 0.1 ? 'good' : _cwv.cls < 0.25 ? 'warn' : 'bad'); }
+        }
+        document.getElementById('perfTime').textContent = new Date().toLocaleTimeString('hr-HR');
+      } catch (e) { console.warn('perf metrics error:', e); }
     }
-    // ── CLS (Cumulative Layout Shift) observer ──
-    try {
-      new PerformanceObserver((list) => {
-        let cls = 0;
-        list.getEntries().forEach(e => { if (!e.hadRecentInput) cls += e.value; });
-        const el = document.getElementById('perfCls');
-        if (el) el.textContent = cls.toFixed(3);
-      }).observe({ type: 'layout-shift', buffered: true });
-    } catch (e) { }
-    // ── LCP (Largest Contentful Paint) observer ──
-    try {
-      new PerformanceObserver((list) => {
-        const entries = list.getEntries();
-        const last = entries[entries.length - 1];
-        const el = document.getElementById('perfLcp');
-        if (el) el.textContent = last.startTime.toFixed(0) + 'ms';
-      }).observe({ type: 'largest-contentful-paint', buffered: true });
-    } catch (e) { }
-    // ── TBT approximation via Long Tasks observer ──
-    try {
-      let tbt = 0;
-      new PerformanceObserver((list) => {
-        list.getEntries().forEach(e => { tbt += Math.max(0, e.duration - 50); });
-        const el = document.getElementById('perfTbt');
-        if (el) el.textContent = tbt.toFixed(0) + 'ms';
-      }).observe({ type: 'longtask', buffered: true });
-    } catch (e) { }
     document.getElementById('mi-new-tab').addEventListener('click', () => createTab());
     document.getElementById('mi-close-tab').addEventListener('click', () => closeTab(STATE.activeTabId));
     document.getElementById('mi-find').addEventListener('click', openFind);
@@ -6511,8 +6746,8 @@
     document.getElementById('mi-show-shared').addEventListener('click', () => showToast('👥 Shared with You — not available in web mode'));
     document.getElementById('mi-show-downloads-view').addEventListener('click', () => togglePanel('dlPanel'));
     document.getElementById('mi-stop').addEventListener('click', () => { frame.src = 'about:blank'; setLoading(0); showToast('✕ Stopped'); consoleLog('warn', '✕ Page load stopped'); });
-    document.getElementById('mi-translation').addEventListener('click', () => { const t = getActiveTab(); if (!t?.url) { showToast('No page to translate'); return; } window.customPrompt('Translate to (e.g. hr, de, fr, es):', 'hr', (lang) => { if (lang) { navigateTo('https://translate.google.com/translate?sl=auto&tl=' + lang + '&u=' + encodeURIComponent(t.url)); } }); });
-    document.getElementById('mi-text-encoding').addEventListener('click', () => { window.customPrompt('Text encoding (e.g. UTF-8, ISO-8859-1):', 'UTF-8', (enc) => { if (enc) showToast('⌘ Encoding set to: ' + enc); }); });
+    document.getElementById('mi-translation').addEventListener('click', () => { const t = getActiveTab(); if (!t?.url) { showToast('No page to translate'); return; } const lang = prompt('Translate to (e.g. hr, de, fr, es):', 'hr'); if (lang) { navigateTo('https://translate.google.com/translate?sl=auto&tl=' + lang + '&u=' + encodeURIComponent(t.url)); } });
+    document.getElementById('mi-text-encoding').addEventListener('click', () => { const enc = prompt('Text encoding (e.g. UTF-8, ISO-8859-1):', 'UTF-8'); if (enc) showToast('⌘ Encoding set to: ' + enc); });
     document.getElementById('mi-show-history').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
     document.getElementById('mi-back-menu').addEventListener('click', () => document.getElementById('btnBack').click());
     document.getElementById('mi-fwd-menu').addEventListener('click', () => document.getElementById('btnFwd').click());
@@ -6530,9 +6765,8 @@
       }
     });
     document.getElementById('mi-add-bm-folder').addEventListener('click', () => {
-      window.customPrompt('Folder name:', '', (name) => {
-        if (name) { const folders = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); folders.push({ name, ts: Date.now() }); localStorage.setItem('ex_bm_folders', JSON.stringify(folders)); showToast('📁 Folder "' + name + '" created'); }
-      });
+      const name = prompt('Folder name:');
+      if (name) { const folders = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); folders.push({ name, ts: Date.now() }); localStorage.setItem('ex_bm_folders', JSON.stringify(folders)); showToast('📁 Folder "' + name + '" created'); }
     });
     // Reading List
     const RL = {
@@ -6677,19 +6911,6 @@
     function dupTab() { const t = getActiveTab(); if (!t) return; createTab(t.url, t.title + ' (copy)'); }
     function addBookmark() { const t = getActiveTab(); if (!t?.url) { showToast('Nothing to bookmark'); return; } DB.addBookmark({ url: t.url, title: t.title }); }
     document.getElementById('btnBookmarkPage')?.addEventListener('click', addBookmark);
-    // ── Share button handler ──
-    document.getElementById('btnShare')?.addEventListener('click', () => {
-      const t = getActiveTab();
-      if (!t?.url) { showToast('No page to share'); return; }
-      const shareData = { title: t.title || 'EtherX', url: t.url };
-      if (navigator.share) {
-        navigator.share(shareData).catch(() => { });
-      } else {
-        navigator.clipboard.writeText(t.url).then(() => {
-          showToast('🔗 URL copied to clipboard: ' + t.url.slice(0, 50) + (t.url.length > 50 ? '…' : ''));
-        }).catch(() => showToast('Could not copy URL'));
-      }
-    });
     const DEFAULT_QUICKLINKS = [{ url: 'https://en.wikipedia.org', label: 'Wiki', icon: '📖' }, { url: 'https://github.com', label: 'GitHub', icon: '��' }, { url: 'https://app.uniswap.org', label: 'Uniswap', icon: '🦄' }, { url: 'https://etherscan.io', label: 'Etherscan', icon: '🔍' }];
     function renderQuickLinks() {
       const ql = document.getElementById('quickLinks');
@@ -6944,7 +7165,6 @@
     document.getElementById('ctx-open-new').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) window.open(t.url, '_blank'); });
     document.getElementById('ctx-bookmark').addEventListener('click', addBookmark);
     document.getElementById('ctx-find').addEventListener('click', openFind);
-    document.getElementById('ctx-ai-summary')?.addEventListener('click', showAiSummary);
     document.getElementById('ctx-devtools').addEventListener('click', toggleDevtools);
     document.getElementById('ctx-close-tab').addEventListener('click', () => closeTab(STATE.activeTabId));
     document.querySelectorAll('.menu-item').forEach(item => {
@@ -6954,7 +7174,7 @@
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
     function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
-    function updateClock() { const now = new Date(); const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockEl = document.getElementById('titleClock'); if (clockEl) { clockEl.textContent = t; const fs = DB.getSettings().clockFontSize; if (fs) clockEl.style.fontSize = fs + 'px'; } document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = d; }
+    function updateClock() { const now = new Date(); const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); document.getElementById('titleClock').textContent = t; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = d; }
     updateClock(); setInterval(updateClock, 30000);
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
     document.addEventListener('keydown', e => {
@@ -7295,6 +7515,8 @@
           hist.push({ user: text, bot: resp, ts: Date.now() });
           if (hist.length > 50) hist.splice(0, hist.length - 50);
           localStorage.setItem(AI_STORAGE, JSON.stringify(hist));
+          // #30b: Also persist to DB (SQLite-backed) ai_cache
+          try { if (typeof DB !== 'undefined') DB.saveSetting('ai_cache', JSON.stringify(hist)); } catch (e) { }
         } catch (err) {
           typing.remove();
           addMsg('\u26a0\ufe0f Doslo je do greske: ' + err.message + '. Pokusaj ponovo.', 'bot');
@@ -7304,11 +7526,16 @@
       input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
       clearBtn?.addEventListener('click', () => {
         localStorage.removeItem(AI_STORAGE);
+        try { if (typeof DB !== 'undefined') DB.saveSetting('ai_cache', '[]'); } catch (e) { }
         msgs.innerHTML = '<div class="ai-msg bot">\U0001f916 Chat ociscen. Pitaj me bilo sto o kripto svijetu ili reci "provjeri sustav"!<span class="ai-time">AI Agent</span></div>';
         showToast('AI chat history cleared');
       });
-      // Restore last messages
-      const hist = JSON.parse(localStorage.getItem(AI_STORAGE) || '[]').slice(-10);
+      // #30b: Restore last messages — fallback to DB ai_cache if localStorage empty
+      let _aiRaw = localStorage.getItem(AI_STORAGE);
+      if (!_aiRaw || _aiRaw === '[]') {
+        try { const dbCache = DB.getSettings().ai_cache; if (dbCache) { _aiRaw = dbCache; localStorage.setItem(AI_STORAGE, dbCache); } } catch (e) { }
+      }
+      const hist = JSON.parse(_aiRaw || '[]').slice(-10);
       hist.forEach(h => { addMsg(h.user, 'user'); addMsg(h.bot, 'bot'); });
       // Welcome message if no history
       if (!hist.length) {
@@ -7430,17 +7657,11 @@
       authInput?.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
       modal?.addEventListener('click', e => { if (e.target === modal) closePwdModal(); });
       addBtn?.addEventListener('click', () => {
-        window.customPrompt('Website:', '', (site) => {
-          if (!site) return;
-          window.customPrompt('Username/Email:', '', (username) => {
-            if (!username) return;
-            window.customPrompt('Password:', '', (password) => {
-              if (!password) return;
-              const passwords = getPasswords(); passwords.push({ site, username, password, ts: Date.now() });
-              savePasswords(passwords); renderPwdList(); showToast('🔑 Password saved');
-            });
-          });
-        });
+        const site = prompt('Website:'); if (!site) return;
+        const username = prompt('Username/Email:'); if (!username) return;
+        const password = prompt('Password:'); if (!password) return;
+        const passwords = getPasswords(); passwords.push({ site, username, password, ts: Date.now() });
+        savePasswords(passwords); renderPwdList(); showToast('🔑 Password saved');
       });
     })();
 
@@ -7558,144 +7779,6 @@
       }
     })();
 
-    // ── AI Page Summary ──────────────────────────────────────────────────────
-    function showAiSummary() {
-      const t = getActiveTab();
-      if (!t?.url) { showToast('No page loaded'); return; }
-
-      // Create modal overlay
-      let modal = document.getElementById('aiSummaryModal');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'aiSummaryModal';
-        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999999;display:flex;align-items:center;justify-content:center;';
-        modal.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;width:520px;max-height:80vh;overflow-y:auto;padding:20px;color:var(--text);box-shadow:0 20px 60px rgba(0,0,0,0.5)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <h3 style="font-size:16px;margin:0">✨ AI Page Summary</h3>
-            <button id="aiSumClose" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">✕</button>
-          </div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--text3)">Provider</label>
-            <select id="aiSumProvider" style="width:100%;padding:6px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;margin-top:4px">
-              <option value="gemini">Google Gemini</option>
-              <option value="openai">OpenAI (GPT)</option>
-              <option value="anthropic">Anthropic Claude</option>
-              <option value="ollama">Ollama (Local)</option>
-            </select>
-          </div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--text3)">Model</label>
-            <input id="aiSumModel" style="width:100%;padding:6px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;margin-top:4px" value="gemini-2.0-flash">
-          </div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--text3)">API Key</label>
-            <input id="aiSumKey" type="password" style="width:100%;padding:6px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;margin-top:4px" placeholder="Enter API key...">
-          </div>
-          <div style="margin-bottom:16px">
-            <label style="font-size:11px;color:var(--text3)">Max Words</label>
-            <select id="aiSumWords" style="width:100%;padding:6px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;margin-top:4px">
-              <option value="100">Short (~100 words)</option>
-              <option value="250" selected>Medium (~250 words)</option>
-              <option value="500">Long (~500 words)</option>
-            </select>
-          </div>
-          <button id="aiSumRun" style="width:100%;padding:10px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">✨ Summarize Page</button>
-          <div id="aiSumResult" style="margin-top:16px;font-size:13px;line-height:1.6;display:none;padding:12px;background:var(--bg2);border-radius:8px;white-space:pre-wrap"></div>
-          <div id="aiSumActions" style="margin-top:8px;display:none;gap:8px">
-            <button id="aiSumCopy" style="padding:4px 12px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px">📋 Copy</button>
-            <button id="aiSumRerun" style="padding:4px 12px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px">🔄 Regenerate</button>
-          </div>
-        </div>`;
-        document.body.appendChild(modal);
-        document.getElementById('aiSumClose').addEventListener('click', () => modal.style.display = 'none');
-        modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
-
-        // Load saved settings
-        const savedProvider = DB.getSettings().aiProvider || 'gemini';
-        const savedModel = DB.getSettings().aiModel || 'gemini-2.0-flash';
-        const savedKey = DB.getSettings().aiApiKey || '';
-        document.getElementById('aiSumProvider').value = savedProvider;
-        document.getElementById('aiSumModel').value = savedModel;
-        document.getElementById('aiSumKey').value = savedKey;
-
-        // Provider change updates model
-        document.getElementById('aiSumProvider').addEventListener('change', function () {
-          const models = {
-            gemini: 'gemini-2.0-flash',
-            openai: 'gpt-4o-mini',
-            anthropic: 'claude-3-haiku-20240307',
-            ollama: 'llama3'
-          };
-          document.getElementById('aiSumModel').value = models[this.value] || '';
-        });
-
-        document.getElementById('aiSumCopy').addEventListener('click', () => {
-          const text = document.getElementById('aiSumResult').textContent;
-          navigator.clipboard?.writeText(text);
-          showToast('📋 Summary copied');
-        });
-
-        document.getElementById('aiSumRun').addEventListener('click', runAiSummary);
-        document.getElementById('aiSumRerun').addEventListener('click', runAiSummary);
-      }
-
-      modal.style.display = 'flex';
-
-      async function runAiSummary() {
-        const result = document.getElementById('aiSumResult');
-        const actions = document.getElementById('aiSumActions');
-        const btn = document.getElementById('aiSumRun');
-        const provider = document.getElementById('aiSumProvider').value;
-        const model = document.getElementById('aiSumModel').value;
-        const apiKey = document.getElementById('aiSumKey').value;
-        const maxWords = parseInt(document.getElementById('aiSumWords').value);
-
-        // Save settings
-        DB.saveSetting('aiProvider', provider);
-        DB.saveSetting('aiModel', model);
-        if (apiKey) DB.saveSetting('aiApiKey', apiKey);
-
-        result.style.display = 'block';
-        result.textContent = '⏳ Summarizing page...';
-        actions.style.display = 'none';
-        btn.disabled = true;
-
-        try {
-          let content = '';
-          if (window.electronWebview) {
-            const wv = document.getElementById('browseFrame');
-            try { content = await wv.executeJavaScript('document.body.innerText'); } catch (e) { content = t.title + ' - ' + t.url; }
-          } else {
-            content = t.title + ' — Content from: ' + t.url;
-          }
-
-          if (window.etherx?.ai?.summarizePage) {
-            const resp = await window.etherx.ai.summarizePage({ url: t.url, content, provider, model, apiKey, maxWords });
-            if (resp.ok) {
-              result.textContent = (resp.cached ? '(Cached) ' : '') + resp.summary;
-              actions.style.display = 'flex';
-            } else {
-              result.textContent = '❌ Error: ' + resp.error;
-            }
-          } else {
-            // Web mode fallback
-            result.textContent = '⚠️ AI Summary requires the Electron desktop app. Download from Settings → About.';
-          }
-        } catch (err) {
-          result.textContent = '❌ Error: ' + err.message;
-        }
-        btn.disabled = false;
-      }
-    }
-
-    // Keyboard shortcut for AI Summary
-    document.addEventListener('keydown', e => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
-        e.preventDefault();
-        showAiSummary();
-      }
-    });
-
     createTab(); renderQuickLinks();
     consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
 
@@ -7768,6 +7851,46 @@
       };
     };
 
+
+    window.customPrompt = function (message, defaultValue, callback) {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999999;display:flex;align-items:center;justify-content:center;';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
+      box.innerHTML = `<div style="margin-bottom:12px;font-size:14px;">${message}</div>
+    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+      <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
+    </div>`;
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      const inp = document.getElementById('cpInput');
+      inp.focus();
+      document.getElementById('cpCancel').onclick = () => { overlay.remove(); callback(null); };
+      document.getElementById('cpOk').onclick = () => { overlay.remove(); callback(inp.value); };
+      inp.onkeydown = (e) => {
+        if (e.key === 'Enter') document.getElementById('cpOk').click();
+        if (e.key === 'Escape') document.getElementById('cpCancel').click();
+      };
+    };
+
+
+    window.customConfirm = function (message, callback) {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999999;display:flex;align-items:center;justify-content:center;';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
+      box.innerHTML = `<div style="margin-bottom:20px;font-size:14px;white-space:pre-wrap;">${message}</div>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+      <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
+    </div>`;
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      document.getElementById('ccCancel').onclick = () => { overlay.remove(); callback(false); };
+      document.getElementById('ccOk').onclick = () => { overlay.remove(); callback(true); };
+    };
 
     window.customConfirm = function (message, callback) {
       const overlay = document.createElement('div');
@@ -7957,84 +8080,26 @@
       }
     });
 
-    // ── Profile picture upload (#22) ──
-    document.getElementById('profilePicUpload')?.addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (!file.type.startsWith('image/')) { showToast('Please select an image file'); return; }
-      if (file.size > 2 * 1024 * 1024) { showToast('Image too large (max 2MB)'); return; }
-      const reader = new FileReader();
-      reader.onload = function (ev) {
-        const img = new Image();
-        img.onload = function () {
-          const canvas = document.createElement('canvas');
-          canvas.width = 128;
-          canvas.height = 128;
-          const ctx = canvas.getContext('2d');
-          const size = Math.min(img.width, img.height);
-          const sx = (img.width - size) / 2;
-          const sy = (img.height - size) / 2;
-          ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
-          const dataUrl = canvas.toDataURL('image/png');
-          localStorage.setItem('ex_profile_pic', dataUrl);
-          const avatar = document.getElementById('profileAvatar');
-          if (avatar) avatar.src = dataUrl;
-          const titleAvatar = document.getElementById('titleProfilePic');
-          if (titleAvatar) titleAvatar.src = dataUrl;
-          showToast('✓ Profile picture updated');
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-    // Restore profile pic on load
-    (function restoreProfilePic() {
-      const pic = localStorage.getItem('ex_profile_pic');
-      if (pic) {
-        const avatar = document.getElementById('profileAvatar');
-        if (avatar) avatar.src = pic;
-        const titleAvatar = document.getElementById('titleProfilePic');
-        if (titleAvatar) titleAvatar.src = pic;
-      }
-    })();
-
-    // ── BobiAI Wallet session persistence (#24) ──
-    (function initWalletPersistence() {
-      const walletFrame = document.getElementById('walletFrame');
-      if (!walletFrame) return;
-
-      // Save wallet state periodically
-      setInterval(() => {
-        try {
-          const state = walletFrame.contentWindow?.localStorage;
-          if (state) {
-            const keys = Object.keys(state);
-            const walletData = {};
-            keys.forEach(k => { if (k.startsWith('wallet') || k.startsWith('metamask') || k.startsWith('bobiai')) walletData[k] = state.getItem(k); });
-            if (Object.keys(walletData).length > 0) {
-              localStorage.setItem('ex_wallet_state', JSON.stringify(walletData));
-            }
-          }
-        } catch (e) { /* cross-origin, expected */ }
-      }, 30000);
-
-      // Restore wallet state
-      walletFrame.addEventListener('load', () => {
-        try {
-          const saved = localStorage.getItem('ex_wallet_state');
-          if (saved) {
-            const data = JSON.parse(saved);
-            Object.entries(data).forEach(([k, v]) => {
-              try { walletFrame.contentWindow?.localStorage.setItem(k, v); } catch (e) { }
-            });
-          }
-        } catch (e) { }
-      });
-    })();
-
     // PWA Service Worker
     if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => { }); }
   </script>
+
+  <!-- Share Sheet Overlay (#23) -->
+  <div id="shareSheet"
+    style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:flex-end;justify-content:center;display:none">
+    <div
+      style="background:var(--bg2,#1e1e2e);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:600px;animation:slideUp .25s ease">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div
+          style="font-size:12px;color:var(--text2,#888);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90%"
+          id="shareUrl"></div>
+        <button id="shareClose"
+          style="background:none;border:none;color:var(--text2,#888);font-size:22px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>
+      <div id="shareActions" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px">
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>
