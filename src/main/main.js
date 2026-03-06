@@ -54,7 +54,17 @@ function createWindow() {
   });
 
   // Allow all new windows (tabs/popups from iframes)
+  // Specifically allow YouTube, Google, and common popup domains
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    const allowed = ['youtube.com', 'google.com', 'accounts.google.com', 'googleapis.com',
+      'kriptoentuzijasti.io', 'etherx.io', 'bobiai.kriptoentuzijasti.io', 'wallet.kriptoentuzijasti.io'];
+    try {
+      const hostname = new URL(url).hostname;
+      if (allowed.some(d => hostname === d || hostname.endsWith('.' + d))) {
+        return { action: 'allow' };
+      }
+    } catch (e) { }
+    // Allow all other URLs as well (browser app behavior)
     return { action: 'allow' };
   });
 
@@ -94,7 +104,32 @@ function buildMenu() {
       label: 'File',
       submenu: [
         { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => mainWindow?.webContents.executeJavaScript("createTab()") },
-        { label: 'New Private Window', accelerator: 'CmdOrCtrl+Shift+N', click: () => mainWindow?.webContents.executeJavaScript("togglePrivate()") },
+        { label: 'New Window', accelerator: 'CmdOrCtrl+N', click: () => createWindow() },
+        {
+          label: 'New Private Window', accelerator: 'CmdOrCtrl+Shift+N', click: () => {
+            const privWin = new BrowserWindow({
+              width: 1440, height: 900, minWidth: 800, minHeight: 600,
+              title: 'EtherX Browser (Private)',
+              icon: path.join(__dirname, '../build/icon.png'),
+              titleBarStyle: 'hidden',
+              trafficLightPosition: { x: 16, y: 16 },
+              backgroundColor: '#0d0d1a',
+              webPreferences: {
+                nodeIntegration: false, contextIsolation: true,
+                preload: path.join(__dirname, 'preload.js'),
+                webSecurity: false, allowRunningInsecureContent: true,
+                webviewTag: true, sandbox: false, partition: 'incognito-' + Date.now()
+              }
+            });
+            const browserPath = path.join(__dirname, 'browser.html');
+            if (fs.existsSync(browserPath)) privWin.loadFile(browserPath);
+            else privWin.loadURL('https://n8n.kriptoentuzijasti.io/browser.html');
+            privWin.once('ready-to-show', () => privWin.show());
+            privWin.webContents.on('did-finish-load', () => {
+              privWin.webContents.executeJavaScript("document.body.classList.add('private-mode'); document.title='EtherX (Private)'");
+            });
+          }
+        },
         { type: 'separator' },
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => mainWindow?.webContents.executeJavaScript("closeTab(STATE.activeTabId)") },
         { type: 'separator' },
@@ -164,6 +199,45 @@ app.whenReady().then(() => {
 
   buildMenu();
   createWindow();
+
+  // Dock / Taskbar context menu
+  const dockMenu = Menu.buildFromTemplate([
+    { label: 'New Window', click: () => createWindow() },
+    {
+      label: 'New Incognito Window', click: () => {
+        const privWin = new BrowserWindow({
+          width: 1440, height: 900, minWidth: 800, minHeight: 600,
+          title: 'EtherX Browser (Private)',
+          icon: path.join(__dirname, '../build/icon.png'),
+          titleBarStyle: 'hidden',
+          backgroundColor: '#0d0d1a',
+          webPreferences: {
+            nodeIntegration: false, contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
+            webSecurity: false, allowRunningInsecureContent: true,
+            webviewTag: true, sandbox: false, partition: 'incognito-' + Date.now()
+          }
+        });
+        const browserPath = path.join(__dirname, 'browser.html');
+        if (fs.existsSync(browserPath)) privWin.loadFile(browserPath);
+        else privWin.loadURL('https://n8n.kriptoentuzijasti.io/browser.html');
+        privWin.once('ready-to-show', () => privWin.show());
+        privWin.webContents.on('did-finish-load', () => {
+          privWin.webContents.executeJavaScript("document.body.classList.add('private-mode'); document.title='EtherX (Private)'");
+        });
+      }
+    }
+  ]);
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setMenu(dockMenu);
+  }
+  // On Linux/Windows, set the app user model tasks (taskbar jump list)
+  if (process.platform === 'win32') {
+    app.setUserTasks([
+      { program: process.execPath, arguments: '--new-window', iconPath: process.execPath, iconIndex: 0, title: 'New Window', description: 'Open a new EtherX window' },
+      { program: process.execPath, arguments: '--incognito', iconPath: process.execPath, iconIndex: 0, title: 'New Incognito Window', description: 'Open a private window' }
+    ]);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

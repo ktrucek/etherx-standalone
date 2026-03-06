@@ -39,6 +39,7 @@ This document outlines the major steps and functionalities required to develop "
 ### 🔴 KRITIČNI PRIORITET
 
 #### Window Management & Taskbar
+
 - [ ] **#2** - Desni klik na taskbar ikonu ne omogućuje otvaranje novog prozora ili incognito prozora
   - Implementirati taskbar context menu opcije: "New Window", "New Incognito Window"
 - [ ] **#13** - "Move tab to new window" otvara bijeli ekran - ne može se upisati web adresa
@@ -48,6 +49,7 @@ This document outlines the major steps and functionalities required to develop "
   - Omogućiti drag & drop tab-ova van i unutar prozora
 
 #### Navigation & Address Bar
+
 - [ ] **#26** - `https://riječ` upis u address bar pokazuje bijeli ekran
   - Dodati fallback na odabranu tražilicu (Google) ako stranica ne postoji
   - Implementirati search/navigate detection logiku
@@ -55,6 +57,7 @@ This document outlines the major steps and functionalities required to develop "
   - Ispraviti popup window handling za YouTube i slične domene
 
 #### Console Errors (BLOKIRA RELEASE!)
+
 - [ ] **#35a** - `DOM tree render failed: Failed to read 'document' from 'Window': Blocked cross-origin frame`
   - Ispraviti cross-origin frame access u DevTools
 - [ ] **#35b** - `Uncaught Error: prompt() is not supported` (2 lokacije: lines 9312, 12026)
@@ -69,6 +72,7 @@ This document outlines the major steps and functionalities required to develop "
 ### 🟡 VISOKI PRIORITET
 
 #### UI/UX Komponente
+
 - [ ] **#3** - Strelice naprijed/nazad su premale
   - Povećati veličinu back/forward navigation arrows (min 32px)
   - Poboljšati vidljivost i hover state
@@ -83,6 +87,7 @@ This document outlines the major steps and functionalities required to develop "
   - Dodati dropdown arrow funkcionalnost
 
 #### Zoom & Scrolling
+
 - [ ] **#5** - Zoom kontrole ne rade pravilno
   - `Ctrl++` ne povećava stranicu (implementirati)
   - `Ctrl+-` radi (provjereno OK)
@@ -90,6 +95,7 @@ This document outlines the major steps and functionalities required to develop "
   - Dodati `Ctrl+0` za reset zoom na 100%
 
 #### Homepage & Navigation
+
 - [ ] **#7** - Home tipka vodi na startpage umjesto homepage
   - **Settings → General**: Dodati opciju izbora "Home button action"
     - [ ] Homepage (custom URL)
@@ -98,12 +104,14 @@ This document outlines the major steps and functionalities required to develop "
   - Spremiti user preference u localStorage/SQLite
 
 #### Session Management
+
 - [ ] **#8** - "All windows from last session" - ne pokreće se svaki put
   - Debug session restore funkcionalnost
   - Provjeriti SQLite `tab_sessions` tablicu
   - Implementirati reliable window/tab state persistence
 
 #### Screenshots
+
 - [ ] **#9** - View → Take Screenshot: Dodati rectangle selection
   - Implementirati area selection overlay (crosshair cursor)
   - Dodati preview i save/copy opcije
@@ -114,11 +122,13 @@ This document outlines the major steps and functionalities required to develop "
 ### 🟢 SREDNJI PRIORITET
 
 #### History
+
 - [ ] **#10** - History: Ispod "Clear history" prikazati top 10 najčešće posjećenih
   - Query SQLite history table: `SELECT url, COUNT(*) as visits FROM history GROUP BY url ORDER BY visits DESC LIMIT 10`
   - Kreirati UI section "Most Visited"
 
 #### Bookmarks
+
 - [ ] **#11** - Bookmark Manager: Puna funkcionalnost
   - [ ] Folder creation i nested structure
   - [ ] Import bookmarks (HTML format)
@@ -132,6 +142,7 @@ This document outlines the major steps and functionalities required to develop "
   - Spremiti folder strukturu u SQLite `bookmarks` tablica
 
 #### Downloads
+
 - [ ] **#15** - Downloads se ne prikazuju u Download manager prozoru
   - Hookati Electron `will-download` event
   - Spremiti download info u SQLite `downloads` tablica
@@ -144,12 +155,14 @@ This document outlines the major steps and functionalities required to develop "
   - [ ] Retry failed download
 
 #### Window Features
+
 - [ ] **#14** - Window split screen funkcionalnost
   - Implementirati snap to half: lijevo (Win+Left), desno (Win+Right)
   - Snap to quarters: gore lijevo, gore desno, dolje lijevo, dolje desno
   - Integration sa OS window manager (Windows Snap Assist, macOS Split View)
 
 #### Popups & Multi-Account
+
 - [ ] **#17** - Google search otvara linkove u popup prozoru umjesto istog tab-a
   - Konfigurirati webPreferences: `nativeWindowOpen: false`
   - Hookati `new-window` event i preusmjeriti u isti tab ili novi tab (user preference)
@@ -162,12 +175,14 @@ This document outlines the major steps and functionalities required to develop "
 ### 🟢 SREDNJI PRIORITET - Settings & Customization
 
 #### Profile Management
+
 - [ ] **#22** - Manage Profile: Dodati profile picture upload
   - File picker za avatar image
   - Crop/resize na 128x128px
   - Spremiti kao base64 u SQLite `user_profile` tablica ili kao file u `userData` folder
 
 #### Appearance Settings
+
 - [ ] **#21** - Top bar clock/time: Customization opcije
   - **Settings → Appearance → Title Bar**:
     - [ ] Clock font size (12px - 24px slider)
@@ -186,6 +201,7 @@ This document outlines the major steps and functionalities required to develop "
   - [ ] "Lock toolbar" toggle
 
 #### Start Page
+
 - [ ] **#20** - Start Page: Customization
   - [ ] Prikazati "Recently Visited" (iz SQLite history)
   - [ ] Drag & drop tiles reordering
@@ -197,6 +213,7 @@ This document outlines the major steps and functionalities required to develop "
 ### 🔵 DATABASE & BACKEND (SQLite)
 
 #### SQLite Tables - Ne Rade / Prazne
+
 - [ ] **#30a** - `open_tabs` tablica prazna
   - Implementirati save open tabs on window close
   - Load tabs on browser start (ako "Restore session" enabled)
@@ -224,6 +241,7 @@ This document outlines the major steps and functionalities required to develop "
   - Enkriptirati lozinke prije spremanja (crypto.js AES ili native keychain API)
 
 #### Dodatne DB Funkcionalnosti
+
 - [ ] **#31** - Lighthouse: Dodati u SQLite
   - Run Lighthouse audit on page
   - Spremiti rezultate u novu tablicu `lighthouse_audits`:
@@ -249,6 +267,7 @@ This document outlines the major steps and functionalities required to develop "
 ### 🟣 EXTENSIONS & INTEGRATIONS
 
 #### BobiAI Wallet
+
 - [ ] **#24** - BobiAI wallet se resetira svaku sesiju
   - Spremiti wallet state u SQLite `wallet_state` tablica
   - Enkriptirati private keys sa master password
@@ -256,6 +275,7 @@ This document outlines the major steps and functionalities required to develop "
   - Implementirati seed phrase backup/restore UI
 
 #### AI Agent
+
 - [ ] **#25** - AI Agent UI problemi
   - [ ] Scrolling issue: Auto-scroll to bottom when new message
     - `chatContainer.scrollTop = chatContainer.scrollHeight`
@@ -263,6 +283,7 @@ This document outlines the major steps and functionalities required to develop "
   - [ ] SQLite data collection: Spremati AI conversations (vidi #30b)
 
 #### AI Page Summary
+
 - [ ] **#36** - Sažetak stranice (Page Summary) sa AI modelom
   - [ ] **Backend implementacija:**
     - Dodati AI service koji šalje page content na API
@@ -277,9 +298,9 @@ This document outlines the major steps and functionalities required to develop "
       // src/main/aiSummary.js
       async function summarizePage(pageContent, model, apiKey) {
         const providers = {
-          'openai': 'https://api.openai.com/v1/chat/completions',
-          'anthropic': 'https://api.anthropic.com/v1/messages',
-          'gemini': 'https://generativelanguage.googleapis.com/v1/models',
+          openai: "https://api.openai.com/v1/chat/completions",
+          anthropic: "https://api.anthropic.com/v1/messages",
+          gemini: "https://generativelanguage.googleapis.com/v1/models",
         };
         // POST request sa page content
       }
@@ -341,6 +362,7 @@ This document outlines the major steps and functionalities required to develop "
 ### ⚪ NISKI PRIORITET
 
 #### Developer Tools
+
 - [ ] **#29** - Developer Tools toggle problemi
   - Mobile view: DevTools donji panel ne može se ugasiti
   - X button ponekad ne radi
@@ -364,6 +386,7 @@ This document outlines the major steps and functionalities required to develop "
 ## 🎯 PREPORUČENI PLAN RADA
 
 ### Sprint 1 - Kritični Bugovi (Tjedan 1-2)
+
 **Cilj:** Riješiti sve blokere i kritične errore
 
 1. **Console errors** (#35a, #35b, #35c, #35d) - MORA biti clean console!
@@ -372,6 +395,7 @@ This document outlines the major steps and functionalities required to develop "
 4. **Taskbar integration** (#2) - Native OS integracija
 
 ### Sprint 2 - UI & Navigation (Tjedan 3-4)
+
 **Cilj:** Polishing user-facing UI komponenti
 
 1. **Navigation controls** (#3, #4, #6, #23) - Vidljivost i funkcionalnost
@@ -380,6 +404,7 @@ This document outlines the major steps and functionalities required to develop "
 4. **Screenshots** (#9) - Value-add feature
 
 ### Sprint 3 - Content Management (Tjedan 5-6)
+
 **Cilj:** Bookmarks, History, Downloads
 
 1. **Bookmarks** (#11, #12) - Full bookmark manager
@@ -388,6 +413,7 @@ This document outlines the major steps and functionalities required to develop "
 4. **Popups** (#17, #18) - Multi-account support
 
 ### Sprint 4 - Settings & Customization (Tjedan 7-8)
+
 **Cilj:** User personalization
 
 1. **Appearance settings** (#21, #27, #28) - Theme customization
@@ -396,6 +422,7 @@ This document outlines the major steps and functionalities required to develop "
 4. **Window features** (#14) - Snap/split screen
 
 ### Sprint 5 - Database & Backend (Tjedan 9-10)
+
 **Cilj:** Data persistence i analytics
 
 1. **SQLite tables** (#30a-g) - Fix all empty tables
@@ -405,6 +432,7 @@ This document outlines the major steps and functionalities required to develop "
 5. **Performance metrics** (#31, #33) - Lighthouse + Web Vitals
 
 ### Sprint 6 - Polish & DevTools (Tjedan 11-12)
+
 **Cilj:** Developer experience i final polish
 
 1. **DevTools fixes** (#29, #32, #34) - Stable dev environment
@@ -417,21 +445,25 @@ This document outlines the major steps and functionalities required to develop "
 ## 🚨 IMMEDIATE ACTION ITEMS
 
 **Danas (6. Ožujak):**
+
 1. Fix console errors (#35) - Clean console test
 2. Address bar search fallback (#26)
 3. YouTube popup (#1)
 
 **Ovaj tjedan:**
+
 1. Tab/window management (#13, #19, #2)
 2. Navigation UI (#3, #4, #6)
 3. Zoom controls (#5)
 
 **Sljedeći tjedan:**
+
 1. Bookmarks (#11, #12)
 2. Downloads (#15, #16)
 3. Session restore (#8)
 
 **AI Features setup:**
+
 1. Page Summary API integration (#36) - dodati Settings → AI sekciju
 2. API key storage sa enkripcijom
 3. Multi-provider support (OpenAI, Claude, Gemini, Ollama)

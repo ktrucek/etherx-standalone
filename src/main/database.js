@@ -134,6 +134,81 @@ class DatabaseManager {
         INSERT OR REPLACE INTO schema_version (version) VALUES (2);
       `);
     }
+
+    // ── Migration v3: Downloads, Tab Sessions, User Profile, Notes, Lighthouse, Summaries
+    if (currentVersion < 3) {
+      this.db.exec(`
+        -- Downloads tracking
+        CREATE TABLE IF NOT EXISTS downloads (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          url TEXT NOT NULL,
+          filename TEXT NOT NULL DEFAULT '',
+          filepath TEXT DEFAULT '',
+          filesize INTEGER DEFAULT 0,
+          received_bytes INTEGER DEFAULT 0,
+          mime_type TEXT DEFAULT '',
+          state TEXT DEFAULT 'progressing',
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          completed_at INTEGER DEFAULT NULL
+        );
+
+        -- Tab sessions for restore
+        CREATE TABLE IF NOT EXISTS tab_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL,
+          tabs_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        -- User profile
+        CREATE TABLE IF NOT EXISTS user_profile (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          full_name TEXT DEFAULT '',
+          email TEXT DEFAULT '',
+          avatar_data TEXT DEFAULT '',
+          bio TEXT DEFAULT '',
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        -- Notes
+        CREATE TABLE IF NOT EXISTS notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL DEFAULT 'Untitled',
+          content TEXT NOT NULL DEFAULT '',
+          color TEXT DEFAULT '#667eea',
+          is_pinned INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        -- Lighthouse audit history
+        CREATE TABLE IF NOT EXISTS lighthouse_audits (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          url TEXT NOT NULL,
+          performance_score INTEGER,
+          accessibility_score INTEGER,
+          best_practices_score INTEGER,
+          seo_score INTEGER,
+          pwa_score INTEGER,
+          audit_json TEXT,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        -- Page summaries (AI)
+        CREATE TABLE IF NOT EXISTS page_summaries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          url TEXT NOT NULL,
+          title TEXT DEFAULT '',
+          summary TEXT NOT NULL,
+          model TEXT DEFAULT '',
+          word_count INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_summaries_url ON page_summaries(url);
+
+        INSERT OR REPLACE INTO schema_version (version) VALUES (3);
+      `);
+    }
   }
 
   // ─── Tabs ─────────────────────────────────────────────────────────────────
@@ -376,6 +451,139 @@ class DatabaseManager {
   clearAiCache() {
     this.db.prepare('DELETE FROM ai_cache').run();
     return { ok: true };
+  }
+
+  // ─── Downloads ────────────────────────────────────────────────────────────
+  addDownload({ url, filename, filepath, filesize, mimeType }) {
+    const result = this.db.prepare(
+      'INSERT INTO downloads (url, filename, filepath, filesize, mime_type) VALUES (?, ?, ?, ?, ?)'
+    ).run(url, filename || '', filepath || '', filesize || 0, mimeType || '');
+    return { ok: true, id: result.lastInsertRowid };
+  }
+
+  updateDownload(id, { receivedBytes, state, filepath, completedAt }) {
+    const sets = [];
+    const vals = [];
+    if (receivedBytes !== undefined) { sets.push('received_bytes = ?'); vals.push(receivedBytes); }
+    if (state) { sets.push('state = ?'); vals.push(state); }
+    if (filepath) { sets.push('filepath = ?'); vals.push(filepath); }
+    if (completedAt) { sets.push('completed_at = ?'); vals.push(completedAt); }
+    if (sets.length === 0) return { ok: true };
+    vals.push(id);
+    this.db.prepare('UPDATE downloads SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+    return { ok: true };
+  }
+
+  getDownloads(limit = 100) {
+    return this.db.prepare('SELECT * FROM downloads ORDER BY created_at DESC LIMIT ?').all(limit);
+  }
+
+  deleteDownload(id) {
+    this.db.prepare('DELETE FROM downloads WHERE id = ?').run(id);
+    return { ok: true };
+  }
+
+  clearDownloads() {
+    this.db.prepare('DELETE FROM downloads').run();
+    return { ok: true };
+  }
+
+  // ─── Tab Sessions ─────────────────────────────────────────────────────────
+  saveTabSession(sessionId, tabsArray) {
+    this.db.prepare(
+      'INSERT INTO tab_sessions (session_id, tabs_json) VALUES (?, ?)'
+    ).run(sessionId, JSON.stringify(tabsArray));
+    return { ok: true };
+  }
+
+  getLatestTabSession() {
+    return this.db.prepare(
+      'SELECT * FROM tab_sessions ORDER BY created_at DESC LIMIT 1'
+    ).get();
+  }
+
+  clearTabSessions() {
+    this.db.prepare('DELETE FROM tab_sessions').run();
+    return { ok: true };
+  }
+
+  // ─── User Profile ────────────────────────────────────────────────────────
+  getUserProfile() {
+    return this.db.prepare('SELECT * FROM user_profile WHERE id = 1').get() || { full_name: '', email: '', avatar_data: '', bio: '' };
+  }
+
+  saveUserProfile({ fullName, email, avatarData, bio }) {
+    this.db.prepare(`
+      INSERT INTO user_profile (id, full_name, email, avatar_data, bio, updated_at)
+      VALUES (1, ?, ?, ?, ?, strftime('%s','now'))
+      ON CONFLICT(id) DO UPDATE SET
+        full_name = excluded.full_name,
+        email = excluded.email,
+        avatar_data = excluded.avatar_data,
+        bio = excluded.bio,
+        updated_at = strftime('%s','now')
+    `).run(fullName || '', email || '', avatarData || '', bio || '');
+    return { ok: true };
+  }
+
+  // ─── Notes ────────────────────────────────────────────────────────────────
+  addNote({ title, content, color }) {
+    const result = this.db.prepare(
+      'INSERT INTO notes (title, content, color) VALUES (?, ?, ?)'
+    ).run(title || 'Untitled', content || '', color || '#667eea');
+    return { ok: true, id: result.lastInsertRowid };
+  }
+
+  getNotes() {
+    return this.db.prepare('SELECT * FROM notes ORDER BY is_pinned DESC, updated_at DESC').all();
+  }
+
+  updateNote(id, { title, content, color, isPinned }) {
+    const sets = ["updated_at = strftime('%s','now')"];
+    const vals = [];
+    if (title !== undefined) { sets.push('title = ?'); vals.push(title); }
+    if (content !== undefined) { sets.push('content = ?'); vals.push(content); }
+    if (color !== undefined) { sets.push('color = ?'); vals.push(color); }
+    if (isPinned !== undefined) { sets.push('is_pinned = ?'); vals.push(isPinned ? 1 : 0); }
+    vals.push(id);
+    this.db.prepare('UPDATE notes SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+    return { ok: true };
+  }
+
+  deleteNote(id) {
+    this.db.prepare('DELETE FROM notes WHERE id = ?').run(id);
+    return { ok: true };
+  }
+
+  // ─── Lighthouse Audits ────────────────────────────────────────────────────
+  saveLighthouseAudit({ url, performanceScore, accessibilityScore, bestPracticesScore, seoScore, pwaScore, auditJson }) {
+    this.db.prepare(
+      'INSERT INTO lighthouse_audits (url, performance_score, accessibility_score, best_practices_score, seo_score, pwa_score, audit_json) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(url, performanceScore, accessibilityScore, bestPracticesScore, seoScore, pwaScore, auditJson || '');
+    return { ok: true };
+  }
+
+  getLighthouseAudits(url, limit = 20) {
+    if (url) {
+      return this.db.prepare('SELECT * FROM lighthouse_audits WHERE url = ? ORDER BY created_at DESC LIMIT ?').all(url, limit);
+    }
+    return this.db.prepare('SELECT * FROM lighthouse_audits ORDER BY created_at DESC LIMIT ?').all(limit);
+  }
+
+  // ─── Page Summaries ───────────────────────────────────────────────────────
+  savePageSummary({ url, title, summary, model, wordCount }) {
+    this.db.prepare(
+      'INSERT INTO page_summaries (url, title, summary, model, word_count) VALUES (?, ?, ?, ?, ?)'
+    ).run(url, title || '', summary, model || '', wordCount || 0);
+    return { ok: true };
+  }
+
+  getPageSummary(url) {
+    return this.db.prepare('SELECT * FROM page_summaries WHERE url = ? ORDER BY created_at DESC LIMIT 1').get(url);
+  }
+
+  getPageSummaries(limit = 50) {
+    return this.db.prepare('SELECT * FROM page_summaries ORDER BY created_at DESC LIMIT ?').all(limit);
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
