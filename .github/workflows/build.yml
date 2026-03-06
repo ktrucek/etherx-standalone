@@ -114,7 +114,7 @@ jobs:
   # ─── macOS Build (Intel x64) ──────────────────────────────────────────────────
   build-macos-x64:
     name: 🍎 macOS Intel (x64 DMG)
-    runs-on: macos-13 # Intel runner (macos-12 deprecated)
+    runs-on: macos-14 # M1 runner, cross-compiles x64
 
     steps:
       - name: 📥 Checkout code
