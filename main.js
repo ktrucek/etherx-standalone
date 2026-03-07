@@ -11,7 +11,6 @@ const {
   protocol,
   clipboard,
   Menu,
-  screen,
 } = require('electron');
 const path = require('path');
 
@@ -47,62 +46,6 @@ let db = null;
 let adBlocker = null;
 let ai = null;
 const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
-const activeDownloads = new Map(); // track in-progress downloads
-
-// ─── Google / YouTube popup whitelist ─────────────────────────────────────────
-const POPUP_WHITELIST = [
-  'accounts.google.com',
-  'mail.google.com',
-  'youtube.com',
-  'www.youtube.com',
-  'music.youtube.com',
-  'google.com',
-  'www.google.com',
-  'docs.google.com',
-  'drive.google.com',
-  'meet.google.com',
-  'calendar.google.com',
-];
-
-function isWhitelistedPopup(url) {
-  try {
-    const { hostname } = new URL(url);
-    return POPUP_WHITELIST.some(d => hostname === d || hostname.endsWith('.' + d));
-  } catch { return false; }
-}
-
-// ─── Helper: create a new BrowserWindow ───────────────────────────────────────
-function createNewBrowserWindow(url, opts = {}) {
-  const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
-    titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: '#1a1a2e',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      webviewTag: true,
-      allowRunningInsecureContent: false,
-      webSecurity: false,
-      ...(opts.partition ? { partition: opts.partition } : {}),
-    },
-    icon: path.join(__dirname, 'src', 'icon.png'),
-    show: false,
-  });
-
-  win.loadFile(path.join(__dirname, 'src', 'index.html'));
-  win.once('ready-to-show', () => {
-    win.show();
-    if (url && url !== 'about:blank') {
-      win.webContents.send('open-url', url);
-    }
-  });
-  return win;
-}
 
 // ─── Single instance lock ─────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -137,166 +80,6 @@ app.whenReady().then(async () => {
 
   createWindow();
 
-  // ── Session restore ──────────────────────────────────────────────────────
-  try {
-    const settings = db.getSettings();
-    if (settings.session_restore === 'true' || settings.session_restore === undefined) {
-      const savedTabs = db.getTabs();
-      if (savedTabs && savedTabs.length > 0) {
-        mainWindow.webContents.once('did-finish-load', () => {
-          mainWindow.webContents.send('restore-tabs', savedTabs);
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Session restore failed:', e.message);
-  }
-
-  // ── Taskbar / Dock context menu ─────────────────────────────────────────
-  if (process.platform === 'win32') {
-    app.setUserTasks([
-      {
-        program: process.execPath,
-        arguments: '--new-window',
-        iconPath: process.execPath,
-        iconIndex: 0,
-        title: 'New Window',
-        description: 'Open a new EtherX window',
-      },
-      {
-        program: process.execPath,
-        arguments: '--incognito',
-        iconPath: process.execPath,
-        iconIndex: 0,
-        title: 'New Incognito Window',
-        description: 'Open a new private window',
-      },
-    ]);
-  }
-
-  if (process.platform === 'darwin' && app.dock) {
-    const dockMenu = Menu.buildFromTemplate([
-      {
-        label: 'New Window',
-        click: () => createNewBrowserWindow(null),
-      },
-      {
-        label: 'New Incognito Window',
-        click: () => createNewBrowserWindow(null, { partition: 'incognito' }),
-      },
-    ]);
-    app.dock.setMenu(dockMenu);
-  }
-
-  // ── Application Menu (File menu with New Window / New Private Window) ───
-  const menuTemplate = [
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'New Window',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => createNewBrowserWindow(null),
-        },
-        {
-          label: 'New Private Window',
-          accelerator: 'CmdOrCtrl+Shift+N',
-          click: () => createNewBrowserWindow(null, { partition: 'incognito' }),
-        },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'close' },
-      ],
-    },
-  ];
-  const appMenu = Menu.buildFromTemplate(menuTemplate);
-  Menu.setApplicationMenu(appMenu);
-
-  // ── Downloads tracking ──────────────────────────────────────────────────
-  session.defaultSession.on('will-download', (_event, item, webContents) => {
-    const downloadId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    const downloadInfo = {
-      id: downloadId,
-      filename: item.getFilename(),
-      url: item.getURL(),
-      totalBytes: item.getTotalBytes(),
-      receivedBytes: 0,
-      state: 'progressing',
-      startTime: Date.now(),
-      savePath: item.getSavePath(),
-    };
-    activeDownloads.set(downloadId, downloadInfo);
-
-    // Notify renderer of new download
-    mainWindow?.webContents.send('download-started', downloadInfo);
-
-    item.on('updated', (_event, state) => {
-      downloadInfo.receivedBytes = item.getReceivedBytes();
-      downloadInfo.totalBytes = item.getTotalBytes();
-      downloadInfo.state = state; // 'progressing' or 'interrupted'
-      downloadInfo.savePath = item.getSavePath();
-      mainWindow?.webContents.send('download-progress', { ...downloadInfo });
-    });
-
-    item.once('done', (_event, state) => {
-      downloadInfo.state = state; // 'completed', 'cancelled', or 'interrupted'
-      downloadInfo.receivedBytes = item.getReceivedBytes();
-      downloadInfo.endTime = Date.now();
-      downloadInfo.savePath = item.getSavePath();
-      mainWindow?.webContents.send('download-complete', { ...downloadInfo });
-      activeDownloads.delete(downloadId);
-
-      // Persist to database
-      try {
-        db.saveSettings({
-          [`download_${downloadId}`]: JSON.stringify({
-            filename: downloadInfo.filename,
-            url: downloadInfo.url,
-            savePath: downloadInfo.savePath,
-            totalBytes: downloadInfo.totalBytes,
-            state: downloadInfo.state,
-            startTime: downloadInfo.startTime,
-            endTime: downloadInfo.endTime,
-          }),
-        });
-      } catch (e) {
-        console.error('Failed to save download record:', e.message);
-      }
-    });
-  });
-
   // Register etherx:// protocol for settings
   protocol.registerHttpProtocol('etherx', (request, callback) => {
     const { URL: NURL } = require('url');
@@ -313,25 +96,18 @@ app.whenReady().then(async () => {
   });
 });
 
-// ─── Save session before window closes ────────────────────────────────────────
-app.on('before-quit', async () => {
-  if (mainWindow && db) {
-    try {
-      mainWindow.webContents.send('save-session-request');
-      // Give renderer a moment to respond, but also save what we have
-      const tabs = db.getTabs();
-      if (tabs) {
-        db.saveSettings({ session_restore: 'true', last_session_tabs: JSON.stringify(tabs.map(t => t.url)) });
-      }
-    } catch (e) {
-      console.error('Failed to save session:', e.message);
-    }
-  }
-});
-
 app.on('window-all-closed', () => {
   INCOGNITO_TABS.clear();
   if (process.platform !== 'darwin') app.quit();
+});
+
+// ─── Auto-save session before window closes ───────────────────────────────────
+app.on('before-quit', () => {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript('saveSessionTabs()').catch(() => { });
+    }
+  } catch (e) { /* window already destroyed */ }
 });
 
 // ─── Create main window ───────────────────────────────────────────────────────
@@ -361,34 +137,6 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  // ── Popup / new-window handling (#1, #17-18, #19) ──────────────────────
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    // Allow whitelisted Google/YouTube popups as new windows
-    if (isWhitelistedPopup(url)) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 1200,
-          height: 800,
-          titleBarStyle: 'hidden',
-          backgroundColor: '#1a1a2e',
-          webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-            webviewTag: true,
-          },
-        },
-      };
-    }
-
-    // For all other popups: convert to a new tab in the renderer (#19)
-    if (url && url !== 'about:blank') {
-      mainWindow?.webContents.send('open-url', url);
-    }
-    return { action: 'deny' };
-  });
-
   // macOS: inject CSS so traffic lights don't overlap left-side content
   if (process.platform === 'darwin') {
     mainWindow.webContents.on('did-finish-load', () => {
@@ -408,6 +156,39 @@ function createWindow() {
   ipcMain.on('window-close', () => mainWindow?.close());
 
   setupIPC();
+
+  // ── Dock / Taskbar context menu ──────────────────────────────────────────
+  const dockMenu = Menu.buildFromTemplate([
+    {
+      label: 'New Window', click: () => {
+        ipcMain.emit('app:newWindow');
+        const win = new BrowserWindow({
+          width: 1280, height: 800, backgroundColor: '#1a1a2e', titleBarStyle: 'hidden',
+          webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true, sandbox: false },
+        });
+        win.loadFile(path.join(__dirname, 'src', 'index.html'));
+      }
+    },
+    {
+      label: 'New Private Window', click: () => {
+        const win = new BrowserWindow({
+          width: 1280, height: 800, backgroundColor: '#0d0d1a', titleBarStyle: 'hidden',
+          webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true, sandbox: false, partition: 'incognito-' + Date.now() },
+        });
+        win.loadFile(path.join(__dirname, 'src', 'index.html'));
+        win.webContents.on('did-finish-load', () => {
+          win.webContents.executeJavaScript(`STATE.isPrivate=true;document.getElementById('privateIndicator').style.display='';document.title='EtherX (Private)';`).catch(() => { });
+        });
+      }
+    },
+    { type: 'separator' },
+    { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => { mainWindow?.webContents.executeJavaScript('createTab()').catch(() => { }); } },
+    { type: 'separator' },
+    { label: 'Settings', click: () => { mainWindow?.webContents.executeJavaScript(`document.getElementById('btnSettings').click()`).catch(() => { }); } },
+  ]);
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setMenu(dockMenu);
+  }
 }
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
@@ -457,70 +238,11 @@ function setupIPC() {
   ipcMain.handle('ai:groupTabs', (_e, tabs) => ai.groupTabs(tabs));
   ipcMain.handle('ai:translate', (_e, text, targetLang) => ai.translate(text, targetLang));
 
-  // ── AI Page Summary ──────────────────────────────────────────────────────
-  ipcMain.handle('ai-summarize-page', async (e, { url, content, provider, model, apiKey, maxWords }) => {
-    try {
-      const crypto = require('crypto');
-      const urlHash = crypto.createHash('md5').update(url).digest('hex');
-
-      // Check cache first
-      const cached = db.getCachedSummary(urlHash);
-      if (cached) return { ok: true, summary: cached, cached: true };
-
-      let summary = '';
-      const prompt = `Summarize this web page content in ${maxWords || 250} words or less. Include key points as bullet points:\n\n${(content || '').slice(0, 10000)}`;
-
-      if (provider === 'openai') {
-        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-          body: JSON.stringify({ model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], max_tokens: 1000 })
-        });
-        const data = await resp.json();
-        summary = data.choices?.[0]?.message?.content || 'No summary generated';
-      } else if (provider === 'anthropic') {
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: model || 'claude-3-haiku-20240307', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
-        });
-        const data = await resp.json();
-        summary = data.content?.[0]?.text || 'No summary generated';
-      } else if (provider === 'gemini') {
-        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        const data = await resp.json();
-        summary = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No summary generated';
-      } else if (provider === 'ollama') {
-        const endpoint = apiKey || 'http://localhost:11434';
-        const resp = await fetch(endpoint + '/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: model || 'llama3', prompt, stream: false })
-        });
-        const data = await resp.json();
-        summary = data.response || 'No summary generated';
-      } else {
-        summary = 'Unknown AI provider: ' + provider;
-      }
-
-      // Cache the result
-      db.setCachedSummary(urlHash, url, summary, model || provider);
-
-      // Also save to page_summaries
-      db.savePageSummary({ url, title: '', summary, model: model || provider, wordCount: summary.split(/\s+/).length });
-
-      return { ok: true, summary, cached: false };
-    } catch (err) {
-      return { ok: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('get-page-summaries', async () => {
-    return db.getPageSummaries();
+  // ── AI: Page Summarizer (proxied through main to keep API key secure) ─────
+  ipcMain.handle('ai:summarizePage', async (_e, url, htmlContent) => {
+    const settings = db.getSettings();
+    const geminiKey = settings.gemini_api_key || process.env.GEMINI_API_KEY || '';
+    return ai.summarizePage(url, htmlContent, geminiKey, db);
   });
 
   // ── Ad Blocker ─────────────────────────────────────────────────────────────
@@ -630,111 +352,169 @@ function setupIPC() {
   ipcMain.handle('clipboard:write', (_e, text) => { clipboard.writeText(text); return { ok: true }; });
   ipcMain.handle('clipboard:read', () => clipboard.readText());
 
-  // ── DevTools (#29) ────────────────────────────────────────────────────
+  // ── DevTools ──────────────────────────────────────────────────────────────
   ipcMain.on('devtools:toggle', () => mainWindow?.webContents.toggleDevTools());
-  ipcMain.handle('toggle-devtools', () => {
-    mainWindow?.webContents.toggleDevTools();
-    return { ok: true };
-  });
 
-  // ── New Window / New Private Window from renderer ─────────────────────
-  ipcMain.handle('new-window', (_e, url) => {
-    createNewBrowserWindow(url || null);
-    return { ok: true };
-  });
-
-  ipcMain.handle('new-private-window', (_e, url) => {
-    createNewBrowserWindow(url || null, { partition: 'incognito' });
-    return { ok: true };
-  });
-
-  // ── Screenshot (#9) ───────────────────────────────────────────────────
-  ipcMain.handle('take-screenshot', async (_e, opts = {}) => {
-    try {
-      const image = await mainWindow.webContents.capturePage();
-      if (opts.save) {
-        const { filePath } = await dialog.showSaveDialog(mainWindow, {
-          defaultPath: `screenshot-${Date.now()}.png`,
-          filters: [{ name: 'PNG Images', extensions: ['png'] }],
-        });
-        if (filePath) {
-          require('fs').writeFileSync(filePath, image.toPNG());
-          return { ok: true, filePath };
-        }
-        return { ok: false, cancelled: true };
-      }
-      return { ok: true, dataUrl: image.toDataURL() };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  // ── Move tab to new window (#13) ──────────────────────────────────────
-  ipcMain.handle('move-tab-to-window', (_e, url) => {
-    if (!url) return { ok: false, error: 'No URL provided' };
-    createNewBrowserWindow(url);
-    return { ok: true };
-  });
-
-  // ── Split screen (#14) ────────────────────────────────────────────────
-  ipcMain.handle('split-screen', (_e, side) => {
-    if (!mainWindow) return { ok: false, error: 'No main window' };
-    const display = screen.getDisplayMatching(mainWindow.getBounds());
-    const { x, y, width, height } = display.workArea;
-
-    if (side === 'right') {
-      mainWindow.setBounds({ x: x + Math.floor(width / 2), y, width: Math.floor(width / 2), height });
-    } else {
-      // Default: left half
-      mainWindow.setBounds({ x, y, width: Math.floor(width / 2), height });
-    }
-    return { ok: true };
-  });
-
-  // ── Zoom via Shift+Scroll (#5) ────────────────────────────────────────
-  ipcMain.handle('zoom-shift-scroll', (_e, deltaY) => {
-    if (!mainWindow) return { ok: false };
-    const wc = mainWindow.webContents;
-    const currentZoom = wc.getZoomFactor();
-    const step = 0.1;
-    if (deltaY < 0) {
-      wc.setZoomFactor(Math.min(currentZoom + step, 5.0));
-    } else {
-      wc.setZoomFactor(Math.max(currentZoom - step, 0.3));
-    }
-    return { ok: true, zoomFactor: wc.getZoomFactor() };
-  });
-
-  // ── Session save from renderer (#8) ───────────────────────────────────
-  ipcMain.handle('session:saveTabs', (_e, tabs) => {
-    if (!db) return { ok: false, error: 'Database not ready' };
-    try {
-      const saveTx = db.db.transaction((items) => {
-        for (const tab of items) {
-          if (!tab.incognito) db.saveTab(tab);
-        }
+  // ── New Window / Private Window ────────────────────────────────────────────
+  ipcMain.handle('app:newWindow', (_e, url) => {
+    const win = new BrowserWindow({
+      width: 1280, height: 800,
+      backgroundColor: '#1a1a2e',
+      titleBarStyle: 'hidden',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        webviewTag: true,
+        sandbox: false,
+      },
+    });
+    win.loadFile(path.join(__dirname, 'src', 'index.html'));
+    if (url) {
+      win.webContents.on('did-finish-load', () => {
+        win.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
       });
-      saveTx(tabs);
-      return { ok: true };
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle('app:newPrivateWindow', () => {
+    const win = new BrowserWindow({
+      width: 1280, height: 800,
+      backgroundColor: '#0d0d1a',
+      titleBarStyle: 'hidden',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        webviewTag: true,
+        sandbox: false,
+        partition: 'incognito-' + Date.now(),
+      },
+    });
+    win.loadFile(path.join(__dirname, 'src', 'index.html'));
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.executeJavaScript(`
+        STATE.isPrivate = true;
+        document.getElementById('privateIndicator').style.display = '';
+        document.title = 'EtherX (Private)';
+      `).catch(() => { });
+    });
+    return { ok: true };
+  });
+
+  // ── Move Tab to New Window ─────────────────────────────────────────────────
+  ipcMain.handle('app:moveTabToWindow', (_e, url, title) => {
+    const win = new BrowserWindow({
+      width: 1280, height: 800,
+      backgroundColor: '#1a1a2e',
+      titleBarStyle: 'hidden',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        webviewTag: true,
+        sandbox: false,
+      },
+    });
+    win.loadFile(path.join(__dirname, 'src', 'index.html'));
+    if (url) {
+      win.webContents.on('did-finish-load', () => {
+        win.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
+      });
+    }
+    return { ok: true };
+  });
+
+  // ── Split Screen ───────────────────────────────────────────────────────────
+  ipcMain.handle('app:splitScreen', (_e, urlLeft, urlRight) => {
+    const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+    const halfW = Math.floor(width / 2);
+    const makeWin = (x, url) => {
+      const w = new BrowserWindow({
+        x, y: 0, width: halfW, height,
+        backgroundColor: '#1a1a2e',
+        titleBarStyle: 'hidden',
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.js'),
+          contextIsolation: true, nodeIntegration: false,
+          webviewTag: true, sandbox: false,
+        },
+      });
+      w.loadFile(path.join(__dirname, 'src', 'index.html'));
+      if (url) {
+        w.webContents.on('did-finish-load', () => {
+          w.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
+        });
+      }
+      return w;
+    };
+    makeWin(0, urlLeft);
+    makeWin(halfW, urlRight);
+    return { ok: true };
+  });
+
+  // ── Screenshot Region (returns base64) ─────────────────────────────────────
+  ipcMain.handle('app:captureRegion', async (_e, rect) => {
+    try {
+      const img = await mainWindow.webContents.capturePage(rect ? {
+        x: Math.round(rect.x), y: Math.round(rect.y),
+        width: Math.round(rect.width), height: Math.round(rect.height),
+      } : undefined);
+      return { ok: true, dataUrl: img.toDataURL() };
     } catch (e) {
       return { ok: false, error: e.message };
     }
   });
 
-  // ── Downloads list (#15-16) ───────────────────────────────────────────
-  ipcMain.handle('downloads:getActive', () => {
-    return Array.from(activeDownloads.values());
-  });
+  // ── Downloads (SQLite) ─────────────────────────────────────────────────────
+  ipcMain.handle('db:addDownload', (_e, data) => db.addDownload(data));
+  ipcMain.handle('db:getDownloads', (_e, limit) => db.getDownloads(limit));
+  ipcMain.handle('db:deleteDownload', (_e, id) => db.deleteDownload(id));
+  ipcMain.handle('db:clearDownloads', () => db.clearDownloads());
 
-  ipcMain.handle('downloads:getHistory', () => {
-    const settings = db.getSettings();
-    const downloads = [];
-    for (const [key, value] of Object.entries(settings)) {
-      if (key.startsWith('download_')) {
-        try { downloads.push(JSON.parse(value)); } catch { }
-      }
+  // ── Sessions (SQLite) ──────────────────────────────────────────────────────
+  ipcMain.handle('db:saveSession', (_e, data) => db.saveSession(data));
+  ipcMain.handle('db:getSessions', (_e, limit) => db.getSessions(limit));
+  ipcMain.handle('db:deleteSession', (_e, id) => db.deleteSession(id));
+
+  // ── Notes (SQLite) ─────────────────────────────────────────────────────────
+  ipcMain.handle('db:addNote', (_e, data) => db.addNote(data));
+  ipcMain.handle('db:getNotes', () => db.getNotes());
+  ipcMain.handle('db:updateNote', (_e, id, data) => db.updateNote(id, data));
+  ipcMain.handle('db:deleteNote', (_e, id) => db.deleteNote(id));
+
+  // ── User Profile (SQLite) ──────────────────────────────────────────────────
+  ipcMain.handle('db:getUserProfile', () => db.getUserProfile());
+  ipcMain.handle('db:saveUserProfile', (_e, data) => db.saveUserProfile(data));
+
+  // ── Lighthouse Audits (SQLite) ─────────────────────────────────────────────
+  ipcMain.handle('db:saveLighthouseAudit', (_e, data) => db.saveLighthouseAudit(data));
+  ipcMain.handle('db:getLighthouseAudits', (_e, url, limit) => db.getLighthouseAudits(url, limit));
+
+  // ── History Top Visited ────────────────────────────────────────────────────
+  ipcMain.handle('db:getTopVisited', (_e, limit) => db.getTopVisited(limit));
+
+  // ── Profile Picture Upload ─────────────────────────────────────────────────
+  ipcMain.handle('app:chooseProfilePicture', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Odaberi profilnu sliku',
+      filters: [
+        { name: 'Slike', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      ],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false };
+    try {
+      const fs = require('fs');
+      const data = fs.readFileSync(result.filePaths[0]);
+      const ext = path.extname(result.filePaths[0]).slice(1).toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const dataUrl = `data:${mime};base64,${data.toString('base64')}`;
+      return { ok: true, dataUrl };
+    } catch (e) {
+      return { ok: false, error: e.message };
     }
-    return downloads.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
   });
 
   // ── Open settings page ────────────────────────────────────────────────────
@@ -769,30 +549,5 @@ app.on('web-contents-created', (_event, contents) => {
     } catch {
       _e.preventDefault();
     }
-  });
-
-  // Apply popup handling to all webContents (including webviews)
-  contents.setWindowOpenHandler(({ url }) => {
-    if (isWhitelistedPopup(url)) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 1200,
-          height: 800,
-          titleBarStyle: 'hidden',
-          backgroundColor: '#1a1a2e',
-          webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-          },
-        },
-      };
-    }
-    // Convert popup to tab
-    if (url && url !== 'about:blank') {
-      mainWindow?.webContents.send('open-url', url);
-    }
-    return { action: 'deny' };
   });
 });

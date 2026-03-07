@@ -67,8 +67,7 @@ contextBridge.exposeInMainWorld('etherx', {
     readingMode: (html) => ipcRenderer.invoke('ai:readingMode', html),
     groupTabs: (tabs) => ipcRenderer.invoke('ai:groupTabs', tabs),
     translate: (text, targetLang) => ipcRenderer.invoke('ai:translate', text, targetLang),
-    summarizePage: (opts) => ipcRenderer.invoke('ai-summarize-page', opts),
-    getPageSummaries: () => ipcRenderer.invoke('get-page-summaries'),
+    summarizePage: (url, html) => ipcRenderer.invoke('ai:summarizePage', url, html),
   },
 
   // ── Ad Blocker ────────────────────────────────────────────────────────────────
@@ -136,42 +135,16 @@ contextBridge.exposeInMainWorld('etherx', {
     chooseIcon: () => ipcRenderer.invoke('app:chooseIcon'),
     setIcon: (filePath) => ipcRenderer.invoke('app:setIcon', filePath),
     resetIcon: () => ipcRenderer.invoke('app:resetIcon'),
-    newWindow: (url) => ipcRenderer.invoke('new-window', url),
-    newPrivateWindow: (url) => ipcRenderer.invoke('new-private-window', url),
-    takeScreenshot: (opts) => ipcRenderer.invoke('take-screenshot', opts),
-    moveTabToWindow: (url) => ipcRenderer.invoke('move-tab-to-window', url),
-    splitScreen: (side) => ipcRenderer.invoke('split-screen', side),
   },
 
   // ── DevTools ──────────────────────────────────────────────────────────────────
   devtools: {
     toggle: () => ipcRenderer.send('devtools:toggle'),
-    toggleAsync: () => ipcRenderer.invoke('toggle-devtools'),
-  },
-
-  // ── Zoom ──────────────────────────────────────────────────────────────────────
-  zoom: {
-    shiftScroll: (deltaY) => ipcRenderer.invoke('zoom-shift-scroll', deltaY),
-  },
-
-  // ── Session ───────────────────────────────────────────────────────────────────
-  session: {
-    saveTabs: (tabs) => ipcRenderer.invoke('session:saveTabs', tabs),
-  },
-
-  // ── Downloads ─────────────────────────────────────────────────────────────────
-  downloads: {
-    getActive: () => ipcRenderer.invoke('downloads:getActive'),
-    getHistory: () => ipcRenderer.invoke('downloads:getHistory'),
   },
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = [
-      'open-url', 'phishing-warning', 'adblock-update',
-      'download-started', 'download-progress', 'download-complete',
-      'restore-tabs', 'save-session-request',
-    ];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

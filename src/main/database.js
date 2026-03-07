@@ -96,7 +96,7 @@ class DatabaseManager {
           ('tls_enforce',     'true'),
           ('user_agent',      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 EtherX/1.0'),
           ('ai_enabled',      'true'),
-          ('gemini_api_key',  'AIzaSyB5-ti6N33oOzMlt6BnGoh2u3Fr-UEkG2A'),
+          ('gemini_api_key',  ''),
           ('homepage',        'etherx://newtab'),
           ('zoom',            '100'),
           ('downloads_path',  '');
@@ -135,76 +135,64 @@ class DatabaseManager {
       `);
     }
 
-    // ── Migration v3: Downloads, Tab Sessions, User Profile, Notes, Lighthouse, Summaries
+    // ── Migration v3: Downloads, Sessions, Notes, Lighthouse, User Profile ──
     if (currentVersion < 3) {
       this.db.exec(`
-        -- Downloads tracking
+        -- ── Downloads ─────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS downloads (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          url TEXT NOT NULL,
-          filename TEXT NOT NULL DEFAULT '',
-          filepath TEXT DEFAULT '',
-          filesize INTEGER DEFAULT 0,
-          received_bytes INTEGER DEFAULT 0,
-          mime_type TEXT DEFAULT '',
-          state TEXT DEFAULT 'progressing',
-          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-          completed_at INTEGER DEFAULT NULL
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          url          TEXT    NOT NULL,
+          filename     TEXT    NOT NULL DEFAULT '',
+          save_path    TEXT    DEFAULT '',
+          file_size    INTEGER DEFAULT 0,
+          mime_type    TEXT    DEFAULT '',
+          status       TEXT    NOT NULL DEFAULT 'completed',
+          created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+
+        -- ── Sessions ──────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS sessions (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          name         TEXT    NOT NULL DEFAULT 'Auto-save',
+          tabs_json    TEXT    NOT NULL DEFAULT '[]',
+          active_tab   TEXT    DEFAULT NULL,
+          created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
 
-        -- Tab sessions for restore
-        CREATE TABLE IF NOT EXISTS tab_sessions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          session_id TEXT NOT NULL,
-          tabs_json TEXT NOT NULL,
-          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
-        );
-
-        -- User profile
-        CREATE TABLE IF NOT EXISTS user_profile (
-          id INTEGER PRIMARY KEY DEFAULT 1,
-          full_name TEXT DEFAULT '',
-          email TEXT DEFAULT '',
-          avatar_data TEXT DEFAULT '',
-          bio TEXT DEFAULT '',
-          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
-        );
-
-        -- Notes
+        -- ── Notes ─────────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS notes (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL DEFAULT 'Untitled',
-          content TEXT NOT NULL DEFAULT '',
-          color TEXT DEFAULT '#667eea',
-          is_pinned INTEGER DEFAULT 0,
-          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          title        TEXT    NOT NULL DEFAULT '',
+          content      TEXT    NOT NULL DEFAULT '',
+          url          TEXT    DEFAULT '',
+          created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          updated_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
 
-        -- Lighthouse audit history
+        -- ── User Profile ──────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS user_profile (
+          key          TEXT    PRIMARY KEY,
+          value        TEXT    NOT NULL DEFAULT ''
+        );
+        INSERT OR IGNORE INTO user_profile (key, value) VALUES
+          ('displayName', 'EtherX User'),
+          ('email',       ''),
+          ('avatar',      ''),
+          ('walletAddress','');
+
+        -- ── Lighthouse Audits ─────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS lighthouse_audits (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          url TEXT NOT NULL,
-          performance_score INTEGER,
-          accessibility_score INTEGER,
-          best_practices_score INTEGER,
-          seo_score INTEGER,
-          pwa_score INTEGER,
-          audit_json TEXT,
-          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          url          TEXT    NOT NULL,
+          scores_json  TEXT    NOT NULL DEFAULT '{}',
+          full_json    TEXT    NOT NULL DEFAULT '{}',
+          created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
+        CREATE INDEX IF NOT EXISTS idx_lighthouse_url ON lighthouse_audits(url);
 
-        -- Page summaries (AI)
-        CREATE TABLE IF NOT EXISTS page_summaries (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          url TEXT NOT NULL,
-          title TEXT DEFAULT '',
-          summary TEXT NOT NULL,
-          model TEXT DEFAULT '',
-          word_count INTEGER DEFAULT 0,
-          created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_summaries_url ON page_summaries(url);
+        -- Add folder column to bookmarks if missing
+        -- (Already exists in v1, but ensure it's there)
 
         INSERT OR REPLACE INTO schema_version (version) VALUES (3);
       `);
@@ -454,23 +442,11 @@ class DatabaseManager {
   }
 
   // ─── Downloads ────────────────────────────────────────────────────────────
-  addDownload({ url, filename, filepath, filesize, mimeType }) {
-    const result = this.db.prepare(
-      'INSERT INTO downloads (url, filename, filepath, filesize, mime_type) VALUES (?, ?, ?, ?, ?)'
-    ).run(url, filename || '', filepath || '', filesize || 0, mimeType || '');
-    return { ok: true, id: result.lastInsertRowid };
-  }
 
-  updateDownload(id, { receivedBytes, state, filepath, completedAt }) {
-    const sets = [];
-    const vals = [];
-    if (receivedBytes !== undefined) { sets.push('received_bytes = ?'); vals.push(receivedBytes); }
-    if (state) { sets.push('state = ?'); vals.push(state); }
-    if (filepath) { sets.push('filepath = ?'); vals.push(filepath); }
-    if (completedAt) { sets.push('completed_at = ?'); vals.push(completedAt); }
-    if (sets.length === 0) return { ok: true };
-    vals.push(id);
-    this.db.prepare('UPDATE downloads SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+  addDownload({ url, filename, savePath, fileSize, mimeType, status }) {
+    this.db.prepare(
+      'INSERT INTO downloads (url, filename, save_path, file_size, mime_type, status) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(url, filename || '', savePath || '', fileSize || 0, mimeType || '', status || 'completed');
     return { ok: true };
   }
 
@@ -488,65 +464,41 @@ class DatabaseManager {
     return { ok: true };
   }
 
-  // ─── Tab Sessions ─────────────────────────────────────────────────────────
-  saveTabSession(sessionId, tabsArray) {
+  // ─── Sessions ────────────────────────────────────────────────────────────
+
+  saveSession({ name, tabsJson, activeTab }) {
     this.db.prepare(
-      'INSERT INTO tab_sessions (session_id, tabs_json) VALUES (?, ?)'
-    ).run(sessionId, JSON.stringify(tabsArray));
+      'INSERT INTO sessions (name, tabs_json, active_tab) VALUES (?, ?, ?)'
+    ).run(name || 'Auto-save', tabsJson || '[]', activeTab || null);
     return { ok: true };
   }
 
-  getLatestTabSession() {
-    return this.db.prepare(
-      'SELECT * FROM tab_sessions ORDER BY created_at DESC LIMIT 1'
-    ).get();
+  getSessions(limit = 20) {
+    return this.db.prepare('SELECT * FROM sessions ORDER BY created_at DESC LIMIT ?').all(limit);
   }
 
-  clearTabSessions() {
-    this.db.prepare('DELETE FROM tab_sessions').run();
+  deleteSession(id) {
+    this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
     return { ok: true };
   }
 
-  // ─── User Profile ────────────────────────────────────────────────────────
-  getUserProfile() {
-    return this.db.prepare('SELECT * FROM user_profile WHERE id = 1').get() || { full_name: '', email: '', avatar_data: '', bio: '' };
-  }
+  // ─── Notes ───────────────────────────────────────────────────────────────
 
-  saveUserProfile({ fullName, email, avatarData, bio }) {
-    this.db.prepare(`
-      INSERT INTO user_profile (id, full_name, email, avatar_data, bio, updated_at)
-      VALUES (1, ?, ?, ?, ?, strftime('%s','now'))
-      ON CONFLICT(id) DO UPDATE SET
-        full_name = excluded.full_name,
-        email = excluded.email,
-        avatar_data = excluded.avatar_data,
-        bio = excluded.bio,
-        updated_at = strftime('%s','now')
-    `).run(fullName || '', email || '', avatarData || '', bio || '');
+  addNote({ title, content, url }) {
+    this.db.prepare(
+      'INSERT INTO notes (title, content, url) VALUES (?, ?, ?)'
+    ).run(title || '', content || '', url || '');
     return { ok: true };
-  }
-
-  // ─── Notes ────────────────────────────────────────────────────────────────
-  addNote({ title, content, color }) {
-    const result = this.db.prepare(
-      'INSERT INTO notes (title, content, color) VALUES (?, ?, ?)'
-    ).run(title || 'Untitled', content || '', color || '#667eea');
-    return { ok: true, id: result.lastInsertRowid };
   }
 
   getNotes() {
-    return this.db.prepare('SELECT * FROM notes ORDER BY is_pinned DESC, updated_at DESC').all();
+    return this.db.prepare('SELECT * FROM notes ORDER BY updated_at DESC').all();
   }
 
-  updateNote(id, { title, content, color, isPinned }) {
-    const sets = ["updated_at = strftime('%s','now')"];
-    const vals = [];
-    if (title !== undefined) { sets.push('title = ?'); vals.push(title); }
-    if (content !== undefined) { sets.push('content = ?'); vals.push(content); }
-    if (color !== undefined) { sets.push('color = ?'); vals.push(color); }
-    if (isPinned !== undefined) { sets.push('is_pinned = ?'); vals.push(isPinned ? 1 : 0); }
-    vals.push(id);
-    this.db.prepare('UPDATE notes SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+  updateNote(id, { title, content }) {
+    this.db.prepare(
+      "UPDATE notes SET title = ?, content = ?, updated_at = strftime('%s','now') WHERE id = ?"
+    ).run(title, content, id);
     return { ok: true };
   }
 
@@ -555,35 +507,50 @@ class DatabaseManager {
     return { ok: true };
   }
 
-  // ─── Lighthouse Audits ────────────────────────────────────────────────────
-  saveLighthouseAudit({ url, performanceScore, accessibilityScore, bestPracticesScore, seoScore, pwaScore, auditJson }) {
-    this.db.prepare(
-      'INSERT INTO lighthouse_audits (url, performance_score, accessibility_score, best_practices_score, seo_score, pwa_score, audit_json) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(url, performanceScore, accessibilityScore, bestPracticesScore, seoScore, pwaScore, auditJson || '');
+  // ─── User Profile ────────────────────────────────────────────────────────
+
+  getUserProfile() {
+    const rows = this.db.prepare('SELECT key, value FROM user_profile').all();
+    return rows.reduce((acc, r) => { acc[r.key] = r.value; return acc; }, {});
+  }
+
+  saveUserProfile(obj) {
+    const upsert = this.db.prepare(
+      'INSERT INTO user_profile (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    );
+    const tx = this.db.transaction((pairs) => {
+      for (const [k, v] of pairs) upsert.run(k, String(v));
+    });
+    tx(Object.entries(obj));
     return { ok: true };
   }
 
-  getLighthouseAudits(url, limit = 20) {
+  // ─── Lighthouse Audits ──────────────────────────────────────────────────
+
+  saveLighthouseAudit({ url, scoresJson, fullJson }) {
+    this.db.prepare(
+      'INSERT INTO lighthouse_audits (url, scores_json, full_json) VALUES (?, ?, ?)'
+    ).run(url, scoresJson || '{}', fullJson || '{}');
+    return { ok: true };
+  }
+
+  getLighthouseAudits(url, limit = 10) {
     if (url) {
-      return this.db.prepare('SELECT * FROM lighthouse_audits WHERE url = ? ORDER BY created_at DESC LIMIT ?').all(url, limit);
+      return this.db.prepare(
+        'SELECT * FROM lighthouse_audits WHERE url = ? ORDER BY created_at DESC LIMIT ?'
+      ).all(url, limit);
     }
-    return this.db.prepare('SELECT * FROM lighthouse_audits ORDER BY created_at DESC LIMIT ?').all(limit);
+    return this.db.prepare(
+      'SELECT * FROM lighthouse_audits ORDER BY created_at DESC LIMIT ?'
+    ).all(limit);
   }
 
-  // ─── Page Summaries ───────────────────────────────────────────────────────
-  savePageSummary({ url, title, summary, model, wordCount }) {
-    this.db.prepare(
-      'INSERT INTO page_summaries (url, title, summary, model, word_count) VALUES (?, ?, ?, ?, ?)'
-    ).run(url, title || '', summary, model || '', wordCount || 0);
-    return { ok: true };
-  }
+  // ─── History: Top Visited ─────────────────────────────────────────────────
 
-  getPageSummary(url) {
-    return this.db.prepare('SELECT * FROM page_summaries WHERE url = ? ORDER BY created_at DESC LIMIT 1').get(url);
-  }
-
-  getPageSummaries(limit = 50) {
-    return this.db.prepare('SELECT * FROM page_summaries ORDER BY created_at DESC LIMIT ?').all(limit);
+  getTopVisited(limit = 10) {
+    return this.db.prepare(
+      'SELECT * FROM history ORDER BY visit_count DESC, last_visited DESC LIMIT ?'
+    ).all(limit);
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
