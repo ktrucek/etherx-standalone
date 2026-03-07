@@ -26,15 +26,15 @@ const fs = require('fs');
 const { URL } = require('url');
 
 // ─── Sub-modules ────────────────────────────────────────────────────────────
-const DatabaseManager   = require('./database');
-const AdBlocker         = require('./adBlocker');
-const SecurityManager   = require('./security');
-const PasswordManager   = require('./passwordManager');
-const QRSyncManager     = require('./qrSync');
-const DefaultBrowser    = require('./defaultBrowser');
-const UserAgentManager  = require('./userAgent');
-const I18nManager       = require('./i18n');
-const AIManager         = require('./ai');
+const DatabaseManager = require('./database');
+const AdBlocker = require('./adBlocker');
+const SecurityManager = require('./security');
+const PasswordManager = require('./passwordManager');
+const QRSyncManager = require('./qrSync');
+const DefaultBrowser = require('./defaultBrowser');
+const UserAgentManager = require('./userAgent');
+const I18nManager = require('./i18n');
+const AIManager = require('./ai');
 
 // ─── App Identity ────────────────────────────────────────────────────────────
 app.setName('EtherX Browser');
@@ -47,11 +47,11 @@ app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
 app.commandLine.appendSwitch('cipher-suite-blacklist', 'TLS_RSA_WITH_RC4_128_MD5,TLS_RSA_WITH_RC4_128_SHA,TLS_RSA_WITH_3DES_EDE_CBC_SHA');
 
 // ─── Global State ────────────────────────────────────────────────────────────
-let mainWindow        = null;
-let db                = null;
-let adBlocker         = null;
-let ai                = null;
-const INCOGNITO_TABS  = new Map(); // tabId → { url, title, ... } — RAM only, never persisted
+let mainWindow = null;
+let db = null;
+let adBlocker = null;
+let ai = null;
+const INCOGNITO_TABS = new Map(); // tabId → { url, title, ... } — RAM only, never persisted
 
 // ─── Single Instance Lock ─────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -127,7 +127,7 @@ function createMainWindow() {
     frame: false, // custom title bar
     backgroundColor: '#1a1a1a',
     show: false,
-    icon: path.join(__dirname, '../../assets/icons/icon.png'),
+    icon: path.join(__dirname, '../../logo_novi.png'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -336,7 +336,7 @@ function setupIPC() {
   ipcMain.handle('app:resetIcon', () => {
     try {
       const path = require('path');
-      const iconPath = path.join(__dirname, '../../assets/icons/icon.png');
+      const iconPath = path.join(__dirname, '../../logo_novi.png');
       const { nativeImage } = require('electron');
       const img = nativeImage.createFromPath(iconPath);
       if (!img.isEmpty()) mainWindow?.setIcon(img);

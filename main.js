@@ -229,7 +229,7 @@ function createWindow() {
       allowRunningInsecureContent: false,
       webSecurity: false,                           // allow cross-origin webviews / iframes
     },
-    icon: path.join(__dirname, 'src', 'icon.png'),
+    icon: path.join(__dirname, 'src', 'logo_novi.png'),
     show: false,
   });
 
@@ -609,7 +609,7 @@ function setupIPC() {
 
   ipcMain.handle('app:resetIcon', () => {
     try {
-      const iconPath = path.join(__dirname, 'src', 'icon.png');
+      const iconPath = path.join(__dirname, 'src', 'logo_novi.png');
       const img = nativeImage.createFromPath(iconPath);
       if (!img.isEmpty()) mainWindow?.setIcon(img);
       if (db) db.saveSettings({ ...db.getSettings(), app_icon_path: '' });
