@@ -55,7 +55,6 @@ jobs:
           npm_config_build_from_source: true
           CXXFLAGS: -std=c++20
 
-
       - name: 🔨 Build Linux packages
         run: npx electron-builder --linux --publish never
         env:
@@ -96,7 +95,6 @@ jobs:
           npm_config_msvs_version: 2022
           CXXFLAGS: /std:c++20
 
-
       - name: 🔨 Build Windows packages
         run: npx electron-builder --win --publish never
         env:
@@ -132,11 +130,15 @@ jobs:
       - name: 🛠️ Install Python setuptools (distutils for node-gyp)
         run: brew install python-setuptools || true
 
-      - name: 📦 Install npm packages
-        run: npm ci
+      - name: 📦 Install npm packages (skip postinstall rebuild — we do it manually below)
+        run: npm ci --ignore-scripts
         env:
           CXXFLAGS: -std=c++20
 
+      - name: 🔧 Rebuild native modules for x64
+        run: npx electron-rebuild --arch x64 -f -w better-sqlite3
+        env:
+          CXXFLAGS: -std=c++20
 
       - name: 🔨 Build macOS x64 DMG (cross-compile)
         run: npx electron-builder --mac dmg zip --x64 --publish never
@@ -170,11 +172,15 @@ jobs:
       - name: 🛠️ Install Python setuptools (distutils for node-gyp)
         run: brew install python-setuptools || true
 
-      - name: 📦 Install npm packages
-        run: npm ci
+      - name: 📦 Install npm packages (skip postinstall rebuild — we do it manually below)
+        run: npm ci --ignore-scripts
         env:
           CXXFLAGS: -std=c++20
 
+      - name: 🔧 Rebuild native modules for arm64
+        run: npx electron-rebuild --arch arm64 -f -w better-sqlite3
+        env:
+          CXXFLAGS: -std=c++20
 
       - name: 🔨 Build macOS arm64 DMG
         run: npx electron-builder --mac dmg zip --arm64 --publish never
