@@ -1455,6 +1455,26 @@
       z-index: 5;
     }
 
+    /* Per-tab webviews — created dynamically, positioned inside contentArea */
+    webview.tab-webview {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+      display: none;
+    }
+
+    webview.tab-webview.active {
+      opacity: 1;
+      pointer-events: auto;
+      z-index: 5;
+      display: flex;
+    }
+
     /* In web mode: fully hide the Electron webview element */
     webview.web-hidden,
     .web-hidden {
