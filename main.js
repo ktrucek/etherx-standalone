@@ -143,6 +143,25 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+  // Strip Electron/x.x and EtherX/x.x tokens from every outgoing request.
+  // Google accounts.google.com detects these tokens as "embedded webview" and
+  // blocks login with "This browser may not be secure". Cleaning the UA fixes it.
+  const CLEAN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      const key = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent');
+      if (key) {
+        headers[key] = headers[key]
+          .replace(/\s*Electron\/[\d.]+/gi, '')
+          .replace(/\s*EtherX\/[\d.]+/gi, '')
+          .trim() || CLEAN_UA;
+      }
+      callback({ requestHeaders: headers });
+    }
+  );
+
   // Show immediately — don't wait for ready-to-show which may never fire on macOS
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

@@ -9,9 +9,9 @@
 
 'use strict';
 
-// Primary UA: Masquerades as Chrome 122 on Windows 10 + EtherX identifier
+// Primary UA: Clean Chrome 122 — no Electron/EtherX tokens so Google OAuth works
 const DEFAULT_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 EtherX/1.0';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 let _current = DEFAULT_UA;
 
