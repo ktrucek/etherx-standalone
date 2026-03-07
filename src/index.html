@@ -7128,7 +7128,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.3</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.4</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -10119,7 +10119,7 @@
       }
     })();
     document.getElementById('mi-about').addEventListener('click', async () => {
-      let ver = '2.4.3';
+      let ver = '2.4.4';
       try { if (window.etherx?.app?.getVersion) ver = await window.etherx.app.getVersion(); } catch (e) { }
       const now = new Date();
       const buildDate = now.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -11496,7 +11496,7 @@
 
     // ── Help Version Info Init ──
     (async function initHelpVersion() {
-      let ver = '2.4.3';
+      let ver = '2.4.4';
       try { if (window.etherx?.app?.getVersion) ver = await window.etherx.app.getVersion(); } catch (e) { }
       const now = new Date();
       const buildDate = now.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + now.toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });

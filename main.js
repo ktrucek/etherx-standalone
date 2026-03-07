@@ -115,21 +115,23 @@ app.on('before-quit', () => {
 
 // ─── Create main window ───────────────────────────────────────────────────────
 function createWindow() {
+  const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: 'hidden',                      // macOS: hidden title bar, shows traffic lights
-    trafficLightPosition: { x: 16, y: 16 },       // macOS: traffic lights on LEFT (like Safari)
-    backgroundColor: '#1a1a2e',                   // deep navy/purple — matches UI theme
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden', // hiddenInset on macOS keeps traffic lights visible + content below
+    trafficLightPosition: { x: 16, y: 16 },           // macOS: traffic lights on LEFT (like Safari)
+    backgroundColor: '#1a1a2e',                       // deep navy/purple — matches UI theme
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webviewTag: true,                           // keep WebView tabs
+      sandbox: false,                               // required for preload to work correctly
+      webviewTag: true,                             // keep WebView tabs
       allowRunningInsecureContent: false,
-      webSecurity: false,                         // allow cross-origin webviews / iframes
+      webSecurity: false,                           // allow cross-origin webviews / iframes
     },
     icon: path.join(__dirname, 'src', 'icon.png'),
     show: false,
@@ -137,14 +139,31 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+  // Show immediately — don't wait for ready-to-show which may never fire on macOS
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    mainWindow.focus();
   });
+  // Fallback: force show after 3s in case ready-to-show never fires
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      console.warn('⚠️ ready-to-show never fired, force showing window');
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 3000);
 
   // Log any load failures and show alert to user
   mainWindow.webContents.on('did-fail-load', (e, code, desc, url) => {
     console.error('❌ did-fail-load:', code, desc, url);
-    dialog.showErrorBox('EtherX: Load Failed', `Code: ${code}\n${desc}\nURL: ${url}`);
+    // Only show dialog for main frame failures (not subresource/CDN fails)
+    if (url && url.startsWith('file://')) {
+      dialog.showErrorBox('EtherX: Load Failed', `Code: ${code}\n${desc}\nURL: ${url}`);
+    }
+  });
+  // Capture renderer console errors
+  mainWindow.webContents.on('console-message', (e, level, msg, line, sourceId) => {
+    if (level >= 2) console.error(`🖥️ Renderer [${level}] ${sourceId}:${line} → ${msg}`);
   });
   mainWindow.webContents.on('render-process-gone', (e, details) => {
     console.error('❌ render-process-gone:', details.reason, details.exitCode);
