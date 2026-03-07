@@ -51,6 +51,7 @@ let db = null;
 let adBlocker = null;
 let ai = null;
 const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
+let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
 
 // ─── Single instance lock ─────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -87,6 +88,12 @@ app.whenReady().then(async () => {
 
   // Init AI
   try { if (AIManager) ai = new AIManager(); } catch (e) { console.error('❌ AI init failed:', e.message); ai = null; }
+
+  // Setup IPC handlers ONCE before creating any window
+  if (!_ipcSetupDone) {
+    setupIPC();
+    _ipcSetupDone = true;
+  }
 
   createWindow();
 
@@ -149,17 +156,28 @@ function createWindow() {
   // Strip Electron/x.x and EtherX/x.x tokens from every outgoing request.
   // Google accounts.google.com detects these tokens as "embedded webview" and
   // blocks login with "This browser may not be secure". Cleaning the UA fixes it.
-  const CLEAN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  const CLEAN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+  // Google also checks Sec-Fetch-Site / Origin headers — force override for google domains
+  const GOOGLE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.requestHeaders };
       const key = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent');
       if (key) {
-        headers[key] = headers[key]
+        // Always strip Electron/EtherX identifiers
+        let ua = headers[key]
           .replace(/\s*Electron\/[\d.]+/gi, '')
           .replace(/\s*EtherX\/[\d.]+/gi, '')
-          .trim() || CLEAN_UA;
+          .trim();
+        // For Google domains force clean modern Chrome UA
+        const url = details.url || '';
+        if (/google\.com|googleapis\.com|accounts\.google/i.test(url)) {
+          ua = GOOGLE_UA;
+          // Remove X-Frame-Options bypass headers that trigger Google security
+          delete headers['X-Requested-With'];
+        }
+        headers[key] = ua || CLEAN_UA;
       }
       callback({ requestHeaders: headers });
     }
@@ -241,7 +259,10 @@ function createWindow() {
     });
   }
 
-  // Window controls (keep existing IPC names)
+  // Window controls — use removeAllListeners to prevent duplicates on re-create
+  ipcMain.removeAllListeners('window-minimize');
+  ipcMain.removeAllListeners('window-maximize');
+  ipcMain.removeAllListeners('window-close');
   ipcMain.on('window-minimize', () => mainWindow?.minimize());
   ipcMain.on('window-maximize', () => {
     if (mainWindow?.isMaximized()) mainWindow.unmaximize();
@@ -249,7 +270,7 @@ function createWindow() {
   });
   ipcMain.on('window-close', () => mainWindow?.close());
 
-  setupIPC();
+  // setupIPC is called once from app.whenReady — never call it from createWindow
 
   // ── Dock / Taskbar context menu ──────────────────────────────────────────
   const dockMenu = Menu.buildFromTemplate([
@@ -405,10 +426,18 @@ function setupIPC() {
   // ── Navigation helpers ─────────────────────────────────────────────────────
   ipcMain.handle('nav:openExternal', (_e, url) => shell.openExternal(url));
 
-  // ── App info ──────────────────────────────────────────────────────────────
+  // ── App info ────────────────────────────────────────────────
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getPlatform', () => process.platform);
   ipcMain.handle('app:getUserDataPath', () => app.getPath('userData'));
+  ipcMain.handle('app:getBuildInfo', () => {
+    try {
+      const pkg = require('./package.json');
+      return { version: pkg.version, buildTime: pkg.buildTime || null };
+    } catch (e) {
+      return { version: app.getVersion(), buildTime: null };
+    }
+  });
 
   // ── Icon management ───────────────────────────────────────────────────────
   ipcMain.handle('app:chooseIcon', async () => {
