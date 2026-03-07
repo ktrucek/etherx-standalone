@@ -15,14 +15,10 @@ const {
 const path = require('path');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
-// Only apply headless/server flags when NOT running on a desktop with a display
-const isHeadless = !process.env.DISPLAY && process.platform === 'linux';
-if (isHeadless) {
-  app.commandLine.appendSwitch('no-sandbox');
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
-  app.commandLine.appendSwitch('disable-dev-shm-usage');
-}
+app.commandLine.appendSwitch('no-sandbox');
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('disable-dev-shm-usage');
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
 app.commandLine.appendSwitch(
@@ -137,7 +133,53 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
+  // Log any load failures and show alert to user
+  mainWindow.webContents.on('did-fail-load', (e, code, desc, url) => {
+    console.error('❌ did-fail-load:', code, desc, url);
+    dialog.showErrorBox('EtherX: Load Failed', `Code: ${code}\n${desc}\nURL: ${url}`);
+  });
+  mainWindow.webContents.on('render-process-gone', (e, details) => {
+    console.error('❌ render-process-gone:', details.reason, details.exitCode);
+    dialog.showErrorBox('EtherX: Renderer Crashed', `Reason: ${details.reason}\nExit: ${details.exitCode}`);
+  });
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('⚠️ webContents unresponsive');
+  });
+
+  // Verify content actually loaded after 5 seconds
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('✅ did-finish-load fired');
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.executeJavaScript(`
+        (function() {
+          var el = document.getElementById('contentArea');
+          var tb = document.querySelector('.title-bar');
+          return JSON.stringify({
+            bodyH: document.body.offsetHeight,
+            bodyW: document.body.offsetWidth,
+            contentArea: el ? { h: el.offsetHeight, w: el.offsetWidth, display: getComputedStyle(el).display } : null,
+            titleBar: tb ? { h: tb.offsetHeight } : null,
+            ntpVisible: !!document.getElementById('ntpPage'),
+            tabCount: typeof STATE !== 'undefined' ? STATE.tabs.length : -1,
+          });
+        })()
+      `).then(json => {
+        const info = JSON.parse(json);
+        console.log('🔍 Layout check:', info);
+        if (info.contentArea && info.contentArea.h < 10) {
+          console.error('⚠️ Content area has 0 height! Layout may be broken.');
+        }
+      }).catch(err => {
+        console.error('⚠️ Layout check failed:', err.message);
+      });
+    }, 3000);
+  });
+
   mainWindow.on('closed', () => { mainWindow = null; });
 
   // macOS: inject CSS so traffic lights don't overlap left-side content
