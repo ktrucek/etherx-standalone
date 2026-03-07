@@ -15,12 +15,15 @@ const {
 const path = require('path');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
-// Server / headless environment flags (keep existing)
-app.commandLine.appendSwitch('no-sandbox');
-app.commandLine.appendSwitch('disable-gpu');
-app.commandLine.appendSwitch('disable-software-rasterizer');
-app.commandLine.appendSwitch('disable-dev-shm-usage');
-// TLS 1.3 enforcement (new)
+// Only apply headless/server flags when NOT running on a desktop with a display
+const isHeadless = !process.env.DISPLAY && process.platform === 'linux';
+if (isHeadless) {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
+// TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
 app.commandLine.appendSwitch(
   'cipher-suite-blacklist',
