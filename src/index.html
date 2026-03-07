@@ -1442,7 +1442,7 @@
       width: 100%;
       height: 100%;
       border: none;
-      display: flex !important;
+      display: flex;
       flex: 1;
       opacity: 0;
       pointer-events: none;
@@ -1453,6 +1453,18 @@
       opacity: 1;
       pointer-events: auto;
       z-index: 5;
+    }
+
+    /* In web mode: fully hide the Electron webview element */
+    webview.web-hidden,
+    .web-hidden {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
+      position: absolute !important;
+      pointer-events: none !important;
+      overflow: hidden !important;
+      opacity: 0 !important;
     }
 
     iframe.browse-frame {
@@ -8010,11 +8022,19 @@
       const wv = document.getElementById('browseFrame');
       const ifrm = document.getElementById('browseFrameWeb');
       if (wv && ifrm) {
-        wv.style.display = 'none';
-        ifrm.id = 'browseFrame'; // rename so all JS finds it by original id
-        wv.id = 'browseFrameElectron'; // rename original out of the way
-        ifrm.style.display = '';
+        // Fully remove webview from rendering (Safari treats unknown tags as inline elements)
+        wv.classList.add('web-hidden');
+        wv.removeAttribute('style');
+        wv.style.cssText = 'display:none!important;width:0!important;height:0!important;position:absolute!important;overflow:hidden!important;';
+        wv.id = 'browseFrameElectron';
+        // Activate iframe as main frame
+        ifrm.id = 'browseFrame';
+        ifrm.style.display = 'none'; // will be shown when .active class is added by showFrame()
+        ifrm.classList.add('browse-frame');
       }
+      // Ensure NTP is visible on startup (safety net)
+      const _ntpEl = document.getElementById('ntpPage');
+      if (_ntpEl) _ntpEl.style.display = 'flex';
     }
     if (window.electronWebview) {
       const _wvEl = document.getElementById('browseFrameElectron') || document.getElementById('browseFrame');
