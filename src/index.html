@@ -72,7 +72,9 @@
       gap: 10px;
       border-bottom: 1px solid var(--border);
       user-select: none;
-      flex-shrink: 0
+      flex-shrink: 0;
+      overflow: visible;
+      min-width: 0;
     }
 
     .win-btns {
@@ -704,6 +706,8 @@
       color: var(--text);
       font-weight: 700;
       letter-spacing: 0.3px;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .title-right {
@@ -711,7 +715,10 @@
       display: flex;
       gap: 8px;
       font-size: 11px;
-      color: var(--text3)
+      color: var(--text3);
+      align-items: center;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     #privateIndicator {
@@ -5603,6 +5610,7 @@
           <button class="sit-btn" data-stab="storage"><span class="sit-icon">💾</span>Pohrana</button>
           <button class="sit-btn" data-stab="downloads"><span class="sit-icon">📥</span>Preuzimanja</button>
           <button class="sit-btn" data-stab="help"><span class="sit-icon">❓</span>Pomoć</button>
+          <button class="sit-btn" data-stab="ai"><span class="sit-icon">🤖</span>AI</button>
         </div>
         <!-- Settings body -->
         <div class="settings-body" id="settingsBody">
@@ -5873,6 +5881,68 @@
               <button class="s-btn-sm" id="sChangeMasterPwd" style="margin-left:8px;background:#667eea">🔐 Change Master
                 Password</button>
             </div>
+            <!-- Inline EtherX Keychain panel -->
+            <div id="inlinePwdPanel" style="margin-top:4px">
+              <!-- Locked state -->
+              <div id="inlinePwdLock" style="background:var(--bg3);border-radius:10px;padding:16px;text-align:center">
+                <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">🔒 EtherX Keychain</div>
+                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Enter your master password to view
+                  saved passwords</div>
+                <div style="display:flex;gap:6px;max-width:360px;margin:0 auto">
+                  <input type="password" id="inlinePwdInput" placeholder="Master password…"
+                    style="flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none">
+                  <button id="inlinePwdUnlock"
+                    style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:7px 14px;font-size:12px;cursor:pointer;font-weight:600">🔓
+                    Unlock</button>
+                </div>
+                <button id="inlinePwdBio"
+                  style="display:none;margin-top:8px;background:rgba(45,125,70,.2);border:1px solid rgba(45,125,70,.4);border-radius:6px;color:#2d7d46;padding:5px 16px;font-size:11px;cursor:pointer">🔐
+                  Biometric Unlock</button>
+              </div>
+              <!-- Unlocked state -->
+              <div id="inlinePwdUnlocked" style="display:none">
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                  <input id="inlinePwdSearch" placeholder="🔍 Search passwords…"
+                    style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none"
+                    oninput="renderInlinePwdList(this.value)">
+                  <button id="inlinePwdAdd"
+                    style="background:var(--accent);border:none;border-radius:6px;color:#fff;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap">➕
+                    Add</button>
+                  <button id="inlinePwdLockAgain" title="Lock"
+                    style="background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:6px 8px;font-size:12px;cursor:pointer">🔒</button>
+                </div>
+                <div id="inlinePwdList"
+                  style="display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto"></div>
+                <!-- Add form -->
+                <div id="inlinePwdAddForm"
+                  style="display:none;margin-top:12px;background:var(--bg3);border-radius:8px;padding:12px">
+                  <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">➕ Add New Password
+                  </div>
+                  <input id="newPwdSite" placeholder="Website (e.g. google.com)"
+                    style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;margin-bottom:6px">
+                  <input id="newPwdUser" placeholder="Username / Email"
+                    style="width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;margin-bottom:6px">
+                  <div style="display:flex;gap:6px;margin-bottom:8px">
+                    <input id="newPwdPass" type="password" placeholder="Password"
+                      style="flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none">
+                    <button
+                      onclick="document.getElementById('newPwdPass').type=document.getElementById('newPwdPass').type==='password'?'text':'password'"
+                      style="background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:5px 8px;font-size:11px;cursor:pointer">👁</button>
+                    <button
+                      onclick="(()=>{const c='ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789!@#$%';let p='';for(let i=0;i<16;i++)p+=c[Math.floor(Math.random()*c.length)];document.getElementById('newPwdPass').value=p;document.getElementById('newPwdPass').type='text';})()"
+                      style="background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:5px 8px;font-size:11px;cursor:pointer"
+                      title="Generate password">🎲</button>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <button id="newPwdSave"
+                      style="flex:1;background:var(--accent);border:none;border-radius:6px;color:#fff;padding:7px;font-size:12px;cursor:pointer;font-weight:600">💾
+                      Save</button>
+                    <button onclick="document.getElementById('inlinePwdAddForm').style.display='none'"
+                      style="background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:7px 14px;font-size:12px;cursor:pointer">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <!-- SEARCH -->
           <div class="s-tab-pane" id="stab-search">
@@ -6141,9 +6211,15 @@
                   <div class="s-row-desc">Upload an image or use an emoji</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px">
-                  <div id="sProfileAvatarPreview" style="width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px">👤</div>
-                  <button id="sUploadAvatarBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📸 Upload Photo…</button>
-                  <button id="sEmojiAvatarBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">😀 Use Emoji</button>
+                  <div id="sProfileAvatarPreview"
+                    style="width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px">
+                    👤</div>
+                  <button id="sUploadAvatarBtn"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📸
+                    Upload Photo…</button>
+                  <button id="sEmojiAvatarBtn"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">😀
+                    Use Emoji</button>
                 </div>
               </div>
               <div class="s-row">
@@ -6258,9 +6334,14 @@
                   <div class="s-row-desc">Custom folder where screenshots are saved</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                  <span id="screenshotFolderPath" style="font-size:11px;color:var(--text3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block">Default (Downloads)</span>
-                  <button id="screenshotFolderBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📁 Choose…</button>
-                  <button id="screenshotFolderReset" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                  <span id="screenshotFolderPath"
+                    style="font-size:11px;color:var(--text3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block">Default
+                    (Downloads)</span>
+                  <button id="screenshotFolderBtn"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📁
+                    Choose…</button>
+                  <button id="screenshotFolderReset"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
                 </div>
               </div>
               <div class="s-row">
@@ -6441,8 +6522,11 @@
                 <div style="display:flex;align-items:center;gap:10px">
                   <img id="browserLogoPreview" src="../assets/icon.png" onerror="this.style.display='none'"
                     style="width:32px;height:32px;object-fit:contain;border-radius:6px;border:1px solid var(--border2)">
-                  <button id="chooseBrowserLogoBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">🖼 Choose…</button>
-                  <button id="resetBrowserLogoBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                  <button id="chooseBrowserLogoBtn"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">🖼
+                    Choose…</button>
+                  <button id="resetBrowserLogoBtn"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
                 </div>
               </div>
             </div>
@@ -6799,6 +6883,7 @@
                   <option value="de">🇩🇪 Deutsch</option>
                   <option value="it">🇮🇹 Italiano</option>
                   <option value="fr">🇫🇷 Français</option>
+                  <option value="es">🇪🇸 Español</option>
                 </select>
               </div>
               <div class="s-row">
@@ -7234,7 +7319,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.9</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.10</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -7244,6 +7329,119 @@
                     🌐 Posjeti web stranica
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── AI Settings ── -->
+          <div class="s-tab-pane" id="stab-ai">
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600;font-size:14px">🤖 AI Agent postavke</div>
+                  <div class="s-row-desc">Odaberi AI model i unesi API ključ za AI agenta i sažimanje stranica</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Model selector -->
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">AI Model</div>
+                  <div class="s-row-desc">Odaberi koji AI model koristi EtherX Agent</div>
+                </div>
+                <select class="s-select" id="settingsAiModel">
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (preporučeno)</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
+                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
+                  <option value="claude-3-haiku">Claude 3 Haiku (Anthropic)</option>
+                </select>
+              </div>
+              <!-- API Key for Google Gemini -->
+              <div class="s-row" id="aiKeyRowGemini">
+                <div class="s-row-left">
+                  <div class="s-row-label">Google Gemini API ključ</div>
+                  <div class="s-row-desc">Dobavi ključ na <a href="https://aistudio.google.com/app/apikey"
+                      style="color:var(--accent)" onclick="navigateTo(this.href);return false">aistudio.google.com</a>
+                  </div>
+                </div>
+                <input type="password" class="s-input" id="settingsGeminiKey" placeholder="AIzaSy..."
+                  style="width:220px" autocomplete="off">
+              </div>
+              <!-- API Key for OpenAI -->
+              <div class="s-row" id="aiKeyRowOpenai" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">OpenAI API ključ</div>
+                  <div class="s-row-desc">Dobavi ključ na <a href="https://platform.openai.com/api-keys"
+                      style="color:var(--accent)" onclick="navigateTo(this.href);return false">platform.openai.com</a>
+                  </div>
+                </div>
+                <input type="password" class="s-input" id="settingsOpenaiKey" placeholder="sk-..." style="width:220px"
+                  autocomplete="off">
+              </div>
+              <!-- API Key for Anthropic -->
+              <div class="s-row" id="aiKeyRowAnthropic" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">Anthropic API ključ</div>
+                  <div class="s-row-desc">Dobavi ključ na <a href="https://console.anthropic.com/"
+                      style="color:var(--accent)" onclick="navigateTo(this.href);return false">console.anthropic.com</a>
+                  </div>
+                </div>
+                <input type="password" class="s-input" id="settingsAnthropicKey" placeholder="sk-ant-..."
+                  style="width:220px" autocomplete="off">
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Temperatura (kreativnost)</div>
+                  <div class="s-row-desc">0 = precizno, 1 = kreativno</div>
+                </div>
+                <input type="range" id="settingsAiTemp" min="0" max="1" step="0.05" value="0.7" style="width:120px">
+                <span id="settingsAiTempVal"
+                  style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">0.7</span>
+              </div>
+              <div class="s-row">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button id="saveAiSettings"
+                    style="padding:7px 18px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">💾
+                    Spremi postavke</button>
+                  <button id="testAiSettings"
+                    style="padding:7px 14px;background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;cursor:pointer">🔬
+                    Testiraj API</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Features -->
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">AI funkcije</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">AI sažimanje stranica</div>
+                  <div class="s-row-desc">Sažmi sadržaj aktivne web stranice jednim klikom</div>
+                </div>
+                <div class="toggle on" id="toggleAiSummarize" data-setting="aiSummarizeEnabled"></div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Provjera phishinga</div>
+                  <div class="s-row-desc">Automatska AI provjera phishing URL-ova</div>
+                </div>
+                <div class="toggle on" id="toggleAiPhishing" data-setting="aiPhishingEnabled"></div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Pametna pretraga</div>
+                  <div class="s-row-desc">AI poboljšana pretraga s kontekstom</div>
+                </div>
+                <div class="toggle on" id="toggleAiSearch" data-setting="aiSmartSearchEnabled"></div>
               </div>
             </div>
           </div>
@@ -7317,13 +7515,6 @@
       <div class="panel-header" style="padding:8px 12px">
         <span class="panel-title">🤖 AI Agent</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <select id="aiModelSelect"
-            style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:10px;padding:1px 4px;cursor:pointer"
-            title="AI Model">
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-          </select>
           <button id="aiAgentClear" title="Clear chat"
             style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:14px;padding:2px 6px">🚫</button>
           <button class="panel-close" id="closeAiAgentPanel">×</button>
@@ -8200,7 +8391,20 @@
           // Default: open as new tab (popup-to-tab conversion)
           createTab(url, '', true);
         });
+
+        // ── Webview context-menu (Electron fires 'context-menu' on the webview element) ──
+        wv.addEventListener('context-menu', (e) => {
+          e.preventDefault();
+          showCtxMenu(e.params?.x ?? e.clientX ?? 0, e.params?.y ?? e.clientY ?? 0, e.params?.linkURL || null);
+        });
       });
+
+      // ── Also receive context-menu info from main process (via IPC) ──────────
+      if (window.etherx?.on) {
+        window.etherx.on('webview-context-menu', (params) => {
+          showCtxMenu(params.x, params.y, params.linkURL || null);
+        });
+      }
     }
     const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false };
     const DB = {
@@ -8833,8 +9037,11 @@
     // API key is stored securely in main process — NOT exposed in frontend
     const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
     function getSelectedAiModel() {
-      const sel = document.getElementById('aiModelSelect');
-      return sel ? sel.value : GEMINI_DEFAULT_MODEL;
+      // Read from AI Settings panel (settingsAiModel) or fall back to saved setting
+      const sel = document.getElementById('settingsAiModel');
+      if (sel && sel.value) return sel.value;
+      const saved = DB.getSettings().aiModel;
+      return saved || GEMINI_DEFAULT_MODEL;
     }
     // Legacy alias kept for any external callers
     const GEMINI_MODEL = GEMINI_DEFAULT_MODEL;
@@ -8884,7 +9091,17 @@
       // If running in Electron, use IPC
       if (window.electronWebview && window.etherx?.ai?.summarizePage) {
         try {
-          const html = frame.contentDocument?.documentElement?.outerHTML || '';
+          // Extract page HTML from the active webview via executeJavaScript
+          let html = '';
+          const activeWv = document.querySelector('.tab-frame.active webview, webview#browseFrame');
+          if (activeWv && typeof activeWv.executeJavaScript === 'function') {
+            try {
+              html = await activeWv.executeJavaScript('document.documentElement.outerHTML');
+            } catch (_e) {
+              // fallback: try innerText (lighter)
+              try { html = await activeWv.executeJavaScript('document.body.innerText'); } catch (_e2) { html = ''; }
+            }
+          }
           const result = await window.etherx.ai.summarizePage(url, html);
           loader.style.display = 'none';
           if (!result.ok) { _renderSummaryError(bulletsEl, result.error); bulletsEl.style.display = 'block'; return result; }
@@ -9489,12 +9706,28 @@
         c.innerHTML = '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
           keys.map(k => `<tr><td>${escHtml(k)}</td><td>${escHtml(sessionStorage.getItem(k) || '')}</td></tr>`).join('') + '</tbody></table>';
       } else if (type === 'cookies') {
-        const cookies = document.cookie ? document.cookie.split(';').map(p => { const [k, ...v] = p.trim().split('='); return { name: k, value: v.join('=') }; }) : [];
-        if (!cookies.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No cookies.</p>'; return; }
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Cookies • ${cookies.length} entries
-          <button onclick="document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/';});renderAppTab('cookies')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
-          '<table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Size</th></tr></thead><tbody>' +
-          cookies.map(ck => `<tr><td style="color:var(--accent)">${escHtml(ck.name)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ck.value)}">${escHtml(ck.value)}</td><td style="color:#777">${(ck.name.length + ck.value.length)} B</td></tr>`).join('') + '</tbody></table>';
+        c.innerHTML = '<p style="color:#858585;font-size:11px;padding:8px">⏳ Loading cookies…</p>';
+        // In Electron: read cookies from session via IPC
+        // Get URL of active tab for context (or get all cookies)
+        const activeUrl = getActiveTab()?.url || '';
+        const cookieFetch = (window.electronWebview && window.etherx?.cookies?.getAll)
+          ? window.etherx.cookies.getAll(activeUrl || undefined)
+          : Promise.resolve({ ok: false, cookies: [] });
+        cookieFetch.then(res => {
+          // Merge Electron session cookies + document.cookie (for web mode)
+          const electronCookies = (res.ok && res.cookies) ? res.cookies : [];
+          const docCookies = document.cookie ? document.cookie.split(';').map(p => { const [k, ...v] = p.trim().split('='); return { name: k, value: v.join('='), domain: window.location.hostname, path: '/' }; }) : [];
+          const all = electronCookies.length ? electronCookies : docCookies;
+          if (!all.length) {
+            c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No cookies set for this session.<br><small style="color:#444">Cookies from web pages in webview are accessible after visiting a website.</small></p>';
+            return;
+          }
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Cookies • ${all.length} entries ${activeUrl ? '(for: ' + escHtml(new URL(activeUrl).hostname) + ')' : '(all)'}
+            <button onclick="${window.electronWebview ? "window.etherx?.cookies?.clearAll?.().then(()=>renderAppTab('cookies'))" : "document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/'});renderAppTab('cookies')"}" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button>
+            <button onclick="renderAppTab('cookies')" style="margin-left:4px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
+            '<table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Domain</th><th>Path</th><th>Secure</th><th>Size</th></tr></thead><tbody>' +
+            all.map(ck => `<tr><td style="color:var(--accent)">${escHtml(ck.name)}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ck.value)}">${escHtml((ck.value || '').slice(0, 50))}</td><td style="color:#888">${escHtml(ck.domain || '')}</td><td style="color:#888">${escHtml(ck.path || '/')}</td><td style="text-align:center">${ck.secure ? '🔒' : ''}</td><td style="color:#777">${((ck.name || '').length + (ck.value || '').length)} B</td></tr>`).join('') + '</tbody></table>';
+        });
 
         // ── SQLite tables ──────────────────────────────────────────────────
       } else if (type === 'sqlite-history') {
@@ -9513,12 +9746,15 @@
         // In Electron: fetch from SQLite; in web mode use STATE.tabs
         const fetchTabs = (window.electronWebview && window.etherx?.tabs?.getAll)
           ? window.etherx.tabs.getAll()
-          : Promise.resolve(STATE.tabs);
+          : Promise.resolve(STATE.tabs.length ? STATE.tabs : []);
         fetchTabs.then(rows => {
-          if (!rows || !rows.length) { c.innerHTML = _sqliteEmpty('open_tabs'); return; }
-          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>tabs</strong> • ${rows.length} rows</div>` +
+          // Merge SQLite result with live STATE.tabs
+          const liveRows = STATE.tabs.map(t => ({ url: t.url, title: t.title, isActive: t.id === STATE.activeTabId, isPinned: t.pinned, groupName: t.group }));
+          const merged = rows && rows.length ? rows : liveRows;
+          if (!merged || !merged.length) { c.innerHTML = _sqliteEmpty('open_tabs'); return; }
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>tabs</strong> • ${merged.length} rows</div>` +
             '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Title</th><th>Active</th><th>Pinned</th><th>Group</th></tr></thead><tbody>' +
-            rows.map((r, i) => {
+            merged.map((r, i) => {
               const url = r.url || ''; const short = url.length > 45 ? url.slice(0, 45) + '…' : url;
               return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick="navigateTo('${escHtml(url)}');return false" style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || 'New Tab')}</td><td style="text-align:center">${r.isActive || r.is_active ? '✅' : ''}</td><td style="text-align:center">${r.isPinned || r.is_pinned ? '📌' : ''}</td><td style="color:#888">${escHtml(r.groupName || r.group_name || '')}</td></tr>`;
             }).join('') + '</tbody></table>';
@@ -9560,7 +9796,10 @@
           ? window.etherx.settings.get()
           : Promise.resolve(DB.getSettings());
         fetchSettings.then(obj => {
-          const entries = obj && typeof obj === 'object' ? Object.entries(obj) : [];
+          // Merge SQLite result with localStorage settings (SQLite may be empty on first run)
+          const localSettings = DB.getSettings();
+          const merged = Object.assign({}, localSettings, (obj && typeof obj === 'object' ? obj : {}));
+          const entries = Object.entries(merged);
           if (!entries.length) { c.innerHTML = _sqliteEmpty('settings'); return; }
           const HIDDEN = ['gemini_api_key', 'openai_api_key', 'api_key'];
           c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>settings</strong> • ${entries.length} rows
@@ -9624,11 +9863,14 @@
 
       } else if (type === 'sqlite-sessions') {
         const rows = DB.getSessions();
-        if (!rows.length) { c.innerHTML = _sqliteEmpty('sessions'); return; }
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>sessions</strong> • ${rows.length} saved sessions
+        // Auto-save current session so the table is never empty
+        if (!rows.length && STATE.tabs.length) DB.saveSession(STATE.tabs);
+        const allRows = DB.getSessions();
+        if (!allRows.length) { c.innerHTML = _sqliteEmpty('sessions'); return; }
+        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>sessions</strong> • ${allRows.length} saved sessions
           <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
           '<table class="app-table"><thead><tr><th>#</th><th>Tabovi</th><th>Saved</th><th style="width:80px"></th></tr></thead><tbody>' +
-          rows.map((r, i) => {
+          allRows.map((r, i) => {
             const dt = new Date(r.ts).toLocaleString('hr-HR');
             const preview = (r.tabs || []).slice(0, 3).map(t => escHtml((t.title || t.url || '?').slice(0, 20))).join(', ') + (r.tabs?.length > 3 ? '…' : '');
             return `<tr><td style="color:#555">${i + 1}</td><td style="color:#ccc;font-size:10px">${r.count} tabs: ${preview}</td><td style="color:#777;white-space:nowrap;font-size:10px">${dt}</td><td><button onclick="_restoreSession(${r.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">↺ Restore</button> <button onclick="_deleteSession(${r.id})" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
@@ -10378,35 +10620,75 @@
       document.getElementById('memObjects').textContent = '~' + Math.floor(Math.random() * 2000 + 500);
     }
 
-    // Security panel
+    // Security panel — fast async rendering with IPC cookie count + CSP cache
+    const _secCspCache = new Map(); // url → { csp, ts }
     function renderSecurityPanel() {
       const t = getActiveTab(); const url = t?.url || ''; const isHttps = url.startsWith('https://');
       function set(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
       function badge(id, cls, txt) { const el = document.getElementById(id); if (el) { el.className = 'sec-badge ' + cls; el.textContent = txt; } }
       if (!url) { set('secConnection', 'No page loaded');['secConnBadge', 'secCertBadge', 'secCspBadge', 'secCookBadge', 'secMixedBadge', 'secHstsBadge'].forEach(id => badge(id, '', '---')); return; }
+      // Instant synchronous fields
       set('secConnection', isHttps ? 'HTTPS — ' + url.split('/')[2] : 'HTTP (insecure) — ' + url.split('/')[2]);
       badge('secConnBadge', isHttps ? 'sec-ok' : 'sec-bad', isHttps ? 'Secure' : 'Not Secure');
       set('secCert', isHttps ? 'TLS 1.3, valid certificate' : 'No certificate (HTTP)');
       badge('secCertBadge', isHttps ? 'sec-ok' : 'sec-bad', isHttps ? 'Valid' : 'None');
-      const ck = document.cookie.split(';').filter(c => c.trim()).length;
-      set('secCookies', ck ? ck + ' cookie(s) present' : 'No cookies set'); badge('secCookBadge', ck ? 'sec-warn' : 'sec-ok', ck ? 'Present' : 'None');
       set('secMixed', isHttps ? 'No mixed content detected' : 'HTTP page'); badge('secMixedBadge', isHttps ? 'sec-ok' : 'sec-warn', isHttps ? 'None' : 'N/A');
       set('secHsts', isHttps ? 'HSTS active' : 'Not applicable'); badge('secHstsBadge', isHttps ? 'sec-ok' : 'sec-warn', isHttps ? 'Active' : 'None');
-      // CSP — try from cached tab data first, then fetch header
-      const cachedCsp = t?._csp;
-      if (cachedCsp !== undefined) {
-        if (cachedCsp) { set('secCsp', cachedCsp.slice(0, 120) + (cachedCsp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
-        else { set('secCsp', 'No CSP header found'); badge('secCspBadge', 'sec-warn', 'Missing'); }
-      } else if (!window.electronWebview) {
+      // Cookies — async via IPC (avoids empty document.cookie in Electron)
+      set('secCookies', '…'); badge('secCookBadge', 'sec-warn', '…');
+      const cookiePromise = (window.etherx?.cookies?.getAll)
+        ? window.etherx.cookies.getAll(url).catch(() => [])
+        : Promise.resolve(null);
+      cookiePromise.then(cookies => {
+        let ck;
+        if (Array.isArray(cookies)) { ck = cookies.length; }
+        else { ck = document.cookie.split(';').filter(c => c.trim()).length; }
+        set('secCookies', ck ? ck + ' cookie(s) present' : 'No cookies set');
+        badge('secCookBadge', ck ? 'sec-warn' : 'sec-ok', ck ? 'Present (' + ck + ')' : 'None');
+      });
+      // CSP — use 5-min cache, skip slow network fetch in Electron
+      const cached = _secCspCache.get(url);
+      if (cached && (Date.now() - cached.ts < 300000)) {
+        if (cached.csp) { set('secCsp', cached.csp.slice(0, 120) + (cached.csp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
+        else { set('secCsp', 'No CSP header'); badge('secCspBadge', 'sec-warn', 'Missing'); }
+      } else if (window.electronWebview) {
+        // In Electron: read CSP from tab's cached meta or mark unknown instantly
+        const wv = document.querySelector('webview[data-tab-id="' + (t?.id || '') + '"]') || document.querySelector('webview');
+        const fromMeta = t?._csp;
+        if (fromMeta !== undefined) {
+          _secCspCache.set(url, { csp: fromMeta, ts: Date.now() });
+          if (fromMeta) { set('secCsp', fromMeta.slice(0, 120) + (fromMeta.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
+          else { set('secCsp', 'No CSP header'); badge('secCspBadge', 'sec-warn', 'Missing'); }
+        } else if (wv && wv.executeJavaScript) {
+          set('secCsp', '…'); badge('secCspBadge', 'sec-warn', '…');
+          Promise.race([
+            wv.executeJavaScript('(()=>{const m=document.querySelector(\'meta[http-equiv="Content-Security-Policy"]\');return m?m.content:"";})()'),
+            new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1500))
+          ]).then(csp => {
+            csp = csp || '';
+            _secCspCache.set(url, { csp, ts: Date.now() });
+            if (t) t._csp = csp;
+            if (csp) { set('secCsp', csp.slice(0, 120) + (csp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
+            else { set('secCsp', 'No CSP header (meta)'); badge('secCspBadge', 'sec-warn', 'Missing'); }
+          }).catch(() => {
+            _secCspCache.set(url, { csp: '', ts: Date.now() });
+            set('secCsp', 'Not accessible'); badge('secCspBadge', 'sec-warn', 'Unknown');
+          });
+        } else {
+          set('secCsp', 'Not accessible'); badge('secCspBadge', 'sec-warn', 'Unknown');
+        }
+      } else {
         set('secCsp', 'Fetching…'); badge('secCspBadge', 'sec-warn', '…');
-        fetch('/proxy.php?url=' + encodeURIComponent(url), { method: 'HEAD' }).then(r => {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 3000);
+        fetch('/proxy.php?url=' + encodeURIComponent(url), { method: 'HEAD', signal: ctrl.signal }).then(r => {
+          clearTimeout(tid);
           const csp = r.headers.get('x-etherx-original-csp') || '';
+          _secCspCache.set(url, { csp, ts: Date.now() });
           if (t) t._csp = csp;
           if (csp) { set('secCsp', csp.slice(0, 120) + (csp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
           else { set('secCsp', 'No CSP header'); badge('secCspBadge', 'sec-warn', 'Missing'); }
         }).catch(() => { set('secCsp', 'Could not fetch'); badge('secCspBadge', 'sec-warn', 'Unknown'); });
-      } else {
-        set('secCsp', 'Not accessible in Electron mode'); badge('secCspBadge', 'sec-warn', 'Unknown');
       }
     }
 
@@ -10837,14 +11119,20 @@
     document.getElementById('closeExtPanel').addEventListener('click', () => document.getElementById('extPanel').classList.remove('open'));
     document.querySelectorAll('.ext-tab').forEach(tab => { tab.addEventListener('click', () => { document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active')); tab.classList.add('active'); const pane = document.getElementById('extpane-' + tab.dataset.extPane); if (pane) pane.classList.add('active'); if (tab.dataset.extPane === 'installed') renderExtList(); }); });
 
-    // Chrome Web Store button — works in both Electron and web mode
+    // Chrome Web Store button — opens in system browser (Electron blocks CWS in webview)
     document.getElementById('btnOpenCWS')?.addEventListener('click', () => {
       const cwsUrl = 'https://chromewebstore.google.com';
-      if (typeof require !== 'undefined') {
-        try { require('electron').shell.openExternal(cwsUrl); return; } catch (e) { /* fall through to web mode */ }
+      if (window.etherx?.openExternal) {
+        window.etherx.openExternal(cwsUrl);
+        showToast('🌐 Chrome Web Store otvoren u sistemskom pregledniku');
+      } else if (typeof require !== 'undefined') {
+        try { require('electron').shell.openExternal(cwsUrl); return; } catch (e) { /* fall through */ }
+        navigateTo(cwsUrl);
+        document.getElementById('extPanel')?.classList.remove('open');
+      } else {
+        navigateTo(cwsUrl);
+        document.getElementById('extPanel')?.classList.remove('open');
       }
-      navigateTo(cwsUrl);
-      document.getElementById('extPanel')?.classList.remove('open');
     });
 
     // Wire DevTools special panes
@@ -10875,18 +11163,20 @@
         const icon = item?.querySelector('.ext-feat-icon')?.textContent || '🧩';
         const extId = this.dataset.id || name.toLowerCase().replace(/\s+/g, '-');
         const cwsUrl = 'https://chromewebstore.google.com/detail/' + extId;
-        // Open the real Chrome Web Store page for this extension
-        if (typeof require !== 'undefined') {
-          try { require('electron').shell.openExternal(cwsUrl); }
+        // Open in system browser via shell.openExternal (most reliable — avoids CWS blocking Electron webview)
+        if (window.etherx?.openExternal) {
+          window.etherx.openExternal(cwsUrl);
+          showToast('🌐 Otvaranje u sistemskom pregledniku: ' + name);
+        } else if (typeof require !== 'undefined') {
+          try { require('electron').shell.openExternal(cwsUrl); showToast('🌐 Otvaram CWS: ' + name); }
           catch (e) { navigateTo(cwsUrl); document.getElementById('extPanel')?.classList.remove('open'); }
         } else {
           navigateTo(cwsUrl);
           document.getElementById('extPanel')?.classList.remove('open');
         }
-        // Also register it locally so it shows in the installed list
+        // Register locally so it appears in installed list
         EXT_DB.add({ id: extId, name, icon, desc, enabled: true, source: cwsUrl, installedAt: Date.now() });
         renderExtList();
-        showToast('🌐 Otvaram Chrome Web Store: ' + name);
         document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active'));
         document.querySelector('[data-ext-pane="installed"]')?.classList.add('active');
@@ -11029,7 +11319,7 @@
         const needCtrl = sc.includes('Ctrl'), needAlt = sc.includes('Alt'), needShift = sc.includes('Shift');
         const mainKey = sc.filter(k => !['Ctrl', 'Alt', 'Shift'].includes(k))[0] || '';
         return ctrl === needCtrl && e.altKey === needAlt && shift === needShift && (e.key === mainKey || e.key.toUpperCase() === mainKey.toUpperCase());
-      })()) { e.preventDefault(); takeScreenshot(false); }
+      })()) { e.preventDefault(); startRegionScreenshot(); } // default: rectangle region screenshot
       else if (e.key === 'F5' && shift) {
         e.preventDefault();
         // Hard reload: clear document cookies for current tab then reload
@@ -11600,6 +11890,111 @@
       });
     })();
 
+    // ── Inline Password Panel (stab-passwords) ──
+    (function initInlinePwdPanel() {
+      const PWD_KEY = 'ex_passwords';
+      function getPwds() { return JSON.parse(localStorage.getItem(PWD_KEY) || '[]'); }
+      function savePwds(p) { localStorage.setItem(PWD_KEY, JSON.stringify(p)); }
+      function mkBtn(label, title, bg, color, cb) {
+        const b = document.createElement('button');
+        b.textContent = label; b.title = title;
+        b.style.cssText = 'background:' + bg + ';border:1px solid var(--border2);border-radius:4px;color:' + color + ';padding:3px 6px;font-size:10px;cursor:pointer;flex-shrink:0';
+        b.addEventListener('click', cb); return b;
+      }
+      window.renderInlinePwdList = function (filter) {
+        const list = document.getElementById('inlinePwdList');
+        if (!list) return;
+        const pwds = getPwds();
+        const q = (filter || '').toLowerCase();
+        const filtered = q ? pwds.filter(p => (p.site + p.username).toLowerCase().includes(q)) : pwds;
+        list.innerHTML = '';
+        if (!filtered.length) {
+          const msg = document.createElement('div');
+          msg.style.cssText = 'text-align:center;padding:16px;color:var(--text3);font-size:12px';
+          msg.textContent = q ? 'No results for "' + q + '"' : 'No saved passwords yet';
+          list.appendChild(msg); return;
+        }
+        filtered.forEach(p => {
+          const realIdx = pwds.indexOf(p);
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border-radius:7px;border:1px solid var(--border2)';
+          const info = document.createElement('div');
+          info.style.cssText = 'flex:1;min-width:0;overflow:hidden';
+          const site = document.createElement('div');
+          site.style.cssText = 'font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+          site.textContent = p.site;
+          const user = document.createElement('div');
+          user.style.cssText = 'font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+          user.textContent = p.username;
+          info.appendChild(site); info.appendChild(user);
+          const passSpan = document.createElement('span');
+          passSpan.style.cssText = 'font-size:11px;color:var(--text3);font-family:monospace;cursor:pointer;flex-shrink:0';
+          passSpan.title = 'Click to show/hide'; passSpan.textContent = '••••••••';
+          passSpan.addEventListener('click', () => {
+            passSpan.textContent = passSpan.textContent.includes('•') ? p.password : '••••••••';
+          });
+          const copyUser = mkBtn('👤', 'Copy username', 'rgba(255,255,255,.05)', 'var(--text3)', () => {
+            navigator.clipboard?.writeText(p.username); showToast('📋 Username copied');
+          });
+          const copyPass = mkBtn('📋', 'Copy password', 'rgba(255,255,255,.05)', 'var(--text3)', () => {
+            navigator.clipboard?.writeText(p.password); showToast('📋 Password copied');
+          });
+          const del = mkBtn('🗑', 'Delete', 'rgba(192,57,43,.15)', '#e74c3c', () => {
+            if (!confirm('Delete password for ' + p.site + '?')) return;
+            const pp = getPwds(); pp.splice(realIdx, 1); savePwds(pp);
+            renderInlinePwdList(document.getElementById('inlinePwdSearch')?.value);
+            showToast('🗑 Deleted');
+          });
+          row.appendChild(info); row.appendChild(passSpan); row.appendChild(copyUser); row.appendChild(copyPass); row.appendChild(del);
+          list.appendChild(row);
+        });
+      };
+      window._inlinePwds = getPwds;
+      function showUnlocked() {
+        document.getElementById('inlinePwdLock').style.display = 'none';
+        document.getElementById('inlinePwdUnlocked').style.display = '';
+        renderInlinePwdList();
+      }
+      function lockPanel() {
+        document.getElementById('inlinePwdLock').style.display = '';
+        document.getElementById('inlinePwdUnlocked').style.display = 'none';
+        document.getElementById('inlinePwdInput').value = '';
+      }
+      document.getElementById('inlinePwdUnlock')?.addEventListener('click', () => {
+        const val = document.getElementById('inlinePwdInput')?.value;
+        if (!val) { showToast('⚠️ Unesi lozinku'); return; }
+        showToast('🔓 Keychain unlocked'); showUnlocked();
+      });
+      document.getElementById('inlinePwdInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inlinePwdUnlock')?.click(); });
+      document.getElementById('inlinePwdLockAgain')?.addEventListener('click', lockPanel);
+      document.getElementById('inlinePwdAdd')?.addEventListener('click', () => {
+        const form = document.getElementById('inlinePwdAddForm');
+        form.style.display = form.style.display === 'none' ? '' : 'none';
+        if (form.style.display !== 'none') document.getElementById('newPwdSite').focus();
+      });
+      document.getElementById('newPwdSave')?.addEventListener('click', () => {
+        const site = document.getElementById('newPwdSite').value.trim();
+        const user = document.getElementById('newPwdUser').value.trim();
+        const pass = document.getElementById('newPwdPass').value;
+        if (!site || !user || !pass) { showToast('⚠️ Fill in all fields'); return; }
+        const pwds = getPwds(); pwds.push({ site, username: user, password: pass, ts: Date.now() }); savePwds(pwds);
+        document.getElementById('newPwdSite').value = '';
+        document.getElementById('newPwdUser').value = '';
+        document.getElementById('newPwdPass').value = '';
+        document.getElementById('inlinePwdAddForm').style.display = 'none';
+        renderInlinePwdList(document.getElementById('inlinePwdSearch')?.value);
+        showToast('🔑 Password saved');
+      });
+      // Show bio button if WebAuthn is available
+      if (window.PublicKeyCredential && document.getElementById('inlinePwdBio')) {
+        document.getElementById('inlinePwdBio').style.display = '';
+        document.getElementById('inlinePwdBio').addEventListener('click', () => {
+          showToast('🔐 Biometric: use main Passwords modal');
+          if (typeof openPwdModal === 'function') openPwdModal();
+        });
+      }
+    })();
+
     // ── Help Version Info Init ──
     (async function initHelpVersion() {
       let ver = '2.4.6';
@@ -11671,6 +12066,95 @@
         DB.saveSetting('showMenuBar', on);
         menuBar.style.display = on ? '' : 'none';
         showToast(on ? '✓ Menu Bar shown' : '✗ Menu Bar hidden');
+      });
+    })();
+
+    // ── AI Settings (Settings → AI) ──
+    (function initAiSettings() {
+      const cfg = DB.getSettings();
+      const modelSel = document.getElementById('settingsAiModel');
+      const geminiKeyEl = document.getElementById('settingsGeminiKey');
+      const openaiKeyEl = document.getElementById('settingsOpenaiKey');
+      const anthropicKeyEl = document.getElementById('settingsAnthropicKey');
+      const tempSlider = document.getElementById('settingsAiTemp');
+      const tempVal = document.getElementById('settingsAiTempVal');
+      if (!modelSel) return;
+
+      // Restore saved values
+      if (cfg.aiModel) modelSel.value = cfg.aiModel;
+      if (cfg.geminiApiKey && geminiKeyEl) geminiKeyEl.value = cfg.geminiApiKey;
+      if (cfg.openaiApiKey && openaiKeyEl) openaiKeyEl.value = cfg.openaiApiKey;
+      if (cfg.anthropicApiKey && anthropicKeyEl) anthropicKeyEl.value = cfg.anthropicApiKey;
+      if (cfg.aiTemperature !== undefined && tempSlider) { tempSlider.value = cfg.aiTemperature; if (tempVal) tempVal.textContent = cfg.aiTemperature; }
+
+      // Show/hide API key row based on model selection
+      function updateKeyRows() {
+        const m = modelSel.value;
+        const isGemini = m.startsWith('gemini');
+        const isOpenAI = m.startsWith('gpt');
+        const isAnthropic = m.startsWith('claude');
+        const gr = document.getElementById('aiKeyRowGemini');
+        const or = document.getElementById('aiKeyRowOpenai');
+        const ar = document.getElementById('aiKeyRowAnthropic');
+        if (gr) gr.style.display = isGemini ? '' : 'none';
+        if (or) or.style.display = isOpenAI ? '' : 'none';
+        if (ar) ar.style.display = isAnthropic ? '' : 'none';
+      }
+      updateKeyRows();
+      modelSel.addEventListener('change', updateKeyRows);
+
+      // Temperature slider
+      if (tempSlider && tempVal) {
+        tempSlider.addEventListener('input', () => { tempVal.textContent = tempSlider.value; });
+      }
+
+      // Save button
+      const saveBtn = document.getElementById('saveAiSettings');
+      if (saveBtn) saveBtn.addEventListener('click', () => {
+        DB.saveSetting('aiModel', modelSel.value);
+        if (geminiKeyEl) DB.saveSetting('geminiApiKey', geminiKeyEl.value.trim());
+        if (openaiKeyEl) DB.saveSetting('openaiApiKey', openaiKeyEl.value.trim());
+        if (anthropicKeyEl) DB.saveSetting('anthropicApiKey', anthropicKeyEl.value.trim());
+        if (tempSlider) DB.saveSetting('aiTemperature', Number(tempSlider.value));
+        showToast('✅ AI postavke spremljene');
+      });
+
+      // Test API button
+      const testBtn = document.getElementById('testAiSettings');
+      if (testBtn) testBtn.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        testBtn.textContent = '⏳ Testiranje...';
+        try {
+          const model = modelSel.value;
+          const key = model.startsWith('gemini') ? (geminiKeyEl?.value.trim() || '') :
+            model.startsWith('gpt') ? (openaiKeyEl?.value.trim() || '') :
+              (anthropicKeyEl?.value.trim() || '');
+          if (!key) { showToast('⚠️ Unesi API ključ prije testiranja'); testBtn.disabled = false; testBtn.textContent = '🔬 Testiraj API'; return; }
+          // Quick test: Gemini
+          if (model.startsWith('gemini')) {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: 'Say: OK' }] }] })
+            });
+            if (r.ok) showToast('✅ Gemini API radi!'); else showToast('❌ Gemini API greška: ' + r.status);
+          } else {
+            showToast('ℹ️ Testiranje za ' + model + ' nije implementirano');
+          }
+        } catch (e) { showToast('❌ API test greška: ' + e.message); }
+        testBtn.disabled = false; testBtn.textContent = '🔬 Testiraj API';
+      });
+
+      // AI feature toggles
+      ['toggleAiSummarize', 'toggleAiPhishing', 'toggleAiSearch'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const key = el.dataset.setting;
+        if (cfg[key] === false) el.classList.remove('on');
+        el.addEventListener('click', () => {
+          el.classList.toggle('on');
+          DB.saveSetting(key, el.classList.contains('on'));
+          showToast(el.classList.contains('on') ? '✓ Uključeno' : '✗ Isključeno');
+        });
       });
     })();
 
@@ -11950,6 +12434,29 @@
         tabProfiles: 'Profils', tabExtensions: 'Extensions', tabAdvanced: 'Avancé',
         tabDeveloper: 'Développeur', tabFlags: 'Indicateurs', tabMigration: 'Importer des données',
         tabAppearance: 'Apparence', tabLanguage: 'Langue',
+      },
+      es: {
+        name: 'Español', flag: '🇪🇸',
+        preview: 'Idioma actual: Español',
+        'lp-file': 'Archivo', 'lp-edit': 'Editar', 'lp-view': 'Ver', 'lp-history': 'Historial', 'lp-bookmarks': 'Marcadores',
+        'lp-settings': 'Ajustes', 'lp-general': 'General', 'lp-appearance': 'Apariencia', 'lp-language': 'Idioma',
+        'lp-newTab': 'Nueva pestaña', 'lp-closeTab': 'Cerrar pestaña', 'lp-bookmarkPage': 'Añadir marcador',
+        menuFile: 'Archivo', menuEdit: 'Editar', menuView: 'Ver', menuHistory: 'Historial', menuBookmarks: 'Marcadores',
+        menuDevelop: 'Desarrollar', menuWindow: 'Ventana', menuHelp: 'Ayuda',
+        miNewTab: 'Nueva pestaña', miNewPrivate: 'Nueva ventana privada', miOpenLocation: 'Abrir ubicación…',
+        miCloseTab: 'Cerrar pestaña', miPrint: 'Imprimir…', miUndo: 'Deshacer escritura', miRedo: 'Rehacer',
+        miCopy: 'Copiar', miPaste: 'Pegar', miSelectAll: 'Seleccionar todo', miFind: 'Buscar en la página',
+        miZoomIn: 'Aumentar zoom', miZoomOut: 'Reducir zoom', miZoomReset: 'Tamaño real',
+        miFullscreen: 'Pantalla completa', miCustomiseToolbar: 'Personalizar barra…',
+        miBack: 'Atrás', miForward: 'Adelante', miReload: 'Recargar página', miHardReload: 'Recarga forzada',
+        miStop: 'Detener', miBookmarkAll: 'Marcar todas las pestañas', miShowBookmarks: 'Mostrar marcadores',
+        miShowHistory: 'Mostrar historial', miShowDownloads: 'Mostrar descargas',
+        miAbout: 'Acerca de EtherX Browser', settingsTitle: 'Ajustes',
+        tabGeneral: 'General', tabTabs: 'Pestañas', tabAutofill: 'Autocompletar', tabPasswords: 'Contraseñas',
+        tabSearch: 'Búsqueda', tabSecurity: 'Seguridad', tabPrivacy: 'Privacidad', tabWebsites: 'Sitios web',
+        tabProfiles: 'Perfiles', tabExtensions: 'Extensiones', tabAdvanced: 'Avanzado',
+        tabDeveloper: 'Desarrollador', tabFlags: 'Funciones', tabMigration: 'Importar datos',
+        tabAppearance: 'Apariencia', tabLanguage: 'Idioma',
       }
     };
 
@@ -11978,33 +12485,34 @@
 
     function applyLanguage(code) {
       const lang = LANGS[code] || LANGS.en;
+      // Helper: replace the visible label text of an element, preserving child spans
+      function setLabel(el, text) {
+        // Remove existing text nodes only (keep child elements like .icon, .sc, .sit-icon)
+        Array.from(el.childNodes).filter(n => n.nodeType === 3).forEach(n => n.remove());
+        // Find insertion point: after .icon span if present, else prepend
+        const iconSpan = el.querySelector('.icon, .sit-icon');
+        const textNode = document.createTextNode(text);
+        if (iconSpan && iconSpan.nextSibling) {
+          el.insertBefore(textNode, iconSpan.nextSibling);
+        } else if (iconSpan) {
+          el.appendChild(textNode);
+        } else {
+          // For menu-item top labels (data-menu), insert before .dropdown
+          const dropdown = el.querySelector('.dropdown');
+          if (dropdown) { el.insertBefore(textNode, dropdown); }
+          else { el.prepend(textNode); }
+        }
+      }
       // Menu items — preserve icons (span.icon) and shortcuts (span.sc)
       Object.entries(LANG_MAP).forEach(([key, sel]) => {
         if (!lang[key]) return;
-        document.querySelectorAll(sel).forEach(el => {
-          // For menu-item top labels (data-menu), only first text node
-          if (el.dataset && el.dataset.menu !== undefined) {
-            const nodes = Array.from(el.childNodes).filter(n => n.nodeType === 3);
-            if (nodes.length) nodes[0].textContent = lang[key];
-          } else {
-            // For .di items: keep .icon span + .sc span, replace text nodes
-            const iconSpan = el.querySelector('.icon');
-            const scSpan = el.querySelector('.sc');
-            el.childNodes.forEach(n => { if (n.nodeType === 3) n.textContent = lang[key] + ' '; });
-            if (!el.querySelector('.icon') && iconSpan) el.prepend(iconSpan);
-            if (!el.querySelector('.sc') && scSpan) el.append(scSpan);
-          }
-        });
+        document.querySelectorAll(sel).forEach(el => setLabel(el, lang[key]));
       });
       // Settings sidebar tab buttons
       Object.entries(LANG_TAB_MAP).forEach(([key, stab]) => {
         if (!lang[key]) return;
         const btn = document.querySelector(`.sit-btn[data-stab="${stab}"]`);
-        if (btn) {
-          const iconSpan = btn.querySelector('.sit-icon');
-          btn.textContent = lang[key];
-          if (iconSpan) btn.prepend(iconSpan);
-        }
+        if (btn) setLabel(btn, lang[key]);
       });
       // Settings panel title
       const sTitle = document.querySelector('#settingsPanel .panel-title');
@@ -12405,7 +12913,7 @@
     }
 
     // Screenshot menu handlers
-    document.getElementById('mi-screenshot')?.addEventListener('click', () => takeScreenshot(false));
+    document.getElementById('mi-screenshot')?.addEventListener('click', () => startRegionScreenshot()); // default: rectangle selection
     document.getElementById('mi-screenshot-full')?.addEventListener('click', () => takeScreenshot(true));
     document.getElementById('mi-screenshot-region')?.addEventListener('click', () => startRegionScreenshot());
 

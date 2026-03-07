@@ -121,6 +121,13 @@ contextBridge.exposeInMainWorld('etherx', {
     read: () => ipcRenderer.invoke('clipboard:read'),
   },
 
+  // ── Cookies ───────────────────────────────────────────────────────────────────
+  cookies: {
+    getAll: (url) => ipcRenderer.invoke('cookies:getAll', url),
+    remove: (url, name) => ipcRenderer.invoke('cookies:remove', url, name),
+    clearAll: () => ipcRenderer.invoke('cookies:clearAll'),
+  },
+
   // ── Navigation ────────────────────────────────────────────────────────────────
   nav: {
     openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
@@ -146,7 +153,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

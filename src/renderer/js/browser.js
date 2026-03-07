@@ -131,6 +131,18 @@ function createTabFrame(tabId, partition) {
     const t = STATE.tabs.find(x => x.id === tabId);
     if (t) { t.url = e.url; if (STATE.activeTabId === tabId) { document.getElementById('urlInput').value = e.url; updateNavBtns(t); } }
   });
+  // Forward webview contextmenu to host page (Electron)
+  wv.addEventListener('context-menu', (e) => {
+    e.preventDefault();
+    const link = e.params?.linkURL || null;
+    showCtxMenu(e.params?.x || 0, e.params?.y || 0, link || null);
+  });
+
+  // Inject contextmenu listener into loaded page so right-click events bubble
+  wv.addEventListener('dom-ready', () => {
+    wv.insertCSS('*{-webkit-user-select: text !important;}').catch(() => { });
+  });
+
   contentArea.appendChild(wv);
   tabFrames.set(tabId, wv);
   return wv;
@@ -164,10 +176,11 @@ function renderTab(tab) {
     switchTab(tab.id);
   });
 
-  // Context menu
+  // Context menu - right click shows menu without switching tab
   el.addEventListener('contextmenu', e => {
     e.preventDefault();
-    switchTab(tab.id);
+    e.stopPropagation();
+    _ctxTabId = tab.id; // track which tab was right-clicked
     showCtxMenu(e.clientX, e.clientY, null);
   });
 
@@ -719,9 +732,12 @@ document.getElementById('btnWallet').addEventListener('click', () => togglePanel
 document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel('bobiaiPanel'));
 
 // ── Gemini Page Summarizer ────────────────────────────────────────────────
-const GEMINI_KEY = 'AIzaSyB5-ti6N33oOzMlt6BnGoh2u3Fr-UEkG2A';
+// API key is loaded from user settings (Settings → AI) — never hardcoded
 const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
+function getGeminiEndpoint() {
+  const key = (typeof DB !== 'undefined' && DB.getSettings().geminiApiKey) || '';
+  return key ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}` : null;
+}
 
 // Simple in-memory cache: urlHash → summary
 const _summaryCache = {};
@@ -763,21 +779,43 @@ async function summarizeCurrentPage() {
     return { ok: true, cached: true };
   }
 
-  // If running in Electron, use IPC
-  if (window.electronWebview && window.etherx?.ai?.summarizePage) {
+  // If running in Electron, use IPC with webview executeJavaScript to get HTML
+  if (window.electronWebview) {
     try {
-      const html = frame.contentDocument?.documentElement?.outerHTML || '';
-      const result = await window.etherx.ai.summarizePage(url, html);
-      loader.style.display = 'none';
-      if (!result.ok) { _renderSummaryError(bulletsEl, result.error); bulletsEl.style.display = 'block'; return result; }
-      _summaryCache[cacheKey] = result;
-      _renderSummaryBullets(bulletsEl, result.bullets);
-      bulletsEl.style.display = 'block';
-      metaEl.textContent = GEMINI_MODEL;
-      cachedEl.textContent = result.cached ? '✓ iz cache-a' : '';
-      return result;
-    } catch (e) {
-      // fall through to direct API
+      const wv = getTabWebview(getActiveTab()?.id);
+      let html = '';
+      if (wv && typeof wv.executeJavaScript === 'function') {
+        try {
+          html = await wv.executeJavaScript('document.documentElement.outerHTML');
+        } catch (e2) { html = ''; }
+      }
+      if (!html || html.length < 200) {
+        loader.style.display = 'none';
+        _renderSummaryError(bulletsEl, 'Not enough page content to summarize. Please wait for the page to fully load.');
+        bulletsEl.style.display = 'block';
+        return { ok: false, error: 'Not enough content' };
+      }
+      // Strip scripts/styles for summarization
+      const cleanText = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 8000);
+      if (window.etherx?.ai?.summarizePage) {
+        try {
+          const result = await window.etherx.ai.summarizePage(url, cleanText);
+          loader.style.display = 'none';
+          if (!result.ok) { _renderSummaryError(bulletsEl, result.error); bulletsEl.style.display = 'block'; return result; }
+          _summaryCache[cacheKey] = result;
+          _renderSummaryBullets(bulletsEl, result.bullets);
+          bulletsEl.style.display = 'block';
+          metaEl.textContent = GEMINI_MODEL;
+          cachedEl.textContent = result.cached ? '✓ iz cache-a' : '';
+          return result;
+        } catch (e) {
+          // fall through to direct API
+        }
+      }
+    } catch (e2) {
+      // Electron HTML extraction failed — fall through to direct API
     }
   }
 
@@ -799,6 +837,13 @@ async function summarizeCurrentPage() {
 
     const prompt = `You are a concise summarizer. Respond with exactly 3 bullet points using the • character. Each bullet is one clear sentence in Croatian language. No intro text, no conclusion.\n\nSummarize the key points of this web page in 3 bullet points:\n\nURL: ${url}\n\n${pageText}`;
 
+    const GEMINI_ENDPOINT = getGeminiEndpoint();
+    if (!GEMINI_ENDPOINT) {
+      loader.style.display = 'none';
+      _renderSummaryError(bulletsEl, 'Gemini API ključ nije postavljen. Idi u Postavke → AI i unesi API ključ.');
+      bulletsEl.style.display = 'block';
+      return { ok: false, error: 'No API key' };
+    }
     const apiResp = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2634,6 +2679,7 @@ document.getElementById('boOpen').addEventListener('click', () => { const t = ge
 document.getElementById('boRetry').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) navigateTo(t.url); });
 const ctxMenu = document.getElementById('ctxMenu');
 let _ctxTargetUrl = null; // URL of right-clicked link (if any)
+let _ctxTabId = null;      // ID of right-clicked tab (if any)
 function showCtxMenu(x, y, targetUrl) {
   _ctxTargetUrl = targetUrl || null;
   // Show/hide link-specific items
@@ -2665,7 +2711,7 @@ document.getElementById('ctx-new-tab').addEventListener('click', () => createTab
 document.getElementById('ctx-reload').addEventListener('click', () => document.getElementById('btnReload').click());
 document.getElementById('ctx-find').addEventListener('click', openFind);
 document.getElementById('ctx-devtools').addEventListener('click', toggleDevtools);
-document.getElementById('ctx-close-tab').addEventListener('click', () => closeTab(STATE.activeTabId));
+document.getElementById('ctx-close-tab').addEventListener('click', () => closeTab(_ctxTabId || STATE.activeTabId));
 document.getElementById('ctx-open-new-tab').addEventListener('click', () => {
   const url = _ctxTargetUrl || getActiveTab()?.url; if (url) createTab(url);
 });

@@ -67,6 +67,9 @@ if (!gotLock) {
   });
 }
 
+// ─── Remove default Electron application menu (we have a custom menu bar) ────
+Menu.setApplicationMenu(null);
+
 // ─── App ready ────────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   // Init database (wrapped — better-sqlite3 may fail on wrong arch)
@@ -450,6 +453,33 @@ function setupIPC() {
   ipcMain.handle('clipboard:write', (_e, text) => { clipboard.writeText(text); return { ok: true }; });
   ipcMain.handle('clipboard:read', () => clipboard.readText());
 
+  // ── Cookies ───────────────────────────────────────────────────────────────
+  ipcMain.handle('cookies:getAll', async (_e, url) => {
+    try {
+      const filter = url ? { url } : {};
+      const cookies = await session.defaultSession.cookies.get(filter);
+      return { ok: true, cookies };
+    } catch (e) {
+      return { ok: false, error: e.message, cookies: [] };
+    }
+  });
+  ipcMain.handle('cookies:remove', async (_e, url, name) => {
+    try {
+      await session.defaultSession.cookies.remove(url, name);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('cookies:clearAll', async () => {
+    try {
+      await session.defaultSession.clearStorageData({ storages: ['cookies'] });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // ── DevTools ──────────────────────────────────────────────────────────────
   ipcMain.on('devtools:toggle', () => mainWindow?.webContents.toggleDevTools());
 
@@ -645,7 +675,7 @@ function setupIPC() {
   });
 }
 
-// ─── Navigation safety ────────────────────────────────────────────────────────
+// ─── Navigation safety + context-menu passthrough ────────────────────────────
 app.on('web-contents-created', (_event, contents) => {
   contents.on('will-navigate', (_e, url) => {
     try {
@@ -658,4 +688,22 @@ app.on('web-contents-created', (_event, contents) => {
       _e.preventDefault();
     }
   });
+
+  // Forward webview context-menu event to the parent renderer so the custom
+  // ctx-menu HTML overlay is shown instead of Electron's built-in popup.
+  contents.on('context-menu', (_e, params) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('webview-context-menu', {
+      x: params.x,
+      y: params.y,
+      linkURL: params.linkURL || '',
+      linkText: params.linkText || '',
+      srcURL: params.srcURL || '',
+      mediaType: params.mediaType || 'none',
+      selectionText: params.selectionText || '',
+      isEditable: params.isEditable || false,
+      pageURL: params.pageURL || '',
+    });
+  });
 });
+
