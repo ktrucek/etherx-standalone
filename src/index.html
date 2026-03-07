@@ -5910,9 +5910,16 @@
             </div>
             <div style="text-align:center;padding:12px">
               <button class="s-btn-sm" id="sOpenPasswords">🔑 Open Passwords…</button>
+              <button class="s-btn-sm" id="sImportPasswordsCsv" style="margin-left:8px">📥 Import CSV…</button>
+              <button class="s-btn-sm" id="sApplePasswords" style="margin-left:8px;background:#333"> Apple
+                Passwords</button>
               <button class="s-btn-sm" id="sChangeMasterPwd" style="margin-left:8px;background:#667eea">🔐 Change Master
                 Password</button>
+              <input type="file" id="pwdCsvInput" accept=".csv,text/csv" style="display:none">
             </div>
+            <div style="text-align:center;padding:0 12px 12px;color:var(--text3);font-size:11px">CSV import podržava
+              stupce poput <code>name,url,website,username,email,login,password</code>. Na macOS-u gumb  otvara Apple
+              Passwords / passkeys.</div>
             <!-- Inline EtherX Keychain panel -->
             <div id="inlinePwdPanel" style="margin-top:4px">
               <!-- Locked state -->
@@ -7376,7 +7383,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.15</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.16</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8159,6 +8166,8 @@
       <div class="ctx-item" id="ctx-copy-url">📋 Copy URL</div>
       <div class="ctx-item" id="ctx-bookmark">⭐ Bookmark Page</div>
       <div class="ctx-item" id="ctx-share">↗ Share…</div>
+      <div class="ctx-sep" id="ctx-window-switch-sep" style="display:none"></div>
+      <div id="ctxWindowList" style="display:none"></div>
       <div class="ctx-sep"></div>
       <div class="ctx-item" id="ctx-save-page">💾 Save Page As…</div>
       <div class="ctx-item" id="ctx-devtools">🛠 Inspect Element</div>
@@ -8287,7 +8296,11 @@
       <div class="ext-add-bar">
         <input type="text" class="ext-add-input" id="extAddUrl" placeholder="Chrome Web Store extension URL or ID…">
         <button class="ext-add-btn" id="extAddBtn">+ Install</button>
+        <button class="ext-add-btn" id="btnLoadUnpackedExt" style="background:#3a4a78">📂 Load Unpacked</button>
       </div>
+      <div style="padding:0 16px 10px;color:var(--text3);font-size:11px">Chrome Web Store direct install ostaje
+        ograničen u Electronu; za stvarno radne ekstenzije koristi <b>Load Unpacked</b> i odaberi raspakiranu mapu
+        ekstenzije.</div>
       <div class="ext-list" id="extList">
         <div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">
           <div style="font-size:32px;margin-bottom:10px">🧩</div>
@@ -8415,6 +8428,96 @@
       const _ntpEl = document.getElementById('ntpPage');
       if (_ntpEl) _ntpEl.style.display = 'flex';
     }
+    let _ctxSelectionText = '';
+    let _ctxIsEditable = false;
+    let _lastSavePromptKey = '';
+    function normalizePwdSite(site) {
+      return String(site || '').trim().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase();
+    }
+    function getSavedPasswords() { return JSON.parse(localStorage.getItem('ex_passwords') || '[]'); }
+    function saveSavedPasswords(passwords) { localStorage.setItem('ex_passwords', JSON.stringify(passwords)); }
+    function getActiveHost() {
+      try { return new URL(getActiveTab()?.url || '').hostname.replace(/^www\./, '').toLowerCase(); } catch (_) { return ''; }
+    }
+    function getPasswordsForHost(host) {
+      const cleanHost = normalizePwdSite(host);
+      return getSavedPasswords().filter(p => {
+        const site = normalizePwdSite(p.site);
+        return cleanHost && site && (cleanHost === site || cleanHost.endsWith('.' + site) || site.endsWith('.' + cleanHost));
+      });
+    }
+    function upsertPasswordEntry(entry) {
+      const passwords = getSavedPasswords();
+      const site = normalizePwdSite(entry.site);
+      const username = String(entry.username || '').trim();
+      const password = String(entry.password || '');
+      if (!site || !username || !password) return false;
+      const idx = passwords.findIndex(p => normalizePwdSite(p.site) === site && String(p.username || '').trim().toLowerCase() === username.toLowerCase());
+      const payload = { site, username, password, ts: Date.now() };
+      if (idx >= 0) passwords[idx] = { ...passwords[idx], ...payload };
+      else passwords.push(payload);
+      saveSavedPasswords(passwords);
+      return true;
+    }
+    function updateAutofillBtnState() {
+      const btn = document.getElementById('autofillBtn');
+      if (!btn) return;
+      const count = getPasswordsForHost(getActiveHost()).length;
+      btn.style.opacity = count ? '1' : '0.6';
+      btn.style.color = count ? 'var(--accent)' : 'var(--text2)';
+      btn.title = count ? `🔑 ${count} saved password${count === 1 ? '' : 's'} for this site` : '🔑 No saved passwords for this site';
+    }
+    async function inspectCurrentPageCredentials() {
+      if (!window.electronWebview) return null;
+      const activeWv = document.getElementById('browseFrame');
+      if (!activeWv || activeWv.tagName !== 'WEBVIEW' || typeof activeWv.executeJavaScript !== 'function') return null;
+      try {
+        return await activeWv.executeJavaScript(`(() => {
+          const visible = el => !!el && !el.disabled && el.type !== 'hidden' && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
+          const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
+          const pwd = passwordInputs.find(i => (i.value || '').trim());
+          if (!pwd) return null;
+          const form = pwd.form || document;
+          const fields = Array.from(form.querySelectorAll('input')).filter(visible);
+          const user = fields.find(i => /email|user|login|identifier|account|name/i.test(i.name || i.id || i.placeholder || '') && (i.value || '').trim())
+            || fields.find(i => ['text','email','tel'].includes((i.type || '').toLowerCase()) && (i.value || '').trim());
+          return {
+            site: location.hostname.replace(/^www\./, ''),
+            url: location.href,
+            username: (user?.value || '').trim(),
+            password: (pwd.value || '').trim()
+          };
+        })()`);
+      } catch (_) {
+        return null;
+      }
+    }
+    async function maybePromptSavePassword(candidate, source = 'manual') {
+      const entry = candidate || await inspectCurrentPageCredentials();
+      const site = normalizePwdSite(entry?.site || getActiveHost());
+      const username = String(entry?.username || '').trim() || site;
+      const password = String(entry?.password || '').trim();
+      if (!site || !password) return false;
+      const existing = getPasswordsForHost(site).find(p => String(p.username || '').trim().toLowerCase() === username.toLowerCase());
+      if (existing && existing.password === password) return false;
+      const promptKey = `${site}|${username}|${password}`;
+      if (source !== 'manual' && _lastSavePromptKey === promptKey) return false;
+      const ok = confirm(existing
+        ? `Ažurirati spremljenu lozinku za ${site} (${username})?`
+        : `Spremiti lozinku za ${site} (${username})?`);
+      if (!ok) {
+        if (source !== 'manual') _lastSavePromptKey = promptKey;
+        return false;
+      }
+      const saved = upsertPasswordEntry({ site, username, password });
+      if (saved) {
+        _lastSavePromptKey = promptKey;
+        updateAutofillBtnState();
+        if (typeof window.renderInlinePwdList === 'function') window.renderInlinePwdList(document.getElementById('inlinePwdSearch')?.value || '');
+        showToast(existing ? '🔑 Password updated' : '🔑 Password saved');
+      }
+      return saved;
+    }
     if (window.electronWebview) {
       const _wvEl = document.getElementById('browseFrameElectron') || document.getElementById('browseFrame');
       if (_wvEl) _wvEl.id = 'browseFrame';
@@ -8422,7 +8525,7 @@
         const wv = document.getElementById('browseFrame');
         if (!wv || wv.tagName !== 'WEBVIEW') return;
         wv.addEventListener('did-start-loading', () => setLoading(30));
-        wv.addEventListener('did-stop-loading', () => setLoading(100));
+        wv.addEventListener('did-stop-loading', () => { setLoading(100); updateAutofillBtnState(); });
         wv.addEventListener('did-fail-load', (e) => {
           if (e.errorCode === -3) return; // Aborted, ignore
           setLoading(0);
@@ -8453,14 +8556,57 @@
         });
         wv.addEventListener('did-navigate-in-page', (e) => {
           const tab = getActiveTab();
-          if (tab && e.url) { tab.url = e.url; document.getElementById('urlInput').value = e.url; }
+          if (tab && e.url) { tab.url = e.url; document.getElementById('urlInput').value = e.url; updateAutofillBtnState(); }
+        });
+        wv.addEventListener('dom-ready', async () => {
+          try {
+            await wv.executeJavaScript(`(() => {
+              if (window.__etherxPwdWatcherInstalled) return true;
+              window.__etherxPwdWatcherInstalled = true;
+              const visible = el => !!el && !el.disabled && el.type !== 'hidden' && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
+              const getCandidate = () => {
+                const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
+                const pwd = passwordInputs.find(i => (i.value || '').trim());
+                if (!pwd) return null;
+                const form = pwd.form || document;
+                const fields = Array.from(form.querySelectorAll('input')).filter(visible);
+                const user = fields.find(i => /email|user|login|identifier|account|name/i.test(i.name || i.id || i.placeholder || '') && (i.value || '').trim())
+                  || fields.find(i => ['text','email','tel'].includes((i.type || '').toLowerCase()) && (i.value || '').trim());
+                return { site: location.hostname.replace(/^www\./, ''), url: location.href, username: (user?.value || '').trim(), password: (pwd.value || '').trim() };
+              };
+              const emit = reason => {
+                const candidate = getCandidate();
+                if (candidate?.password) console.log('__ETHERX_SAVE_PASSWORD__' + JSON.stringify({ ...candidate, reason }));
+              };
+              document.addEventListener('mousedown', () => console.log('__ETHERX_PAGE_CLICK__'), true);
+              document.addEventListener('submit', () => setTimeout(() => emit('submit'), 80), true);
+              document.addEventListener('click', ev => {
+                const target = ev.target && ev.target.closest ? ev.target.closest('button,input[type="submit"],input[type="button"]') : null;
+                if (target) setTimeout(() => emit('click-submit'), 120);
+              }, true);
+              return true;
+            })()`);
+          } catch (_) { }
+        });
+        wv.addEventListener('console-message', (e) => {
+          const msg = String(e.message || '');
+          if (msg === '__ETHERX_PAGE_CLICK__') {
+            ctxMenu.classList.remove('show');
+            hideAutofillBox();
+            return;
+          }
+          if (!msg.startsWith('__ETHERX_SAVE_PASSWORD__')) return;
+          try {
+            maybePromptSavePassword(JSON.parse(msg.slice('__ETHERX_SAVE_PASSWORD__'.length)), 'auto');
+          } catch (_) { }
         });
         wv.addEventListener('new-window', (e) => {
           // Bug #1/#17/#19: Convert popups to tabs; handle YouTube, Google multi-account
           const url = e.url || '';
-          // Google account chooser / consent — open in current tab
-          if (url.includes('accounts.google.com') || url.includes('consent.google.com') || url.includes('myaccount.google.com')) {
-            navigateTo(url);
+          // Google auth / Gmail are blocked inside Electron webviews — open in default browser
+          if (shouldOpenGoogleExternally(url)) {
+            window.etherx?.openExternal?.(url)?.catch?.(() => { });
+            showToast('🔐 Google login otvaram u zadanom browseru');
             return;
           }
           // YouTube popups — open as new tab
@@ -8477,14 +8623,18 @@
         // ── Webview context-menu (Electron fires 'context-menu' on the webview element) ──
         wv.addEventListener('context-menu', (e) => {
           e.preventDefault();
-          showCtxMenu(e.params?.x ?? e.clientX ?? 0, e.params?.y ?? e.clientY ?? 0, e.params?.linkURL || null);
+          showCtxMenu(e.params?.x ?? e.clientX ?? 0, e.params?.y ?? e.clientY ?? 0, e.params?.linkURL || null, {
+            selectionText: e.params?.selectionText || '',
+            isEditable: !!e.params?.isEditable,
+            pageURL: e.params?.pageURL || ''
+          });
         });
       });
 
       // ── Also receive context-menu info from main process (via IPC) ──────────
       if (window.etherx?.on) {
         window.etherx.on('webview-context-menu', (params) => {
-          showCtxMenu(params.x, params.y, params.linkURL || null);
+          showCtxMenu(params.x, params.y, params.linkURL || null, params || {});
         });
       }
     }
@@ -8520,6 +8670,15 @@
       addDownload(d) { const arr = this.getDownloads(); arr.unshift({ id: Date.now(), ...d, ts: Date.now() }); localStorage.setItem('ex_dl', JSON.stringify(arr.slice(0, 200))) },
       deleteDownload(id) { localStorage.setItem('ex_dl', JSON.stringify(this.getDownloads().filter(d => d.id !== id))) },
       clearDownloads() { localStorage.removeItem('ex_dl') },
+      upsertDownload(d) {
+        const arr = this.getDownloads();
+        const key = d.id || `${d.url || ''}|${d.filename || ''}`;
+        const index = arr.findIndex(x => (x.id && d.id && x.id === d.id) || `${x.url || ''}|${x.filename || ''}` === key);
+        const item = { id: d.id || Date.now(), ...d, ts: d.ts || Date.now() };
+        if (index >= 0) arr[index] = { ...arr[index], ...item };
+        else arr.unshift(item);
+        localStorage.setItem('ex_dl', JSON.stringify(arr.slice(0, 200)));
+      },
       getSessions: () => JSON.parse(localStorage.getItem('ex_sessions') || '[]'),
       saveSession(tabs) { const arr = this.getSessions(); arr.unshift({ id: Date.now(), ts: Date.now(), count: tabs.length, tabs: tabs.map(t => ({ url: t.url, title: t.title })) }); localStorage.setItem('ex_sessions', JSON.stringify(arr.slice(0, 20))) },
       // Storage location config (which localStorage key each store uses)
@@ -8712,8 +8871,30 @@
       renderQuickLinks();
     }
     function showFrame(tab) { ntp.style.display = 'none'; frame.classList.add('active'); document.getElementById('blockedOverlay').classList.remove('show'); }
+    function shouldOpenGoogleExternally(rawUrl) {
+      if (!rawUrl || typeof rawUrl !== 'string') return false;
+      try {
+        const parsed = new URL(rawUrl);
+        const host = parsed.hostname.toLowerCase();
+        const path = parsed.pathname.toLowerCase();
+        const full = rawUrl.toLowerCase();
+        if (host === 'accounts.google.com' || host === 'consent.google.com' || host === 'myaccount.google.com') return true;
+        if (host === 'mail.google.com') return true;
+        if (host.endsWith('.google.com') && path.includes('/signin/')) return true;
+        if (host.endsWith('.google.com') && full.includes('/v3/signin/rejected')) return true;
+        if (host.endsWith('.google.com') && (full.includes('flowname=glifwebsignin') || full.includes('flowentry=servicelogin'))) return true;
+      } catch (e) { }
+      return false;
+    }
+
     function navigateTo(raw, tabId) {
       const url = normalizeUrl(raw); if (!url) { showNTP(); return; }
+      if (shouldOpenGoogleExternally(url) && window.electronWebview && window.etherx?.openExternal) {
+        window.etherx.openExternal(url).catch(() => { });
+        showToast('🔐 Google/Gmail otvaram u zadanom browseru da prijava radi');
+        consoleLog('info', '🌐 Opened externally: ' + url);
+        return;
+      }
       const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
       closeAllPanels();
       tab.url = url;
@@ -9435,8 +9616,21 @@
         list.appendChild(el);
       });
     }
+    function openDownloadsPanelWithRefresh() {
+      renderDownloadsPanel();
+      document.getElementById('dlPanel')?.classList.add('open');
+    }
     document.getElementById('dlClearAll')?.addEventListener('click', () => { DB.clearDownloads(); renderDownloadsPanel(); showToast('Downloads cleared'); });
     document.getElementById('btnDownloads').addEventListener('click', () => { renderDownloadsPanel(); togglePanel('dlPanel'); });
+    if (window.etherx?.on) {
+      window.etherx.on('download-update', (download) => {
+        DB.upsertDownload(download || {});
+        renderDownloadsPanel();
+        if (download?.status === 'started' || download?.status === 'progressing' || download?.status === 'completed') {
+          openDownloadsPanelWithRefresh();
+        }
+      });
+    }
 
     /* toggle handlers moved to initSettingsPanel() — removed duplicate */
     document.getElementById('btnDevtools').addEventListener('click', toggleDevtools);
@@ -10920,13 +11114,13 @@
     });
 
     // Extensions DB + Manager
-    const EXT_DB = { get: () => JSON.parse(localStorage.getItem('ex_extensions') || '[]'), save(a) { localStorage.setItem('ex_extensions', JSON.stringify(a)); }, add(ext) { const a = this.get(); if (a.find(e => e.id === ext.id)) { showToast('Already installed'); return; } a.push(ext); this.save(a); }, remove(id) { this.save(this.get().filter(e => e.id !== id)); }, toggle(id) { const a = this.get(); const e = a.find(x => x.id === id); if (e) e.enabled = !e.enabled; this.save(a); } };
+    const EXT_DB = { get: () => JSON.parse(localStorage.getItem('ex_extensions') || '[]'), save(a) { localStorage.setItem('ex_extensions', JSON.stringify(a)); }, add(ext) { const a = this.get(); if (a.find(e => e.id === ext.id || (ext.path && e.path === ext.path))) { showToast('Already added'); return; } a.push(ext); this.save(a); }, remove(id) { this.save(this.get().filter(e => e.id !== id)); }, toggle(id) { const a = this.get(); const e = a.find(x => x.id === id); if (e) e.enabled = !e.enabled; this.save(a); } };
 
     // Seed default extensions on first run
     (function seedDefaultExtensions() {
       const defaults = [
-        { id: 'djpcnbhbkplhbnkppfopnnejhaigffjn', name: 'Crypto Price Tracker', icon: '📈', desc: 'Real-time crypto price tracking for 1000+ coins', enabled: true, source: 'https://chromewebstore.google.com/detail/crypto-price-tracker/djpcnbhbkplhbnkppfopnnejhaigffjn', installedAt: Date.now() },
-        { id: 'pejdijmoenmkgeppbflobdenhhabjlaj', name: 'iCloud Passwords', icon: '🔑', desc: 'Use iCloud Keychain passwords in your browser', enabled: true, source: 'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj', installedAt: Date.now() }
+        { id: 'djpcnbhbkplhbnkppfopnnejhaigffjn', name: 'Crypto Price Tracker', icon: '📈', desc: 'Chrome Web Store shortcut (install externally or load unpacked)', enabled: true, source: 'https://chromewebstore.google.com/detail/crypto-price-tracker/djpcnbhbkplhbnkppfopnnejhaigffjn', installMode: 'cws-shortcut', installedAt: Date.now() },
+        { id: 'pejdijmoenmkgeppbflobdenhhabjlaj', name: 'iCloud Passwords', icon: '🔑', desc: 'Open Apple/iCloud passwords support externally or via Apple Passwords', enabled: true, source: 'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj', installMode: 'cws-shortcut', installedAt: Date.now() }
       ];
       const existing = EXT_DB.get();
       let changed = false;
@@ -10940,7 +11134,8 @@
       list.innerHTML = '';
       exts.forEach(ext => {
         const el = document.createElement('div'); el.className = 'ext-item';
-        el.innerHTML = `<div class="ext-item-icon" style="cursor:pointer;position:relative" title="Klikni za promjenu ikone">${ext.icon || '🧩'}<span style="position:absolute;bottom:-2px;right:-2px;font-size:9px;background:var(--accent);border-radius:3px;padding:0 2px;color:#fff;line-height:1.4">✎</span></div><div class="ext-item-body"><div class="ext-item-name">${escHtml(ext.name)}</div><div class="ext-item-desc">${escHtml(ext.desc || '')}</div><div class="ext-item-actions"><button class="ext-toggle${ext.enabled ? ' on' : ''}" data-extid="${ext.id}"></button><span class="ext-badge">${ext.enabled ? 'Enabled' : 'Disabled'}</span><button class="ext-btn-sm" data-del="${ext.id}">Remove</button></div></div>`;
+        const modeLabel = ext.installMode === 'unpacked' ? 'Loaded' : (ext.installMode === 'cws-shortcut' ? 'Shortcut' : (ext.enabled ? 'Enabled' : 'Disabled'));
+        el.innerHTML = `<div class="ext-item-icon" style="cursor:pointer;position:relative" title="Klikni za promjenu ikone">${ext.icon || '🧩'}<span style="position:absolute;bottom:-2px;right:-2px;font-size:9px;background:var(--accent);border-radius:3px;padding:0 2px;color:#fff;line-height:1.4">✎</span></div><div class="ext-item-body"><div class="ext-item-name">${escHtml(ext.name)}</div><div class="ext-item-desc">${escHtml(ext.desc || '')}</div><div class="ext-item-actions"><button class="ext-toggle${ext.enabled ? ' on' : ''}" data-extid="${ext.id}"></button><span class="ext-badge">${modeLabel}</span><button class="ext-btn-sm" data-del="${ext.id}">Remove</button></div></div>`;
         el.querySelector('.ext-toggle').addEventListener('click', () => { EXT_DB.toggle(ext.id); renderExtList(); renderExtIconBar(); });
         el.querySelector('[data-del]').addEventListener('click', () => {
           window.customConfirm('Remove "' + ext.name + '"?', (c) => { if (c) { EXT_DB.remove(ext.id); renderExtList(); renderExtIconBar(); showToast('🗑 Removed: ' + ext.name); } });
@@ -10974,8 +11169,15 @@
         pill.addEventListener('click', () => {
           const url = ext.source || ('https://chromewebstore.google.com/detail/' + ext.id);
           closeAllPanels();
-          navigateTo(url);
-          showToast('🧩 Opening: ' + ext.name);
+          if (ext.installMode === 'cws-shortcut' && window.etherx?.openExternal) {
+            window.etherx.openExternal(url).catch(() => { });
+            showToast('🌐 Otvaram ekstenziju izvan EtherX-a: ' + ext.name);
+          } else if (ext.installMode === 'unpacked') {
+            showToast('🧩 Unpacked extension loaded: ' + ext.name);
+          } else {
+            navigateTo(url);
+            showToast('🧩 Opening: ' + ext.name);
+          }
         });
         pill.addEventListener('contextmenu', e => {
           e.preventDefault();
@@ -11241,26 +11443,49 @@
         const t = getActiveTab();
         const host = t?.url ? (() => { try { return new URL(t.url).hostname.replace('www.', ''); } catch (e2) { return ''; } })() : '';
         const pwds = JSON.parse(localStorage.getItem('ex_passwords') || '[]')
-          .filter(p => !host || p.site.replace(/https?:\/\//, '').replace('www.', '').startsWith(host) || host.includes(p.site.replace(/https?:\/\//, '').replace('www.', '')))
+          .filter(p => !host || normalizePwdSite(p.site) === normalizePwdSite(host) || normalizePwdSite(host).includes(normalizePwdSite(p.site)) || normalizePwdSite(p.site).includes(normalizePwdSite(host)))
           .map(p => ({ ...p, _type: 'password' }));
         const cards = getCards().map(c => ({ ...c, _type: 'card' }));
         const all = [...pwds, ...cards];
-        if (!all.length) { showToast('🔑 No saved passwords or cards for this site'); return; }
-        const rect = btn.getBoundingClientRect();
-        showAutofillBox(rect.left - 200, rect.bottom + 8, all, (item) => {
-          if (item._type === 'password') {
-            navigator.clipboard?.writeText(item.password);
-            showToast('🔑 Password for ' + item.username + ' copied!');
-          } else {
-            navigator.clipboard?.writeText(item.number);
-            showToast('💳 Card ' + item.last4 + ' number copied!');
+        inspectCurrentPageCredentials().then(candidate => {
+          const rect = btn.getBoundingClientRect();
+          if (!all.length && candidate?.password) {
+            maybePromptSavePassword(candidate, 'manual');
+            return;
           }
+          if (!all.length) { showToast('🔑 No saved passwords or cards for this site'); return; }
+          showAutofillBox(rect.left - 200, rect.bottom + 8, all, (item) => {
+            if (item._type === 'password') {
+              navigator.clipboard?.writeText(item.password);
+              showToast('🔑 Password for ' + item.username + ' copied!');
+            } else {
+              navigator.clipboard?.writeText(item.number);
+              showToast('💳 Card ' + item.last4 + ' number copied!');
+            }
+          });
+          if (candidate?.password) {
+            const exists = pwds.some(p => String(p.username || '').trim().toLowerCase() === String(candidate.username || host).trim().toLowerCase() && p.password === candidate.password);
+            if (!exists) setTimeout(() => maybePromptSavePassword(candidate, 'manual'), 0);
+          }
+        }).catch(() => {
+          if (!all.length) { showToast('🔑 No saved passwords or cards for this site'); return; }
+          const rect = btn.getBoundingClientRect();
+          showAutofillBox(rect.left - 200, rect.bottom + 8, all, (item) => {
+            if (item._type === 'password') {
+              navigator.clipboard?.writeText(item.password);
+              showToast('🔑 Password for ' + item.username + ' copied!');
+            } else {
+              navigator.clipboard?.writeText(item.number);
+              showToast('💳 Card ' + item.last4 + ' number copied!');
+            }
+          });
         });
       });
       // Insert before go-btn
       const goBtn = document.getElementById('goBtn');
       if (goBtn) urlBar.insertBefore(btn, goBtn);
       else urlBar.appendChild(btn);
+      updateAutofillBtnState();
     })();
 
     // ── Cards management (in Autofill settings) ───────────────────────────────
@@ -11303,9 +11528,18 @@
       const known = { MetaMask: 'nkbihfbeogaeaoehlefnkodbefgpgknn', 'uBlock Origin': 'cjpalhdlnbpafiamejdnhcphjbkeiagm', Grammarly: 'kbfnbcaeplbcioakkpcpgfkobkghlhen', Honey: 'bmnlcjabgnpnenekpadlanbbkooimhnj', LastPass: 'hdokiejnpimakedhajhdlcegeplioahd', 'Crypto Price Tracker': 'djpcnbhbkplhbnkppfopnnejhaigffjn', 'iCloud Passwords': 'pejdijmoenmkgeppbflobdenhhabjlaj' };
       const icons = { MetaMask: '\uD83E\uDD8A', 'uBlock Origin': '\uD83D\uDEE1\uFE0F', Grammarly: '\uD83D\uDCDD', Honey: '\uD83C\uDF6F', LastPass: '\uD83D\uDD11', 'Crypto Price Tracker': '\uD83D\uDCC8', 'iCloud Passwords': '\uD83D\uDD11' };
       for (const [n, kid] of Object.entries(known)) { if (val.includes(kid) || val.toLowerCase().includes(n.toLowerCase())) { name = n; id = kid; icon = icons[n] || '\uD83E\uDDE9'; } }
-      EXT_DB.add({ id, name, desc, icon, enabled: true, source: val, installedAt: Date.now() });
+      EXT_DB.add({ id, name, desc: 'Chrome Web Store shortcut — direct install remains limited in Electron; use Load Unpacked for real extension runtime.', icon, enabled: true, source: val, installMode: 'cws-shortcut', installedAt: Date.now() });
       renderExtList(); document.getElementById('extAddUrl').value = '';
-      showToast('\uD83E\uDDE9 Installed: ' + name); consoleLog('success', '\uD83E\uDDE9 Extension installed: ' + name);
+      showToast('🧩 Shortcut saved: ' + name + ' — use Load Unpacked for working runtime'); consoleLog('success', '🧩 Extension shortcut saved: ' + name);
+    });
+    document.getElementById('btnLoadUnpackedExt')?.addEventListener('click', async () => {
+      const chosen = await window.etherx?.extensions?.chooseFolder?.();
+      if (!chosen?.ok || !chosen.path) return;
+      const loaded = await window.etherx?.extensions?.loadUnpacked?.(chosen.path);
+      if (!loaded?.ok) { showToast('❌ Extension load failed: ' + (loaded?.error || 'unknown error')); return; }
+      EXT_DB.add({ id: loaded.id, name: loaded.name, icon: '🧩', desc: 'Loaded unpacked extension v' + (loaded.version || '?'), enabled: true, installMode: 'unpacked', path: loaded.path, source: 'extension://' + loaded.id, installedAt: Date.now() });
+      renderExtList();
+      showToast('🧩 Loaded unpacked extension: ' + loaded.name);
     });
     document.getElementById('extAddUrl').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('extAddBtn').click(); });
     document.getElementById('btnExtensions').addEventListener('click', () => { const ep = document.getElementById('extPanel'); const isOpen = ep.classList.contains('open'); closeAllPanels(); ep.classList.toggle('open', !isOpen); if (!isOpen) renderExtList(); });
@@ -11367,8 +11601,8 @@
           navigateTo(cwsUrl);
           document.getElementById('extPanel')?.classList.remove('open');
         }
-        // Register locally so it appears in installed list
-        EXT_DB.add({ id: extId, name, icon, desc, enabled: true, source: cwsUrl, installedAt: Date.now() });
+        // Register locally as a shortcut; real runtime install in Electron needs unpacked loading
+        EXT_DB.add({ id: extId, name, icon, desc: desc || 'Chrome Web Store shortcut — use Load Unpacked for real runtime.', enabled: true, source: cwsUrl, installMode: 'cws-shortcut', installedAt: Date.now() });
         renderExtList();
         document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active'));
@@ -11376,6 +11610,23 @@
         document.getElementById('extpane-installed')?.classList.add('active');
       });
     });
+
+    (async function restoreUnpackedExtensions() {
+      const exts = EXT_DB.get();
+      let changed = false;
+      for (const ext of exts) {
+        if (ext.installMode !== 'unpacked' || !ext.path) continue;
+        const loaded = await window.etherx?.extensions?.loadUnpacked?.(ext.path);
+        if (loaded?.ok) {
+          ext.id = loaded.id;
+          ext.name = loaded.name || ext.name;
+          ext.desc = 'Loaded unpacked extension v' + (loaded.version || '?');
+          changed = true;
+        }
+      }
+      if (changed) EXT_DB.save(exts);
+      renderExtList();
+    })();
 
     // frame.load hook for recent sites
     frame.addEventListener('load', () => {
@@ -11392,33 +11643,69 @@
     document.getElementById('boOpen').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) window.open(t.url, '_blank'); });
     document.getElementById('boRetry').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) navigateTo(t.url); });
     const ctxMenu = document.getElementById('ctxMenu');
+    const ctxWindowList = document.getElementById('ctxWindowList');
     let _ctxTargetUrl = null; // URL of right-clicked link (if any)
-    function showCtxMenu(x, y, targetUrl) {
+    async function showCtxMenu(x, y, targetUrl, params = {}) {
       _ctxTargetUrl = targetUrl || null;
+      _ctxSelectionText = String(params.selectionText || window.getSelection()?.toString() || '');
+      _ctxIsEditable = !!params.isEditable || ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || !!document.activeElement?.isContentEditable;
       // Show/hide link-specific items
       const hasLink = !!targetUrl;
       ['ctx-open-new-tab', 'ctx-open-new-window', 'ctx-open-tab-group', 'ctx-download-link', 'ctx-download-link-as', 'ctx-reading-list'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = hasLink ? '' : 'none';
       });
       document.querySelectorAll('.ctx-sep:not(.ctx-no-link), #ctx-copy-url').forEach(el => {
-        el.style.display = '';
+        el.style.display = hasLink ? '' : 'none';
       });
       // Show copy-text only when there's a selection
-      const hasSel = !!(window.getSelection()?.toString());
+      const hasSel = !!_ctxSelectionText;
       const ctxCopyTextEl = document.getElementById('ctx-copy-text');
       if (ctxCopyTextEl) ctxCopyTextEl.style.display = hasSel ? '' : 'none';
+      const ctxPasteTextEl = document.getElementById('ctx-paste-text');
+      if (ctxPasteTextEl) ctxPasteTextEl.style.display = _ctxIsEditable ? '' : 'none';
+      if (ctxWindowList) {
+        ctxWindowList.innerHTML = '';
+        ctxWindowList.style.display = 'none';
+        const sep = document.getElementById('ctx-window-switch-sep');
+        if (sep) sep.style.display = 'none';
+        try {
+          const result = await window.electronAPI?.invoke?.('app:listWindows');
+          const windows = result?.windows || [];
+          const currentId = result?.currentWindowId;
+          const others = windows.filter(w => w.id !== currentId);
+          if (others.length) {
+            if (sep) sep.style.display = '';
+            ctxWindowList.style.display = '';
+            others.forEach((win, index) => {
+              const item = document.createElement('div');
+              item.className = 'ctx-item';
+              item.dataset.windowId = String(win.id);
+              item.textContent = `🪟 Switch to ${win.title || ('Window ' + (index + 1))}${win.minimized ? ' (minimized)' : ''}`;
+              ctxWindowList.appendChild(item);
+            });
+          }
+        } catch (_) { }
+      }
       // Position
       const menuW = 240, menuH = ctxMenu.offsetHeight || 320;
       ctxMenu.style.left = Math.min(x, window.innerWidth - menuW - 8) + 'px';
       ctxMenu.style.top = Math.min(y, window.innerHeight - menuH - 8) + 'px';
       ctxMenu.classList.add('show');
     }
-    document.addEventListener('click', () => ctxMenu.classList.remove('show'));
+    const closeCtxMenu = () => ctxMenu.classList.remove('show');
+    document.addEventListener('click', closeCtxMenu, true);
+    document.addEventListener('mousedown', e => { if (!ctxMenu.contains(e.target)) closeCtxMenu(); }, true);
+    document.addEventListener('scroll', closeCtxMenu, true);
+    window.addEventListener('blur', closeCtxMenu);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtxMenu(); });
     document.addEventListener('contextmenu', e => {
       // Check if user right-clicked on a link
       const link = e.target.closest('a[href]');
       e.preventDefault();
-      showCtxMenu(e.clientX, e.clientY, link?.href || null);
+      showCtxMenu(e.clientX, e.clientY, link?.href || null, {
+        selectionText: window.getSelection()?.toString() || '',
+        isEditable: !!(e.target?.isContentEditable || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName))
+      });
     });
     // New context menu item handlers
     document.getElementById('ctx-new-tab').addEventListener('click', () => createTab());
@@ -11442,16 +11729,32 @@
     document.getElementById('ctx-open-new-window').addEventListener('click', () => {
       const url = _ctxTargetUrl || getActiveTab()?.url; if (url) window.open(url, '_blank');
     });
+    ctxWindowList?.addEventListener('click', async (e) => {
+      const item = e.target.closest('[data-window-id]');
+      if (!item) return;
+      try {
+        await window.electronAPI?.invoke?.('app:focusWindow', Number(item.dataset.windowId));
+        closeCtxMenu();
+      } catch (_) { }
+    });
     document.getElementById('ctx-open-tab-group').addEventListener('click', () => {
       const url = _ctxTargetUrl || getActiveTab()?.url; if (url) { createTab(url); showToast('Opened in Tab Group'); }
     });
     document.getElementById('ctx-download-link').addEventListener('click', () => {
-      if (_ctxTargetUrl) { const a = document.createElement('a'); a.href = _ctxTargetUrl; a.download = ''; a.click(); showToast('⬇️ Download started'); }
+      if (_ctxTargetUrl) {
+        DB.upsertDownload({ id: `manual-${Date.now()}`, url: _ctxTargetUrl, filename: _ctxTargetUrl.split('/').pop() || 'download', status: 'started', ts: Date.now() });
+        openDownloadsPanelWithRefresh();
+        const a = document.createElement('a'); a.href = _ctxTargetUrl; a.download = ''; a.click(); showToast('⬇️ Download started');
+      }
     });
     document.getElementById('ctx-download-link-as').addEventListener('click', () => {
       if (_ctxTargetUrl) {
         const name = prompt('Save as:', _ctxTargetUrl.split('/').pop() || 'file');
-        if (name) { const a = document.createElement('a'); a.href = _ctxTargetUrl; a.download = name; a.click(); showToast('⬇️ Download started'); }
+        if (name) {
+          DB.upsertDownload({ id: `manual-${Date.now()}`, url: _ctxTargetUrl, filename: name, status: 'started', ts: Date.now() });
+          openDownloadsPanelWithRefresh();
+          const a = document.createElement('a'); a.href = _ctxTargetUrl; a.download = name; a.click(); showToast('⬇️ Download started');
+        }
       }
     });
     document.getElementById('ctx-bookmark').addEventListener('click', () => {
@@ -11468,7 +11771,7 @@
       if (url) navigator.clipboard.writeText(url).then(() => showToast('📋 URL copied'));
     });
     document.getElementById('ctx-copy-text').addEventListener('click', () => {
-      const sel = window.getSelection()?.toString();
+      const sel = _ctxSelectionText || window.getSelection()?.toString();
       if (sel) { navigator.clipboard.writeText(sel).then(() => showToast('📋 Kopirano')); }
       else { document.execCommand('copy'); }
     });
@@ -12039,8 +12342,46 @@
       const addBtn = document.getElementById('pwdAddNew');
       if (!modal) return;
       let unlocked = false;
+      const BIO_KEY = 'ex_bio_cred_v2';
+      const bytesToBase64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+      const base64ToBytes = str => Uint8Array.from(atob(str), ch => ch.charCodeAt(0));
       function getPasswords() { return JSON.parse(localStorage.getItem(PWD_KEY) || '[]'); }
       function savePasswords(p) { localStorage.setItem(PWD_KEY, JSON.stringify(p)); }
+      function getSavedBioCred() {
+        try { return JSON.parse(localStorage.getItem(BIO_KEY) || 'null'); } catch (_) { return null; }
+      }
+      function updateBioButtons() {
+        const saved = getSavedBioCred();
+        const modalBtn = document.getElementById('pwdBioBtn');
+        const inlineBtn = document.getElementById('inlinePwdBio');
+        if (modalBtn) modalBtn.textContent = saved ? '🔐 Biometric' : '🔐 Setup Biometric';
+        if (inlineBtn) inlineBtn.textContent = saved ? '🔐 Biometric Unlock' : '🔐 Setup Biometric';
+      }
+      async function setupBiometricCredential() {
+        const challenge = crypto.getRandomValues(new Uint8Array(32));
+        const userId = crypto.getRandomValues(new Uint8Array(16));
+        const cred = await navigator.credentials.create({ publicKey: { challenge, rp: { name: 'EtherX Browser' }, user: { id: userId, name: 'etherx-user', displayName: 'EtherX User' }, pubKeyCredParams: [{ alg: -7, type: 'public-key' }], authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
+        if (!cred) return { ok: false, error: 'Credential creation cancelled.' };
+        localStorage.setItem(BIO_KEY, JSON.stringify({ id: cred.id, rawId: bytesToBase64(cred.rawId) }));
+        updateBioButtons();
+        return { ok: true };
+      }
+      async function unlockWithBiometric(onSuccess) {
+        if (!getSavedBioCred()) {
+          const setup = await setupBiometricCredential();
+          if (!setup.ok) return setup;
+        }
+        const saved = getSavedBioCred();
+        const challenge = crypto.getRandomValues(new Uint8Array(32));
+        const assertion = await navigator.credentials.get({ publicKey: { challenge, allowCredentials: [{ id: base64ToBytes(saved.rawId), type: 'public-key' }], userVerification: 'required', timeout: 60000 } });
+        if (assertion) {
+          onSuccess && onSuccess();
+          return { ok: true };
+        }
+        return { ok: false, error: 'Biometric unlock cancelled.' };
+      }
+      window.__etherxBiometricUnlock = unlockWithBiometric;
+      window.__etherxUpdateBioButtons = updateBioButtons;
       function renderPwdList() {
         const passwords = getPasswords();
         pwdList.innerHTML = '';
@@ -12060,43 +12401,33 @@
             } else if (btn.dataset.action === 'copy') {
               navigator.clipboard?.writeText(passwords[idx].password); showToast('📋 Password copied');
             } else if (btn.dataset.action === 'del') {
-              passwords.splice(idx, 1); savePasswords(passwords); renderPwdList(); showToast('🗑 Password removed');
+              passwords.splice(idx, 1); savePasswords(passwords); renderPwdList(); updateAutofillBtnState(); showToast('🗑 Password removed');
             }
           });
         });
       }
-      function openPwdModal() { modal.classList.add('open'); authInput.value = ''; listContainer.style.display = 'none'; unlocked = false; authInput.focus(); }
+      function openPwdModal() { modal.classList.add('open'); authInput.value = ''; listContainer.style.display = 'none'; unlocked = false; authInput.style.display = ''; unlockBtn.style.display = ''; authInput.focus(); }
       function closePwdModal() { modal.classList.remove('open'); }
-      function unlock() {
-        if (!authInput.value) { showToast('Please enter a password'); return; }
+      function unlock(viaBiometric = false) {
+        if (!viaBiometric && !authInput.value) { showToast('Please enter a password'); return; }
         unlocked = true; listContainer.style.display = 'block'; authInput.parentElement.querySelector('.pwd-subtitle')?.remove();
         authInput.style.display = 'none'; unlockBtn.style.display = 'none';
         renderPwdList(); showToast('🔓 Passwords unlocked');
       }
+      window.openPwdModal = openPwdModal;
       document.getElementById('sOpenPasswords')?.addEventListener('click', openPwdModal);
       cancelBtn?.addEventListener('click', closePwdModal);
       unlockBtn?.addEventListener('click', unlock);
       // ── WebAuthn Biometric Unlock ──
       const bioBtn = document.getElementById('pwdBioBtn');
-      const BIO_KEY = 'ex_bio_cred';
       const hasBio = window.PublicKeyCredential && navigator.credentials;
       if (hasBio && bioBtn) {
         bioBtn.style.display = '';
-        const savedCred = localStorage.getItem(BIO_KEY);
-        if (!savedCred) bioBtn.textContent = '🔐 Setup Biometric';
-        else bioBtn.textContent = '🔐 Biometric';
+        updateBioButtons();
         bioBtn.addEventListener('click', async () => {
           try {
-            if (!savedCred) {
-              const challenge = crypto.getRandomValues(new Uint8Array(32));
-              const userId = crypto.getRandomValues(new Uint8Array(16));
-              const cred = await navigator.credentials.create({ publicKey: { challenge, rp: { name: 'EtherX Browser' }, user: { id: userId, name: 'etherx-user', displayName: 'EtherX User' }, pubKeyCredParams: [{ alg: -7, type: 'public-key' }], authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' }, timeout: 60000 } });
-              if (cred) { localStorage.setItem(BIO_KEY, cred.id); bioBtn.textContent = '🔐 Biometric'; showToast('🔐 Biometric registered!'); }
-            } else {
-              const challenge = crypto.getRandomValues(new Uint8Array(32));
-              const assertion = await navigator.credentials.get({ publicKey: { challenge, allowCredentials: [{ id: Uint8Array.from(atob(savedCred.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)), type: 'public-key' }], userVerification: 'required', timeout: 60000 } });
-              if (assertion) { unlock(); showToast('🔐 Biometric unlock successful'); }
-            }
+            const result = await unlockWithBiometric(() => unlock(true));
+            if (result.ok) showToast('🔐 Biometric unlock successful');
           } catch (err) { showToast('❌ Biometric failed: ' + err.message); }
         });
       }
@@ -12107,7 +12438,7 @@
         const username = prompt('Username/Email:'); if (!username) return;
         const password = prompt('Password:'); if (!password) return;
         const passwords = getPasswords(); passwords.push({ site, username, password, ts: Date.now() });
-        savePasswords(passwords); renderPwdList(); showToast('🔑 Password saved');
+        savePasswords(passwords); renderPwdList(); updateAutofillBtnState(); showToast('🔑 Password saved');
       });
     })();
 
@@ -12116,6 +12447,31 @@
       const PWD_KEY = 'ex_passwords';
       function getPwds() { return JSON.parse(localStorage.getItem(PWD_KEY) || '[]'); }
       function savePwds(p) { localStorage.setItem(PWD_KEY, JSON.stringify(p)); }
+      function splitCsvLine(line) {
+        const out = []; let cur = ''; let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+            else inQuotes = !inQuotes;
+          } else if (ch === ',' && !inQuotes) {
+            out.push(cur.trim()); cur = '';
+          } else cur += ch;
+        }
+        out.push(cur.trim());
+        return out;
+      }
+      function parsePasswordCsv(text) {
+        const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+        if (lines.length < 2) return [];
+        const headers = splitCsvLine(lines[0]).map(h => h.toLowerCase().trim());
+        const findIdx = keys => headers.findIndex(h => keys.some(k => h.includes(k)));
+        const siteIdx = findIdx(['url', 'website', 'site', 'origin', 'name']);
+        const userIdx = findIdx(['username', 'user name', 'email', 'login']);
+        const passIdx = findIdx(['password', 'pass']);
+        if (siteIdx < 0 || userIdx < 0 || passIdx < 0) return [];
+        return lines.slice(1).map(line => splitCsvLine(line)).map(cols => ({ site: (cols[siteIdx] || '').replace(/^https?:\/\//, '').replace(/\/$/, ''), username: cols[userIdx] || '', password: cols[passIdx] || '', ts: Date.now() })).filter(row => row.site && row.username && row.password);
+      }
       function mkBtn(label, title, bg, color, cb) {
         const b = document.createElement('button');
         b.textContent = label; b.title = title;
@@ -12204,14 +12560,51 @@
         document.getElementById('newPwdPass').value = '';
         document.getElementById('inlinePwdAddForm').style.display = 'none';
         renderInlinePwdList(document.getElementById('inlinePwdSearch')?.value);
+        updateAutofillBtnState();
         showToast('🔑 Password saved');
+      });
+      document.getElementById('sImportPasswordsCsv')?.addEventListener('click', () => document.getElementById('pwdCsvInput')?.click());
+      document.getElementById('pwdCsvInput')?.addEventListener('change', async e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const imported = parsePasswordCsv(text);
+          if (!imported.length) { showToast('⚠️ CSV nije prepoznat ili nema lozinki'); return; }
+          const existing = getPwds();
+          const seen = new Set(existing.map(p => `${p.site}|${p.username}`.toLowerCase()));
+          let added = 0;
+          imported.forEach(row => {
+            const key = `${row.site}|${row.username}`.toLowerCase();
+            if (!seen.has(key)) { existing.push(row); seen.add(key); added++; }
+          });
+          savePwds(existing);
+          renderInlinePwdList(document.getElementById('inlinePwdSearch')?.value);
+          updateAutofillBtnState();
+          showToast(`📥 Uvezeno lozinki: ${added}`);
+        } catch (err) {
+          showToast('❌ CSV import failed: ' + err.message);
+        } finally {
+          e.target.value = '';
+        }
+      });
+      document.getElementById('sApplePasswords')?.addEventListener('click', async () => {
+        const result = await window.etherx?.app?.openApplePasswords?.();
+        if (result?.ok) showToast(' Apple Passwords opened');
+        else showToast(result?.error || '⚠️ Apple Passwords dostupno samo na macOS-u');
       });
       // Show bio button if WebAuthn is available
       if (window.PublicKeyCredential && document.getElementById('inlinePwdBio')) {
-        document.getElementById('inlinePwdBio').style.display = '';
-        document.getElementById('inlinePwdBio').addEventListener('click', () => {
-          showToast('🔐 Biometric: use main Passwords modal');
-          if (typeof openPwdModal === 'function') openPwdModal();
+        const inlineBioBtn = document.getElementById('inlinePwdBio');
+        inlineBioBtn.style.display = '';
+        window.__etherxUpdateBioButtons?.();
+        inlineBioBtn.addEventListener('click', async () => {
+          try {
+            const result = await window.__etherxBiometricUnlock?.(() => showUnlocked());
+            if (result?.ok) showToast('🔐 Keychain unlocked with biometric');
+          } catch (err) {
+            showToast('❌ Biometric failed: ' + err.message);
+          }
         });
       }
     })();

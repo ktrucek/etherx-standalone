@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 // ── Full EtherX API (new features) ────────────────────────────────────────────
 contextBridge.exposeInMainWorld('etherx', {
 
+  openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
+
   // ── Window ──────────────────────────────────────────────────────────────────
   window: {
     minimize: () => ipcRenderer.send('window-minimize'),
@@ -60,6 +62,10 @@ contextBridge.exposeInMainWorld('etherx', {
     get: (site) => ipcRenderer.invoke('passwords:get', site),
     list: () => ipcRenderer.invoke('passwords:list'),
     delete: (id) => ipcRenderer.invoke('passwords:delete', id),
+    setupVault: (masterPassword) => ipcRenderer.invoke('passwords:setupVault', masterPassword),
+    unlockVault: (masterPassword) => ipcRenderer.invoke('passwords:unlockVault', masterPassword),
+    lockVault: () => ipcRenderer.invoke('passwords:lockVault'),
+    exportBitwarden: () => ipcRenderer.invoke('passwords:exportBitwarden'),
   },
 
   // ── AI ────────────────────────────────────────────────────────────────────────
@@ -135,11 +141,17 @@ contextBridge.exposeInMainWorld('etherx', {
     openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
   },
 
+  extensions: {
+    chooseFolder: () => ipcRenderer.invoke('extensions:chooseFolder'),
+    loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),
+  },
+
   // ── App ───────────────────────────────────────────────────────────────────────
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
     getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
+    openApplePasswords: () => ipcRenderer.invoke('app:openApplePasswords'),
     openSettings: () => ipcRenderer.send('app:openSettings'),
     chooseIcon: () => ipcRenderer.invoke('app:chooseIcon'),
     setIcon: (filePath) => ipcRenderer.invoke('app:setIcon', filePath),
@@ -155,7 +167,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

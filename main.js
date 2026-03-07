@@ -13,6 +13,8 @@ const {
   Menu,
 } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const { execFile } = require('child_process');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
@@ -52,6 +54,58 @@ let adBlocker = null;
 let ai = null;
 const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
 let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
+const _downloadTrackedSessions = new Set();
+
+function broadcastToAllWindows(channel, payload) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    try {
+      if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    } catch (_) { }
+  });
+}
+
+function setupDownloadTracking(ses) {
+  if (!ses || _downloadTrackedSessions.has(ses)) return;
+  _downloadTrackedSessions.add(ses);
+  ses.on('will-download', (_event, item, webContents) => {
+    const downloadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      id: downloadId,
+      url: item.getURL(),
+      filename: item.getFilename(),
+      totalBytes: item.getTotalBytes(),
+      receivedBytes: 0,
+      status: 'started',
+      ts: Date.now(),
+      windowId: BrowserWindow.fromWebContents(webContents)?.id || null,
+    };
+    broadcastToAllWindows('download-update', payload);
+    item.on('updated', () => {
+      broadcastToAllWindows('download-update', {
+        ...payload,
+        receivedBytes: item.getReceivedBytes(),
+        totalBytes: item.getTotalBytes(),
+        status: item.isPaused() ? 'paused' : 'progressing',
+        savePath: item.getSavePath?.() || '',
+      });
+    });
+    item.on('done', (_e2, state) => {
+      const finalPayload = {
+        ...payload,
+        receivedBytes: item.getReceivedBytes(),
+        totalBytes: item.getTotalBytes(),
+        savePath: item.getSavePath?.() || '',
+        status: state === 'completed' ? 'completed' : 'failed',
+        state,
+        ts: Date.now(),
+      };
+      try {
+        if (db) db.addDownload(finalPayload);
+      } catch (_) { }
+      broadcastToAllWindows('download-update', finalPayload);
+    });
+  });
+}
 
 // ─── Single instance lock ─────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -68,8 +122,33 @@ if (!gotLock) {
   });
 }
 
-// ─── Remove default Electron application menu (we have a custom menu bar) ────
-Menu.setApplicationMenu(null);
+// ─── Native application menu ──────────────────────────────────────────────────
+function configureNativeMenu() {
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' },
+      ],
+    },
+    { role: 'windowMenu' },
+  ]));
+}
+
+configureNativeMenu();
 
 // ─── App ready ────────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
@@ -88,6 +167,9 @@ app.whenReady().then(async () => {
 
   // Init AI
   try { if (AIManager) ai = new AIManager(); } catch (e) { console.error('❌ AI init failed:', e.message); ai = null; }
+
+  setupDownloadTracking(session.defaultSession);
+  try { setupDownloadTracking(session.fromPartition('persist:etherx')); } catch (_) { }
 
   // Setup IPC handlers ONCE before creating any window
   if (!_ipcSetupDone) {
@@ -348,6 +430,14 @@ function setupIPC() {
     PasswordManager ? PasswordManager.get(app.getPath('userData'), site) : null);
   ipcMain.handle('passwords:list', () => PasswordManager ? PasswordManager.list(app.getPath('userData')) : []);
   ipcMain.handle('passwords:delete', (_e, id) => PasswordManager ? PasswordManager.remove(app.getPath('userData'), id) : noDb());
+  ipcMain.handle('passwords:setupVault', async (_e, masterPassword) =>
+    PasswordManager ? PasswordManager.setupVault(app.getPath('userData'), masterPassword) : noDb());
+  ipcMain.handle('passwords:unlockVault', async (_e, masterPassword) =>
+    PasswordManager ? PasswordManager.unlockVault(app.getPath('userData'), masterPassword) : noDb());
+  ipcMain.handle('passwords:lockVault', () =>
+    PasswordManager ? PasswordManager.lockVault(app.getPath('userData')) : noDb());
+  ipcMain.handle('passwords:exportBitwarden', () =>
+    PasswordManager ? PasswordManager.exportBitwardenFormat(app.getPath('userData')) : noDb());
 
   // ── AI ─────────────────────────────────────────────────────────────────────
   ipcMain.handle('ai:smartSearch', (_e, query) => ai ? ai.smartSearch(query) : noAi());
@@ -425,11 +515,62 @@ function setupIPC() {
 
   // ── Navigation helpers ─────────────────────────────────────────────────────
   ipcMain.handle('nav:openExternal', (_e, url) => shell.openExternal(url));
+  ipcMain.handle('app:openApplePasswords', async () => {
+    if (process.platform !== 'darwin') return { ok: false, error: 'Apple Passwords available only on macOS.' };
+    const tryExec = (file, args = []) => new Promise(resolve => {
+      execFile(file, args, err => resolve(!err));
+    });
+    if (await tryExec('open', ['-a', 'Passwords'])) return { ok: true };
+    if (await tryExec('open', ['x-apple.systempreferences:com.apple.Passwords-Settings.extension'])) return { ok: true };
+    try {
+      await shell.openExternal('x-apple.systempreferences:com.apple.Passwords-Settings.extension');
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+  ipcMain.handle('extensions:chooseFolder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose unpacked extension folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false };
+    return { ok: true, path: result.filePaths[0] };
+  });
+  ipcMain.handle('extensions:loadUnpacked', async (_e, extensionPath) => {
+    try {
+      if (!extensionPath || !fs.existsSync(extensionPath)) return { ok: false, error: 'Extension folder not found.' };
+      const manifestPath = path.join(extensionPath, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) return { ok: false, error: 'manifest.json not found in selected folder.' };
+      const ext = await session.defaultSession.loadExtension(extensionPath, { allowFileAccess: true });
+      return { ok: true, id: ext.id, name: ext.name, version: ext.version, path: extensionPath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
 
   // ── App info ────────────────────────────────────────────────
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getPlatform', () => process.platform);
   ipcMain.handle('app:getUserDataPath', () => app.getPath('userData'));
+  ipcMain.handle('app:listWindows', (event) => {
+    const currentWindow = BrowserWindow.fromWebContents(event.sender);
+    const windows = BrowserWindow.getAllWindows().map((win, index) => ({
+      id: win.id,
+      title: win.getTitle() || win.webContents.getTitle() || `Window ${index + 1}`,
+      focused: win.isFocused(),
+      minimized: win.isMinimized(),
+    }));
+    return { currentWindowId: currentWindow?.id || null, windows };
+  });
+  ipcMain.handle('app:focusWindow', (_event, windowId) => {
+    const win = BrowserWindow.fromId(Number(windowId));
+    if (!win) return { ok: false, error: 'Window not found' };
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    return { ok: true };
+  });
   ipcMain.handle('app:getBuildInfo', () => {
     try {
       const pkg = require('./package.json');
@@ -526,6 +667,7 @@ function setupIPC() {
         sandbox: false,
       },
     });
+    setupDownloadTracking(win.webContents.session);
     win.loadFile(path.join(__dirname, 'src', 'index.html'));
     if (url) {
       win.webContents.on('did-finish-load', () => {
@@ -549,6 +691,7 @@ function setupIPC() {
         partition: 'incognito-' + Date.now(),
       },
     });
+    setupDownloadTracking(win.webContents.session);
     win.loadFile(path.join(__dirname, 'src', 'index.html'));
     win.webContents.on('did-finish-load', () => {
       win.webContents.executeJavaScript(`
@@ -574,6 +717,7 @@ function setupIPC() {
         sandbox: false,
       },
     });
+    setupDownloadTracking(win.webContents.session);
     win.loadFile(path.join(__dirname, 'src', 'index.html'));
     if (url) {
       win.webContents.on('did-finish-load', () => {
@@ -598,6 +742,7 @@ function setupIPC() {
           webviewTag: true, sandbox: false,
         },
       });
+      setupDownloadTracking(w.webContents.session);
       w.loadFile(path.join(__dirname, 'src', 'index.html'));
       if (url) {
         w.webContents.on('did-finish-load', () => {
@@ -706,6 +851,19 @@ function setupIPC() {
 
 // ─── Navigation safety + context-menu passthrough ────────────────────────────
 app.on('web-contents-created', (_event, contents) => {
+  contents.on('before-input-event', (event, input) => {
+    if (process.platform !== 'darwin' || !input.meta || input.control || input.alt) return;
+    const key = (input.key || '').toLowerCase();
+    try {
+      if (key === 'c') { contents.copy(); event.preventDefault(); }
+      else if (key === 'v') { contents.paste(); event.preventDefault(); }
+      else if (key === 'x') { contents.cut(); event.preventDefault(); }
+      else if (key === 'a') { contents.selectAll(); event.preventDefault(); }
+      else if (key === 'z' && input.shift) { contents.redo(); event.preventDefault(); }
+      else if (key === 'z') { contents.undo(); event.preventDefault(); }
+    } catch (_) { }
+  });
+
   contents.on('will-navigate', (_e, url) => {
     try {
       const { URL: NURL } = require('url');
