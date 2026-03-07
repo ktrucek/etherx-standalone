@@ -7319,7 +7319,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.10</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.11</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -12489,8 +12489,8 @@
       function setLabel(el, text) {
         // Remove existing text nodes only (keep child elements like .icon, .sc, .sit-icon)
         Array.from(el.childNodes).filter(n => n.nodeType === 3).forEach(n => n.remove());
-        // Find insertion point: after .icon span if present, else prepend
-        const iconSpan = el.querySelector('.icon, .sit-icon');
+        // Find insertion point — only look at DIRECT children to avoid NotFoundError
+        const iconSpan = Array.from(el.children).find(c => c.classList.contains('icon') || c.classList.contains('sit-icon'));
         const textNode = document.createTextNode(text);
         if (iconSpan && iconSpan.nextSibling) {
           el.insertBefore(textNode, iconSpan.nextSibling);
@@ -12498,7 +12498,7 @@
           el.appendChild(textNode);
         } else {
           // For menu-item top labels (data-menu), insert before .dropdown
-          const dropdown = el.querySelector('.dropdown');
+          const dropdown = Array.from(el.children).find(c => c.classList.contains('dropdown'));
           if (dropdown) { el.insertBefore(textNode, dropdown); }
           else { el.prepend(textNode); }
         }
