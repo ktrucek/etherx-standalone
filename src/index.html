@@ -5566,7 +5566,7 @@
       </div>
     </div>
     <webview id="browseFrame" class="browse-frame" allowpopups allowfullscreen partition="persist:etherx"
-      useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36">
+      useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36">
     </webview>
     <iframe id="browseFrameWeb" class="browse-frame"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
@@ -7376,7 +7376,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.13</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.14</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -7426,8 +7426,15 @@
                       style="color:var(--accent)" onclick="navigateTo(this.href);return false">aistudio.google.com</a>
                   </div>
                 </div>
-                <input type="password" class="s-input" id="settingsGeminiKey" placeholder="AIzaSy..."
-                  style="width:220px" autocomplete="off">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="text" class="s-input" id="settingsGeminiKey" placeholder="AIzaSy..."
+                    style="width:220px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                    spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsGeminiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                </div>
               </div>
               <!-- API Key for OpenAI -->
               <div class="s-row" id="aiKeyRowOpenai" style="display:none">
@@ -7437,8 +7444,15 @@
                       style="color:var(--accent)" onclick="navigateTo(this.href);return false">platform.openai.com</a>
                   </div>
                 </div>
-                <input type="password" class="s-input" id="settingsOpenaiKey" placeholder="sk-..." style="width:220px"
-                  autocomplete="off">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="text" class="s-input" id="settingsOpenaiKey" placeholder="sk-..."
+                    style="width:220px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                    spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsOpenaiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                </div>
               </div>
               <!-- API Key for Anthropic -->
               <div class="s-row" id="aiKeyRowAnthropic" style="display:none">
@@ -7448,8 +7462,15 @@
                       style="color:var(--accent)" onclick="navigateTo(this.href);return false">console.anthropic.com</a>
                   </div>
                 </div>
-                <input type="password" class="s-input" id="settingsAnthropicKey" placeholder="sk-ant-..."
-                  style="width:220px" autocomplete="off">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="text" class="s-input" id="settingsAnthropicKey" placeholder="sk-ant-..."
+                    style="width:220px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                    spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsAnthropicKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                </div>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
@@ -9072,7 +9093,58 @@
     document.getElementById('mi-fullscreen').addEventListener('click', () => {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => { }); else document.exitFullscreen();
     });
-    document.addEventListener('fullscreenchange', () => showToast(document.fullscreenElement ? '⛶ Full Screen — F11 to exit' : '⊡ Exited Full Screen'));
+    // Fullscreen: sakrij title-bar i menu-bar, prikaži na hover gore
+    (function initFullscreenBars() {
+      const titleBar = document.querySelector('.title-bar');
+      const menuBar = document.getElementById('menuBar');
+      const tabBar = document.querySelector('.tab-bar');
+      let _fsHoverTimer = null;
+      // Hover zona na vrhu ekrana koja prikazuje barove u fullscreenu
+      const hoverZone = document.createElement('div');
+      hoverZone.id = 'fsHoverZone';
+      hoverZone.style.cssText = 'position:fixed;top:0;left:0;right:0;height:6px;z-index:99998;display:none';
+      document.body.appendChild(hoverZone);
+
+      function showBarsFS() {
+        clearTimeout(_fsHoverTimer);
+        if (!document.fullscreenElement) return;
+        if (titleBar) { titleBar.style.transition = 'transform .2s'; titleBar.style.transform = 'translateY(0)'; }
+        if (menuBar && menuBar.style.display !== 'none') { menuBar.style.transition = 'transform .2s'; menuBar.style.transform = 'translateY(0)'; }
+        if (tabBar) { tabBar.style.transition = 'transform .2s'; tabBar.style.transform = 'translateY(0)'; }
+        _fsHoverTimer = setTimeout(hideBarsFS, 2500);
+      }
+      function hideBarsFS() {
+        if (!document.fullscreenElement) return;
+        const h = (titleBar ? titleBar.offsetHeight : 0) + (menuBar && menuBar.style.display !== 'none' ? menuBar.offsetHeight : 0) + (tabBar ? tabBar.offsetHeight : 0);
+        if (titleBar) titleBar.style.transform = 'translateY(-' + (titleBar.offsetHeight) + 'px)';
+        if (menuBar && menuBar.style.display !== 'none') menuBar.style.transform = 'translateY(-' + h + 'px)';
+        if (tabBar) tabBar.style.transform = 'translateY(-' + h + 'px)';
+      }
+      hoverZone.addEventListener('mouseenter', showBarsFS);
+      hoverZone.addEventListener('mousemove', showBarsFS);
+
+      document.addEventListener('fullscreenchange', () => {
+        if (document.fullscreenElement) {
+          // Ušli u fullscreen — sakrij barove i prikaži hover zonu
+          hoverZone.style.display = 'block';
+          if (titleBar) { titleBar.style.overflow = 'visible'; titleBar.style.position = 'fixed'; titleBar.style.top = '0'; titleBar.style.left = '0'; titleBar.style.right = '0'; titleBar.style.zIndex = '99999'; }
+          if (menuBar) { menuBar.style.position = 'fixed'; menuBar.style.top = (titleBar ? titleBar.offsetHeight : 0) + 'px'; menuBar.style.left = '0'; menuBar.style.right = '0'; menuBar.style.zIndex = '99998'; }
+          if (tabBar) { tabBar.style.position = 'fixed'; tabBar.style.top = ((titleBar ? titleBar.offsetHeight : 0) + (menuBar && menuBar.style.display !== 'none' ? menuBar.offsetHeight : 0)) + 'px'; tabBar.style.left = '0'; tabBar.style.right = '0'; tabBar.style.zIndex = '99997'; }
+          setTimeout(hideBarsFS, 1500);
+          showToast('⛶ Full Screen — pomakni miš gore za menije | F11 za izlaz');
+        } else {
+          // Izašli iz fullscreen — vrati sve u normalu
+          hoverZone.style.display = 'none';
+          clearTimeout(_fsHoverTimer);
+          [titleBar, menuBar, tabBar].forEach(el => {
+            if (!el) return;
+            el.style.position = ''; el.style.top = ''; el.style.left = ''; el.style.right = '';
+            el.style.zIndex = ''; el.style.transform = ''; el.style.transition = '';
+          });
+          showToast('⊡ Exited Full Screen');
+        }
+      });
+    })();
     document.getElementById('mi-new-private').addEventListener('click', () => {
       // Bug #4: In Electron — open real private window; in web — toggle local private mode
       if (window.etherx?.app || window.electronAPI) {
