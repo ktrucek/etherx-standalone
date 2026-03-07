@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   platform: process.platform,
+  // Generic invoke wrapper for backward compatibility
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
 });
 
 // ── Full EtherX API (new features) ────────────────────────────────────────────

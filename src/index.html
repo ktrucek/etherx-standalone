@@ -5078,6 +5078,8 @@
     <div class="title-text">EtherX Browser</div>
     <div class="title-right electron-no-drag"><span id="privateIndicator">🕶 Private</span><span id="titleDate"
         style="opacity:0.7"></span><span id="titleClock"></span>
+      <button class="nav-btn icon-btn" id="btnTabOverview" title="Show Tab Overview (Ctrl+Shift+\\)"
+        style="margin-left:8px;font-size:15px">⧉</button>
       <div style="position:relative"><button id="titleProfileBtn"
           style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:2px 10px;color:var(--text2);cursor:pointer;font-size:11px;display:flex;align-items:center;gap:4px">👤
           <span id="activeProfileName">Default</span> ▾</button>
@@ -5458,7 +5460,6 @@
     <button class="nav-btn icon-btn" id="btnBookmarks" title="Bookmarks (Ctrl+B)">⭐</button>
     <button class="nav-btn icon-btn" id="btnHistory" title="History (Ctrl+H)">🕒</button>
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
-    <button class="nav-btn icon-btn" id="btnTabOverview" title="Show Tab Overview (Ctrl+Shift+\\)">⧉</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
   </div>
@@ -6716,6 +6717,31 @@
               </div>
               <div class="s-row">
                 <div class="s-row-left">
+                  <div class="s-row-label">Date colour</div>
+                  <div class="s-row-desc">Colour of the date in the title bar</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="color" id="dateColor" value="#ffffff"
+                    style="width:36px;height:28px;border:1px solid var(--border2);border-radius:6px;background:none;cursor:pointer;padding:2px">
+                  <button id="dateColorReset"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Date font size</div>
+                  <div class="s-row-desc">Size of the date in the title bar (px)</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="number" id="dateSizeInput" min="8" max="32" step="1" value="12"
+                    style="width:60px;padding:4px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px">
+                  <span style="font-size:11px;color:var(--text3)">px</span>
+                  <button id="dateSizeReset"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
                   <button class="s-icon-edit-btn" data-icon-target-text="privateIndicator"
                     title="Promijeni ikonu">🕶</button>
                   <div class="s-row-label">Private Mode Indicator</div>
@@ -7350,7 +7376,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.12</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.13</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8811,6 +8837,12 @@
 
     if (urlInput) {
       urlInput.addEventListener('keydown', e => {
+        // Cmd+A (Mac) or Ctrl+A (Windows) to select all text in URL input
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+          e.preventDefault();
+          urlInput.select();
+          return;
+        }
         if (e.key === 'Enter') {
           e.preventDefault();
           if (_acSelIdx >= 0 && _acItems[_acSelIdx]) {
@@ -11391,13 +11423,16 @@
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
     function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
-    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; if (cfg.clockColor) clockEl.style.color = cfg.clockColor; else clockEl.style.color = '#ffffff'; if (cfg.clockSize) clockEl.style.fontSize = cfg.clockSize + 'px'; else clockEl.style.fontSize = '15px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
+    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const clockColor = cfg.clockColor || '#ffffff'; clockEl.style.color = clockColor; const clockSize = cfg.clockSize || 15; clockEl.style.fontSize = clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) { de.textContent = (datePfx ? datePfx + ' ' : '') + d; const dateColor = cfg.dateColor || '#ffffff'; de.style.color = dateColor; const dateSize = cfg.dateSize || 12; de.style.fontSize = dateSize + 'px'; } }
     updateClock(); setInterval(updateClock, 30000);
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
     document.addEventListener('keydown', e => {
       const ctrl = e.ctrlKey || e.metaKey; const shift = e.shiftKey;
       // Never intercept clipboard/undo/redo — let OS and webview handle natively
+      // Also skip all Ctrl shortcuts when focus is in input/textarea to allow paste etc.
+      const isInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
       if (ctrl && !shift && ['c', 'C', 'v', 'V', 'x', 'X', 'a', 'A', 'z', 'Z', 'y', 'Y'].includes(e.key)) return;
+      if (isInput && ctrl) return; // Allow all Ctrl+key in inputs
       if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
       else if (ctrl && e.key === 'w') { e.preventDefault(); closeTab(STATE.activeTabId); }
       else if (ctrl && e.key === 'r') { e.preventDefault(); document.getElementById('btnReload').click(); }
@@ -12293,6 +12328,10 @@
             const clockEl = document.getElementById('titleClock');
             if (clockEl) clockEl.style.color = inp.value;
           }
+          if (settingKey === 'dateColor') {
+            const dateEl = document.getElementById('titleDate');
+            if (dateEl) dateEl.style.color = inp.value;
+          }
           DB.saveSetting(settingKey, inp.value);
         });
         rst && rst.addEventListener('click', () => {
@@ -12313,6 +12352,7 @@
       makeColor('accentColor', 'accentColorReset', '--accent', 'accentColor', '#667eea');
       makeColor('textColor', 'textColorReset', '--text', 'textColor', '#e2e8f0');
       makeColor('clockColor', 'clockColorReset', '--clock-color', 'clockColor', '#ffffff');
+      makeColor('dateColor', 'dateColorReset', '--date-color', 'dateColor', '#ffffff');
 
       // Clock size
       (() => {
@@ -12336,6 +12376,28 @@
           if (clockEl) clockEl.style.fontSize = '15px';
           DB.saveSetting('clockSize', 15);
           showToast('↺ Clock size reset');
+        });
+      })();
+
+      // Date size
+      (() => {
+        const inp = document.getElementById('dateSizeInput');
+        const rst = document.getElementById('dateSizeReset');
+        if (!inp) return;
+        const savedSize = cfg.dateSize || 12;
+        inp.value = savedSize;
+        inp.addEventListener('input', () => {
+          const v = Math.max(8, Math.min(32, Number(inp.value) || 12));
+          const dateEl = document.getElementById('titleDate');
+          if (dateEl) dateEl.style.fontSize = v + 'px';
+          DB.saveSetting('dateSize', v);
+        });
+        rst && rst.addEventListener('click', () => {
+          inp.value = 12;
+          const dateEl = document.getElementById('titleDate');
+          if (dateEl) dateEl.style.fontSize = '12px';
+          DB.saveSetting('dateSize', 12);
+          showToast('↺ Date size reset');
         });
       })();
 
