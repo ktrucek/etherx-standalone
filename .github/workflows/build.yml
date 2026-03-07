@@ -55,8 +55,6 @@ jobs:
           npm_config_build_from_source: true
           CXXFLAGS: -std=c++20
 
-      - name: 🔄 Sync browser.html → src/index.html
-        run: cp electron-app/src/browser.html src/index.html
 
       - name: 🔨 Build Linux packages
         run: npx electron-builder --linux --publish never
@@ -98,8 +96,6 @@ jobs:
           npm_config_msvs_version: 2022
           CXXFLAGS: /std:c++20
 
-      - name: 🔄 Sync browser.html → src/index.html
-        run: copy electron-app\src\browser.html src\index.html
 
       - name: 🔨 Build Windows packages
         run: npx electron-builder --win --publish never
@@ -141,8 +137,6 @@ jobs:
         env:
           CXXFLAGS: -std=c++20
 
-      - name: 🔄 Sync browser.html → src/index.html
-        run: cp electron-app/src/browser.html src/index.html
 
       - name: 🔨 Build macOS x64 DMG (cross-compile)
         run: npx electron-builder --mac dmg zip --x64 --publish never
@@ -181,8 +175,6 @@ jobs:
         env:
           CXXFLAGS: -std=c++20
 
-      - name: 🔄 Sync browser.html → src/index.html
-        run: cp electron-app/src/browser.html src/index.html
 
       - name: 🔨 Build macOS arm64 DMG
         run: npx electron-builder --mac dmg zip --arm64 --publish never
