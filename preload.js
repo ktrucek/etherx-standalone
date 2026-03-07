@@ -135,6 +135,8 @@ contextBridge.exposeInMainWorld('etherx', {
     chooseIcon: () => ipcRenderer.invoke('app:chooseIcon'),
     setIcon: (filePath) => ipcRenderer.invoke('app:setIcon', filePath),
     resetIcon: () => ipcRenderer.invoke('app:resetIcon'),
+    chooseScreenshotFolder: () => ipcRenderer.invoke('app:chooseScreenshotFolder'),
+    chooseProfilePicture: () => ipcRenderer.invoke('app:chooseProfilePicture'),
   },
 
   // ── DevTools ──────────────────────────────────────────────────────────────────

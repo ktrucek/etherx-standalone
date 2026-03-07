@@ -6131,8 +6131,25 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Default</div>
-                  <div class="s-row-desc">Active profile</div>
+                  <div class="s-row-label" style="font-weight:600">👤 Profile</div>
+                  <div class="s-row-desc">Your account picture and display name</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Profile picture</div>
+                  <div class="s-row-desc">Upload an image or use an emoji</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div id="sProfileAvatarPreview" style="width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px">👤</div>
+                  <button id="sUploadAvatarBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📸 Upload Photo…</button>
+                  <button id="sEmojiAvatarBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">😀 Use Emoji</button>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Active profile</div>
+                  <div class="s-row-desc">Default</div>
                 </div><span style="color:var(--green);font-size:12px">✓ Active</span>
               </div>
             </div>
@@ -6234,6 +6251,17 @@
                   <option value="clipboard">📋 Copy to clipboard</option>
                   <option value="ask">❓ Ask each time</option>
                 </select>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Screenshot folder</div>
+                  <div class="s-row-desc">Custom folder where screenshots are saved</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span id="screenshotFolderPath" style="font-size:11px;color:var(--text3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block">Default (Downloads)</span>
+                  <button id="screenshotFolderBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📁 Choose…</button>
+                  <button id="screenshotFolderReset" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
@@ -6401,6 +6429,26 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">🌐 Browser Logo</div>
+                  <div class="s-row-desc">Customise the application icon shown in the taskbar and title bar</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">App icon</div>
+                  <div class="s-row-desc">Choose a custom image (.png, .ico) or reset to default</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <img id="browserLogoPreview" src="../assets/icon.png" onerror="this.style.display='none'"
+                    style="width:32px;height:32px;object-fit:contain;border-radius:6px;border:1px solid var(--border2)">
+                  <button id="chooseBrowserLogoBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">🖼 Choose…</button>
+                  <button id="resetBrowserLogoBtn" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
+              </div>
+            </div>
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
                   <div class="s-row-label" style="font-weight:600">Toolbar Icons</div>
                   <div class="s-row-desc">Show or hide icons in the navigation bar</div>
                 </div>
@@ -6528,6 +6576,31 @@
               </div>
               <div class="s-row">
                 <div class="s-row-left">
+                  <div class="s-row-label">Clock colour</div>
+                  <div class="s-row-desc">Colour of the clock in the title bar</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="color" id="clockColor" value="#e2e8f0"
+                    style="width:36px;height:28px;border:1px solid var(--border2);border-radius:6px;background:none;cursor:pointer;padding:2px">
+                  <button id="clockColorReset"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Clock font size</div>
+                  <div class="s-row-desc">Size of the clock in the title bar (px)</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="number" id="clockSizeInput" min="8" max="32" step="1" value="12"
+                    style="width:60px;padding:4px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px">
+                  <span style="font-size:11px;color:var(--text3)">px</span>
+                  <button id="clockSizeReset"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
                   <button class="s-icon-edit-btn" data-icon-target-text="privateIndicator"
                     title="Promijeni ikonu">🕶</button>
                   <div class="s-row-label">Private Mode Indicator</div>
@@ -6636,6 +6709,19 @@
                   <input type="color" id="accentColor" value="#667eea"
                     style="width:36px;height:28px;border:1px solid var(--border2);border-radius:6px;background:none;cursor:pointer;padding:2px">
                   <button id="accentColorReset"
+                    style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
+                </div>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Text colour</div>
+                  <div class="s-row-desc">Colour of primary text in the browser UI</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="color" id="textColor" value="#e2e8f0"
+                    style="width:36px;height:28px;border:1px solid var(--border2);border-radius:6px;background:none;cursor:pointer;padding:2px">
+                  <button id="textColorReset"
                     style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
                 </div>
               </div>
@@ -7148,7 +7234,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.7</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.9</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -10913,7 +10999,7 @@
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
     function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
-    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; document.getElementById('titleClock').textContent = (clockPfx ? clockPfx + ' ' : '') + t; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
+    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; if (cfg.clockColor) clockEl.style.color = cfg.clockColor; if (cfg.clockSize) clockEl.style.fontSize = cfg.clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
     updateClock(); setInterval(updateClock, 30000);
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
     document.addEventListener('keydown', e => {
@@ -11633,6 +11719,91 @@
       makeColor('toolbarBgColor', 'toolbarBgReset', '--bg2', 'toolbarBgColor', '#16213e');
       makeColor('tabBarBgColor', 'tabBarBgReset', '--bg', 'tabBarBgColor', '#1a1a2e');
       makeColor('accentColor', 'accentColorReset', '--accent', 'accentColor', '#667eea');
+      makeColor('textColor', 'textColorReset', '--text', 'textColor', '#e2e8f0');
+      makeColor('clockColor', 'clockColorReset', '--clock-color', 'clockColor', '#e2e8f0');
+
+      // Clock size
+      (() => {
+        const inp = document.getElementById('clockSizeInput');
+        const rst = document.getElementById('clockSizeReset');
+        if (!inp) return;
+        const savedSize = cfg.clockSize || 12;
+        inp.value = savedSize;
+        document.documentElement.style.setProperty('--clock-size', savedSize + 'px');
+        inp.addEventListener('input', () => {
+          const v = Math.max(8, Math.min(32, Number(inp.value) || 12));
+          document.documentElement.style.setProperty('--clock-size', v + 'px');
+          DB.saveSetting('clockSize', v);
+        });
+        rst && rst.addEventListener('click', () => {
+          inp.value = 12;
+          document.documentElement.style.setProperty('--clock-size', '12px');
+          DB.saveSetting('clockSize', 12);
+          showToast('↺ Clock size reset');
+        });
+      })();
+
+      // Screenshot folder
+      (() => {
+        const btn = document.getElementById('screenshotFolderBtn');
+        const rstBtn = document.getElementById('screenshotFolderReset');
+        const pathEl = document.getElementById('screenshotFolderPath');
+        function updateFolderDisplay() {
+          const folder = DB.getSettings().screenshotFolder || '';
+          if (pathEl) pathEl.textContent = folder || 'Default (Downloads)';
+        }
+        updateFolderDisplay();
+        if (btn) btn.addEventListener('click', async () => {
+          if (window.etherx?.app?.chooseScreenshotFolder) {
+            const result = await window.etherx.app.chooseScreenshotFolder();
+            if (result?.ok && result.path) { DB.saveSetting('screenshotFolder', result.path); updateFolderDisplay(); showToast('📁 Screenshot folder set'); }
+          } else { showToast('⚠️ Not available in browser mode'); }
+        });
+        if (rstBtn) rstBtn.addEventListener('click', () => { DB.saveSetting('screenshotFolder', ''); updateFolderDisplay(); showToast('↺ Screenshot folder reset'); });
+      })();
+
+      // Browser logo
+      (() => {
+        const chooseBtn = document.getElementById('chooseBrowserLogoBtn');
+        const resetBtn2 = document.getElementById('resetBrowserLogoBtn');
+        const preview = document.getElementById('browserLogoPreview');
+        if (chooseBtn) chooseBtn.addEventListener('click', async () => {
+          if (window.etherx?.app?.chooseIcon) {
+            const result = await window.etherx.app.chooseIcon();
+            if (result?.ok && result.filePath) { await window.etherx.app.setIcon(result.filePath); if (preview) { preview.src = 'file://' + result.filePath; preview.style.display = 'block'; } showToast('🌐 Browser icon updated'); }
+          } else { showToast('⚠️ Not available in browser mode'); }
+        });
+        if (resetBtn2) resetBtn2.addEventListener('click', async () => {
+          if (window.etherx?.app?.resetIcon) { await window.etherx.app.resetIcon(); if (preview) preview.src = '../assets/icon.png'; showToast('↺ Browser icon reset'); }
+        });
+      })();
+
+      // Profile avatar in settings
+      (() => {
+        const uploadBtn = document.getElementById('sUploadAvatarBtn');
+        const emojiBtn = document.getElementById('sEmojiAvatarBtn');
+        const previewEl = document.getElementById('sProfileAvatarPreview');
+        function refreshPreview() {
+          if (!previewEl) return;
+          const u = DB.getUser();
+          if (u.avatarUrl) { previewEl.innerHTML = '<img src="' + u.avatarUrl + '" style="width:40px;height:40px;object-fit:cover;border-radius:50%">'; }
+          else { previewEl.innerHTML = u.avatar || '👤'; }
+        }
+        refreshPreview();
+        if (uploadBtn) uploadBtn.addEventListener('click', async () => {
+          if (window.etherx?.app?.chooseProfilePicture) {
+            const result = await window.etherx.app.chooseProfilePicture();
+            if (result?.ok && result.dataUrl) { DB.saveUser({ avatarUrl: result.dataUrl }); refreshPreview(); showToast('📸 Profile picture updated'); }
+          } else { showToast('⚠️ Not available in browser mode'); }
+        });
+        if (emojiBtn) emojiBtn.addEventListener('click', () => {
+          const nv = prompt('Enter emoji or text for avatar:', DB.getUser().avatar || '👤');
+          if (nv === null) return;
+          DB.saveUser({ avatar: nv, avatarUrl: null });
+          refreshPreview();
+          showToast('👤 Avatar updated');
+        });
+      })();
       // UI Font family
       const uiFontSel = document.getElementById('uiFontSelect');
       if (uiFontSel) {

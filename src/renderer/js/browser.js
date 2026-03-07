@@ -2713,7 +2713,7 @@ document.addEventListener('click', () => document.querySelectorAll('.menu-item')
 document.getElementById('newTabBtn').addEventListener('click', () => createTab());
 let toastTimer;
 function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
-function updateClock() { const now = new Date(); const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; document.getElementById('titleClock').textContent = (clockPfx ? clockPfx + ' ' : '') + t; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
+function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const savedCfg = DB.getSettings(); if (savedCfg.clockColor) clockEl.style.color = savedCfg.clockColor; if (savedCfg.clockSize) clockEl.style.fontSize = savedCfg.clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
 updateClock(); setInterval(updateClock, 30000);
 function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
 document.addEventListener('keydown', e => {
@@ -3420,6 +3420,29 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
   makeColor('toolbarBgColor', 'toolbarBgReset', '--bg2', 'toolbarBgColor', '#16213e');
   makeColor('tabBarBgColor', 'tabBarBgReset', '--bg', 'tabBarBgColor', '#1a1a2e');
   makeColor('accentColor', 'accentColorReset', '--accent', 'accentColor', '#667eea');
+  makeColor('textColor', 'textColorReset', '--text', 'textColor', '#e2e8f0');
+  makeColor('clockColor', 'clockColorReset', '--clock-color', 'clockColor', '#e2e8f0');
+
+  // Clock size
+  (() => {
+    const inp = document.getElementById('clockSizeInput');
+    const rst = document.getElementById('clockSizeReset');
+    if (!inp) return;
+    const savedSize = cfg.clockSize || 12;
+    inp.value = savedSize;
+    document.documentElement.style.setProperty('--clock-size', savedSize + 'px');
+    inp.addEventListener('input', () => {
+      const v = Math.max(8, Math.min(32, Number(inp.value) || 12));
+      document.documentElement.style.setProperty('--clock-size', v + 'px');
+      DB.saveSetting('clockSize', v);
+    });
+    rst && rst.addEventListener('click', () => {
+      inp.value = 12;
+      document.documentElement.style.setProperty('--clock-size', '12px');
+      DB.saveSetting('clockSize', 12);
+      showToast('↺ Clock size reset');
+    });
+  })();
   // Apply max-tabs warning on new tab
   const origNewTab = window.__origNewTab || null;
   document.getElementById('maxTabsSlider')?.addEventListener('change', () => { });
@@ -4049,6 +4072,119 @@ document.getElementById('mi-screenshot-full')?.addEventListener('click', () => t
     locSel.addEventListener('change', () => {
       DB.saveSetting('screenshotLocation', locSel.value);
       showToast('📷 Lokacija screenshota: ' + locSel.options[locSel.selectedIndex].text);
+    });
+  }
+})();
+
+// ── Screenshot folder chooser ───────────────────────────────────────────────
+(function initScreenshotFolder() {
+  const btn = document.getElementById('screenshotFolderBtn');
+  const rst = document.getElementById('screenshotFolderReset');
+  const pathEl = document.getElementById('screenshotFolderPath');
+
+  function updateFolderDisplay() {
+    const folder = DB.getSettings().screenshotFolder || '';
+    if (pathEl) pathEl.textContent = folder || 'Default (Downloads)';
+  }
+  updateFolderDisplay();
+
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      if (window.etherx?.app?.chooseScreenshotFolder) {
+        const result = await window.etherx.app.chooseScreenshotFolder();
+        if (result?.ok && result.path) {
+          DB.saveSetting('screenshotFolder', result.path);
+          updateFolderDisplay();
+          showToast('📁 Screenshot folder set');
+        }
+      } else {
+        showToast('⚠️ Not available in browser mode');
+      }
+    });
+  }
+
+  if (rst) {
+    rst.addEventListener('click', () => {
+      DB.saveSetting('screenshotFolder', '');
+      updateFolderDisplay();
+      showToast('↺ Screenshot folder reset');
+    });
+  }
+})();
+
+// ── Browser logo chooser ───────────────────────────────────────────────────
+(function initBrowserLogo() {
+  const chooseBtn = document.getElementById('chooseBrowserLogoBtn');
+  const resetBtn = document.getElementById('resetBrowserLogoBtn');
+  const preview = document.getElementById('browserLogoPreview');
+
+  if (chooseBtn) {
+    chooseBtn.addEventListener('click', async () => {
+      if (window.etherx?.app?.chooseIcon) {
+        const result = await window.etherx.app.chooseIcon();
+        if (result?.ok && result.filePath) {
+          await window.etherx.app.setIcon(result.filePath);
+          if (preview) { preview.src = 'file://' + result.filePath; preview.style.display = 'block'; }
+          showToast('🌐 Browser icon updated');
+        }
+      } else {
+        showToast('⚠️ Not available in browser mode');
+      }
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', async () => {
+      if (window.etherx?.app?.resetIcon) {
+        await window.etherx.app.resetIcon();
+        if (preview) { preview.src = '../assets/icon.png'; }
+        showToast('↺ Browser icon reset');
+      }
+    });
+  }
+})();
+
+// ── Profile picture upload (Settings → Profiles) ──────────────────────────
+(function initProfileAvatarSettings() {
+  const uploadBtn = document.getElementById('sUploadAvatarBtn');
+  const emojiBtn = document.getElementById('sEmojiAvatarBtn');
+  const previewEl = document.getElementById('sProfileAvatarPreview');
+
+  function refreshPreview() {
+    if (!previewEl) return;
+    const u = DB.getUser();
+    if (u.avatarUrl) {
+      previewEl.innerHTML = '<img src="' + u.avatarUrl + '" style="width:40px;height:40px;object-fit:cover;border-radius:50%">';
+    } else {
+      previewEl.innerHTML = u.avatar || '👤';
+    }
+  }
+  refreshPreview();
+
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', async () => {
+      if (window.etherx?.app?.chooseProfilePicture) {
+        try {
+          const result = await window.etherx.app.chooseProfilePicture();
+          if (result?.ok && result.dataUrl) {
+            DB.saveUser({ avatarUrl: result.dataUrl });
+            refreshPreview();
+            showToast('📸 Profile picture updated');
+          }
+        } catch (e) {
+          showToast('⚠️ Upload failed: ' + e.message);
+        }
+      }
+    });
+  }
+
+  if (emojiBtn) {
+    emojiBtn.addEventListener('click', () => {
+      const nv = prompt('Enter emoji or text for avatar:', DB.getUser().avatar || '👤');
+      if (nv === null) return;
+      DB.saveUser({ avatar: nv, avatarUrl: null });
+      refreshPreview();
+      showToast('👤 Avatar updated');
     });
   }
 })();

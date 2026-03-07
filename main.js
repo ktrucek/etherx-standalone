@@ -593,6 +593,16 @@ function setupIPC() {
   // ── History Top Visited ────────────────────────────────────────────────────
   ipcMain.handle('db:getTopVisited', (_e, limit) => db ? db.getTopVisited(limit) : []);
 
+  // ── Screenshot Folder Chooser ─────────────────────────────────────────────
+  ipcMain.handle('app:chooseScreenshotFolder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose Screenshot Folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false };
+    return { ok: true, path: result.filePaths[0] };
+  });
+
   // ── Profile Picture Upload ─────────────────────────────────────────────────
   ipcMain.handle('app:chooseProfilePicture', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
