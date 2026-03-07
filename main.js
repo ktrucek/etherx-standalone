@@ -15,10 +15,14 @@ const {
 const path = require('path');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
-app.commandLine.appendSwitch('no-sandbox');
-app.commandLine.appendSwitch('disable-gpu');
-app.commandLine.appendSwitch('disable-software-rasterizer');
-app.commandLine.appendSwitch('disable-dev-shm-usage');
+// disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
+// Only apply on Linux headless/CI environments
+if (process.platform !== 'darwin') {
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+  app.commandLine.appendSwitch('disable-dev-shm-usage');
+}
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
 app.commandLine.appendSwitch(
