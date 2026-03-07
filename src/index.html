@@ -3706,6 +3706,28 @@
       flex-shrink: 0
     }
 
+    .tgl-del {
+      margin-left: 4px;
+      font-size: 9px;
+      opacity: 0;
+      cursor: pointer;
+      padding: 0 3px;
+      border-radius: 3px;
+      transition: opacity .15s, background .15s;
+      color: var(--text2);
+      line-height: 1;
+    }
+
+    .tab-group-label:hover .tgl-del {
+      opacity: 1;
+    }
+
+    .tgl-del:hover {
+      background: var(--red, #e53935) !important;
+      color: #fff !important;
+      opacity: 1 !important;
+    }
+
     .tab-group-label:hover {
       background: rgba(255, 255, 255, .06)
     }
@@ -5052,7 +5074,7 @@
       <div class="win-btn btn-min"></div>
       <div class="win-btn btn-max"></div>
     </div>
-    <div class="title-logo" id="titleLogoBtn" title="Bookmarks (Ctrl+B)" style="cursor:pointer">E</div>
+    <div class="title-logo" id="titleLogoBtn" title="Bookmarks (Ctrl+B)" style="cursor:pointer">🌐</div>
     <div class="title-text">EtherX Browser</div>
     <div class="title-right electron-no-drag"><span id="privateIndicator">🕶 Private</span><span id="titleDate"
         style="opacity:0.7"></span><span id="titleClock"></span>
@@ -5148,7 +5170,13 @@
         <div class="di" id="mi-open-location"><span class="icon">🌐</span>Open Location…<span class="sc">Ctrl+L</span>
         </div>
         <div class="dsep"></div>
+        <div class="di" id="mi-share-page"><span class="icon">↗️</span>Share Page…</div>
+        <div class="dsep"></div>
         <div class="di" id="mi-close-tab"><span class="icon">⊠</span>Close Tab<span class="sc">Ctrl+W</span></div>
+        <div class="di" id="mi-close-window"><span class="icon">🚪</span>Close Window<span
+            class="sc">Ctrl+Shift+W</span></div>
+        <div class="di" id="mi-close-all-tabs"><span class="icon">⊠⊠</span>Close All Tabs</div>
+        <div class="di" id="mi-close-all-windows"><span class="icon">🚧</span>Close All Windows</div>
         <div class="dsep"></div>
         <div class="di" id="mi-print"><span class="icon">🖨️</span>Print…<span class="sc">Ctrl+P</span></div>
       </div>
@@ -5321,6 +5349,8 @@
         <div class="dsep"></div>
         <div class="di" id="mi-arrange-tabs"><span class="icon">⇅</span>Arrange Tabs By<span class="sc"
             style="font-size:10px">▶</span></div>
+        <div class="di" id="mi-delete-tab-group"><span class="icon">🗑</span>Delete Tab Group</div>
+        <div class="dsep"></div>
         <div class="di" id="mi-prev-tab"><span class="icon">⊟</span>Show Previous Tab<span class="sc">⌃⇧→</span></div>
         <div class="di" id="mi-next-tab"><span class="icon">⊞</span>Show Next Tab<span class="sc">⌃→</span></div>
         <div class="di" id="mi-prev-tab-group"><span class="icon">◀◀</span>Go to Previous Tab Group<span
@@ -5428,6 +5458,7 @@
     <button class="nav-btn icon-btn" id="btnBookmarks" title="Bookmarks (Ctrl+B)">⭐</button>
     <button class="nav-btn icon-btn" id="btnHistory" title="History (Ctrl+H)">🕒</button>
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
+    <button class="nav-btn icon-btn" id="btnTabOverview" title="Show Tab Overview (Ctrl+Shift+\\)">⧉</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
   </div>
@@ -5534,7 +5565,7 @@
       </div>
     </div>
     <webview id="browseFrame" class="browse-frame" allowpopups allowfullscreen partition="persist:etherx"
-      useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36">
+      useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36">
     </webview>
     <iframe id="browseFrameWeb" class="browse-frame"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
@@ -6664,7 +6695,7 @@
                   <div class="s-row-desc">Colour of the clock in the title bar</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                  <input type="color" id="clockColor" value="#e2e8f0"
+                  <input type="color" id="clockColor" value="#ffffff"
                     style="width:36px;height:28px;border:1px solid var(--border2);border-radius:6px;background:none;cursor:pointer;padding:2px">
                   <button id="clockColorReset"
                     style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Reset</button>
@@ -6676,7 +6707,7 @@
                   <div class="s-row-desc">Size of the clock in the title bar (px)</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px">
-                  <input type="number" id="clockSizeInput" min="8" max="32" step="1" value="12"
+                  <input type="number" id="clockSizeInput" min="8" max="32" step="1" value="15"
                     style="width:60px;padding:4px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px">
                   <span style="font-size:11px;color:var(--text3)">px</span>
                   <button id="clockSizeReset"
@@ -7319,7 +7350,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.11</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.12</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8066,6 +8097,10 @@
       <div class="ctx-item" id="ctx-download-link">⬇️ Download Linked File</div>
       <div class="ctx-item" id="ctx-download-link-as">⬇️ Download Linked File As…</div>
       <div class="ctx-item" id="ctx-reading-list">📖 Add to Reading List</div>
+      <div class="ctx-sep"></div>
+      <!-- Clipboard -->
+      <div class="ctx-item" id="ctx-copy-text">📋 Kopiraj</div>
+      <div class="ctx-item" id="ctx-paste-text">📌 Zalijepi</div>
       <div class="ctx-sep"></div>
       <!-- Page / general items -->
       <div class="ctx-item" id="ctx-new-tab">➕ New Tab</div>
@@ -9301,6 +9336,7 @@
 
     /* toggle handlers moved to initSettingsPanel() — removed duplicate */
     document.getElementById('btnDevtools').addEventListener('click', toggleDevtools);
+    document.getElementById('btnTabOverview')?.addEventListener('click', toggleTabOverview);
     document.getElementById('closeDevtools').addEventListener('click', () => { document.getElementById('devtools').classList.remove('open'); STATE.devtoolsOpen = false; });
     function toggleDevtools() {
       STATE.devtoolsOpen = !STATE.devtoolsOpen;
@@ -10032,6 +10068,49 @@
       }
     });
     document.getElementById('mi-close-tab').addEventListener('click', () => closeTab(STATE.activeTabId));
+    document.getElementById('mi-close-window')?.addEventListener('click', () => {
+      if (window.etherx?.app || window.electronAPI) {
+        (window.electronAPI?.invoke?.('app:closeWindow') || window.etherx?.app?.closeWindow?.())?.catch?.(() => { });
+      } else { window.close(); }
+    });
+    document.getElementById('mi-close-all-tabs')?.addEventListener('click', () => {
+      if (confirm('Close all ' + STATE.tabs.length + ' tabs?')) {
+        const ids = STATE.tabs.map(t => t.id);
+        ids.forEach(id => closeTab(id));
+        showToast('✕ All tabs closed');
+      }
+    });
+    document.getElementById('mi-close-all-windows')?.addEventListener('click', () => {
+      if (confirm('Close all windows and quit?')) {
+        if (window.electronAPI) { window.electronAPI.invoke('app:quit'); }
+        else { window.close(); }
+      }
+    });
+    document.getElementById('mi-share-page')?.addEventListener('click', () => {
+      const t = getActiveTab();
+      if (!t?.url) { showToast('No page to share'); return; }
+      if (navigator.share) {
+        navigator.share({ title: t.title || t.url, url: t.url }).catch(() => { });
+      } else {
+        navigator.clipboard.writeText(t.url).then(() => showToast('📋 Link copied to share'));
+      }
+    });
+    document.getElementById('mi-delete-tab-group')?.addEventListener('click', () => {
+      if (!STATE.groups || !STATE.groups.length) { showToast('No tab groups'); return; }
+      const t = getActiveTab();
+      if (!t) return;
+      const g = STATE.groups.find(gr => gr.tabIds.includes(t.id));
+      if (!g) { showToast('Current tab is not in any group'); return; }
+      const idx = STATE.groups.findIndex(x => x.id === g.id);
+      if (idx !== -1) STATE.groups.splice(idx, 1);
+      g.tabIds.forEach(tid => {
+        const tel = document.getElementById('tab-' + tid);
+        if (tel) { tel.style.removeProperty('--group-color'); tel.classList.remove('in-group'); }
+      });
+      const label = document.getElementById('tgl-' + g.id);
+      if (label) label.remove();
+      showToast('🗑 Group "' + g.name + '" deleted');
+    });
     document.getElementById('mi-find').addEventListener('click', openFind);
     document.getElementById('mi-reload').addEventListener('click', () => document.getElementById('btnReload').click());
     document.getElementById('mi-hard-reload').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) { frame.src = ''; setTimeout(() => { if (window.electronWebview) { frame.src = t.url; } else { frame.src = '/proxy.php?url=' + encodeURIComponent(t.url); } setLoading(20); }, 50); } });
@@ -11210,6 +11289,10 @@
       document.querySelectorAll('.ctx-sep:not(.ctx-no-link), #ctx-copy-url').forEach(el => {
         el.style.display = '';
       });
+      // Show copy-text only when there's a selection
+      const hasSel = !!(window.getSelection()?.toString());
+      const ctxCopyTextEl = document.getElementById('ctx-copy-text');
+      if (ctxCopyTextEl) ctxCopyTextEl.style.display = hasSel ? '' : 'none';
       // Position
       const menuW = 240, menuH = ctxMenu.offsetHeight || 320;
       ctxMenu.style.left = Math.min(x, window.innerWidth - menuW - 8) + 'px';
@@ -11220,11 +11303,8 @@
     document.addEventListener('contextmenu', e => {
       // Check if user right-clicked on a link
       const link = e.target.closest('a[href]');
-      const inContent = e.target.closest('#contentArea');
-      if (inContent || link) {
-        e.preventDefault();
-        showCtxMenu(e.clientX, e.clientY, link?.href || null);
-      }
+      e.preventDefault();
+      showCtxMenu(e.clientX, e.clientY, link?.href || null);
     });
     // New context menu item handlers
     document.getElementById('ctx-new-tab').addEventListener('click', () => createTab());
@@ -11273,6 +11353,28 @@
       const url = _ctxTargetUrl || getActiveTab()?.url;
       if (url) navigator.clipboard.writeText(url).then(() => showToast('📋 URL copied'));
     });
+    document.getElementById('ctx-copy-text').addEventListener('click', () => {
+      const sel = window.getSelection()?.toString();
+      if (sel) { navigator.clipboard.writeText(sel).then(() => showToast('📋 Kopirano')); }
+      else { document.execCommand('copy'); }
+    });
+    document.getElementById('ctx-paste-text').addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        const el = document.activeElement;
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+          const s = el.selectionStart ?? 0, end = el.selectionEnd ?? 0;
+          if (el.isContentEditable) {
+            document.execCommand('insertText', false, text);
+          } else {
+            el.value = el.value.slice(0, s) + text + el.value.slice(end);
+            el.selectionStart = el.selectionEnd = s + text.length;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        } else { document.execCommand('paste'); }
+        showToast('📌 Zalijepljeno');
+      } catch (_) { showToast('⚠️ Dozvoli pristup međuspremniku u postavkama preglednika'); }
+    });
     document.getElementById('ctx-share').addEventListener('click', () => {
       const url = _ctxTargetUrl || getActiveTab()?.url;
       const title = getActiveTab()?.title || url;
@@ -11289,11 +11391,13 @@
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
     function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
-    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; if (cfg.clockColor) clockEl.style.color = cfg.clockColor; if (cfg.clockSize) clockEl.style.fontSize = cfg.clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
+    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; if (cfg.clockColor) clockEl.style.color = cfg.clockColor; else clockEl.style.color = '#ffffff'; if (cfg.clockSize) clockEl.style.fontSize = cfg.clockSize + 'px'; else clockEl.style.fontSize = '15px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
     updateClock(); setInterval(updateClock, 30000);
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
     document.addEventListener('keydown', e => {
       const ctrl = e.ctrlKey || e.metaKey; const shift = e.shiftKey;
+      // Never intercept clipboard/undo/redo — let OS and webview handle natively
+      if (ctrl && !shift && ['c', 'C', 'v', 'V', 'x', 'X', 'a', 'A', 'z', 'Z', 'y', 'Y'].includes(e.key)) return;
       if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
       else if (ctrl && e.key === 'w') { e.preventDefault(); closeTab(STATE.activeTabId); }
       else if (ctrl && e.key === 'r') { e.preventDefault(); document.getElementById('btnReload').click(); }
@@ -12185,6 +12289,10 @@
         document.documentElement.style.setProperty(cssVar, saved);
         inp.addEventListener('input', () => {
           document.documentElement.style.setProperty(cssVar, inp.value);
+          if (settingKey === 'clockColor') {
+            const clockEl = document.getElementById('titleClock');
+            if (clockEl) clockEl.style.color = inp.value;
+          }
           DB.saveSetting(settingKey, inp.value);
         });
         rst && rst.addEventListener('click', () => {
@@ -12204,25 +12312,29 @@
       makeColor('tabBarBgColor', 'tabBarBgReset', '--bg', 'tabBarBgColor', '#1a1a2e');
       makeColor('accentColor', 'accentColorReset', '--accent', 'accentColor', '#667eea');
       makeColor('textColor', 'textColorReset', '--text', 'textColor', '#e2e8f0');
-      makeColor('clockColor', 'clockColorReset', '--clock-color', 'clockColor', '#e2e8f0');
+      makeColor('clockColor', 'clockColorReset', '--clock-color', 'clockColor', '#ffffff');
 
       // Clock size
       (() => {
         const inp = document.getElementById('clockSizeInput');
         const rst = document.getElementById('clockSizeReset');
         if (!inp) return;
-        const savedSize = cfg.clockSize || 12;
+        const savedSize = cfg.clockSize || 15;
         inp.value = savedSize;
         document.documentElement.style.setProperty('--clock-size', savedSize + 'px');
         inp.addEventListener('input', () => {
-          const v = Math.max(8, Math.min(32, Number(inp.value) || 12));
+          const v = Math.max(8, Math.min(32, Number(inp.value) || 15));
           document.documentElement.style.setProperty('--clock-size', v + 'px');
+          const clockEl = document.getElementById('titleClock');
+          if (clockEl) clockEl.style.fontSize = v + 'px';
           DB.saveSetting('clockSize', v);
         });
         rst && rst.addEventListener('click', () => {
-          inp.value = 12;
-          document.documentElement.style.setProperty('--clock-size', '12px');
-          DB.saveSetting('clockSize', 12);
+          inp.value = 15;
+          document.documentElement.style.setProperty('--clock-size', '15px');
+          const clockEl = document.getElementById('titleClock');
+          if (clockEl) clockEl.style.fontSize = '15px';
+          DB.saveSetting('clockSize', 15);
           showToast('↺ Clock size reset');
         });
       })();
@@ -13712,10 +13824,22 @@
       label.className = 'tab-group-label';
       label.id = 'tgl-' + g.id;
       label.style.setProperty('--group-color', g.color);
-      label.innerHTML = `<span class="tgl-dot" style="background:${g.color}"></span><span>${escHtml(g.name)}</span>`;
-      label.title = 'Double-click to rename';
-      label.addEventListener('dblclick', () => {
-        window.customPrompt('Rename group:', g.name, (n) => { if (n) { g.name = n; label.querySelector('span:last-child').textContent = n; } })
+      label.innerHTML = `<span class="tgl-dot" style="background:${g.color}"></span><span class="tgl-name">${escHtml(g.name)}</span><span class="tgl-del" title="Obriši grupu">✕</span>`;
+      label.title = 'Dvaput klikni za preimenovanje';
+      label.addEventListener('dblclick', (ev) => {
+        if (ev.target.classList.contains('tgl-del')) return;
+        window.customPrompt('Rename group:', g.name, (n) => { if (n) { g.name = n; label.querySelector('.tgl-name').textContent = n; } })
+      });
+      label.querySelector('.tgl-del').addEventListener('click', (ev) => {
+        ev.stopPropagation(); ev.preventDefault();
+        const idx = STATE.groups.findIndex(x => x.id === g.id);
+        if (idx !== -1) STATE.groups.splice(idx, 1);
+        g.tabIds.forEach(tid => {
+          const tel = document.getElementById('tab-' + tid);
+          if (tel) { tel.style.removeProperty('--group-color'); tel.classList.remove('in-group'); }
+        });
+        label.remove();
+        showToast('🗑 Grupa "' + g.name + '" obrisana');
       });
       // Insert before first tab that belongs to group, or at end
       const firstTabId = g.tabIds[0];
