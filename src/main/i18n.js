@@ -90,6 +90,17 @@ const STRINGS = {
     incognitoNote: 'Privatno pregledavanje: stranice se ne sprema u povijest.',
     setDefaultOk: 'EtherX je postavljen kao zadani preglednik.',
     qrScanInfo: 'Skenirajte QR kodom na drugom uređaju za sinkronizaciju.',
+    // AI Agent settings
+    aiAgent: 'AI Agent',
+    geminiApiKey: 'Google Gemini API Key',
+    geminiApiKeyDesc: 'API ključ za Gemini AI sažetak stranice i analizu',
+    openaiApiKey: 'OpenAI API Key',
+    openaiApiKeyDesc: 'API ključ za ChatGPT integraciju (opcionalno)',
+    autoSummarize: 'Automatski sažetak stranica',
+    autoSummarizeDesc: 'AI automatski generira sažetak pri učitavanju stranice',
+    aiAssistant: 'AI asistent u adresnoj traci',
+    aiAssistantDesc: 'Omogući AI prijedloge i odgovore iz adresne trake',
+    geminiNotConfigured: '⚠️ Gemini API key nije konfiguriran. Dodaj ga u Postavke → AI Agent.',
   },
 
   en: {
@@ -160,6 +171,17 @@ const STRINGS = {
     incognitoNote: 'Private browsing: pages are not saved to history.',
     setDefaultOk: 'EtherX is now the default browser.',
     qrScanInfo: 'Scan the QR code on another device to sync.',
+    // AI Agent settings
+    aiAgent: 'AI Agent',
+    geminiApiKey: 'Google Gemini API Key',
+    geminiApiKeyDesc: 'API key for Gemini AI page summarization and analysis',
+    openaiApiKey: 'OpenAI API Key',
+    openaiApiKeyDesc: 'API key for ChatGPT integration (optional)',
+    autoSummarize: 'Auto-summarize pages',
+    autoSummarizeDesc: 'AI automatically generates summaries when loading pages',
+    aiAssistant: 'AI assistant in address bar',
+    aiAssistantDesc: 'Enable AI suggestions and answers from the address bar',
+    geminiNotConfigured: '⚠️ Gemini API key not configured. Add it in Settings → AI Agent.',
   },
 
   de: {

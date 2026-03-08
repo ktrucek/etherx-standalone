@@ -72,6 +72,12 @@ const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoo
 // Per-tab webview map: tabId → <webview> element
 // Each tab gets its own webview so audio/video keeps playing when switching tabs
 const tabFrames = new Map();
+
+// ── Performance: In-memory cache za settings ──────────────────────────────
+let _settingsCache = null;
+let _settingsCacheTime = 0;
+const SETTINGS_CACHE_TTL = 5000; // 5 sekundi
+
 const DB = {
   getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
   addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
@@ -79,8 +85,22 @@ const DB = {
   getBookmarks: () => JSON.parse(localStorage.getItem('ex_bm') || '[]'),
   addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { showToast('Already bookmarked'); return; } b.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); showToast('⭐ Bookmarked: ' + e.title) },
   removeBookmark(u) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().filter(x => x.url !== u))) },
-  getSettings: () => JSON.parse(localStorage.getItem('ex_cfg') || '{}'),
-  saveSetting(k, v) { const s = this.getSettings(); s[k] = v; localStorage.setItem('ex_cfg', JSON.stringify(s)) },
+  getSettings: () => {
+    const now = Date.now();
+    if (_settingsCache && (now - _settingsCacheTime) < SETTINGS_CACHE_TTL) {
+      return _settingsCache; // Return cached
+    }
+    _settingsCache = JSON.parse(localStorage.getItem('ex_cfg') || '{}');
+    _settingsCacheTime = now;
+    return _settingsCache;
+  },
+  saveSetting(k, v) {
+    const s = this.getSettings();
+    s[k] = v;
+    localStorage.setItem('ex_cfg', JSON.stringify(s));
+    _settingsCache = s; // Update cache
+    _settingsCacheTime = Date.now();
+  },
   // ── Extended user data ──────────────────────────────────────────────────
   getUser: () => JSON.parse(localStorage.getItem('ex_user') || '{"name":"","email":"","avatar":"👤","bio":"","createdAt":' + Date.now() + '}'),
   saveUser(u) { localStorage.setItem('ex_user', JSON.stringify({ ...this.getUser(), ...u, updatedAt: Date.now() })) },
@@ -735,7 +755,7 @@ document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel
 // API key is loaded from user settings (Settings → AI) — never hardcoded
 const GEMINI_MODEL = 'gemini-2.5-flash';
 function getGeminiEndpoint() {
-  const key = (typeof DB !== 'undefined' && DB.getSettings().geminiApiKey) || '';
+  const key = (typeof DB !== 'undefined' && DB.getSettings().gemini_api_key) || '';
   return key ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}` : null;
 }
 
