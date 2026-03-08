@@ -1,23 +1,18 @@
-# Node modules
 node_modules/
 npm-debug.log*
 
-# Build output
 dist/
 out/
 build/
 
-# OS files
 .DS_Store
 Thumbs.db
 *.log
 
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Temp files
 *.tmp
 .env
