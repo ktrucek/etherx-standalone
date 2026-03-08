@@ -290,8 +290,7 @@ function switchTab(id) {
       document.getElementById('blockedOverlay').classList.remove('show');
     } else {
       // Web mode (iframe): always update src
-      const proxyUrl = '/proxy.php?url=' + encodeURIComponent(tab.url);
-      if (frame.src !== proxyUrl) frame.src = proxyUrl;
+      if (frame.src !== tab.url) frame.src = tab.url;
       showFrame(tab);
     }
   }
@@ -366,7 +365,7 @@ function navigateTo(raw, tabId) {
     setLoading(30);
     const tabWv = getTabWebview(tab.id);
     if (window.electronWebview) { tabWv.style.display = ''; tabWv.classList.add('active'); tabWv.src = url; }
-    else { frame.classList.add('active'); frame.src = '/proxy.php?url=' + encodeURIComponent(url); }
+    else { frame.classList.add('active'); frame.src = url; }
     document.getElementById('sbUrl').textContent = url;
   } else if (window.electronWebview) {
     // Background tab: load URL in its webview without showing it
@@ -386,20 +385,20 @@ document.getElementById('btnBack').addEventListener('click', () => {
   tab.histIdx--; const u = tab.history[tab.histIdx]; tab.url = u;
   document.getElementById('urlInput').value = u; updateUrlIcon(u);
   if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.goBack(); } catch (e) { wv.src = u; } } }
-  else { frame.src = '/proxy.php?url=' + encodeURIComponent(u); } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
+  else { frame.src = u; } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
 });
 document.getElementById('btnFwd').addEventListener('click', () => {
   const tab = getActiveTab(); if (!tab || tab.histIdx >= tab.history.length - 1) return;
   tab.histIdx++; const u = tab.history[tab.histIdx]; tab.url = u;
   document.getElementById('urlInput').value = u; updateUrlIcon(u);
   if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.goForward(); } catch (e) { wv.src = u; } } }
-  else { frame.src = '/proxy.php?url=' + encodeURIComponent(u); } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
+  else { frame.src = u; } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
 });
 document.getElementById('btnReload').addEventListener('click', () => {
   const tab = getActiveTab(); if (tab && tab.url) {
     setLoading(20);
     if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.reload(); } catch (e) { wv.src = tab.url; } } }
-    else { frame.src = '/proxy.php?url=' + encodeURIComponent(tab.url); } consoleLog('log', '↺ Reload: ' + tab.url);
+    else { frame.src = tab.url; } consoleLog('log', '↺ Reload: ' + tab.url);
   }
 });
 document.getElementById('btnHome').addEventListener('click', () => { showNTP(); const t = getActiveTab(); if (t) { t.url = ''; t.title = 'New Tab'; updateTabEl(t); } });
@@ -695,7 +694,7 @@ document.querySelectorAll('.rp').forEach(btn => {
     document.querySelectorAll('.rp').forEach(b => b.classList.remove('active')); btn.classList.add('active');
     const w = btn.dataset.w, h = btn.dataset.h; const rf = document.getElementById('respFrame');
     rf.style.width = w + 'px'; rf.style.height = h + 'px'; document.getElementById('respSize').textContent = w + ' × ' + h;
-    const tab = getActiveTab(); if (tab?.url) rf.src = window.electronWebview ? tab.url : '/proxy.php?url=' + encodeURIComponent(tab.url);
+    const tab = getActiveTab(); if (tab?.url) rf.src = tab.url;
   });
 });
 function toggleRespMode() {
@@ -704,7 +703,7 @@ function toggleRespMode() {
   if (STATE.respMode) {
     wrap.classList.add('active'); const rf = document.getElementById('respFrame');
     rf.style.width = '375px'; rf.style.height = '812px';
-    const tab = getActiveTab(); if (tab?.url) rf.src = window.electronWebview ? tab.url : '/proxy.php?url=' + encodeURIComponent(tab.url);
+    const tab = getActiveTab(); if (tab?.url) rf.src = tab.url;
     ntp.style.display = 'none'; frame.classList.remove('active'); showToast('📐 Responsive Design Mode');
   } else {
     wrap.classList.remove('active'); document.getElementById('respFrame').src = '';
@@ -842,7 +841,7 @@ async function summarizeCurrentPage() {
   // Web mode: call Gemini API directly from browser
   try {
     // Get page text via proxy
-    const proxyUrl = window.electronWebview ? url : `/proxy.php?url=${encodeURIComponent(url)}&raw=1`;
+    const proxyUrl = url;
     let pageText = '';
     try {
       const resp = await fetch(proxyUrl);
@@ -1602,7 +1601,7 @@ document.getElementById('mi-new-tab').addEventListener('click', () => createTab(
 document.getElementById('mi-close-tab').addEventListener('click', () => closeTab(STATE.activeTabId));
 document.getElementById('mi-find').addEventListener('click', openFind);
 document.getElementById('mi-reload').addEventListener('click', () => document.getElementById('btnReload').click());
-document.getElementById('mi-hard-reload').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) { frame.src = ''; setTimeout(() => { if (window.electronWebview) { frame.src = t.url; } else { frame.src = '/proxy.php?url=' + encodeURIComponent(t.url); } setLoading(20); }, 50); } });
+document.getElementById('mi-hard-reload').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) { frame.src = ''; setTimeout(() => { if (window.electronWebview) { frame.src = t.url; } else { frame.src = t.url; } setLoading(20); }, 50); } });
 document.getElementById('mi-zoom-in').addEventListener('click', () => setZoom(STATE.zoom + 10));
 document.getElementById('mi-zoom-out').addEventListener('click', () => setZoom(STATE.zoom - 10));
 document.getElementById('mi-zoom-reset').addEventListener('click', () => setZoom(100));
@@ -1845,7 +1844,8 @@ function loadSourceIntoPane(url, codeEl) {
     } else { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable</div>'; }
     return;
   }
-  fetch('/proxy.php?url=' + encodeURIComponent(url) + '&raw=1').then(r => r.text()).then(src => {
+  // Standalone: try direct fetch (may be blocked by CORS on some sites)
+  fetch(url).then(r => r.text()).then(src => {
     // Syntax-highlight basic HTML/CSS/JS tokens
     const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const highlighted = esc
@@ -1857,7 +1857,7 @@ function loadSourceIntoPane(url, codeEl) {
       highlighted.split('\n').map((line, i) =>
         `<div style="display:flex;gap:0"><span style="color:#555;min-width:42px;text-align:right;padding-right:12px;user-select:none;font-size:10px;padding-top:1px">${i + 1}</span><span style="flex:1;word-break:break-word">${line || ' '}</span></div>`
       ).join('') + '</div>';
-  }).catch(() => { codeEl.innerHTML = '<span style="color:#f48771">Could not fetch source. Check proxy.</span>'; });
+  }).catch(() => { codeEl.innerHTML = '<span style="color:#f48771">Source not available (blocked by CORS).</span>'; });
 }
 document.getElementById('mi-page-resources').addEventListener('click', () => { document.querySelector('[data-pane="network"]').click(); showToast('📦 Page Resources — see Network tab'); });
 let timelineRunning = false;
@@ -2195,12 +2195,8 @@ function renderSecurityPanel() {
     else { set('secCsp', 'No CSP header found'); badge('secCspBadge', 'sec-warn', 'Missing'); }
   } else if (!window.electronWebview) {
     set('secCsp', 'Fetching…'); badge('secCspBadge', 'sec-warn', '…');
-    fetch('/proxy.php?url=' + encodeURIComponent(url), { method: 'HEAD' }).then(r => {
-      const csp = r.headers.get('x-etherx-original-csp') || '';
-      if (t) t._csp = csp;
-      if (csp) { set('secCsp', csp.slice(0, 120) + (csp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
-      else { set('secCsp', 'No CSP header'); badge('secCspBadge', 'sec-warn', 'Missing'); }
-    }).catch(() => { set('secCsp', 'Could not fetch'); badge('secCspBadge', 'sec-warn', 'Unknown'); });
+    // Standalone: CSP headers not accessible via CORS fetch
+    set('secCsp', 'Not available in standalone mode'); badge('secCspBadge', 'sec-warn', 'N/A');
   } else {
     set('secCsp', 'Not accessible in Electron mode'); badge('secCspBadge', 'sec-warn', 'Unknown');
   }
@@ -2964,25 +2960,10 @@ document.addEventListener('keydown', e => {
   const AI_STORAGE = 'ex_ai_chat';
   const KRIPTO_API = 'https://kriptoentuzijasti.io/wp-json/wp/v2';
 
-  // Route WP REST API through proxy.php to avoid CORS (browser is on n8n.kriptoentuzijasti.io)
+  // Standalone: fetch WP REST API directly (requires CORS enabled on kriptoentuzijasti.io)
   async function proxyFetch(apiPath, timeout) {
     const fullUrl = KRIPTO_API + apiPath;
-    // Try proxy first (avoids CORS)
-    try {
-      const r = await fetch('/proxy.php?url=' + encodeURIComponent(fullUrl), {
-        signal: AbortSignal.timeout(timeout || 10000)
-      });
-      if (r.ok) {
-        const text = await r.text();
-        // proxy.php may wrap HTML; try to extract JSON from the response
-        try { return JSON.parse(text); } catch (e) {
-          // proxy injected HTML — strip injected script and try again
-          const clean = text.replace(/<base[^>]*>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '');
-          return JSON.parse(clean);
-        }
-      }
-    } catch (e) { /* fall through to direct */ }
-    // Fallback: direct fetch (works if CORS is ever enabled on the WP site)
+    // Direct fetch — works if CORS is enabled on the WP site
     const r2 = await fetch(fullUrl, { signal: AbortSignal.timeout(timeout || 10000) });
     if (!r2.ok) throw new Error('HTTP ' + r2.status);
     return r2.json();
@@ -4474,7 +4455,7 @@ document.querySelectorAll('.sit-btn[data-stab="downloads"]').forEach(btn => {
 
 // Mobile Install Button
 document.getElementById('mobileInstallBtn')?.addEventListener('click', () => {
-  window.open('https://n8n.kriptoentuzijasti.io/browser.html', '_blank');
+  window.open('https://ktrucek.github.io/etherx-standalone', '_blank');
   showToast('📱 Opening mobile install page...');
 });
 
@@ -5017,9 +4998,8 @@ document.getElementById('srcBrowserHtml')?.addEventListener('click', () => {
 document.getElementById('mi-download-app')?.addEventListener('click', () => {
   const cf = document.getElementById('browseFrame');
   if (cf) {
-    if (window.electronWebview) { cf.src = 'https://n8n.kriptoentuzijasti.io/download.html'; }
-    else { cf.src = '/download.html'; }
-    document.getElementById('urlInput').value = 'n8n.kriptoentuzijasti.io/download.html';
+    cf.src = 'https://github.com/ktrucek/etherx-browser-2/releases';
+    document.getElementById('urlInput').value = 'github.com/ktrucek/etherx-browser-2/releases';
   }
 });
 

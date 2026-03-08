@@ -895,7 +895,10 @@
       cursor: pointer;
       position: relative;
       flex-shrink: 0;
-      transition: .15s
+      transition: .15s;
+      /* Performance optimizations */
+      will-change: transform, opacity;
+      contain: layout style paint;
     }
 
     .tab.active {
@@ -3979,6 +3982,95 @@
       background: rgba(102, 126, 234, .3)
     }
 
+    .s-btn {
+      background: var(--bg3, #2d2d2d);
+      border: 1px solid var(--border2, #4a4a4a);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 6px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s
+    }
+
+    .s-btn:hover {
+      background: var(--bg4, #3a3a3a)
+    }
+
+    .s-btn-primary {
+      background: var(--accent, #667eea);
+      border-color: var(--accent, #667eea);
+      color: #fff
+    }
+
+    .s-btn-primary:hover {
+      opacity: .88
+    }
+
+    .s-btn-danger {
+      background: rgba(255, 95, 86, .15);
+      border-color: rgba(255, 95, 86, .4);
+      color: #ff5f56
+    }
+
+    .s-btn-danger:hover {
+      background: rgba(255, 95, 86, .3)
+    }
+
+    .s-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text3, #888);
+      padding: 10px 16px 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, .06)
+    }
+
+    .s-toggle {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0
+    }
+
+    .s-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0
+    }
+
+    .s-toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--bg4, #3a3a3a);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background .2s
+    }
+
+    .s-toggle-track::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px;
+      left: 3px;
+      transition: transform .2s
+    }
+
+    .s-toggle input:checked+.s-toggle-track {
+      background: var(--accent, #667eea)
+    }
+
+    .s-toggle input:checked+.s-toggle-track::after {
+      transform: translateX(16px)
+    }
+
     .ctx-item {
       padding: 6px 16px;
       cursor: pointer;
@@ -5622,26 +5714,32 @@
         <div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No downloads yet</div>
       </div>
     </div>
-    <div class="panel" id="settingsPanel" style="width:min(720px,96vw)">
+    <div class="panel" id="settingsPanel" style="width:min(580px,96vw)">
       <div class="panel-header"><span class="panel-title">Settings</span><button class="panel-close"
           id="closeSettingsPanel">×</button></div>
-      <iframe id="settingsFrame" src="/renderer/settings.html"
-        style="width:100%;height:calc(100% - 44px);border:none;background:var(--bg)"></iframe>
-      <div class="settings-safari" style="display:none">
+      <div class="settings-safari">
         <!-- Icon tab bar -->
         <div class="settings-icon-tabs" id="settingsIconTabs">
           <button class="sit-btn active" data-stab="general"><span class="sit-icon">⚙️</span>Općenito</button>
           <button class="sit-btn" data-stab="tabs"><span class="sit-icon">🗂</span>Tabovi</button>
           <button class="sit-btn" data-stab="autofill"><span class="sit-icon">✏️</span>Auto. popunjavanje</button>
           <button class="sit-btn" data-stab="passwords"><span class="sit-icon">🔑</span>Lozinke</button>
+          <button class="sit-btn" data-stab="history"><span class="sit-icon">📜</span>Povijest</button>
+          <button class="sit-btn" data-stab="cookies"><span class="sit-icon">🍪</span>Kolačići</button>
+          <button class="sit-btn" data-stab="permissions"><span class="sit-icon">🔔</span>Dozvole</button>
           <button class="sit-btn" data-stab="search"><span class="sit-icon">🔍</span>Pretraživanje</button>
+          <button class="sit-btn" data-stab="shortcuts"><span class="sit-icon">⌨️</span>Prečaci</button>
+          <button class="sit-btn" data-stab="cache"><span class="sit-icon">💾</span>Predmemorija</button>
           <button class="sit-btn" data-stab="security"><span class="sit-icon">🔒</span>Sigurnost</button>
+          <button class="sit-btn" data-stab="dns"><span class="sit-icon">🌐</span>DNS</button>
           <button class="sit-btn" data-stab="privacy"><span class="sit-icon">🤚</span>Privatnost</button>
           <button class="sit-btn" data-stab="websites"><span class="sit-icon">🌐</span>Web stranice</button>
           <button class="sit-btn" data-stab="profiles"><span class="sit-icon">👤</span>Profili</button>
           <button class="sit-btn" data-stab="extensions"><span class="sit-icon">🧩</span>Proširenja</button>
           <button class="sit-btn" data-stab="advanced"><span class="sit-icon">🔧</span>Napredno</button>
           <button class="sit-btn" data-stab="developer"><span class="sit-icon">⌨️</span>Razvoj</button>
+          <button class="sit-btn" data-stab="updates"><span class="sit-icon">🔄</span>Ažuriranja</button>
+          <button class="sit-btn" data-stab="backup"><span class="sit-icon">💼</span>Sigurnosna kopija</button>
           <button class="sit-btn" data-stab="flags"><span class="sit-icon">��</span>Značajke</button>
           <button class="sit-btn" data-stab="migration"><span class="sit-icon">📥</span>Uvoz podataka</button>
           <button class="sit-btn" data-stab="appearance"><span class="sit-icon">🎨</span>Izgled</button>
@@ -6405,6 +6503,43 @@
                 </div>
               </div>
             </div>
+            <!-- MEMORY SAVER -->
+            <div class="s-group" style="margin-top:16px">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">💾 Memory Saver</div>
+                  <div class="s-row-desc">Automatski suspendiraj neaktivne tabove i oslobodi RAM</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Omogući Memory Saver</div>
+                  <div class="s-row-desc">Automatski suspendira neaktivne tabove nakon zadanog vremena</div>
+                </div>
+                <label class="s-toggle"><input type="checkbox" id="settingMemorySaver"><span
+                    class="s-toggle-track"></span></label>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Suspendiraj nakon</div>
+                  <div class="s-row-desc">Vrijeme neaktivnosti prije suspenzije taba</div>
+                </div>
+                <select class="s-select" id="settingMemorySaverTimeout">
+                  <option value="5">5 minuta</option>
+                  <option value="10" selected>10 minuta</option>
+                  <option value="15">15 minuta</option>
+                  <option value="30">30 minuta</option>
+                  <option value="60">1 sat</option>
+                </select>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Status Memory Saver</div>
+                  <div class="s-row-desc">Trenutno suspendirano tabova</div>
+                </div>
+                <span id="memorySaverStatus" style="font-size:12px;color:var(--text3)">0 tabova suspendirano</span>
+              </div>
+            </div>
           </div>
           <!-- DEVELOPER -->
           <div class="s-tab-pane" id="stab-developer">
@@ -6447,16 +6582,82 @@
                 <div class="toggle" data-setting="autoConnect"></div>
               </div>
             </div>
+            <!-- CORS INFO -->
+            <div class="s-group"
+              style="margin-top:16px;background:rgba(102,126,234,.08);border:1px solid rgba(102,126,234,.2)">
+              <div class="s-row" style="border:none;flex-direction:column;align-items:flex-start;gap:8px">
+                <div style="font-weight:600;font-size:13px;color:var(--accent)">🌐 CORS Napomena (Standalone Web
+                  Verzija)</div>
+                <div style="font-size:12px;line-height:1.6;color:var(--text2)">
+                  <strong>CORS</strong> (Cross-Origin Resource Sharing) je sigurnosna politika browsera koja blokira web
+                  stranicama pristup resursima s drugih domena.
+                  <br><br>
+                  <strong>Standalone web verzija</strong> EtherX browsera <u>nema pristup CORS proxy-ju</u> koji
+                  zaobilazi ovu politiku.
+                  Zato neke funkcije (npr. DevTools Source viewer, CSP header fetch) mogu biti ograničene.
+                  <br><br>
+                  <strong>Rješenje:</strong> Koristi <strong>Electron desktop verziju</strong> za puni pristup svim
+                  funkcijama ili implementiraj vlastiti CORS proxy (Service Worker).
+                </div>
+              </div>
+            </div>
           </div>
           <!-- FEATURE FLAGS -->
           <div class="s-tab-pane" id="stab-flags">
+            <!-- GPU/Hardware Acceleration Status -->
+            <div
+              style="background:linear-gradient(135deg,rgba(102,126,234,.12),rgba(118,75,162,.08));border:1px solid rgba(102,126,234,.22);border-radius:10px;padding:16px 20px;margin-bottom:16px">
+              <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent)">🎮 GPU / Hardware
+                Acceleration</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">
+                  <span style="color:var(--text3)">WebGL Status:</span>
+                  <span id="gpuWebGLStatus" style="font-weight:600;color:#27c93f">—</span>
+                </div>
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">
+                  <span style="color:var(--text3)">WebGL2 Status:</span>
+                  <span id="gpuWebGL2Status" style="font-weight:600;color:#27c93f">—</span>
+                </div>
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">
+                  <span style="color:var(--text3)">GPU Renderer:</span>
+                  <span id="gpuRenderer"
+                    style="font-weight:600;color:var(--text);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    title="">—</span>
+                </div>
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">
+                  <span style="color:var(--text3)">GPU Vendor:</span>
+                  <span id="gpuVendor" style="font-weight:600;color:var(--text);font-size:11px">—</span>
+                </div>
+              </div>
+              <div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">
+                💡 Hardware acceleration ubrzava rendering i omogućava glatku animaciju. WebGL se koristi za 3D grafiku.
+              </div>
+            </div>
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
                   <div class="s-row-label">Enable WebGPU</div>
-                  <div class="s-row-desc">Experimental GPU-accelerated graphics</div>
+                  <div class="s-row-desc">Experimental GPU-accelerated graphics (Next-gen WebGL)</div>
                 </div>
                 <div class="toggle" data-setting="webgpu"></div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">CSS will-change optimizacije</div>
+                  <div class="s-row-desc">Ubrzava CSS transformacije i animacije (automatski uključeno)</div>
+                </div>
+                <div class="toggle on" data-setting="cssWillChange"></div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">CSS contain property</div>
+                  <div class="s-row-desc">Izolira elemente za brži repaint/reflow (automatski uključeno)</div>
+                </div>
+                <div class="toggle on" data-setting="cssContain"></div>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
@@ -7392,7 +7593,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.21</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.25</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -7542,6 +7743,334 @@
 
         </div>
       </div>
+
+      <!-- ── History ─────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-history">
+        <div class="s-group">
+          <div class="s-group-title">Čuvanje povijesti</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Koliko dugo čuvati povijest</div>
+              <div class="s-row-desc">Automatski obriši povijest stariju od zadanog broja dana.</div>
+            </div>
+            <select class="s-select" id="settingHistoryDays">
+              <option value="7">7 dana</option>
+              <option value="30">30 dana</option>
+              <option value="90" selected>90 dana</option>
+              <option value="180">6 mjeseci</option>
+              <option value="365">1 godina</option>
+              <option value="-1">Zauvijek</option>
+            </select>
+          </div>
+        </div>
+        <div class="s-group">
+          <div class="s-group-title">Brisanje povijesti</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Obriši svu povijest</div>
+              <div class="s-row-desc">Trajno obriši sve podatke o posjećenim stranicama.</div>
+            </div>
+            <button class="s-btn s-btn-danger" id="btnClearAllHistory">Obriši sve</button>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Obriši povijest po razdoblju</div>
+              <div class="s-row-desc">Obriši povijest samo za određeno vremensko razdoblje.</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select class="s-select" id="selectHistoryPeriod">
+                <option value="1">Zadnji sat</option>
+                <option value="24">Zadnjih 24 sata</option>
+                <option value="168">Zadnjih 7 dana</option>
+                <option value="720">Zadnjih 30 dana</option>
+              </select>
+              <button class="s-btn" id="btnClearHistoryPeriod">Obriši</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Cookies ─────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-cookies">
+        <div class="s-group">
+          <div class="s-group-title">Cookie postavke</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Pravila za kolačiće</div>
+              <div class="s-row-desc">Kontroliraj kako stranice mogu koristiti kolačiće.</div>
+            </div>
+            <select class="s-select" id="settingCookiePolicy">
+              <option value="allow-all" selected>Dozvoli sve kolačiće</option>
+              <option value="block-third-party">Blokiraj samo third-party</option>
+              <option value="block-all">Blokiraj sve kolačiće</option>
+            </select>
+          </div>
+        </div>
+        <div class="s-group">
+          <div class="s-group-title">Brisanje kolačića</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Obriši sve kolačiće</div>
+              <div class="s-row-desc">Trajno obriši sve pohranjene kolačiće sa svih stranica.</div>
+            </div>
+            <button class="s-btn s-btn-danger" id="btnClearAllCookies">Obriši sve</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Permissions ─────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-permissions">
+        <div class="s-group">
+          <div class="s-group-title">Notifikacije</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Push notifikacije</div>
+              <div class="s-row-desc">Dopusti stranicama da šalju notifikacije.</div>
+            </div>
+            <label class="s-toggle"><input type="checkbox" id="settingNotifications"><span
+                class="s-toggle-track"></span></label>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Zvuk notifikacija</div>
+              <div class="s-row-desc">Reproduciraj zvuk kada stigne notifikacija.</div>
+            </div>
+            <label class="s-toggle"><input type="checkbox" id="settingNotificationSound" checked><span
+                class="s-toggle-track"></span></label>
+          </div>
+        </div>
+        <div class="s-group">
+          <div class="s-group-title">Lokacija</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Pristup lokaciji</div>
+              <div class="s-row-desc">Stranice mogu zatražiti tvoju geografsku lokaciju.</div>
+            </div>
+            <select class="s-select" id="settingGeolocation">
+              <option value="ask" selected>Uvijek pitaj</option>
+              <option value="allow">Uvijek dozvoli</option>
+              <option value="block">Nikad ne dijeli</option>
+            </select>
+          </div>
+        </div>
+        <div class="s-group">
+          <div class="s-group-title">Medijske dozvole</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Mikrofon</div>
+              <div class="s-row-desc">Dopusti pristup mikrofonu za video pozive i snimanje.</div>
+            </div>
+            <select class="s-select" id="settingMicrophone">
+              <option value="ask" selected>Uvijek pitaj</option>
+              <option value="allow">Uvijek dozvoli</option>
+              <option value="block">Blokiraj</option>
+            </select>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Kamera</div>
+              <div class="s-row-desc">Dopusti pristup kameri za video pozive.</div>
+            </div>
+            <select class="s-select" id="settingCamera">
+              <option value="ask" selected>Uvijek pitaj</option>
+              <option value="allow">Uvijek dozvoli</option>
+              <option value="block">Blokiraj</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Shortcuts ───────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-shortcuts">
+        <div class="s-group">
+          <div class="s-group-title">Navigacija</div>
+          <div style="padding:12px 16px;font-size:13px;line-height:2.2;color:var(--text)">
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + T</kbd> — Nova kartica</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + W</kbd> — Zatvori karticu</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + Tab</kbd> — Sljedeća kartica</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + Shift + Tab</kbd> — Prethodna kartica</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + L</kbd> — Fokusiraj adresnu traku</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + R</kbd> — Osvježi stranicu</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + Shift + R</kbd> — Hard refresh (bez cache)</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">F11</kbd>
+              — Full screen</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">F12</kbd>
+              — Developer Tools</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + +/-</kbd> — Zoom in/out</div>
+            <div><kbd
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
+                + 0</kbd> — Reset zoom</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Cache ───────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-cache">
+        <div class="s-group">
+          <div class="s-group-title">Cache i privremeni podaci</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Veličina cache-a</div>
+              <div class="s-row-desc">Trenutna veličina spremljenih cache podataka.</div>
+            </div>
+            <span id="cacheSize" style="color:var(--text3);font-size:13px">Izračunavanje…</span>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Očisti cache</div>
+              <div class="s-row-desc">Obriši sve privremene podatke i cache stranica.</div>
+            </div>
+            <button class="s-btn s-btn-danger" id="btnClearCache">Očisti cache</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DNS ─────────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-dns">
+        <div class="s-group">
+          <div class="s-group-title">DNS over HTTPS</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Omogući DoH</div>
+              <div class="s-row-desc">Kriptiraj DNS upite preko HTTPS-a.</div>
+            </div>
+            <label class="s-toggle"><input type="checkbox" id="settingDoH"><span class="s-toggle-track"></span></label>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">DoH provider</div>
+              <div class="s-row-desc">Odaberi pružatelja usluge DNS over HTTPS.</div>
+            </div>
+            <select class="s-select" id="settingDoHProvider">
+              <option value="cloudflare" selected>Cloudflare (1.1.1.1)</option>
+              <option value="google">Google (8.8.8.8)</option>
+              <option value="quad9">Quad9 (9.9.9.9)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Updates ─────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-updates">
+        <!-- Current version card -->
+        <div
+          style="background:linear-gradient(135deg,rgba(102,126,234,.15),rgba(118,75,162,.10));border:1px solid rgba(102,126,234,.25);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
+            <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
+                id="helpVersionNum2">2.4.24</span></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
+            </div>
+          </div>
+          <div id="updStatusBadge"
+            style="font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(39,201,63,.1);color:#27c93f;border:1px solid rgba(39,201,63,.25);white-space:nowrap">
+            ✓ Ažuran</div>
+        </div>
+
+        <div class="s-group">
+          <div class="s-group-title">Postavke ažuriranja</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Automatski provjeri nadogradnje</div>
+              <div class="s-row-desc">Provjeri GitHub Releases pri pokretanju browsera.</div>
+            </div>
+            <label class="s-toggle"><input type="checkbox" id="settingAutoUpdate" checked><span
+                class="s-toggle-track"></span></label>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Provjeri dostupne nadogradnje</div>
+              <div class="s-row-desc">Provjeri github.com/ktrucek/etherx-standalone za novu verziju.</div>
+            </div>
+            <button class="s-btn s-btn-primary" id="btnCheckUpdates" style="min-width:110px">🔍 Provjeri sada</button>
+          </div>
+        </div>
+
+        <!-- Update result (hidden by default) -->
+        <div id="updResultBox"
+          style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel">Nova verzija dostupna!
+              </div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <a id="updDownloadLink" href="#" target="_blank"
+                style="display:none;padding:7px 16px;background:var(--accent);border-radius:7px;color:#fff;font-size:12px;font-weight:700;text-decoration:none">⬇️
+                Preuzmi</a>
+              <a id="updReleasesLink" href="https://github.com/ktrucek/etherx-standalone/releases" target="_blank"
+                style="padding:7px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none">📋
+                Sve verzije</a>
+            </div>
+          </div>
+          <div id="updReleaseNotes"
+            style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">
+          </div>
+        </div>
+
+        <div class="s-group">
+          <div class="s-group-title">Preuzimanje</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Preuzmi najnoviju verziju</div>
+              <div class="s-row-desc">Otvori GitHub Releases stranicu za ručno preuzimanje.</div>
+            </div>
+            <a href="https://github.com/ktrucek/etherx-standalone/releases/latest" target="_blank"
+              style="padding:6px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none;white-space:nowrap">🐙
+              GitHub Releases</a>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Direktan download (standalone)</div>
+              <div class="s-row-desc">HTML verzija za offline korištenje.</div>
+            </div>
+            <a href="https://ktrucek.github.io/etherx-standalone/src/index.html" target="_blank"
+              style="padding:6px 14px;background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.3);border-radius:7px;color:var(--accent);font-size:12px;text-decoration:none;white-space:nowrap">⬇️
+              Preuzmi HTML</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Backup ──────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-backup">
+        <div class="s-group">
+          <div class="s-group-title">Export / Import postavki</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Export postavki</div>
+              <div class="s-row-desc">Spremi sve postavke u JSON datoteku.</div>
+            </div>
+            <button class="s-btn s-btn-primary" id="btnExportSettings">📤 Export</button>
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Import postavki</div>
+              <div class="s-row-desc">Učitaj postavke iz prethodno spremljene datoteke.</div>
+            </div>
+            <button class="s-btn" id="btnImportSettings">📥 Import</button>
+          </div>
+        </div>
+      </div>
+
     </div>
     <div class="panel" id="walletPanel" style="width:420px">
       <div class="panel-header" style="padding:8px 12px">
@@ -14584,6 +15113,298 @@
         // Replace in global scope the best way we can
         try { window.navigateTo = patchedNav; } catch (e) { }
       }
+
+      // ══════════════════════════════════════════════════════════════════════════
+      // NEW SETTINGS SECTIONS HANDLERS
+      // ══════════════════════════════════════════════════════════════════════════
+
+      // ── History ──────────────────────────────────────────────────────────────
+      document.getElementById('settingHistoryDays')?.addEventListener('change', async (e) => {
+        await saveSettings({ history_retention_days: parseInt(e.target.value) });
+      });
+
+      document.getElementById('btnClearAllHistory')?.addEventListener('click', async () => {
+        if (confirm('Obrisati svu povijest pregledavanja? Ova radnja je nepovratna.')) {
+          await etherx.db?.clearHistory();
+          alert('Povijest obrisana.');
+        }
+      });
+
+      document.getElementById('btnClearHistoryPeriod')?.addEventListener('click', async () => {
+        const hours = parseInt(document.getElementById('selectHistoryPeriod').value);
+        const cutoff = Date.now() - (hours * 60 * 60 * 1000);
+        await etherx.db?.clearHistorySince(cutoff);
+        alert(`Povijest obrisana za zadnjih ${hours}h.`);
+      });
+
+      // ── Cookies ──────────────────────────────────────────────────────────────
+      document.getElementById('settingCookiePolicy')?.addEventListener('change', async (e) => {
+        await saveSettings({ cookie_policy: e.target.value });
+      });
+
+      document.getElementById('btnClearAllCookies')?.addEventListener('click', async () => {
+        if (confirm('Obrisati sve kolačiće? Bit ćeš odjavljen sa svih stranica.')) {
+          await etherx.cookies?.clearAll();
+          alert('Kolačići obrisani.');
+        }
+      });
+
+      // ── Permissions ──────────────────────────────────────────────────────────
+      document.getElementById('settingNotifications')?.addEventListener('change', async (e) => {
+        await saveSettings({ notifications_enabled: e.target.checked });
+      });
+
+      document.getElementById('settingNotificationSound')?.addEventListener('change', async (e) => {
+        await saveSettings({ notification_sound: e.target.checked });
+      });
+
+      document.getElementById('settingGeolocation')?.addEventListener('change', async (e) => {
+        await saveSettings({ geolocation_policy: e.target.value });
+      });
+
+      document.getElementById('settingMicrophone')?.addEventListener('change', async (e) => {
+        await saveSettings({ microphone_policy: e.target.value });
+      });
+
+      document.getElementById('settingCamera')?.addEventListener('change', async (e) => {
+        await saveSettings({ camera_policy: e.target.value });
+      });
+
+      // ── Cache ────────────────────────────────────────────────────────────────
+      (async () => {
+        const size = await etherx.cache?.getSize() || 0;
+        const mb = (size / 1024 / 1024).toFixed(2);
+        document.getElementById('cacheSize').textContent = `${mb} MB`;
+      })();
+
+      document.getElementById('btnClearCache')?.addEventListener('click', async () => {
+        if (confirm('Očistiti sav cache? Stranice će se morati ponovo učitati.')) {
+          await etherx.cache?.clear();
+          alert('Cache očišćen.');
+          const size = await etherx.cache?.getSize() || 0;
+          const mb = (size / 1024 / 1024).toFixed(2);
+          document.getElementById('cacheSize').textContent = `${mb} MB`;
+        }
+      });
+
+      // ── DNS ──────────────────────────────────────────────────────────────────
+      document.getElementById('settingDoH')?.addEventListener('change', async (e) => {
+        await saveSettings({ dns_over_https: e.target.checked });
+      });
+
+      document.getElementById('settingDoHProvider')?.addEventListener('change', async (e) => {
+        await saveSettings({ doh_provider: e.target.value });
+      });
+
+      // ── Updates ──────────────────────────────────────────────────────────────
+      document.getElementById('settingAutoUpdate')?.addEventListener('change', async (e) => {
+        await saveSettings({ auto_update: e.target.checked });
+      });
+
+      // Show current version in updates panel
+      const _curVerSpan = document.getElementById('helpVersionNum2');
+      const _curVerMain = document.getElementById('helpVersionNum');
+      if (_curVerMain && _curVerSpan) _curVerSpan.textContent = _curVerMain.textContent;
+
+      async function checkForUpdates(silent = false) {
+        const btn = document.getElementById('btnCheckUpdates');
+        const badge = document.getElementById('updStatusBadge');
+        const resultBox = document.getElementById('updResultBox');
+        const lastCheckedEl = document.getElementById('updLastChecked');
+        if (btn) { btn.textContent = '⏳ Provjera…'; btn.disabled = true; }
+        try {
+          // Fetch GitHub Releases API
+          const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
+            headers: { 'Accept': 'application/vnd.github+json' }
+          });
+          if (!res.ok) throw new Error('GitHub API error: ' + res.status);
+          const data = await res.json();
+          const latestTag = (data.tag_name || '').replace(/^v/, '');
+          const currentTag = (document.getElementById('helpVersionNum')?.textContent || '0.0.0').replace(/^v/, '');
+          const now = new Date().toLocaleString('hr-HR');
+          if (lastCheckedEl) lastCheckedEl.textContent = 'Zadnja provjera: ' + now;
+          await saveSettings({ last_update_check: now });
+
+          function semverNewer(latest, current) {
+            const a = latest.split('.').map(Number);
+            const b = current.split('.').map(Number);
+            for (let i = 0; i < 3; i++) { if ((a[i] || 0) > (b[i] || 0)) return true; if ((a[i] || 0) < (b[i] || 0)) return false; }
+            return false;
+          }
+
+          if (semverNewer(latestTag, currentTag)) {
+            if (badge) { badge.textContent = '⬆ Dostupno v' + latestTag; badge.style.background = 'rgba(255,189,46,.1)'; badge.style.color = '#ffbd2e'; badge.style.borderColor = 'rgba(255,189,46,.3)'; }
+            if (resultBox) {
+              resultBox.style.display = 'block';
+              const newLabel = document.getElementById('updNewVerLabel');
+              const newNum = document.getElementById('updNewVerNum');
+              const dlLink = document.getElementById('updDownloadLink');
+              const notes = document.getElementById('updReleaseNotes');
+              if (newLabel) newLabel.textContent = '🎉 Nova verzija dostupna!';
+              if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
+              // Find HTML asset download link
+              const htmlAsset = data.assets?.find(a => a.name?.endsWith('.html'));
+              if (dlLink) {
+                dlLink.style.display = 'inline-block';
+                dlLink.href = htmlAsset?.browser_download_url || data.html_url;
+              }
+              if (notes) notes.textContent = data.body ? data.body.replace(/\r\n/g, '\n').slice(0, 600) : 'Nema release notes.';
+            }
+            if (!silent) showToast('⬆️ Nova verzija: v' + latestTag + ' — provjeri Ažuriranja!');
+          } else {
+            if (badge) { badge.textContent = '✓ Ažuran'; badge.style.background = 'rgba(39,201,63,.1)'; badge.style.color = '#27c93f'; badge.style.borderColor = 'rgba(39,201,63,.25)'; }
+            if (resultBox) {
+              resultBox.style.display = 'block';
+              const newLabel = document.getElementById('updNewVerLabel');
+              const newNum = document.getElementById('updNewVerNum');
+              const dlLink = document.getElementById('updDownloadLink');
+              const notes = document.getElementById('updReleaseNotes');
+              if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
+              if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
+              if (dlLink) dlLink.style.display = 'none';
+              if (notes) notes.textContent = data.body ? data.body.replace(/\r\n/g, '\n').slice(0, 600) : '';
+            }
+            if (!silent) showToast('✓ Browser je ažuran — v' + currentTag);
+          }
+        } catch (err) {
+          if (badge) { badge.textContent = '? Greška'; badge.style.background = 'rgba(255,95,86,.1)'; badge.style.color = '#ff5f56'; badge.style.borderColor = 'rgba(255,95,86,.3)'; }
+          if (!silent) showToast('❌ Greška pri provjeri: ' + err.message);
+        } finally {
+          if (btn) { btn.textContent = '🔍 Provjeri sada'; btn.disabled = false; }
+        }
+      }
+
+      document.getElementById('btnCheckUpdates')?.addEventListener('click', () => checkForUpdates(false));
+      // Auto-check on load if enabled
+      setTimeout(() => {
+        const autoUpd = document.getElementById('settingAutoUpdate');
+        if (autoUpd?.checked) checkForUpdates(true);
+      }, 4000);
+
+      // ── Memory Saver ─────────────────────────────────────────────────────────
+      let memorySaverInterval = null;
+      let suspendedTabs = new Map(); // tabId -> {suspended: true, originalSrc: url}
+
+      function updateMemorySaverStatus() {
+        const el = document.getElementById('memorySaverStatus');
+        if (el) el.textContent = suspendedTabs.size + ' tabova suspendirano';
+      }
+
+      function startMemorySaver() {
+        const enabled = document.getElementById('settingMemorySaver')?.checked;
+        const timeout = parseInt(document.getElementById('settingMemorySaverTimeout')?.value || '10') * 60 * 1000;
+        if (memorySaverInterval) clearInterval(memorySaverInterval);
+        if (!enabled) return;
+
+        memorySaverInterval = setInterval(() => {
+          const now = Date.now();
+          TABS.forEach((tab, idx) => {
+            if (idx === activeTabIndex || !tab.lastActive) return; // Skip active tab
+            const inactiveDuration = now - tab.lastActive;
+            if (inactiveDuration > timeout && !suspendedTabs.has(idx)) {
+              // Suspend this tab
+              const frame = document.getElementById('f' + idx);
+              if (frame && frame.src && frame.src !== 'about:blank') {
+                suspendedTabs.set(idx, { originalSrc: frame.src });
+                frame.src = 'about:blank';
+                tab.suspended = true;
+                tab.title = '💤 ' + (tab.title || 'Suspended Tab');
+                document.getElementById('elemTitle').textContent = tab.title;
+                updateMemorySaverStatus();
+                console.log(`[Memory Saver] Suspended tab ${idx} after ${Math.round(inactiveDuration / 60000)}min inactive`);
+              }
+            }
+          });
+        }, 60000); // Check every minute
+      }
+
+      document.getElementById('settingMemorySaver')?.addEventListener('change', async (e) => {
+        await saveSettings({ memory_saver_enabled: e.target.checked });
+        startMemorySaver();
+      });
+
+      document.getElementById('settingMemorySaverTimeout')?.addEventListener('change', async (e) => {
+        await saveSettings({ memory_saver_timeout: e.target.value });
+        startMemorySaver();
+      });
+
+      // Start Memory Saver if enabled
+      setTimeout(() => {
+        if (document.getElementById('settingMemorySaver')?.checked) startMemorySaver();
+      }, 5000);
+
+      // ── GPU / WebGL Status ───────────────────────────────────────────────────
+      function detectGPU() {
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          const gl2 = canvas.getContext('webgl2');
+          
+          const webglStatus = document.getElementById('gpuWebGLStatus');
+          const webgl2Status = document.getElementById('gpuWebGL2Status');
+          const rendererEl = document.getElementById('gpuRenderer');
+          const vendorEl = document.getElementById('gpuVendor');
+
+          if (webglStatus) webglStatus.textContent = gl ? '✓ Enabled' : '✗ Disabled';
+          if (webglStatus) webglStatus.style.color = gl ? '#27c93f' : '#ff5f56';
+          if (webgl2Status) webgl2Status.textContent = gl2 ? '✓ Enabled' : '✗ Disabled';
+          if (webgl2Status) webgl2Status.style.color = gl2 ? '#27c93f' : '#ff5f56';
+
+          if (gl) {
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+              const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+              const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+              if (rendererEl) { rendererEl.textContent = renderer || 'Unknown'; rendererEl.title = renderer; }
+              if (vendorEl) vendorEl.textContent = vendor || 'Unknown';
+            } else {
+              if (rendererEl) rendererEl.textContent = 'Not available';
+              if (vendorEl) vendorEl.textContent = 'Not available';
+            }
+          } else {
+            if (rendererEl) rendererEl.textContent = 'WebGL not available';
+            if (vendorEl) vendorEl.textContent = 'N/A';
+          }
+        } catch (err) {
+          console.warn('[GPU] Detection failed:', err);
+        }
+      }
+
+      // Detect GPU when Flags tab is opened
+      document.querySelector('[data-stab="flags"]')?.addEventListener('click', detectGPU);
+
+      // ── Backup ───────────────────────────────────────────────────────────────
+      document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
+        const allSettings = await etherx.settings.get();
+        const json = JSON.stringify(allSettings, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `etherx-settings-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.getElementById('btnImportSettings')?.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const text = await file.text();
+          try {
+            const imported = JSON.parse(text);
+            await etherx.settings.set(imported);
+            alert('Postavke uspješno učitane. Browser će se restartirati.');
+            window.location.reload();
+          } catch (err) {
+            alert('Greška pri učitavanju: ' + err.message);
+          }
+        };
+        input.click();
+      });
 
     })();
   </script>
