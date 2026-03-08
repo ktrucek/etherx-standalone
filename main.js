@@ -241,6 +241,10 @@ function createWindow() {
   const CLEAN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
   // Google also checks Sec-Fetch-Site / Origin headers — force override for google domains
   const GOOGLE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+  // ── Network monitoring & CORS bypass ────────────────────────────────────────
+  const networkLog = [];
+  const MAX_NETWORK_LOG = 500;
+
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
     (details, callback) => {
@@ -261,7 +265,89 @@ function createWindow() {
         }
         headers[key] = ua || CLEAN_UA;
       }
+
+      // ── CORS Bypass: Remove Origin/Referer restrictions ──────────────────────
+      // This allows cross-origin requests without proxy
+      delete headers['Origin'];
+      delete headers['Referer'];
+
+      // Log network request
+      networkLog.push({
+        id: details.id,
+        url: details.url,
+        method: details.method,
+        resourceType: details.resourceType,
+        timestamp: Date.now(),
+        requestHeaders: headers
+      });
+      if (networkLog.length > MAX_NETWORK_LOG) networkLog.shift();
+
       callback({ requestHeaders: headers });
+    }
+  );
+
+  // ── Response headers: Disable CORS, X-Frame-Options, CSP ────────────────────
+  mainWindow.webContents.session.webRequest.onHeadersReceived(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      const headers = { ...details.responseHeaders };
+
+      // Remove CORS restrictions
+      delete headers['access-control-allow-origin'];
+      delete headers['Access-Control-Allow-Origin'];
+      headers['Access-Control-Allow-Origin'] = ['*'];
+      headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+      headers['Access-Control-Allow-Headers'] = ['*'];
+      headers['Access-Control-Allow-Credentials'] = ['true'];
+
+      // Remove frame restrictions (allows embedding)
+      delete headers['x-frame-options'];
+      delete headers['X-Frame-Options'];
+
+      // Remove CSP restrictions
+      delete headers['content-security-policy'];
+      delete headers['Content-Security-Policy'];
+      delete headers['content-security-policy-report-only'];
+
+      // Update network log with response
+      const logEntry = networkLog.find(e => e.id === details.id);
+      if (logEntry) {
+        logEntry.statusCode = details.statusCode;
+        logEntry.responseHeaders = headers;
+        logEntry.fromCache = details.fromCache;
+      }
+
+      callback({ responseHeaders: headers });
+    }
+  );
+
+  // ── Network completed/error tracking ─────────────────────────────────────────
+  mainWindow.webContents.session.webRequest.onCompleted(
+    { urls: ['*://*/*'] },
+    (details) => {
+      const logEntry = networkLog.find(e => e.id === details.id);
+      if (logEntry) {
+        logEntry.completed = true;
+        logEntry.duration = Date.now() - logEntry.timestamp;
+        // Send to renderer for DevTools Network panel
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('network-log', logEntry);
+        }
+      }
+    }
+  );
+
+  mainWindow.webContents.session.webRequest.onErrorOccurred(
+    { urls: ['*://*/*'] },
+    (details) => {
+      const logEntry = networkLog.find(e => e.id === details.id);
+      if (logEntry) {
+        logEntry.error = details.error;
+        logEntry.completed = false;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('network-log', logEntry);
+        }
+      }
     }
   );
 
@@ -438,6 +524,15 @@ function setupIPC() {
     PasswordManager ? PasswordManager.lockVault(app.getPath('userData')) : noDb());
   ipcMain.handle('passwords:exportBitwarden', () =>
     PasswordManager ? PasswordManager.exportBitwardenFormat(app.getPath('userData')) : noDb());
+
+  // ── Network Monitoring ─────────────────────────────────────────────────────
+  ipcMain.handle('network:getLog', () => {
+    return networkLog.slice(-100); // Return last 100 entries
+  });
+  ipcMain.handle('network:clearLog', () => {
+    networkLog.length = 0;
+    return { ok: true };
+  });
 
   // ── AI ─────────────────────────────────────────────────────────────────────
   ipcMain.handle('ai:smartSearch', (_e, query) => ai ? ai.smartSearch(query) : noAi());

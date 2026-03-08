@@ -6246,6 +6246,8 @@
                   Storage…</button>
                 <button class="s-btn-sm" id="sClearSessionStorage" style="text-align:left">⚡ Clear Session
                   Storage…</button>
+                <button class="s-btn-sm" id="sClearServiceWorker" style="text-align:left">⚙️ Clear Service Worker
+                  Cache…</button>
                 <button class="s-btn-sm" id="sClearAllBrowsing"
                   style="text-align:left;background:rgba(192,57,43,.12);border-color:rgba(192,57,43,.3);color:#e74c3c">🗑
                   Clear Everything (History + Cache + Cookies + Storage)…</button>
@@ -6635,6 +6637,31 @@
               </div>
               <div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">
                 💡 Hardware acceleration ubrzava rendering i omogućava glatku animaciju. WebGL se koristi za 3D grafiku.
+              </div>
+            </div>
+            <div
+              style="background:linear-gradient(135deg,rgba(52,152,219,.12),rgba(41,128,185,.08));border:1px solid rgba(52,152,219,.22);border-radius:10px;padding:16px 20px;margin-bottom:16px">
+              <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#3498db">⚙️ Service Worker Status
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">
+                  <span style="color:var(--text3)">Status:</span>
+                  <span id="swStatus" style="font-weight:600;color:#27c93f">—</span>
+                </div>
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px">
+                  <span style="color:var(--text3)">Scope:</span>
+                  <span id="swScope" style="font-weight:600;color:var(--text);font-size:11px">—</span>
+                </div>
+                <div
+                  style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(0,0,0,.15);border-radius:6px;grid-column:span 2">
+                  <span style="color:var(--text3)">Cache Version:</span>
+                  <span id="swCacheVersion" style="font-weight:600;color:var(--text)">—</span>
+                </div>
+              </div>
+              <div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">
+                💡 Service Worker omogućava offline pristup, caching i background sync. Potreban je HTTPS ili localhost.
               </div>
             </div>
             <div class="s-group">
@@ -14729,6 +14756,30 @@
         showToast('⚡ Session storage cleared');
       });
     });
+    document.getElementById('sClearServiceWorker')?.addEventListener('click', () => {
+      window.customConfirm('Clear Service Worker cache?\n\nThis will clear offline cached data and unregister the service worker.', (c) => {
+        if (!c) return;
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+            registrations.forEach(reg => {
+              reg.unregister();
+            });
+          });
+          if ('caches' in window) {
+            caches.keys().then(names => {
+              names.forEach(name => {
+                if (name.startsWith('etherx-')) {
+                  caches.delete(name);
+                }
+              });
+            });
+          }
+          showToast('⚙️ Service Worker cache cleared — refresh to re-register');
+        } else {
+          showToast('⚠️ Service Worker not supported');
+        }
+      });
+    });
     document.getElementById('sClearAllBrowsing')?.addEventListener('click', () => {
       window.customConfirm('Clear EVERYTHING?\n\n• History\n• Bookmarks\n• Extensions\n• Settings\n• Cookies\n• Cache\n• Session\n• Site permissions\n\n⚠️ This cannot be undone. The page will reload.', (c) => {
         if (!c) return;
@@ -15336,6 +15387,62 @@
         if (document.getElementById('settingMemorySaver')?.checked) startMemorySaver();
       }, 5000);
 
+      // ── Service Worker Status ────────────────────────────────────────────────
+      function updateServiceWorkerStatus() {
+        const statusEl = document.getElementById('swStatus');
+        const scopeEl = document.getElementById('swScope');
+        const cacheVersionEl = document.getElementById('swCacheVersion');
+
+        if (!('serviceWorker' in navigator)) {
+          if (statusEl) {
+            statusEl.textContent = '✗ Not Supported';
+            statusEl.style.color = '#ff5f56';
+          }
+          if (scopeEl) scopeEl.textContent = '—';
+          if (cacheVersionEl) cacheVersionEl.textContent = '—';
+          return;
+        }
+
+        navigator.serviceWorker.getRegistration().then(registration => {
+          if (registration) {
+            if (statusEl) {
+              statusEl.textContent = '✓ Active';
+              statusEl.style.color = '#27c93f';
+            }
+            if (scopeEl) {
+              scopeEl.textContent = registration.scope.replace(location.origin, '');
+            }
+
+            // Get cache version
+            if ('caches' in window) {
+              caches.keys().then(names => {
+                const etherxCache = names.find(n => n.startsWith('etherx-'));
+                if (cacheVersionEl) {
+                  cacheVersionEl.textContent = etherxCache || 'No cache';
+                }
+              });
+            }
+          } else {
+            if (statusEl) {
+              statusEl.textContent = '○ Not Registered';
+              statusEl.style.color = '#f39c12';
+            }
+            if (scopeEl) scopeEl.textContent = '—';
+            if (cacheVersionEl) cacheVersionEl.textContent = '—';
+          }
+        }).catch(() => {
+          if (statusEl) {
+            statusEl.textContent = '✗ Error';
+            statusEl.style.color = '#ff5f56';
+          }
+        });
+      }
+
+      // Update SW status when settings panel opens
+      document.getElementById('settingsBtn')?.addEventListener('click', () => {
+        setTimeout(updateServiceWorkerStatus, 300);
+      });
+
       // ── GPU / WebGL Status ───────────────────────────────────────────────────
       function detectGPU() {
         try {
@@ -15410,6 +15517,50 @@
       });
 
     })();
+
+    // ── Service Worker Registration ────────────────────────────────────────
+    // Only register in web mode (not Electron) and not on file:// protocol
+    if ('serviceWorker' in navigator &&
+      !window.electronAPI &&
+      window.location.protocol !== 'file:') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/standalone-browser/sw.js', { scope: '/standalone-browser/' })
+          .then(registration => {
+            console.log('[SW] Service Worker registered:', registration.scope);
+
+            // Check for updates every 60 minutes
+            setInterval(() => {
+              registration.update();
+            }, 60 * 60 * 1000);
+
+            // Handle updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New service worker available
+                  if (confirm('Nova verzija EtherX Browser-a je dostupna. Osvježi stranicu?')) {
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    window.location.reload();
+                  }
+                }
+              });
+            });
+          })
+          .catch(err => {
+            console.warn('[SW] Service Worker registration failed:', err);
+          });
+
+        // Listen for Service Worker messages
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'SYNC_COMPLETE') {
+            console.log('[SW] Sync completed:', event.data);
+          }
+        });
+      });
+    } else if (window.electronAPI) {
+      console.log('[SW] Service Worker disabled (running in Electron mode - CORS bypass active)');
+    }
   </script>
 </body>
 
