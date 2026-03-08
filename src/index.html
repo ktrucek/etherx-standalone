@@ -5160,6 +5160,7 @@
     }
   </style>
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js" defer></script>
+  <script src="../assets/ethers.umd.min.js"></script>
 </head>
 
 <body>
@@ -5690,9 +5691,143 @@
     </div>
     <div id="settingsBackdrop"></div>
     <div class="panel" id="bmPanel">
-      <div class="panel-header"><span class="panel-title">⭐ Bookmarks</span><button class="panel-close"
-          id="closeBmPanel">×</button></div>
+      <div class="panel-header">
+        <span class="panel-title">⭐ Bookmarks</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button id="btnOpenBmManager" title="Open Bookmark Manager"
+            style="background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:5px;color:var(--text2);cursor:pointer;font-size:11px;padding:2px 8px">✏️
+            Uredi</button>
+          <button class="panel-close" id="closeBmPanel">×</button>
+        </div>
+      </div>
       <div class="panel-body" id="bmList"></div>
+    </div>
+
+    <!-- ══ Bookmark Manager Modal ══════════════════════════════════════════ -->
+    <div id="bmManagerModal"
+      style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);align-items:center;justify-content:center">
+      <div id="bmManagerWin"
+        style="width:min(920px,96vw);height:min(640px,90vh);background:var(--bg);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden">
+
+        <!-- Header -->
+        <div
+          style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg2)">
+          <span style="font-size:20px">⭐</span>
+          <span style="font-size:15px;font-weight:700;color:var(--text)">Bookmark Manager</span>
+          <div style="flex:1;max-width:280px;margin-left:8px">
+            <input id="bmSearchInput" placeholder="🔍  Pretraži bookmarke…"
+              style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:5px 10px;font-size:12px;outline:none;box-sizing:border-box">
+          </div>
+          <div style="flex:1"></div>
+          <!-- Toolbar buttons -->
+          <button id="bmMgrAddBm" title="Dodaj bookmark"
+            style="background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;padding:5px 12px;font-weight:600">＋
+            Bookmark</button>
+          <button id="bmMgrAddFolder" title="Novi folder"
+            style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer;font-size:12px;padding:5px 10px">📁
+            Folder</button>
+          <button id="bmMgrImport" title="Import"
+            style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer;font-size:12px;padding:5px 10px">📥</button>
+          <button id="bmMgrExport" title="Export"
+            style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer;font-size:12px;padding:5px 10px">📤</button>
+          <button id="closeBmManager"
+            style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;line-height:1;padding:2px 6px;border-radius:4px">×</button>
+        </div>
+
+        <!-- Body: sidebar + content -->
+        <div style="display:flex;flex:1;min-height:0">
+
+          <!-- Left: Folder tree -->
+          <div id="bmFolderTree"
+            style="width:200px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px 6px;background:var(--bg2)">
+          </div>
+
+          <!-- Right: Bookmark list -->
+          <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+
+            <!-- Bulk action bar (hidden by default) -->
+            <div id="bmBulkBar"
+              style="display:none;align-items:center;gap:8px;padding:6px 12px;background:rgba(102,126,234,.1);border-bottom:1px solid rgba(102,126,234,.25);font-size:12px;flex-shrink:0">
+              <span id="bmBulkCount" style="color:var(--accent);font-weight:600">0 odabrano</span>
+              <div style="flex:1"></div>
+              <select id="bmBulkMoveSelect"
+                style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:3px 8px;font-size:11px">
+                <option value="">— Premjesti u folder —</option>
+              </select>
+              <button id="bmBulkMove"
+                style="background:var(--accent);border:none;border-radius:5px;color:#fff;cursor:pointer;font-size:11px;padding:4px 10px">Premjesti</button>
+              <button id="bmBulkDelete"
+                style="background:#c0392b;border:none;border-radius:5px;color:#fff;cursor:pointer;font-size:11px;padding:4px 10px">🗑
+                Obriši</button>
+              <button id="bmBulkClear"
+                style="background:none;border:1px solid var(--border2);border-radius:5px;color:var(--text3);cursor:pointer;font-size:11px;padding:4px 8px">Odaberi
+                sve / ništa</button>
+            </div>
+
+            <!-- Column headers -->
+            <div
+              style="display:grid;grid-template-columns:28px 1fr 200px 120px 36px;gap:0;font-size:11px;color:var(--text3);padding:5px 10px 5px 8px;border-bottom:1px solid var(--border);flex-shrink:0;user-select:none">
+              <div><input type="checkbox" id="bmSelectAll" style="cursor:pointer"></div>
+              <div style="cursor:pointer" data-sort="title">Naziv ▾</div>
+              <div style="cursor:pointer" data-sort="url">URL</div>
+              <div style="cursor:pointer" data-sort="folder">Folder</div>
+              <div></div>
+            </div>
+
+            <!-- Rows -->
+            <div id="bmMgrList" style="flex:1;overflow-y:auto;min-height:0"></div>
+
+          </div>
+        </div>
+
+        <!-- Edit drawer (slides up from bottom) -->
+        <div id="bmEditDrawer"
+          style="display:none;border-top:1px solid var(--border);background:var(--bg2);padding:14px 16px;flex-shrink:0">
+          <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--accent)">✏️ Uredi bookmark</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Naziv</div>
+              <input id="bmEditTitle"
+                style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 9px;font-size:12px;box-sizing:border-box">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px">URL</div>
+              <input id="bmEditUrl"
+                style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 9px;font-size:12px;box-sizing:border-box">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Folder</div>
+              <div style="display:flex;gap:6px">
+                <select id="bmEditFolder"
+                  style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 9px;font-size:12px">
+                  <option value="">— Bez foldera —</option>
+                </select>
+                <input id="bmEditFolderNew" placeholder="ili novi…"
+                  style="width:100px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 9px;font-size:12px">
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Opis (napomena)</div>
+              <input id="bmEditDesc" placeholder="Opcionalni opis…"
+                style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 9px;font-size:12px;box-sizing:border-box">
+            </div>
+            <div style="grid-column:span 2">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Oznake / tagovi <span
+                  style="color:var(--text3)">(razdvoji zarezom)</span></div>
+              <input id="bmEditTags" placeholder="vijesti, posao, tech…"
+                style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 9px;font-size:12px;box-sizing:border-box">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+            <button id="bmEditCancel"
+              style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer;font-size:12px;padding:6px 16px">Odustani</button>
+            <button id="bmEditSave"
+              style="background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;padding:6px 18px;font-weight:600">💾
+              Spremi</button>
+          </div>
+        </div>
+
+      </div>
     </div>
     <div class="panel" id="histPanel">
       <div class="panel-header"><span class="panel-title">🕒 History</span><button class="panel-close"
@@ -5725,13 +5860,8 @@
           <button class="sit-btn" data-stab="autofill"><span class="sit-icon">✏️</span>Auto. popunjavanje</button>
           <button class="sit-btn" data-stab="passwords"><span class="sit-icon">🔑</span>Lozinke</button>
           <button class="sit-btn" data-stab="history"><span class="sit-icon">📜</span>Povijest</button>
-          <button class="sit-btn" data-stab="cookies"><span class="sit-icon">🍪</span>Kolačići</button>
-          <button class="sit-btn" data-stab="permissions"><span class="sit-icon">🔔</span>Dozvole</button>
           <button class="sit-btn" data-stab="search"><span class="sit-icon">🔍</span>Pretraživanje</button>
-          <button class="sit-btn" data-stab="shortcuts"><span class="sit-icon">⌨️</span>Prečaci</button>
-          <button class="sit-btn" data-stab="cache"><span class="sit-icon">💾</span>Predmemorija</button>
           <button class="sit-btn" data-stab="security"><span class="sit-icon">🔒</span>Sigurnost</button>
-          <button class="sit-btn" data-stab="dns"><span class="sit-icon">🌐</span>DNS</button>
           <button class="sit-btn" data-stab="privacy"><span class="sit-icon">🤚</span>Privatnost</button>
           <button class="sit-btn" data-stab="websites"><span class="sit-icon">🌐</span>Web stranice</button>
           <button class="sit-btn" data-stab="profiles"><span class="sit-icon">👤</span>Profili</button>
@@ -5739,7 +5869,6 @@
           <button class="sit-btn" data-stab="advanced"><span class="sit-icon">🔧</span>Napredno</button>
           <button class="sit-btn" data-stab="developer"><span class="sit-icon">⌨️</span>Razvoj</button>
           <button class="sit-btn" data-stab="updates"><span class="sit-icon">🔄</span>Ažuriranja</button>
-          <button class="sit-btn" data-stab="backup"><span class="sit-icon">💼</span>Sigurnosna kopija</button>
           <button class="sit-btn" data-stab="flags"><span class="sit-icon">��</span>Značajke</button>
           <button class="sit-btn" data-stab="migration"><span class="sit-icon">📥</span>Uvoz podataka</button>
           <button class="sit-btn" data-stab="appearance"><span class="sit-icon">🎨</span>Izgled</button>
@@ -6185,6 +6314,23 @@
                 <div class="toggle" data-setting="showFullURL"></div>
               </div>
             </div>
+            <div class="s-group">
+              <div class="s-group-title">Sigurnosna kopija</div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Export postavki</div>
+                  <div class="s-row-desc">Spremi sve postavke u JSON datoteku.</div>
+                </div>
+                <button class="s-btn s-btn-primary" id="btnExportSettings">📤 Export</button>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Import postavki</div>
+                  <div class="s-row-desc">Učitaj postavke iz prethodno spremljene datoteke.</div>
+                </div>
+                <button class="s-btn" id="btnImportSettings">📥 Import</button>
+              </div>
+            </div>
           </div>
           <!-- PRIVACY -->
           <div class="s-tab-pane" id="stab-privacy">
@@ -6329,6 +6475,29 @@
                   <option>110%</option>
                   <option>125%</option>
                   <option>150%</option>
+                </select>
+              </div>
+            </div>
+            <!-- DNS over HTTPS -->
+            <div class="s-group" style="margin-top:8px">
+              <div class="s-group-title">DNS over HTTPS</div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Omogući DoH</div>
+                  <div class="s-row-desc">Kriptiraj DNS upite preko HTTPS-a.</div>
+                </div>
+                <label class="s-toggle"><input type="checkbox" id="settingDoH"><span
+                    class="s-toggle-track"></span></label>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">DoH provider</div>
+                  <div class="s-row-desc">Odaberi pružatelja usluge DNS over HTTPS.</div>
+                </div>
+                <select class="s-select" id="settingDoHProvider">
+                  <option value="cloudflare" selected>Cloudflare (1.1.1.1)</option>
+                  <option value="google">Google (8.8.8.8)</option>
+                  <option value="quad9">Quad9 (9.9.9.9)</option>
                 </select>
               </div>
             </div>
@@ -7620,7 +7789,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.29</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.30</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -7636,32 +7805,34 @@
 
           <!-- ── AI Settings ── -->
           <div class="s-tab-pane" id="stab-ai">
+            <!-- Status banner -->
+            <div id="aiStatusBanner"
+              style="display:none;margin:12px 16px 0;padding:10px 14px;border-radius:8px;font-size:12px;border:1px solid transparent">
+            </div>
+
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
                   <div class="s-row-label" style="font-weight:600;font-size:14px">🤖 AI Agent postavke</div>
-                  <div class="s-row-desc">Odaberi AI model i unesi API ključ za AI agenta i sažimanje stranica</div>
+                  <div class="s-row-desc">Unesi API ključ, dohvati dostupne modele i testiraj AI funkcije</div>
                 </div>
               </div>
             </div>
 
-            <!-- Model selector -->
+            <!-- Provider & API Key -->
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">AI Model</div>
-                  <div class="s-row-desc">Odaberi koji AI model koristi EtherX Agent</div>
+                  <div class="s-row-label">AI Provider</div>
+                  <div class="s-row-desc">Odaberi davatelja AI usluge</div>
                 </div>
-                <select class="s-select" id="settingsAiModel">
-                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (preporučeno)</option>
-                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                  <option value="gpt-4o">GPT-4o (OpenAI)</option>
-                  <option value="gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
-                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
-                  <option value="claude-3-haiku">Claude 3 Haiku (Anthropic)</option>
+                <select class="s-select" id="settingsAiProvider">
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI (GPT)</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
                 </select>
               </div>
+
               <!-- API Key for Google Gemini -->
               <div class="s-row" id="aiKeyRowGemini">
                 <div class="s-row-left">
@@ -7678,6 +7849,9 @@
                     onclick="(function(b){var i=document.getElementById('settingsGeminiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
                     style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
                     title="Prikaži/sakrij ključ">🙈</button>
+                  <button id="aiFetchModelsBtn" title="Dohvati dostupne modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
                 </div>
               </div>
               <!-- API Key for OpenAI -->
@@ -7696,6 +7870,9 @@
                     onclick="(function(b){var i=document.getElementById('settingsOpenaiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
                     style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
                     title="Prikaži/sakrij ključ">🙈</button>
+                  <button id="aiFetchModelsOpenaiBtn" title="Dohvati dostupne modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
                 </div>
               </div>
               <!-- API Key for Anthropic -->
@@ -7716,6 +7893,24 @@
                     title="Prikaži/sakrij ključ">🙈</button>
                 </div>
               </div>
+
+              <!-- Model selector — populated dynamically or from defaults -->
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">AI Model</div>
+                  <div class="s-row-desc" id="aiModelDesc">Klikni "⬇ Modeli" za dohvat dostupnih modela</div>
+                </div>
+                <select class="s-select" id="settingsAiModel">
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (preporučeno)</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
+                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
+                  <option value="claude-3-haiku">Claude 3 Haiku (Anthropic)</option>
+                </select>
+              </div>
+
               <div class="s-row">
                 <div class="s-row-left">
                   <div class="s-row-label">Temperatura (kreativnost)</div>
@@ -7726,14 +7921,40 @@
                   style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">0.7</span>
               </div>
               <div class="s-row">
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                   <button id="saveAiSettings"
                     style="padding:7px 18px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">💾
-                    Spremi postavke</button>
+                    Spremi</button>
                   <button id="testAiSettings"
                     style="padding:7px 14px;background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;cursor:pointer">🔬
-                    Testiraj API</button>
+                    Testiraj sve AI funkcije</button>
+                  <button id="aiClearHistory"
+                    style="padding:7px 10px;background:none;border:1px solid #c0392b44;border-radius:7px;color:#e74c3c;font-size:11px;cursor:pointer">🗑
+                    Obriši povijest</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- AI Test Results / Status -->
+            <div class="s-group" id="aiTestResultsGroup" style="display:none">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">📊 Rezultati testiranja</div>
+                </div>
+              </div>
+              <div id="aiTestResults" style="padding:0 4px"></div>
+            </div>
+
+            <!-- AI Test History -->
+            <div class="s-group" id="aiHistoryGroup">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">🕐 Povijest testova</div>
+                  <div class="s-row-desc">Prethodni testovi API-ja i AI funkcija</div>
+                </div>
+              </div>
+              <div id="aiTestHistory" style="padding:0 4px;max-height:220px;overflow-y:auto">
+                <div style="color:#555;font-size:11px;padding:6px 0">Nema prethodnih testova.</div>
               </div>
             </div>
 
@@ -7817,184 +8038,6 @@
         </div>
       </div>
 
-      <!-- ── Cookies ─────────────────────────────────────────── -->
-      <div class="s-tab-pane" id="stab-cookies">
-        <div class="s-group">
-          <div class="s-group-title">Cookie postavke</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Pravila za kolačiće</div>
-              <div class="s-row-desc">Kontroliraj kako stranice mogu koristiti kolačiće.</div>
-            </div>
-            <select class="s-select" id="settingCookiePolicy">
-              <option value="allow-all" selected>Dozvoli sve kolačiće</option>
-              <option value="block-third-party">Blokiraj samo third-party</option>
-              <option value="block-all">Blokiraj sve kolačiće</option>
-            </select>
-          </div>
-        </div>
-        <div class="s-group">
-          <div class="s-group-title">Brisanje kolačića</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Obriši sve kolačiće</div>
-              <div class="s-row-desc">Trajno obriši sve pohranjene kolačiće sa svih stranica.</div>
-            </div>
-            <button class="s-btn s-btn-danger" id="btnClearAllCookies">Obriši sve</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Permissions ─────────────────────────────────────── -->
-      <div class="s-tab-pane" id="stab-permissions">
-        <div class="s-group">
-          <div class="s-group-title">Notifikacije</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Push notifikacije</div>
-              <div class="s-row-desc">Dopusti stranicama da šalju notifikacije.</div>
-            </div>
-            <label class="s-toggle"><input type="checkbox" id="settingNotifications"><span
-                class="s-toggle-track"></span></label>
-          </div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Zvuk notifikacija</div>
-              <div class="s-row-desc">Reproduciraj zvuk kada stigne notifikacija.</div>
-            </div>
-            <label class="s-toggle"><input type="checkbox" id="settingNotificationSound" checked><span
-                class="s-toggle-track"></span></label>
-          </div>
-        </div>
-        <div class="s-group">
-          <div class="s-group-title">Lokacija</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Pristup lokaciji</div>
-              <div class="s-row-desc">Stranice mogu zatražiti tvoju geografsku lokaciju.</div>
-            </div>
-            <select class="s-select" id="settingGeolocation">
-              <option value="ask" selected>Uvijek pitaj</option>
-              <option value="allow">Uvijek dozvoli</option>
-              <option value="block">Nikad ne dijeli</option>
-            </select>
-          </div>
-        </div>
-        <div class="s-group">
-          <div class="s-group-title">Medijske dozvole</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Mikrofon</div>
-              <div class="s-row-desc">Dopusti pristup mikrofonu za video pozive i snimanje.</div>
-            </div>
-            <select class="s-select" id="settingMicrophone">
-              <option value="ask" selected>Uvijek pitaj</option>
-              <option value="allow">Uvijek dozvoli</option>
-              <option value="block">Blokiraj</option>
-            </select>
-          </div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Kamera</div>
-              <div class="s-row-desc">Dopusti pristup kameri za video pozive.</div>
-            </div>
-            <select class="s-select" id="settingCamera">
-              <option value="ask" selected>Uvijek pitaj</option>
-              <option value="allow">Uvijek dozvoli</option>
-              <option value="block">Blokiraj</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Shortcuts ───────────────────────────────────────── -->
-      <div class="s-tab-pane" id="stab-shortcuts">
-        <div class="s-group">
-          <div class="s-group-title">Navigacija</div>
-          <div style="padding:12px 16px;font-size:13px;line-height:2.2;color:var(--text)">
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + T</kbd> — Nova kartica</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + W</kbd> — Zatvori karticu</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + Tab</kbd> — Sljedeća kartica</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + Shift + Tab</kbd> — Prethodna kartica</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + L</kbd> — Fokusiraj adresnu traku</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + R</kbd> — Osvježi stranicu</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + Shift + R</kbd> — Hard refresh (bez cache)</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">F11</kbd>
-              — Full screen</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">F12</kbd>
-              — Developer Tools</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + +/-</kbd> — Zoom in/out</div>
-            <div><kbd
-                style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;font-size:12px">Ctrl/Cmd
-                + 0</kbd> — Reset zoom</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Cache ───────────────────────────────────────────── -->
-      <div class="s-tab-pane" id="stab-cache">
-        <div class="s-group">
-          <div class="s-group-title">Cache i privremeni podaci</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Veličina cache-a</div>
-              <div class="s-row-desc">Trenutna veličina spremljenih cache podataka.</div>
-            </div>
-            <span id="cacheSize" style="color:var(--text3);font-size:13px">Izračunavanje…</span>
-          </div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Očisti cache</div>
-              <div class="s-row-desc">Obriši sve privremene podatke i cache stranica.</div>
-            </div>
-            <button class="s-btn s-btn-danger" id="btnClearCache">Očisti cache</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── DNS ─────────────────────────────────────────────── -->
-      <div class="s-tab-pane" id="stab-dns">
-        <div class="s-group">
-          <div class="s-group-title">DNS over HTTPS</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Omogući DoH</div>
-              <div class="s-row-desc">Kriptiraj DNS upite preko HTTPS-a.</div>
-            </div>
-            <label class="s-toggle"><input type="checkbox" id="settingDoH"><span class="s-toggle-track"></span></label>
-          </div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">DoH provider</div>
-              <div class="s-row-desc">Odaberi pružatelja usluge DNS over HTTPS.</div>
-            </div>
-            <select class="s-select" id="settingDoHProvider">
-              <option value="cloudflare" selected>Cloudflare (1.1.1.1)</option>
-              <option value="google">Google (8.8.8.8)</option>
-              <option value="quad9">Quad9 (9.9.9.9)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
       <!-- ── Updates ─────────────────────────────────────────── -->
       <div class="s-tab-pane" id="stab-updates">
         <!-- Current version card -->
@@ -8003,7 +8046,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.29</span></div>
+                id="helpVersionNum2">2.4.30</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8077,57 +8120,19 @@
         </div>
       </div>
 
-      <!-- ── Backup ──────────────────────────────────────────── -->
-      <div class="s-tab-pane" id="stab-backup">
-        <div class="s-group">
-          <div class="s-group-title">Export / Import postavki</div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Export postavki</div>
-              <div class="s-row-desc">Spremi sve postavke u JSON datoteku.</div>
-            </div>
-            <button class="s-btn s-btn-primary" id="btnExportSettings">📤 Export</button>
-          </div>
-          <div class="s-row">
-            <div class="s-row-left">
-              <div class="s-row-label">Import postavki</div>
-              <div class="s-row-desc">Učitaj postavke iz prethodno spremljene datoteke.</div>
-            </div>
-            <button class="s-btn" id="btnImportSettings">📥 Import</button>
-          </div>
-        </div>
-      </div>
-
     </div>
     <div class="panel" id="walletPanel" style="width:420px">
       <div class="panel-header" style="padding:8px 12px">
         <span class="panel-title">💰 BOBIAI Wallet</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <button id="walletPopout" title="Open in new tab"
+          <button id="walletMenuBtn" title="Wallet opcije"
             style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 6px"
-            onclick="window.open('https://wallet.kriptoentuzijasti.io','_blank')">↗</button>
-          <button id="walletReload" title="Reload wallet"
-            style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 6px">↺</button>
+            onclick="walletShowMenu(event)">⋮</button>
           <button class="panel-close" id="closeWalletPanel">×</button>
         </div>
       </div>
-      <div style="flex:1;position:relative;overflow:hidden">
-        <div id="walletLoading"
-          style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--bg);z-index:2">
-          <div style="font-size:32px">💰</div>
-          <div style="font-size:13px;color:var(--text2)">Loading BOBIAI Wallet…</div>
-          <div style="width:40px;height:3px;background:var(--border);border-radius:2px;overflow:hidden">
-            <div
-              style="height:100%;width:40%;background:var(--accent);border-radius:2px;animation:walletLoad 1s infinite alternate">
-            </div>
-          </div>
-        </div>
-        <iframe id="walletFrame" src="https://wallet.kriptoentuzijasti.io"
-          style="width:100%;height:100%;border:none;display:block" allow="clipboard-read; clipboard-write; web-share"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-          title="BOBIAI Wallet" onload="document.getElementById('walletLoading').style.display='none'"
-          onerror="document.getElementById('walletLoading').innerHTML='<div style=&quot;font-size:13px;color:var(--red);text-align:center;padding:16px&quot;>❌ Could not load wallet.<br><small style=&quot;color:var(--text3)&quot;>Check your connection</small></div>'"></iframe>
-      </div>
+      <!-- ── Wallet Inner ─────────────────────────────────────────────────────── -->
+      <div id="wlt-root" style="flex:1;overflow-y:auto;padding:0"></div>
     </div>
     <!-- BobiAI Studio Panel -->
     <div class="panel" id="bobiaiPanel" style="width:420px">
@@ -9714,7 +9719,8 @@
             folder.textContent = '📁 ' + (d.origin || '(loaded page)').replace('https://', '').replace('http://', '');
             treeEl.appendChild(folder);
           }
-          d.resources.forEach(r => {
+          const SRC_SKIP = ['proxy.php', 'browser.html', 'n8n.kriptoentuzijasti.io', 'localhost:', 'file://'];
+          d.resources.filter(r => !SRC_SKIP.some(skip => r.url.includes(skip))).forEach(r => {
             const rKey = 'src-res-' + btoa(r.url).slice(0, 16);
             if (!document.getElementById(rKey)) {
               const name = r.url.split('/').pop().split('?')[0] || 'file';
@@ -9918,7 +9924,7 @@
       if (wl) wl.style.display = 'flex';
       if (wf) { wf.src = ''; setTimeout(() => { wf.src = 'https://wallet.kriptoentuzijasti.io'; }, 50); }
     });
-    document.getElementById('btnWallet').addEventListener('click', () => togglePanel('walletPanel'));
+    document.getElementById('btnWallet').addEventListener('click', () => { togglePanel('walletPanel'); _wltInit(); });
     document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel('bobiaiPanel'));
 
     // ── Gemini Page Summarizer (multi-provider) ─────────────────────────────
@@ -10018,8 +10024,9 @@
           pageText = `Stranica: ${url}`;
         }
 
-        // Read API key from user settings — NEVER hardcoded in frontend
-        const userApiKey = DB.getSettings().gemini_api_key || '';
+        // Read API key from user settings — supports both camelCase and snake_case storage
+        const _s = DB.getSettings();
+        const userApiKey = _s.geminiApiKey || _s.gemini_api_key || '';
         if (!userApiKey) {
           loader.style.display = 'none';
           _renderSummaryError(bulletsEl, 'Gemini API ključ nije postavljen. Dodajte ga u Postavke → AI.');
@@ -10211,6 +10218,8 @@
       if (STATE.devtoolsOpen) {
         const activePane = document.querySelector('.dt-tab.active');
         if (!activePane) { const consoleTab = document.querySelector('[data-pane="console"]'); if (consoleTab) consoleTab.click(); }
+        // Flush buffered network entries collected while DevTools was closed
+        _flushNetBuffer();
       }
     }
     // ── DevTools tab switching
@@ -10223,6 +10232,7 @@
         if (pane) pane.classList.add('active');
         if (!STATE.devtoolsOpen) { STATE.devtoolsOpen = true; document.getElementById('devtools').classList.add('open'); }
         if (tab.dataset.pane === 'application') renderAppTab('localstorage');
+        if (tab.dataset.pane === 'network') _flushNetBuffer();
         if (tab.dataset.pane === 'performance') collectPerfMetrics();
       });
     });
@@ -10558,8 +10568,11 @@
 
     // ── Network log
     const networkLog = document.getElementById('networkLog');
-    function logNetworkEntry(url, type, status, size, time) {
-      if (!STATE.devtoolsOpen) return;
+    const _netBuffer = [];  // buffer entries captured when DevTools is closed
+    const _NET_BUF_MAX = 300;
+    function _renderNetEntry(entry) {
+      if (!networkLog) return;
+      const { url, type, status, size, time } = entry;
       const tr = document.createElement('tr');
       const name = (url.split('/').pop().split('?')[0] || '/').slice(0, 40);
       const t = type || 'HTML'; const s = status || 200; const sz = size || (Math.floor(Math.random() * 200 + 10) + 'KB'); const ms = time || (Math.floor(Math.random() * 200 + 20) + 'ms');
@@ -10569,9 +10582,22 @@
       tr.innerHTML = `<td title="${escHtml(url)}">${escHtml(name)}</td><td style="color:${s >= 400 ? '#f48771' : '#89d185'}">${s}</td><td><span class="badge ${badgeClass}">${t}</span></td><td>${sz}</td><td>${ms}</td><td><div class="net-bar-wrap"><div class="net-bar" style="width:${bar}%"></div></div></td>`;
       networkLog.appendChild(tr);
     }
+    function _flushNetBuffer() {
+      if (!networkLog || !_netBuffer.length) return;
+      _netBuffer.forEach(entry => _renderNetEntry(entry));
+      _netBuffer.length = 0;
+    }
+    function logNetworkEntry(url, type, status, size, time) {
+      const entry = { url, type: type || 'HTML', status: status || 200, size, time };
+      // Always buffer so history is available when DevTools opens
+      _netBuffer.push(entry);
+      if (_netBuffer.length > _NET_BUF_MAX) _netBuffer.shift();
+      // Only render immediately if DevTools is open
+      if (STATE.devtoolsOpen) _renderNetEntry(entry);
+    }
 
     // ── Network controls
-    document.getElementById('netClear')?.addEventListener('click', () => { if (networkLog) networkLog.innerHTML = ''; });
+    document.getElementById('netClear')?.addEventListener('click', () => { if (networkLog) networkLog.innerHTML = ''; _netBuffer.length = 0; });
     document.querySelectorAll('.net-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.net-type-btn').forEach(b => b.classList.remove('on'));
@@ -10614,10 +10640,18 @@
         const activeUrl = getActiveTab()?.url || '';
         const cookieFetch = (window.electronWebview && window.etherx?.cookies?.getAll)
           ? window.etherx.cookies.getAll(activeUrl || undefined)
-          : Promise.resolve({ ok: false, cookies: [] });
+          : Promise.resolve(null);
         cookieFetch.then(res => {
-          // Merge Electron session cookies + document.cookie (for web mode)
-          const electronCookies = (res.ok && res.cookies) ? res.cookies : [];
+          // etherx.cookies.getAll may return an array directly or {ok, cookies}
+          let electronCookies = [];
+          if (Array.isArray(res)) {
+            electronCookies = res;
+          } else if (res && res.ok && Array.isArray(res.cookies)) {
+            electronCookies = res.cookies;
+          } else if (res && Array.isArray(res.cookies)) {
+            electronCookies = res.cookies;
+          }
+          // fallback: document.cookie (works in web/same-origin mode)
           const docCookies = document.cookie ? document.cookie.split(';').map(p => { const [k, ...v] = p.trim().split('='); return { name: k, value: v.join('='), domain: window.location.hostname, path: '/' }; }) : [];
           const all = electronCookies.length ? electronCookies : docCookies;
           if (!all.length) {
@@ -10665,8 +10699,14 @@
         c.innerHTML = _sqliteLoading('Bookmarks');
         const fetchBm = (window.electronWebview && window.etherx?.bookmarks?.getAll)
           ? window.etherx.bookmarks.getAll()
-          : Promise.resolve(DB.getBookmarks());
-        fetchBm.then(rows => {
+          : Promise.resolve([]);
+        fetchBm.then(sqliteRows => {
+          // Always merge with localStorage bookmarks (primary store for web mode)
+          const localRows = DB.getBookmarks();
+          // Deduplicate by URL: prefer SQLite rows, fill in rest from localStorage
+          const seen = new Set((sqliteRows || []).map(r => r.url));
+          const merged = [...(sqliteRows || []), ...localRows.filter(r => !seen.has(r.url))];
+          const rows = merged;
           if (!rows || !rows.length) { c.innerHTML = _sqliteEmpty('bookmarks'); return; }
           c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>bookmarks</strong> • ${rows.length} rows</div>` +
             '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Title</th><th>Folder</th><th>Added</th></tr></thead><tbody>' +
@@ -10703,12 +10743,22 @@
           const merged = Object.assign({}, localSettings, (obj && typeof obj === 'object' ? obj : {}));
           const entries = Object.entries(merged);
           if (!entries.length) { c.innerHTML = _sqliteEmpty('settings'); return; }
-          const HIDDEN = ['gemini_api_key', 'openai_api_key', 'api_key'];
+          const HIDDEN_KEYS = /api[_.]?key|api[_.]?secret|secret|password|token/i;
+          const MODEL_KEYS = /ai[_.]?model|model[_.]?name/i;
           c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>settings</strong> • ${entries.length} rows
             <button onclick="renderAppTab('sqlite-settings')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺ Refresh</button></div>` +
             '<table class="app-table"><thead><tr><th>Key</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody id="settingsTableBody">' +
             entries.map(([k, v]) => {
-              const display = HIDDEN.some(h => k.includes(h)) ? '•••••••••• (hidden)' : escHtml(String(v).slice(0, 100));
+              let display;
+              if (HIDDEN_KEYS.test(k)) {
+                display = '<span style="color:#666;letter-spacing:2px">••••••••••</span>';
+              } else if (MODEL_KEYS.test(k)) {
+                // Show only provider prefix (e.g. "gemini" from "gemini-2.5-flash"), not the exact model string
+                const provider = String(v).split(/[-/_]/)[0] || '—';
+                display = '<span style="color:#888">' + escHtml(provider) + ' <span style="color:#555">(configuriran)</span></span>';
+              } else {
+                display = escHtml(String(v).slice(0, 100));
+              }
               return `<tr><td style="color:var(--yellow)">${escHtml(k)}</td><td style="color:#ccc" id="sv_${escHtml(k)}">${display}</td><td><button onclick="_editSetting('${escHtml(k)}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button> <button onclick="_deleteSetting('${escHtml(k)}')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 5px">✕</button></td></tr>`;
             }).join('') + '</tbody></table>' +
             `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
@@ -11004,7 +11054,8 @@
     document.getElementById('mi-add-bm').addEventListener('click', addBookmark);
     document.getElementById('mi-show-bm').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
     document.getElementById('mi-start-page').addEventListener('click', () => { showNTP(); const t = getActiveTab(); if (t) { t.url = ''; t.title = 'New Tab'; updateTabEl(t); } });
-    document.getElementById('mi-edit-bm').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); showToast('✏️ Edit mode — click × to remove bookmarks'); });
+    document.getElementById('mi-edit-bm').addEventListener('click', () => openBookmarkManager());
+    document.getElementById('btnOpenBmManager').addEventListener('click', () => { closeAllPanels(); openBookmarkManager(); });
     document.getElementById('mi-add-bm-all-tabs').addEventListener('click', () => {
       const count = STATE.tabs.filter(t => t.url).length;
       if (count === 0) { showToast('No pages to bookmark'); return; }
@@ -11592,12 +11643,17 @@
       // Cookies — async via IPC (avoids empty document.cookie in Electron)
       set('secCookies', '…'); badge('secCookBadge', 'sec-warn', '…');
       const cookiePromise = (window.etherx?.cookies?.getAll)
-        ? window.etherx.cookies.getAll(url).catch(() => [])
+        ? window.etherx.cookies.getAll(url).catch(() => null)
         : Promise.resolve(null);
-      cookiePromise.then(cookies => {
-        let ck;
-        if (Array.isArray(cookies)) { ck = cookies.length; }
-        else { ck = document.cookie.split(';').filter(c => c.trim()).length; }
+      cookiePromise.then(res => {
+        let ck = 0;
+        if (Array.isArray(res)) {
+          ck = res.length;
+        } else if (res && Array.isArray(res.cookies)) {
+          ck = res.cookies.length;
+        } else {
+          ck = document.cookie.split(';').filter(c => c.trim()).length;
+        }
         set('secCookies', ck ? ck + ' cookie(s) present' : 'No cookies set');
         badge('secCookBadge', ck ? 'sec-warn' : 'sec-ok', ck ? 'Present (' + ck + ')' : 'None');
       });
@@ -11613,7 +11669,7 @@
         if (fromMeta !== undefined) {
           _secCspCache.set(url, { csp: fromMeta, ts: Date.now() });
           if (fromMeta) { set('secCsp', fromMeta.slice(0, 120) + (fromMeta.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
-          else { set('secCsp', 'No CSP header'); badge('secCspBadge', 'sec-warn', 'Missing'); }
+          else { set('secCsp', 'N/A — nije dostupno (proxy mode)'); badge('secCspBadge', 'sec-warn', 'N/A'); }
         } else if (wv && wv.executeJavaScript) {
           set('secCsp', '…'); badge('secCspBadge', 'sec-warn', '…');
           Promise.race([
@@ -12627,7 +12683,7 @@
         // Check DevTools
         checks.push(document.getElementById('devtools') ? '\u2705 DevTools dostupni' : '\u274c DevTools nedostupni');
         // Check iframes
-        const iframes = ['walletFrame', 'bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
+        const iframes = ['bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
         let iOk = 0; iframes.forEach(id => { if (document.getElementById(id)) iOk++; });
         checks.push(iOk === iframes.length ? '\u2705 Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '\u26a0\ufe0f Iframes: ' + iOk + '/' + iframes.length);
         // Check localStorage
@@ -13255,78 +13311,302 @@
     (function initAiSettings() {
       const cfg = DB.getSettings();
       const modelSel = document.getElementById('settingsAiModel');
+      const providerSel = document.getElementById('settingsAiProvider');
       const geminiKeyEl = document.getElementById('settingsGeminiKey');
       const openaiKeyEl = document.getElementById('settingsOpenaiKey');
       const anthropicKeyEl = document.getElementById('settingsAnthropicKey');
       const tempSlider = document.getElementById('settingsAiTemp');
       const tempVal = document.getElementById('settingsAiTempVal');
+      const banner = document.getElementById('aiStatusBanner');
+      const histEl = document.getElementById('aiTestHistory');
       if (!modelSel) return;
 
-      // Restore saved values
+      // ── Helper: read API key (supports both camelCase and snake_case storage) ──
+      function getStoredApiKey(provider) {
+        const s = DB.getSettings();
+        if (provider === 'gemini') return s.geminiApiKey || s.gemini_api_key || '';
+        if (provider === 'openai') return s.openaiApiKey || s.openai_api_key || '';
+        if (provider === 'anthropic') return s.anthropicApiKey || s.anthropic_api_key || '';
+        return '';
+      }
+      function currentProvider() {
+        const m = modelSel.value || '';
+        if (m.startsWith('gpt')) return 'openai';
+        if (m.startsWith('claude')) return 'anthropic';
+        return 'gemini';
+      }
+      function currentApiKey() {
+        const p = currentProvider();
+        if (p === 'gemini') return geminiKeyEl?.value.trim() || getStoredApiKey('gemini');
+        if (p === 'openai') return openaiKeyEl?.value.trim() || getStoredApiKey('openai');
+        if (p === 'anthropic') return anthropicKeyEl?.value.trim() || getStoredApiKey('anthropic');
+        return '';
+      }
+
+      // ── Status banner ──
+      function showBanner(ok, msg) {
+        if (!banner) return;
+        banner.style.display = '';
+        banner.style.background = ok ? 'rgba(39,174,96,.12)' : 'rgba(231,76,60,.12)';
+        banner.style.borderColor = ok ? '#27ae6044' : '#e74c3c44';
+        banner.style.color = ok ? '#2ecc71' : '#e74c3c';
+        banner.innerHTML = (ok ? '✅ ' : '⚠️ ') + msg;
+      }
+
+      // ── Restore saved values ──
+      const savedProvider = cfg.aiProvider || (cfg.aiModel?.startsWith('gpt') ? 'openai' : cfg.aiModel?.startsWith('claude') ? 'anthropic' : 'gemini');
+      if (providerSel) providerSel.value = savedProvider;
       if (cfg.aiModel) modelSel.value = cfg.aiModel;
-      if (cfg.geminiApiKey && geminiKeyEl) geminiKeyEl.value = cfg.geminiApiKey;
-      if (cfg.openaiApiKey && openaiKeyEl) openaiKeyEl.value = cfg.openaiApiKey;
-      if (cfg.anthropicApiKey && anthropicKeyEl) anthropicKeyEl.value = cfg.anthropicApiKey;
+      const gk = getStoredApiKey('gemini');
+      const ok_ = getStoredApiKey('openai');
+      const ak = getStoredApiKey('anthropic');
+      if (gk && geminiKeyEl) geminiKeyEl.value = gk;
+      if (ok_ && openaiKeyEl) openaiKeyEl.value = ok_;
+      if (ak && anthropicKeyEl) anthropicKeyEl.value = ak;
       if (cfg.aiTemperature !== undefined && tempSlider) { tempSlider.value = cfg.aiTemperature; if (tempVal) tempVal.textContent = cfg.aiTemperature; }
 
-      // Show/hide API key row based on model selection
+      // Show initial status
+      const hasKey = gk || ok_ || ak;
+      if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || 'gemini-2.5-flash') + '</strong>');
+      else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+
+      // ── Provider selector changes key rows ──
       function updateKeyRows() {
-        const m = modelSel.value;
-        const isGemini = m.startsWith('gemini');
-        const isOpenAI = m.startsWith('gpt');
-        const isAnthropic = m.startsWith('claude');
-        const gr = document.getElementById('aiKeyRowGemini');
-        const or = document.getElementById('aiKeyRowOpenai');
-        const ar = document.getElementById('aiKeyRowAnthropic');
-        if (gr) gr.style.display = isGemini ? '' : 'none';
-        if (or) or.style.display = isOpenAI ? '' : 'none';
-        if (ar) ar.style.display = isAnthropic ? '' : 'none';
+        const p = providerSel?.value || currentProvider();
+        document.getElementById('aiKeyRowGemini')?.style && (document.getElementById('aiKeyRowGemini').style.display = p === 'gemini' ? '' : 'none');
+        document.getElementById('aiKeyRowOpenai')?.style && (document.getElementById('aiKeyRowOpenai').style.display = p === 'openai' ? '' : 'none');
+        document.getElementById('aiKeyRowAnthropic')?.style && (document.getElementById('aiKeyRowAnthropic').style.display = p === 'anthropic' ? '' : 'none');
+        // Also filter model dropdown to show only models for that provider
+        const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+        const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
+        const claudeModels = ['claude-3-5-sonnet', 'claude-3-haiku', 'claude-3-opus'];
+        const defaults = p === 'openai' ? openaiModels : p === 'anthropic' ? claudeModels : geminiModels;
+        // Only reset options to defaults if we haven't fetched live models for this provider
+        if (!modelSel.dataset['populated_' + p]) {
+          const prev = modelSel.value;
+          modelSel.innerHTML = defaults.map(m => `<option value="${m}">${m}</option>`).join('');
+          if (defaults.includes(prev)) modelSel.value = prev;
+        }
       }
       updateKeyRows();
-      modelSel.addEventListener('change', updateKeyRows);
+      providerSel?.addEventListener('change', updateKeyRows);
 
-      // Temperature slider
-      if (tempSlider && tempVal) {
-        tempSlider.addEventListener('input', () => { tempVal.textContent = tempSlider.value; });
+      // ── Temperature slider ──
+      if (tempSlider && tempVal) tempSlider.addEventListener('input', () => { tempVal.textContent = tempSlider.value; });
+
+      // ── Fetch available models from API ──
+      async function fetchModels(provider, key) {
+        const fetchBtn = document.getElementById(provider === 'gemini' ? 'aiFetchModelsBtn' : 'aiFetchModelsOpenaiBtn');
+        if (fetchBtn) { fetchBtn.disabled = true; fetchBtn.textContent = '⏳'; }
+        const modelDesc = document.getElementById('aiModelDesc');
+        try {
+          let models = [];
+          if (provider === 'gemini') {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + (await r.text()).slice(0, 120));
+            const d = await r.json();
+            models = (d.models || [])
+              .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+              .map(m => m.name.replace('models/', ''))
+              .filter(m => m.includes('gemini'));
+          } else if (provider === 'openai') {
+            const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + key } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            models = (d.data || []).map(m => m.id).filter(m => m.includes('gpt')).sort();
+          }
+          if (!models.length) throw new Error('Nema dostupnih modela');
+          const prev = modelSel.value;
+          modelSel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+          if (models.includes(prev)) modelSel.value = prev;
+          modelSel.dataset['populated_' + provider] = '1';
+          if (modelDesc) modelDesc.textContent = `✅ Dohvaćeno ${models.length} modela`;
+          showBanner(true, `Dohvaćeno <strong>${models.length}</strong> dostupnih modela za <strong>${provider}</strong>.`);
+          _saveAiTestResult({ ts: Date.now(), action: 'fetch-models', provider, ok: true, detail: models.length + ' modela' });
+          renderAiHistory();
+        } catch (e) {
+          if (modelDesc) modelDesc.textContent = '❌ Greška: ' + e.message;
+          showBanner(false, 'Greška pri dohvatu modela: ' + e.message);
+          _saveAiTestResult({ ts: Date.now(), action: 'fetch-models', provider, ok: false, detail: e.message });
+          renderAiHistory();
+        } finally {
+          if (fetchBtn) { fetchBtn.disabled = false; fetchBtn.textContent = '⬇ Modeli'; }
+        }
       }
+      document.getElementById('aiFetchModelsBtn')?.addEventListener('click', () => {
+        const k = geminiKeyEl?.value.trim();
+        if (!k) { showBanner(false, 'Unesi Gemini API ključ prije dohvata modela.'); return; }
+        fetchModels('gemini', k);
+      });
+      document.getElementById('aiFetchModelsOpenaiBtn')?.addEventListener('click', () => {
+        const k = openaiKeyEl?.value.trim();
+        if (!k) { showBanner(false, 'Unesi OpenAI API ključ prije dohvata modela.'); return; }
+        fetchModels('openai', k);
+      });
 
-      // Save button
+      // ── Save button ──
       const saveBtn = document.getElementById('saveAiSettings');
       if (saveBtn) saveBtn.addEventListener('click', () => {
+        const p = providerSel?.value || 'gemini';
+        DB.saveSetting('aiProvider', p);
         DB.saveSetting('aiModel', modelSel.value);
-        if (geminiKeyEl) DB.saveSetting('geminiApiKey', geminiKeyEl.value.trim());
-        if (openaiKeyEl) DB.saveSetting('openaiApiKey', openaiKeyEl.value.trim());
-        if (anthropicKeyEl) DB.saveSetting('anthropicApiKey', anthropicKeyEl.value.trim());
+        DB.saveSetting('geminiApiKey', geminiKeyEl?.value.trim() || '');
+        DB.saveSetting('openaiApiKey', openaiKeyEl?.value.trim() || '');
+        DB.saveSetting('anthropicApiKey', anthropicKeyEl?.value.trim() || '');
+        // Also save legacy snake_case aliases so other code finds them
+        DB.saveSetting('gemini_api_key', geminiKeyEl?.value.trim() || '');
+        DB.saveSetting('openai_api_key', openaiKeyEl?.value.trim() || '');
         if (tempSlider) DB.saveSetting('aiTemperature', Number(tempSlider.value));
         showToast('✅ AI postavke spremljene');
+        showBanner(true, 'Postavke spremljene. Model: <strong>' + modelSel.value + '</strong>');
       });
 
-      // Test API button
+      // ── Test ALL AI functions ──
       const testBtn = document.getElementById('testAiSettings');
       if (testBtn) testBtn.addEventListener('click', async () => {
+        const key = currentApiKey();
+        if (!key) { showBanner(false, 'API ključ nije unesen. Unesi ključ i klikni Spremi.'); return; }
+        const model = modelSel.value;
+        const provider = currentProvider();
         testBtn.disabled = true;
-        testBtn.textContent = '⏳ Testiranje...';
+        testBtn.innerHTML = '⏳ Testiranje...';
+        const resultsGroup = document.getElementById('aiTestResultsGroup');
+        const resultsEl = document.getElementById('aiTestResults');
+        if (resultsGroup) resultsGroup.style.display = '';
+        if (resultsEl) resultsEl.innerHTML = '<div style="color:#858585;font-size:11px">⏳ Pokrećem testove…</div>';
+
+        const tests = [];
+        const ts = Date.now();
+
+        // ── Test 1: API connectivity ──
         try {
-          const model = modelSel.value;
-          const key = model.startsWith('gemini') ? (geminiKeyEl?.value.trim() || '') :
-            model.startsWith('gpt') ? (openaiKeyEl?.value.trim() || '') :
-              (anthropicKeyEl?.value.trim() || '');
-          if (!key) { showToast('⚠️ Unesi API ključ prije testiranja'); testBtn.disabled = false; testBtn.textContent = '🔬 Testiraj API'; return; }
-          // Quick test: Gemini
-          if (model.startsWith('gemini')) {
+          let r;
+          if (provider === 'gemini') {
+            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: 'Odgovori samo: OK' }] }], generationConfig: { maxOutputTokens: 10 } })
+            });
+            if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error('HTTP ' + r.status + (e.error?.message ? ' — ' + e.error.message : '')); }
+            const d = await r.json();
+            const reply = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            tests.push({ ok: true, name: 'API konekcija (' + model + ')', detail: 'Odgovor: "' + reply.slice(0, 60) + '"' });
+          } else if (provider === 'openai') {
+            r = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+              body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say: OK' }], max_tokens: 10 })
+            });
+            if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error('HTTP ' + r.status + (e.error?.message ? ' — ' + e.error.message : '')); }
+            const d = await r.json();
+            const reply = d.choices?.[0]?.message?.content || '';
+            tests.push({ ok: true, name: 'API konekcija (' + model + ')', detail: 'Odgovor: "' + reply.slice(0, 60) + '"' });
+          } else {
+            tests.push({ ok: null, name: 'API konekcija', detail: 'Anthropic testiranje nije implementirano' });
+          }
+        } catch (e) {
+          tests.push({ ok: false, name: 'API konekcija', detail: e.message });
+        }
+
+        // ── Test 2: Sažetak funkcija ──
+        try {
+          if (provider === 'gemini') {
             const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text: 'Say: OK' }] }] })
+              body: JSON.stringify({ contents: [{ parts: [{ text: 'Napiši 1 kratku rečenicu na hrvatskom o Bitcoinu.' }] }], generationConfig: { maxOutputTokens: 60, temperature: 0.2 } })
             });
-            if (r.ok) showToast('✅ Gemini API radi!'); else showToast('❌ Gemini API greška: ' + r.status);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            const txt = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            tests.push({ ok: !!txt, name: 'AI sažimanje', detail: txt ? 'Radi ✓ — "' + txt.slice(0, 80) + '"' : 'Prazan odgovor' });
           } else {
-            showToast('ℹ️ Testiranje za ' + model + ' nije implementirano');
+            tests.push({ ok: null, name: 'AI sažimanje', detail: 'Test dostupan samo za Gemini' });
           }
-        } catch (e) { showToast('❌ API test greška: ' + e.message); }
-        testBtn.disabled = false; testBtn.textContent = '🔬 Testiraj API';
+        } catch (e) {
+          tests.push({ ok: false, name: 'AI sažimanje', detail: e.message });
+        }
+
+        // ── Test 3: Phishing detekcija ──
+        try {
+          if (provider === 'gemini') {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: 'Is "https://google.com" a phishing site? Answer only: SAFE or PHISHING' }] }], generationConfig: { maxOutputTokens: 10, temperature: 0 } })
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            const txt = (d.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().toUpperCase();
+            tests.push({ ok: txt.includes('SAFE'), name: 'Phishing detekcija', detail: 'Odgovor za google.com: "' + txt + '"' });
+          } else {
+            tests.push({ ok: null, name: 'Phishing detekcija', detail: 'Test dostupan samo za Gemini' });
+          }
+        } catch (e) {
+          tests.push({ ok: false, name: 'Phishing detekcija', detail: e.message });
+        }
+
+        // ── Test 4: Provjera kvote / billing ──
+        try {
+          if (provider === 'gemini') {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            const n = r.ok ? ((await r.json()).models || []).length : 0;
+            tests.push({ ok: r.ok, name: 'API kvota / pristup modelima', detail: r.ok ? 'Dostupno ' + n + ' modela' : 'HTTP ' + r.status + ' — provjeri billing' });
+          } else {
+            tests.push({ ok: null, name: 'API kvota', detail: 'N/A za ovog providera' });
+          }
+        } catch (e) {
+          tests.push({ ok: false, name: 'API kvota', detail: e.message });
+        }
+
+        // ── Render results ──
+        const allOk = tests.every(t => t.ok !== false);
+        if (resultsEl) {
+          resultsEl.innerHTML = tests.map(t => {
+            const ic = t.ok === true ? '✅' : t.ok === false ? '❌' : 'ℹ️';
+            const cl = t.ok === true ? '#2ecc71' : t.ok === false ? '#e74c3c' : '#858585';
+            return `<div style="padding:7px 0;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:13px">${ic}</span>
+              <div><div style="font-size:11px;font-weight:600;color:${cl}">${escHtml(t.name)}</div>
+              <div style="font-size:10px;color:#858585;margin-top:2px">${escHtml(t.detail)}</div></div></div>`;
+          }).join('');
+        }
+        showBanner(allOk, allOk ? 'Svi testovi prošli! AI je spreman za korištenje.' : 'Neki testovi nisu prošli. Provjeri detalje ispod.');
+        _saveAiTestResult({ ts, action: 'full-test', provider, model, ok: allOk, tests });
+        renderAiHistory();
+        testBtn.disabled = false;
+        testBtn.innerHTML = '🔬 Testiraj sve AI funkcije';
       });
 
-      // AI feature toggles
+      // ── AI test history (localStorage) ──
+      function _saveAiTestResult(rec) {
+        const hist = JSON.parse(localStorage.getItem('ex_ai_test_history') || '[]');
+        hist.unshift(rec);
+        localStorage.setItem('ex_ai_test_history', JSON.stringify(hist.slice(0, 30)));
+      }
+      function renderAiHistory() {
+        if (!histEl) return;
+        const hist = JSON.parse(localStorage.getItem('ex_ai_test_history') || '[]');
+        if (!hist.length) { histEl.innerHTML = '<div style="color:#555;font-size:11px;padding:6px 0">Nema prethodnih testova.</div>'; return; }
+        histEl.innerHTML = hist.map(r => {
+          const d = new Date(r.ts).toLocaleString('hr-HR');
+          const ic = r.ok ? '✅' : '❌';
+          const detail = r.action === 'full-test'
+            ? (r.tests || []).map(t => (t.ok ? '✓' : '✗') + ' ' + t.name).join(' · ')
+            : (r.detail || '');
+          return `<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:10px">
+            <span style="color:#666">${d}</span>
+            <span style="margin:0 6px">${ic}</span>
+            <span style="color:#aaa">${escHtml(r.action === 'full-test' ? 'Test: ' + (r.model || r.provider) : r.action)}</span>
+            <div style="color:#666;margin-top:2px">${escHtml(detail.slice(0, 140))}</div></div>`;
+        }).join('');
+      }
+      renderAiHistory();
+
+      // ── Clear history ──
+      document.getElementById('aiClearHistory')?.addEventListener('click', () => {
+        localStorage.removeItem('ex_ai_test_history');
+        renderAiHistory();
+        showToast('🗑 Povijest testova obrisana');
+      });
+
+      // ── AI feature toggles ──
       ['toggleAiSummarize', 'toggleAiPhishing', 'toggleAiSearch'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -13912,6 +14192,18 @@
 
     // ── Restore last session tabs ─────────────────────────────────────────────
     (function restoreSession() {
+      // Detect "Move Tab to New Window" launch: hash = #move-tab=<encoded-url>
+      // In that case skip session restore and open only the single moved tab.
+      const _hash = window.location.hash.slice(1);
+      if (_hash.startsWith('move-tab=')) {
+        const _movedUrl = decodeURIComponent(_hash.slice('move-tab='.length));
+        createTab(_movedUrl || '');
+        renderQuickLinks();
+        history.replaceState(null, '', window.location.pathname);
+        consoleLog('info', '🪟 Tab moved to new window' + (_movedUrl ? ': ' + _movedUrl : ''));
+        consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+        return;
+      }
       const cfg = DB.getSettings();
       // If user set "opensWith" to something other than "All windows from last session", skip restore
       if (cfg.opensWith && cfg.opensWith !== 'All windows from last session') {
@@ -15438,9 +15730,10 @@
         });
       }
 
-      // Update SW status when settings panel opens
+      // Update SW status when settings panel opens (also updates on flags tab click)
       document.getElementById('settingsBtn')?.addEventListener('click', () => {
         setTimeout(updateServiceWorkerStatus, 300);
+        setTimeout(detectGPU, 300);
       });
 
       // ── GPU / WebGL Status ───────────────────────────────────────────────────
@@ -15480,8 +15773,15 @@
         }
       }
 
-      // Detect GPU when Flags tab is opened
-      document.querySelector('[data-stab="flags"]')?.addEventListener('click', detectGPU);
+      // Detect GPU + SW status when Flags tab is opened
+      document.querySelector('[data-stab="flags"]')?.addEventListener('click', () => {
+        detectGPU();
+        updateServiceWorkerStatus();
+      });
+
+      // Run GPU detection once on init (so status is ready when tab is first opened)
+      detectGPU();
+      updateServiceWorkerStatus();
 
       // ── Backup ───────────────────────────────────────────────────────────────
       document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
@@ -15517,6 +15817,966 @@
       });
 
     })();
+
+    // ══ Bookmark Manager ═══════════════════════════════════════════════════
+    (function () {
+      let _bmEditingUrl = null;   // URL of bookmark currently in edit drawer
+      let _bmActiveFolder = null; // null = all, '' = unfiled, 'FolderName' = specific
+      let _bmSelected = new Set();
+      let _bmSort = { key: 'title', asc: true };
+
+      // ── Open / Close ────────────────────────────────────────────────────
+      window.openBookmarkManager = function () {
+        const modal = document.getElementById('bmManagerModal');
+        modal.style.display = 'flex';
+        _bmSelected.clear();
+        _bmActiveFolder = null;
+        _bmEditingUrl = null;
+        document.getElementById('bmEditDrawer').style.display = 'none';
+        document.getElementById('bmSearchInput').value = '';
+        _bmRenderTree();
+        _bmRenderList();
+        document.getElementById('bmSearchInput').focus();
+      };
+
+      document.getElementById('closeBmManager').addEventListener('click', () => {
+        document.getElementById('bmManagerModal').style.display = 'none';
+      });
+      document.getElementById('bmManagerModal').addEventListener('click', e => {
+        if (e.target === document.getElementById('bmManagerModal')) {
+          document.getElementById('bmManagerModal').style.display = 'none';
+        }
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('bmManagerModal').style.display === 'flex') {
+          document.getElementById('bmManagerModal').style.display = 'none';
+        }
+      });
+
+      // ── Folder Tree ─────────────────────────────────────────────────────
+      function _bmRenderTree() {
+        const tree = document.getElementById('bmFolderTree');
+        const folders = DB.getBookmarkFolderList();
+        const all = DB.getBookmarks();
+        const unfiledCount = all.filter(b => !b.folder).length;
+
+        let html = '';
+        // All bookmarks
+        html += `<div class="bm-tree-item${_bmActiveFolder === null ? ' bm-tree-active' : ''}" data-folder="__all__" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px">
+          <span>📚</span><span style="flex:1">Svi bookmarci</span><span style="font-size:10px;color:var(--text3)">${all.length}</span>
+        </div>`;
+        // Unfiled
+        html += `<div class="bm-tree-item${_bmActiveFolder === '' ? ' bm-tree-active' : ''}" data-folder="__unfiled__" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px">
+          <span>📄</span><span style="flex:1">Bez foldera</span><span style="font-size:10px;color:var(--text3)">${unfiledCount}</span>
+        </div>`;
+        // Separator
+        if (folders.length) html += '<div style="border-top:1px solid var(--border);margin:4px 0"></div>';
+        // Folders
+        folders.forEach(f => {
+          const cnt = all.filter(b => b.folder === f).length;
+          const isActive = _bmActiveFolder === f;
+          html += `<div class="bm-tree-item${isActive ? ' bm-tree-active' : ''}" data-folder="${escHtml(f)}"
+            style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px"
+            draggable="false">
+            <span>📁</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f)}</span>
+            <span style="font-size:10px;color:var(--text3)">${cnt}</span>
+            <button class="bm-tree-del" data-folder="${escHtml(f)}" title="Obriši folder"
+              style="background:none;border:none;color:transparent;cursor:pointer;font-size:13px;padding:0 2px;transition:color .15s">×</button>
+          </div>`;
+        });
+        tree.innerHTML = html;
+
+        // Active style injection (once)
+        if (!document.getElementById('bmMgrStyle')) {
+          const s = document.createElement('style');
+          s.id = 'bmMgrStyle';
+          s.textContent = `
+            .bm-tree-item:hover { background: var(--bg3) !important; }
+            .bm-tree-item:hover .bm-tree-del { color: var(--text3) !important; }
+            .bm-tree-active { background: rgba(102,126,234,.18) !important; color: var(--accent) !important; font-weight:600 }
+            .bm-mgr-row:hover { background: var(--bg2) !important; }
+            .bm-mgr-row.bm-mgr-selected { background: rgba(102,126,234,.12) !important; }
+            .bm-tree-item { transition: background .12s; }
+          `;
+          document.head.appendChild(s);
+        }
+
+        // Folder click
+        tree.querySelectorAll('.bm-tree-item').forEach(el => {
+          el.addEventListener('click', e => {
+            if (e.target.classList.contains('bm-tree-del')) return;
+            const f = el.dataset.folder;
+            _bmActiveFolder = f === '__all__' ? null : (f === '__unfiled__' ? '' : f);
+            _bmSelected.clear();
+            _bmRenderTree();
+            _bmRenderList();
+          });
+        });
+
+        // Delete folder buttons
+        tree.querySelectorAll('.bm-tree-del').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const f = btn.dataset.folder;
+            if (confirm(`Obriši folder "${f}"?\nBookmarci će biti premješteni u "Bez foldera".`)) {
+              DB.deleteBookmarkFolder(f);
+              if (_bmActiveFolder === f) _bmActiveFolder = null;
+              _bmRenderTree();
+              _bmRenderList();
+              renderBookmarksPanel();
+              showToast('📁 Folder obrisan');
+            }
+          });
+        });
+      }
+
+      // ── List Render ─────────────────────────────────────────────────────
+      function _bmRenderList(filter) {
+        const container = document.getElementById('bmMgrList');
+        const q = (filter ?? document.getElementById('bmSearchInput').value).toLowerCase().trim();
+        let bms = DB.getBookmarks();
+
+        // Filter by active folder
+        if (_bmActiveFolder !== null) {
+          bms = bms.filter(b => (b.folder || '') === _bmActiveFolder);
+        }
+        // Search filter
+        if (q) {
+          bms = bms.filter(b =>
+            (b.title || '').toLowerCase().includes(q) ||
+            (b.url || '').toLowerCase().includes(q) ||
+            (b.description || '').toLowerCase().includes(q) ||
+            (b.tags || '').toLowerCase().includes(q)
+          );
+        }
+        // Sort
+        bms.sort((a, b) => {
+          let va = (a[_bmSort.key] || '').toString().toLowerCase();
+          let vb = (b[_bmSort.key] || '').toString().toLowerCase();
+          if (_bmSort.key === 'ts') { va = a.ts || 0; vb = b.ts || 0; }
+          return _bmSort.asc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+        });
+
+        if (!bms.length) {
+          container.innerHTML = `<div style="text-align:center;padding:48px 20px;color:var(--text3);font-size:13px">${q ? '🔍 Nema rezultata za "' + escHtml(q) + '"' : '⭐ Nema bookmarkova ovdje'}</div>`;
+          _bmUpdateBulkBar();
+          return;
+        }
+
+        container.innerHTML = bms.map(b => {
+          const sel = _bmSelected.has(b.url);
+          const domain = (() => { try { return new URL(b.url).hostname.replace('www.', ''); } catch { return ''; } })();
+          const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
+          const tags = b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+          return `<div class="bm-mgr-row${sel ? ' bm-mgr-selected' : ''}" data-url="${escHtml(b.url)}"
+            style="display:grid;grid-template-columns:28px 1fr 200px 120px 36px;gap:0;align-items:center;padding:6px 10px 6px 8px;border-bottom:1px solid var(--border);cursor:default;font-size:12px">
+            <div><input type="checkbox" class="bm-chk" data-url="${escHtml(b.url)}" ${sel ? 'checked' : ''} style="cursor:pointer"></div>
+            <div style="min-width:0;padding-right:8px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <img src="${faviconUrl}" width="14" height="14" style="border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">
+                <span class="bm-row-title" data-url="${escHtml(b.url)}" style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(b.title || b.url)}">${escHtml(b.title || b.url)}</span>
+              </div>
+              <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${escHtml(b.url)}</div>
+              ${b.description ? `<div style="font-size:10px;color:var(--text3);margin-top:1px;font-style:italic">${escHtml(b.description.slice(0, 80))}</div>` : ''}
+              ${tags.length ? `<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${tags.map(t => `<span style="background:rgba(102,126,234,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:10px">${escHtml(t)}</span>`).join('')}</div>` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px" title="${escHtml(b.url)}">${escHtml(domain)}</div>
+            <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.folder ? `<span style="background:var(--bg3);border-radius:4px;padding:2px 6px">📁 ${escHtml(b.folder)}</span>` : ''}</div>
+            <div style="display:flex;gap:2px;justify-content:flex-end">
+              <button class="bm-row-edit" data-url="${escHtml(b.url)}" title="Uredi" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">✏️</button>
+              <button class="bm-row-del" data-url="${escHtml(b.url)}" title="Obriši" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">🗑</button>
+            </div>
+          </div>`;
+        }).join('');
+
+        // Row title click → navigate
+        container.querySelectorAll('.bm-row-title').forEach(el => {
+          el.addEventListener('click', () => {
+            navigateTo(el.dataset.url);
+            document.getElementById('bmManagerModal').style.display = 'none';
+          });
+        });
+
+        // Checkbox
+        container.querySelectorAll('.bm-chk').forEach(chk => {
+          chk.addEventListener('change', () => {
+            if (chk.checked) _bmSelected.add(chk.dataset.url);
+            else _bmSelected.delete(chk.dataset.url);
+            _bmUpdateBulkBar();
+            const row = chk.closest('.bm-mgr-row');
+            if (row) row.classList.toggle('bm-mgr-selected', chk.checked);
+          });
+        });
+
+        // Edit button
+        container.querySelectorAll('.bm-row-edit').forEach(btn => {
+          btn.addEventListener('click', () => _bmOpenEdit(btn.dataset.url));
+        });
+
+        // Delete button
+        container.querySelectorAll('.bm-row-del').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const url = btn.dataset.url;
+            if (confirm('Obriši ovaj bookmark?')) {
+              DB.removeBookmark(url);
+              _bmSelected.delete(url);
+              _bmRenderTree();
+              _bmRenderList();
+              renderBookmarksPanel();
+              showToast('🗑 Bookmark obrisan');
+            }
+          });
+        });
+
+        _bmUpdateBulkBar();
+      }
+
+      // ── Select All ──────────────────────────────────────────────────────
+      document.getElementById('bmSelectAll').addEventListener('change', function () {
+        const q = document.getElementById('bmSearchInput').value.toLowerCase().trim();
+        let bms = DB.getBookmarks();
+        if (_bmActiveFolder !== null) bms = bms.filter(b => (b.folder || '') === _bmActiveFolder);
+        if (q) bms = bms.filter(b => (b.title + b.url + (b.description || '') + (b.tags || '')).toLowerCase().includes(q));
+        if (this.checked) bms.forEach(b => _bmSelected.add(b.url));
+        else _bmSelected.clear();
+        _bmRenderList();
+      });
+
+      // ── Bulk Bar ────────────────────────────────────────────────────────
+      function _bmUpdateBulkBar() {
+        const bar = document.getElementById('bmBulkBar');
+        const count = _bmSelected.size;
+        bar.style.display = count > 0 ? 'flex' : 'none';
+        document.getElementById('bmBulkCount').textContent = count + ' odabrano';
+        // Populate move select
+        const sel = document.getElementById('bmBulkMoveSelect');
+        const folders = DB.getBookmarkFolderList();
+        sel.innerHTML = '<option value="">— Premjesti u folder —</option>' +
+          '<option value="__unfiled__">📄 Bez foldera</option>' +
+          folders.map(f => `<option value="${escHtml(f)}">📁 ${escHtml(f)}</option>`).join('');
+      }
+      document.getElementById('bmBulkMove').addEventListener('click', () => {
+        const target = document.getElementById('bmBulkMoveSelect').value;
+        if (!target) { showToast('Odaberi folder'); return; }
+        const folder = target === '__unfiled__' ? '' : target;
+        _bmSelected.forEach(url => DB.updateBookmark(url, { folder }));
+        showToast(`📁 Premješteno ${_bmSelected.size} bookmarkova`);
+        _bmSelected.clear();
+        _bmRenderTree();
+        _bmRenderList();
+        renderBookmarksPanel();
+      });
+      document.getElementById('bmBulkDelete').addEventListener('click', () => {
+        if (!confirm(`Obriši ${_bmSelected.size} odabranih bookmarkova?`)) return;
+        _bmSelected.forEach(url => DB.removeBookmark(url));
+        showToast(`🗑 Obrisano ${_bmSelected.size} bookmarkova`);
+        _bmSelected.clear();
+        _bmRenderTree();
+        _bmRenderList();
+        renderBookmarksPanel();
+      });
+      document.getElementById('bmBulkClear').addEventListener('click', () => {
+        const q = document.getElementById('bmSearchInput').value.toLowerCase().trim();
+        let bms = DB.getBookmarks();
+        if (_bmActiveFolder !== null) bms = bms.filter(b => (b.folder || '') === _bmActiveFolder);
+        if (q) bms = bms.filter(b => (b.title + b.url + (b.description || '') + (b.tags || '')).toLowerCase().includes(q));
+        if (_bmSelected.size === bms.length) _bmSelected.clear();
+        else bms.forEach(b => _bmSelected.add(b.url));
+        _bmRenderList();
+      });
+
+      // ── Sort headers ────────────────────────────────────────────────────
+      document.querySelectorAll('[data-sort]').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => {
+          const k = th.dataset.sort;
+          if (_bmSort.key === k) _bmSort.asc = !_bmSort.asc;
+          else { _bmSort.key = k; _bmSort.asc = true; }
+          _bmRenderList();
+        });
+      });
+
+      // ── Search ──────────────────────────────────────────────────────────
+      document.getElementById('bmSearchInput').addEventListener('input', e => {
+        _bmRenderList(e.target.value);
+      });
+
+      // ── Add Folder ──────────────────────────────────────────────────────
+      document.getElementById('bmMgrAddFolder').addEventListener('click', () => {
+        const name = prompt('Naziv novog foldera:');
+        if (name && name.trim()) {
+          DB.createBookmarkFolder(name.trim());
+          _bmActiveFolder = name.trim();
+          _bmRenderTree();
+          _bmRenderList();
+          renderBookmarksPanel();
+          showToast('📁 Folder kreiran: ' + name.trim());
+        }
+      });
+
+      // ── Add Bookmark ────────────────────────────────────────────────────
+      document.getElementById('bmMgrAddBm').addEventListener('click', () => {
+        const t = getActiveTab();
+        const url = t?.url || '';
+        const title = t?.title || '';
+        // Prepopulate edit drawer for new bookmark
+        _bmEditingUrl = '__new__';
+        _bmOpenEdit(null, { url, title, folder: _bmActiveFolder && _bmActiveFolder !== '' ? _bmActiveFolder : '', description: '', tags: '' });
+      });
+
+      // ── Export ──────────────────────────────────────────────────────────
+      document.getElementById('bmMgrExport').addEventListener('click', () => {
+        const bms = DB.getBookmarks();
+        // Netscape HTML format (compatible with all browsers)
+        const lines = ['<!DOCTYPE NETSCAPE-Bookmark-file-1>', '<!-- EtherX Bookmark Export -->', '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">', '<TITLE>Bookmarks</TITLE>', '<H1>Bookmarks</H1>', '<DL><p>'];
+        const folders = DB.getBookmarkFolderList();
+        // Unfiled
+        bms.filter(b => !b.folder).forEach(b => {
+          lines.push(`    <DT><A HREF="${b.url}" ADD_DATE="${Math.floor((b.ts || Date.now()) / 1000)}">${b.title || b.url}</A>`);
+        });
+        // Folders
+        folders.forEach(f => {
+          lines.push(`    <DT><H3>${f}</H3>`, '    <DL><p>');
+          bms.filter(b => b.folder === f).forEach(b => {
+            lines.push(`        <DT><A HREF="${b.url}" ADD_DATE="${Math.floor((b.ts || Date.now()) / 1000)}">${b.title || b.url}</A>`);
+          });
+          lines.push('    </DL><p>');
+        });
+        lines.push('</DL><p>');
+        const blob = new Blob([lines.join('\n')], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `etherx-bookmarks-${new Date().toISOString().split('T')[0]}.html`;
+        a.click();
+        showToast('📤 Bookmarci exported');
+      });
+
+      // ── Import ──────────────────────────────────────────────────────────
+      document.getElementById('bmMgrImport').addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.html,.json';
+        input.addEventListener('change', () => {
+          const file = input.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = e => {
+            try {
+              let count = 0;
+              if (file.name.endsWith('.json')) {
+                const data = JSON.parse(e.target.result);
+                const arr = Array.isArray(data) ? data : (data.bookmarks || []);
+                arr.forEach(b => { if (b.url) { DB.addBookmark({ url: b.url, title: b.title || b.url, folder: b.folder || '', description: b.description || '', tags: b.tags || '' }); count++; } });
+              } else {
+                // Parse Netscape HTML bookmark format
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(e.target.result, 'text/html');
+                let currentFolder = '';
+                doc.querySelectorAll('dt').forEach(dt => {
+                  const h3 = dt.querySelector('h3');
+                  if (h3) { currentFolder = h3.textContent.trim(); DB.createBookmarkFolder(currentFolder); return; }
+                  const a = dt.querySelector('a');
+                  if (a && a.href) {
+                    DB.addBookmark({ url: a.href, title: a.textContent.trim() || a.href, folder: currentFolder });
+                    count++;
+                  }
+                });
+              }
+              _bmRenderTree();
+              _bmRenderList();
+              renderBookmarksPanel();
+              showToast(`📥 Importirano ${count} bookmarkova`);
+            } catch (err) {
+              showToast('❌ Greška pri importu: ' + err.message);
+            }
+          };
+          reader.readAsText(file);
+        });
+        input.click();
+      });
+
+      // ── Edit Drawer ─────────────────────────────────────────────────────
+      function _bmOpenEdit(url, prefill) {
+        const bms = DB.getBookmarks();
+        const b = prefill || bms.find(x => x.url === url) || {};
+        _bmEditingUrl = url;
+        document.getElementById('bmEditTitle').value = b.title || '';
+        document.getElementById('bmEditUrl').value = b.url || url || '';
+        document.getElementById('bmEditDesc').value = b.description || '';
+        document.getElementById('bmEditTags').value = b.tags || '';
+
+        // Populate folder select
+        const folders = DB.getBookmarkFolderList();
+        const sel = document.getElementById('bmEditFolder');
+        sel.innerHTML = '<option value="">— Bez foldera —</option>' +
+          folders.map(f => `<option value="${escHtml(f)}" ${(b.folder || '') === f ? 'selected' : ''}>${escHtml(f)}</option>`).join('');
+        document.getElementById('bmEditFolderNew').value = '';
+
+        document.getElementById('bmEditDrawer').style.display = 'block';
+        document.getElementById('bmEditTitle').focus();
+      }
+
+      document.getElementById('bmEditCancel').addEventListener('click', () => {
+        document.getElementById('bmEditDrawer').style.display = 'none';
+        _bmEditingUrl = null;
+      });
+
+      document.getElementById('bmEditSave').addEventListener('click', () => {
+        const title = document.getElementById('bmEditTitle').value.trim();
+        const url = document.getElementById('bmEditUrl').value.trim();
+        const desc = document.getElementById('bmEditDesc').value.trim();
+        const tags = document.getElementById('bmEditTags').value.trim();
+        const newFolderInput = document.getElementById('bmEditFolderNew').value.trim();
+        const folder = newFolderInput || document.getElementById('bmEditFolder').value;
+
+        if (!url) { showToast('URL je obavezan'); return; }
+        if (newFolderInput) DB.createBookmarkFolder(newFolderInput);
+
+        if (_bmEditingUrl === '__new__') {
+          // New bookmark
+          const existing = DB.getBookmarks().find(b => b.url === url);
+          if (existing) {
+            DB.updateBookmark(url, { title, folder, description: desc, tags });
+            showToast('⭐ Bookmark ažuriran');
+          } else {
+            DB.addBookmark({ url, title: title || url, folder, description: desc, tags, ts: Date.now() });
+            showToast('⭐ Bookmark dodan');
+          }
+        } else {
+          // Update existing - handle URL change
+          const oldUrl = _bmEditingUrl;
+          if (oldUrl && oldUrl !== url) {
+            const old = DB.getBookmarks().find(b => b.url === oldUrl);
+            DB.removeBookmark(oldUrl);
+            DB.addBookmark({ url, title: title || url, folder, description: desc, tags, ts: old?.ts || Date.now() });
+          } else {
+            DB.updateBookmark(url, { title, folder, description: desc, tags });
+          }
+          showToast('💾 Bookmark spremljen');
+        }
+
+        document.getElementById('bmEditDrawer').style.display = 'none';
+        _bmEditingUrl = null;
+        _bmRenderTree();
+        _bmRenderList();
+        renderBookmarksPanel();
+      });
+
+      // Enter to save in edit drawer
+      ['bmEditTitle', 'bmEditUrl', 'bmEditDesc', 'bmEditTags', 'bmEditFolderNew'].forEach(id => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
+          if (e.key === 'Enter') document.getElementById('bmEditSave').click();
+          if (e.key === 'Escape') document.getElementById('bmEditCancel').click();
+        });
+      });
+
+    })();
+    // ══ End Bookmark Manager ═══════════════════════════════════════════════
+
+    // ══ BOBIAI Wallet (embedded, no iframe) ════════════════════════════════
+    // Storage: localStorage['ex_wallet'] = { encrypted, address, network, createdAt }
+    // Encrypted: AES-GCM / PBKDF2 via Web Crypto API
+    // ethers.js v6 UMD loaded from ../assets/ethers.umd.min.js
+    (function () {
+      'use strict';
+
+      const LS_KEY = 'ex_wallet';
+      let _wltSession = null; // { wallet: ethers.Wallet, address, network }
+
+      // ── Persist helpers ─────────────────────────────────────────────────
+      function _wltLoad() {
+        try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch { return null; }
+      }
+      function _wltSave(data) {
+        localStorage.setItem(LS_KEY, JSON.stringify(data));
+        // Sync to SQLite if Electron
+        if (window.etherx?.app) {
+          window.electronAPI?.invoke('db:saveUserProfile', {
+            walletAddress: data.address || '',
+            walletEncrypted: data.encrypted || ''
+          }).catch(() => { });
+        }
+      }
+
+      // ── Web Crypto AES-GCM helpers ───────────────────────────────────────
+      async function _deriveKey(password, salt) {
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations: 210_000, hash: 'SHA-256' },
+          keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+        );
+      }
+      async function _encrypt(plaintext, password) {
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const key = await _deriveKey(password, salt);
+        const enc = new TextEncoder();
+        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+        // Pack: salt(16) + iv(12) + ciphertext, base64 encoded
+        const combined = new Uint8Array(16 + 12 + ct.byteLength);
+        combined.set(salt, 0); combined.set(iv, 16); combined.set(new Uint8Array(ct), 28);
+        return btoa(String.fromCharCode(...combined));
+      }
+      async function _decrypt(b64, password) {
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        const salt = bytes.slice(0, 16);
+        const iv = bytes.slice(16, 28);
+        const ct = bytes.slice(28);
+        const key = await _deriveKey(password, salt);
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+        return new TextDecoder().decode(plain);
+      }
+
+      // ── Ethers helpers ──────────────────────────────────────────────────
+      function _ethers() { return window.ethers; }
+      function _hasEthers() { return !!(window.ethers && window.ethers.Wallet); }
+
+      async function _createWallet() {
+        if (!_hasEthers()) throw new Error('ethers.js nije učitan');
+        const e = _ethers();
+        const wallet = e.Wallet.createRandom();
+        return wallet;
+      }
+      async function _walletFromMnemonic(mnemonic) {
+        if (!_hasEthers()) throw new Error('ethers.js nije učitan');
+        const e = _ethers();
+        const wallet = e.Wallet.fromPhrase(mnemonic.trim());
+        return wallet;
+      }
+      async function _walletFromPrivateKey(pk) {
+        if (!_hasEthers()) throw new Error('ethers.js nije učitan');
+        const e = _ethers();
+        const wallet = new e.Wallet(pk.trim());
+        return wallet;
+      }
+
+      // ── Balance fetch ──────────────────────────────────────────────────
+      const RPC_ENDPOINTS = {
+        ethereum: 'https://cloudflare-eth.com',
+        polygon: 'https://polygon-rpc.com',
+        bsc: 'https://bsc-dataseed.binance.org',
+        arbitrum: 'https://arb1.arbitrum.io/rpc',
+      };
+      async function _fetchBalance(address, network) {
+        const rpc = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.ethereum;
+        try {
+          const resp = await fetch(rpc, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 })
+          });
+          const data = await resp.json();
+          if (data.result) {
+            const wei = BigInt(data.result);
+            const eth = Number(wei) / 1e18;
+            return eth.toFixed(6);
+          }
+        } catch { }
+        return null;
+      }
+
+      // ── Render functions ───────────────────────────────────────────────
+      function _wltRoot() { return document.getElementById('wlt-root'); }
+
+      function _wltRenderLoading(msg) {
+        const r = _wltRoot(); if (!r) return;
+        r.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:48px 24px">
+          <div style="font-size:36px">💰</div>
+          <div style="font-size:13px;color:var(--text2)">${msg || 'Učitavam…'}</div>
+          <div style="width:40px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:40%;background:var(--accent);border-radius:2px;animation:walletLoad 1s infinite alternate"></div></div>
+        </div>`;
+      }
+
+      function _wltRenderSetup() {
+        const r = _wltRoot(); if (!r) return;
+        r.innerHTML = `
+        <div style="padding:24px 16px 16px">
+          <div style="text-align:center;margin-bottom:20px">
+            <div style="font-size:40px;margin-bottom:8px">🔐</div>
+            <div style="font-size:15px;font-weight:700;color:var(--text)">BOBIAI Wallet</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">Privatni ključevi ostaju na uređaju</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button onclick="_wltShowCreate()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:12px;width:100%">✨ Kreiraj novi wallet</button>
+            <button onclick="_wltShowImport()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;padding:12px;width:100%">📥 Uvezi wallet (seed ili ključ)</button>
+          </div>
+          <div style="margin-top:16px;padding:10px 12px;background:#1a1a2e;border-radius:6px;border:1px solid #2a2a4e">
+            <div style="font-size:10px;color:#6c7a9c;line-height:1.6">
+              🛡️ Wallet podaci su šifrirani AES-256 i pohranjeni lokalno — nikada se ne šalju na server.
+            </div>
+          </div>
+        </div>`;
+      }
+
+      function _wltShowCreate() {
+        const r = _wltRoot(); if (!r) return;
+        r.innerHTML = `
+        <div style="padding:16px">
+          <button onclick="_wltRenderSetup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-bottom:12px">← Natrag</button>
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Kreiraj novi wallet</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:16px">Bit će generirana nova recovery fraza (12 riječi).</div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Lozinka (za šifriranje)</label>
+            <input type="password" id="wlt-pwd1" placeholder="Min. 8 znakova" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Potvrdi lozinku</label>
+            <input type="password" id="wlt-pwd2" placeholder="Ponovi lozinku" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
+          </div>
+          <button onclick="_wltDoCreate()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:11px;width:100%">Generiraj wallet</button>
+        </div>`;
+      }
+
+      function _wltShowImport() {
+        const r = _wltRoot(); if (!r) return;
+        r.innerHTML = `
+        <div style="padding:16px">
+          <button onclick="_wltRenderSetup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-bottom:12px">← Natrag</button>
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Uvezi wallet</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:16px">Unesi 12/24-riječnu frazu ili privatni ključ (0x…)</div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Recovery fraza ili privatni ključ</label>
+            <textarea id="wlt-seed" rows="3" placeholder="word1 word2 word3… ili 0xPrivateKey" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:12px;font-family:monospace;resize:none;box-sizing:border-box"></textarea>
+          </div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Lozinka za šifriranje</label>
+            <input type="password" id="wlt-imp-pwd1" placeholder="Min. 8 znakova" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Potvrdi lozinku</label>
+            <input type="password" id="wlt-imp-pwd2" placeholder="Ponovi lozinku" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
+          </div>
+          <button onclick="_wltDoImport()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:11px;width:100%">Uvezi wallet</button>
+        </div>`;
+      }
+
+      function _wltRenderUnlock() {
+        const stored = _wltLoad();
+        const r = _wltRoot(); if (!r) return;
+        r.innerHTML = `
+        <div style="padding:24px 16px">
+          <div style="text-align:center;margin-bottom:20px">
+            <div style="font-size:36px;margin-bottom:8px">🔒</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">Otključaj wallet</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;font-family:monospace">${(stored.address || '').slice(0, 10)}…${(stored.address || '').slice(-6)}</div>
+          </div>
+          <div style="margin-bottom:14px">
+            <input type="password" id="wlt-unlock-pwd" placeholder="Lozinka walletа" autofocus
+              style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:10px 12px;font-size:13px;box-sizing:border-box"
+              onkeydown="if(event.key==='Enter')_wltDoUnlock()">
+          </div>
+          <button onclick="_wltDoUnlock()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:11px;width:100%;margin-bottom:8px">🔓 Otključaj</button>
+          <button onclick="_wltRenderSetup()" style="background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text3);cursor:pointer;font-size:11px;padding:7px;width:100%">Koristi drugi wallet…</button>
+        </div>`;
+        document.getElementById('wlt-unlock-pwd')?.focus();
+      }
+
+      async function _wltRenderMain() {
+        const r = _wltRoot(); if (!r || !_wltSession) return;
+        const { address, network } = _wltSession;
+        const netLabel = { ethereum: 'Ethereum', polygon: 'Polygon', bsc: 'BNB Chain', arbitrum: 'Arbitrum' };
+        r.innerHTML = `
+        <div style="padding:0">
+          <!-- Header / Balance -->
+          <div style="background:linear-gradient(135deg,#1a1f4e,#0d0f2b);padding:16px;text-align:center">
+            <div style="font-size:28px;margin-bottom:4px">💰</div>
+            <div style="font-size:11px;color:#7a86c0;margin-bottom:2px">${netLabel[network] || network}</div>
+            <div id="wlt-balance" style="font-size:22px;font-weight:700;color:#fff;margin-bottom:6px">…</div>
+            <div style="font-size:10px;color:#5a6890;font-family:monospace;cursor:pointer;word-break:break-all" onclick="navigator.clipboard&&navigator.clipboard.writeText('${address}').then(()=>showToast('📋 Adresa kopirana'))" title="Klikni za kopiranje">
+              ${address.slice(0, 10)}…${address.slice(-8)}
+            </div>
+            <div style="display:flex;justify-content:center;gap:6px;margin-top:10px">
+              ${Object.entries(netLabel).map(([k, v]) => `<button onclick="_wltSwitchNet('${k}')" style="background:${network === k ? 'var(--accent)' : '#1e2456'};border:none;border-radius:12px;color:#fff;cursor:pointer;font-size:9px;padding:3px 8px">${v}</button>`).join('')}
+            </div>
+          </div>
+          <!-- Actions -->
+          <div style="display:flex;gap:8px;padding:12px 16px">
+            <button onclick="_wltShowSend()" style="flex:1;background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:9px">↑ Pošalji</button>
+            <button onclick="_wltShowReceive()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;padding:9px">↓ Primi</button>
+            <button onclick="_wltShowBackup()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;padding:9px" title="Backup / Recovery fraza">🔑</button>
+            <button onclick="_wltLock()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text3);cursor:pointer;font-size:12px;padding:9px" title="Zaključaj">🔒</button>
+          </div>
+          <!-- Adresa puna -->
+          <div style="padding:0 16px 12px">
+            <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px">
+              <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Adresa</div>
+              <div style="font-size:10px;font-family:monospace;color:var(--text);word-break:break-all;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText('${address}').then(()=>showToast('📋 Adresa kopirana'))" title="Klikni za kopiranje">${address} 📋</div>
+            </div>
+          </div>
+          <!-- Detail pane placeholder -->
+          <div id="wlt-detail" style="padding:0 16px 16px"></div>
+        </div>`;
+        // Async balance fetch
+        const balDiv = document.getElementById('wlt-balance');
+        _fetchBalance(address, network).then(bal => {
+          if (balDiv) balDiv.textContent = bal !== null ? bal + ' ETH' : '— (offline)';
+        });
+      }
+
+      function _wltShowSend() {
+        const det = document.getElementById('wlt-detail'); if (!det) return;
+        det.innerHTML = `
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">↑ Pošalji ETH</div>
+          <div style="margin-bottom:8px">
+            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Prima (adresa)</label>
+            <input id="wlt-send-to" placeholder="0x…" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:7px 8px;font-size:11px;font-family:monospace;box-sizing:border-box">
+          </div>
+          <div style="margin-bottom:10px">
+            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Iznos (ETH)</label>
+            <input id="wlt-send-amt" type="number" placeholder="0.001" step="0.000001" min="0" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:7px 8px;font-size:12px;box-sizing:border-box">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button onclick="_wltDoSend()" style="flex:1;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:8px">Pošalji</button>
+            <button onclick="document.getElementById('wlt-detail').innerHTML=''" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:12px;padding:8px">Odustani</button>
+          </div>
+          <div id="wlt-send-status" style="margin-top:8px;font-size:10px;color:var(--text3)"></div>
+        </div>`;
+      }
+
+      function _wltShowReceive() {
+        const det = document.getElementById('wlt-detail'); if (!det || !_wltSession) return;
+        const addr = _wltSession.address;
+        // Generate simple QR via API (no ethers needed)
+        det.innerHTML = `
+        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">↓ Primi ETH</div>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(addr)}&bgcolor=1a1a2e&color=4a9eff" alt="QR" style="border-radius:8px;width:140px;height:140px">
+          <div style="font-size:9px;font-family:monospace;color:var(--text3);word-break:break-all;margin-top:8px;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText('${addr}').then(()=>showToast('📋 Adresa kopirana'))">${addr}</div>
+          <div style="font-size:10px;color:#5a9f5a;margin-top:6px">📋 Klikni na adresu za kopiranje</div>
+          <button onclick="document.getElementById('wlt-detail').innerHTML=''" style="margin-top:8px;background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 14px">Zatvori</button>
+        </div>`;
+      }
+
+      function _wltShowBackup() {
+        const r = _wltRoot(); if (!r) return;
+        r.innerHTML = `
+        <div style="padding:16px">
+          <button onclick="_wltRenderMain()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-bottom:12px">← Natrag</button>
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">🔑 Backup walletа</div>
+          <div style="font-size:11px;color:#e74c3c;margin-bottom:14px">⚠️ Ne dijeli recovery frazu nikome!</div>
+          <div style="margin-bottom:10px">
+            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Unesi lozinku za potvrdu</label>
+            <input type="password" id="wlt-backup-pwd" placeholder="Lozinka walletа"
+              style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box"
+              onkeydown="if(event.key==='Enter')_wltDoBackup()">
+          </div>
+          <button onclick="_wltDoBackup()" style="background:#c0392b;border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:10px;width:100%">Prikaži recovery frazu</button>
+          <div id="wlt-backup-out" style="margin-top:14px"></div>
+        </div>`;
+      }
+
+      function _wltLock() {
+        _wltSession = null;
+        _wltRenderUnlock();
+        showToast('🔒 Wallet zaključan');
+      }
+
+      function _wltSwitchNet(net) {
+        if (_wltSession) { _wltSession.network = net; _wltRenderMain(); }
+      }
+
+      // ── Actions ─────────────────────────────────────────────────────────
+      async function _wltDoCreate() {
+        const p1 = document.getElementById('wlt-pwd1')?.value;
+        const p2 = document.getElementById('wlt-pwd2')?.value;
+        if (!p1 || p1.length < 8) { showToast('⚠️ Lozinka mora imati min. 8 znakova'); return; }
+        if (p1 !== p2) { showToast('⚠️ Lozinke se ne podudaraju'); return; }
+        _wltRenderLoading('Generiranje walletа…');
+        try {
+          const wallet = await _createWallet();
+          const mnemonic = wallet.mnemonic.phrase;
+          const encrypted = await _encrypt(JSON.stringify({ mnemonic, privateKey: wallet.privateKey }), p1);
+          _wltSave({ encrypted, address: wallet.address, network: 'ethereum', createdAt: Date.now() });
+          _wltSession = { wallet, address: wallet.address, network: 'ethereum' };
+          // Show mnemonic once
+          const r = _wltRoot(); if (!r) return;
+          r.innerHTML = `
+          <div style="padding:16px">
+            <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">✅ Wallet kreiran!</div>
+            <div style="font-size:11px;color:#e74c3c;margin-bottom:10px">⚠️ Zapiši ovu frazu — prikazuje se samo jednom!</div>
+            <div style="background:#1a0d0d;border:1px solid #5a1a1a;border-radius:8px;padding:14px;font-size:12px;font-family:monospace;color:#f5a623;line-height:1.8;word-spacing:6px;letter-spacing:0.5px;margin-bottom:14px">${mnemonic}</div>
+            <div style="display:flex;gap:8px">
+              <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${mnemonic}').then(()=>showToast('📋 Fraza kopirana'))" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer;font-size:11px;padding:8px">📋 Kopiraj</button>
+              <button onclick="_wltRenderMain()" style="flex:1;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:8px">Nastavi →</button>
+            </div>
+          </div>`;
+        } catch (err) {
+          showToast('❌ Greška: ' + err.message);
+          _wltRenderSetup();
+        }
+      }
+
+      async function _wltDoImport() {
+        const seed = document.getElementById('wlt-seed')?.value?.trim();
+        const p1 = document.getElementById('wlt-imp-pwd1')?.value;
+        const p2 = document.getElementById('wlt-imp-pwd2')?.value;
+        if (!seed) { showToast('⚠️ Unesi recovery frazu ili privatni ključ'); return; }
+        if (!p1 || p1.length < 8) { showToast('⚠️ Lozinka mora imati min. 8 znakova'); return; }
+        if (p1 !== p2) { showToast('⚠️ Lozinke se ne podudaraju'); return; }
+        _wltRenderLoading('Uvoz walletа…');
+        try {
+          let wallet;
+          if (seed.startsWith('0x') && seed.length >= 64) {
+            wallet = await _walletFromPrivateKey(seed);
+          } else {
+            wallet = await _walletFromMnemonic(seed);
+          }
+          const mnemonic = wallet.mnemonic?.phrase || '';
+          const encrypted = await _encrypt(JSON.stringify({ mnemonic, privateKey: wallet.privateKey }), p1);
+          _wltSave({ encrypted, address: wallet.address, network: 'ethereum', createdAt: Date.now() });
+          _wltSession = { wallet, address: wallet.address, network: 'ethereum' };
+          showToast('✅ Wallet uvezen: ' + wallet.address.slice(0, 10) + '…');
+          _wltRenderMain();
+        } catch (err) {
+          showToast('❌ Greška: ' + err.message);
+          _wltShowImport();
+        }
+      }
+
+      async function _wltDoUnlock() {
+        const pwd = document.getElementById('wlt-unlock-pwd')?.value;
+        if (!pwd) { showToast('⚠️ Unesi lozinku'); return; }
+        const stored = _wltLoad();
+        if (!stored?.encrypted) { _wltRenderSetup(); return; }
+        _wltRenderLoading('Dešifriranje walletа…');
+        try {
+          const plain = await _decrypt(stored.encrypted, pwd);
+          const { mnemonic, privateKey } = JSON.parse(plain);
+          let wallet;
+          if (mnemonic && _hasEthers()) {
+            wallet = await _walletFromMnemonic(mnemonic);
+          } else if (privateKey && _hasEthers()) {
+            wallet = await _walletFromPrivateKey(privateKey);
+          } else {
+            throw new Error('ethers.js nije dostupan');
+          }
+          _wltSession = { wallet, address: stored.address || wallet.address, network: stored.network || 'ethereum' };
+          showToast('✅ Wallet otključan');
+          _wltRenderMain();
+        } catch (err) {
+          showToast('❌ Pogrešna lozinka ili greška');
+          _wltRenderUnlock();
+        }
+      }
+
+      async function _wltDoSend() {
+        const to = document.getElementById('wlt-send-to')?.value?.trim();
+        const amt = document.getElementById('wlt-send-amt')?.value?.trim();
+        const status = document.getElementById('wlt-send-status');
+        if (!to || !amt) { showToast('⚠️ Popuni sva polja'); return; }
+        if (!_wltSession?.wallet) { showToast('⚠️ Wallet nije otključan'); return; }
+        if (status) status.textContent = 'Priprema transakcije…';
+        try {
+          const e = _ethers();
+          const rpc = RPC_ENDPOINTS[_wltSession.network] || RPC_ENDPOINTS.ethereum;
+          const provider = new e.JsonRpcProvider(rpc);
+          const connected = _wltSession.wallet.connect(provider);
+          const tx = await connected.sendTransaction({ to, value: e.parseEther(amt) });
+          if (status) status.innerHTML = `✅ TX poslan! Hash: <a href="https://etherscan.io/tx/${tx.hash}" target="_blank" style="color:var(--accent);word-break:break-all">${tx.hash.slice(0, 20)}…</a>`;
+          showToast('✅ Transakcija poslana');
+        } catch (err) {
+          if (status) status.textContent = '❌ ' + err.message;
+          showToast('❌ Greška slanja: ' + (err.shortMessage || err.message).slice(0, 60));
+        }
+      }
+
+      async function _wltDoBackup() {
+        const pwd = document.getElementById('wlt-backup-pwd')?.value;
+        if (!pwd) { showToast('⚠️ Unesi lozinku'); return; }
+        const stored = _wltLoad();
+        if (!stored?.encrypted) return;
+        const out = document.getElementById('wlt-backup-out'); if (!out) return;
+        try {
+          const plain = await _decrypt(stored.encrypted, pwd);
+          const { mnemonic, privateKey } = JSON.parse(plain);
+          out.innerHTML = `
+          <div style="margin-bottom:10px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Recovery fraza (12 riječi)</div>
+            <div style="background:#1a0d0d;border:1px solid #5a1a1a;border-radius:6px;padding:12px;font-size:12px;font-family:monospace;color:#f5a623;line-height:1.8;word-spacing:5px">${mnemonic || '(nema - uvezen privatnim ključem)'}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Privatni ključ</div>
+            <div style="background:#0d1a0d;border:1px solid #1a5a1a;border-radius:6px;padding:8px 10px;font-size:10px;font-family:monospace;color:#5af55a;word-break:break-all">${privateKey}</div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            ${mnemonic ? `<button onclick="navigator.clipboard&&navigator.clipboard.writeText('${mnemonic}').then(()=>showToast('📋 Kopirano'))" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);cursor:pointer;font-size:10px;padding:6px">📋 Fraza</button>` : ''}
+            <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${privateKey}').then(()=>showToast('📋 Kopirano'))" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);cursor:pointer;font-size:10px;padding:6px">📋 Ključ</button>
+          </div>`;
+        } catch {
+          out.innerHTML = '<div style="color:#e74c3c;font-size:11px">❌ Pogrešna lozinka</div>';
+        }
+      }
+
+      // ── Context menu ────────────────────────────────────────────────────
+      window.walletShowMenu = function (e) {
+        e.stopPropagation();
+        const items = [
+          { label: '🔄 Osvježi balans', fn: () => _wltSession && _wltRenderMain() },
+          { label: '🔑 Backup / Recovery fraza', fn: () => _wltSession && _wltShowBackup() },
+          { label: '🗑 Ukloni wallet', fn: _wltDoDelete },
+        ];
+        // Simple popover
+        document.querySelectorAll('.wlt-menu').forEach(m => m.remove());
+        const menu = document.createElement('div');
+        menu.className = 'wlt-menu';
+        menu.style.cssText = 'position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 24px #0006;z-index:10000;min-width:180px;padding:4px 0;font-size:12px';
+        const btn = e.currentTarget.getBoundingClientRect();
+        menu.style.top = (btn.bottom + 4) + 'px';
+        menu.style.right = (window.innerWidth - btn.right) + 'px';
+        items.forEach(item => {
+          const mi = document.createElement('div');
+          mi.textContent = item.label;
+          mi.style.cssText = 'padding:8px 14px;cursor:pointer;color:var(--text);transition:background 0.1s';
+          mi.onmouseenter = () => mi.style.background = 'var(--bg3)';
+          mi.onmouseleave = () => mi.style.background = '';
+          mi.onclick = () => { menu.remove(); item.fn(); };
+          menu.appendChild(mi);
+        });
+        document.body.appendChild(menu);
+        setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+      };
+
+      function _wltDoDelete() {
+        window.customConfirm('⚠️ Obriši wallet iz ovog browsera?\n\nBez backup-a nećeš moći pristupiti sredstvima!', (confirmed) => {
+          if (!confirmed) return;
+          localStorage.removeItem(LS_KEY);
+          window.electronAPI?.invoke('db:saveUserProfile', { walletAddress: '', walletEncrypted: '' }).catch(() => { });
+          _wltSession = null;
+          _wltRenderSetup();
+          showToast('🗑 Wallet obrisan');
+        });
+      }
+
+      // ── Public entry point ───────────────────────────────────────────────
+      window._wltInit = function () {
+        const stored = _wltLoad();
+        if (!stored) {
+          _wltRenderSetup();
+        } else if (_wltSession) {
+          _wltRenderMain();
+        } else {
+          _wltRenderUnlock();
+        }
+      };
+      // Expose helpers globally (called from inline onclick)
+      window._wltRenderSetup = _wltRenderSetup;
+      window._wltShowCreate = _wltShowCreate;
+      window._wltShowImport = _wltShowImport;
+      window._wltDoCreate = _wltDoCreate;
+      window._wltDoImport = _wltDoImport;
+      window._wltDoUnlock = _wltDoUnlock;
+      window._wltRenderMain = _wltRenderMain;
+      window._wltShowSend = _wltShowSend;
+      window._wltShowReceive = _wltShowReceive;
+      window._wltShowBackup = _wltShowBackup;
+      window._wltDoSend = _wltDoSend;
+      window._wltDoBackup = _wltDoBackup;
+      window._wltLock = _wltLock;
+      window._wltSwitchNet = _wltSwitchNet;
+    })();
+    // ══ End BOBIAI Wallet ══════════════════════════════════════════════════
 
     // ── Service Worker Registration ────────────────────────────────────────
     // Only register in web mode (not Electron) and not on file:// protocol
