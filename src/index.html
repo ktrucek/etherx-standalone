@@ -5622,10 +5622,12 @@
         <div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No downloads yet</div>
       </div>
     </div>
-    <div class="panel" id="settingsPanel" style="width:min(580px,96vw)">
+    <div class="panel" id="settingsPanel" style="width:min(720px,96vw)">
       <div class="panel-header"><span class="panel-title">Settings</span><button class="panel-close"
           id="closeSettingsPanel">×</button></div>
-      <div class="settings-safari">
+      <iframe id="settingsFrame" src="/renderer/settings.html"
+        style="width:100%;height:calc(100% - 44px);border:none;background:var(--bg)"></iframe>
+      <div class="settings-safari" style="display:none">
         <!-- Icon tab bar -->
         <div class="settings-icon-tabs" id="settingsIconTabs">
           <button class="sit-btn active" data-stab="general"><span class="sit-icon">⚙️</span>Općenito</button>
