@@ -1,0 +1,278 @@
+name: 🔨 Build EtherX Browser
+
+on:
+  push:
+    tags:
+      - "v*" # triggers on: git tag v2.4.1 && git push --tags
+  workflow_dispatch: # manual trigger from GitHub Actions tab
+    inputs:
+      version:
+        description: "Release tag (e.g. v2.4.1) — leave empty to just build without releasing"
+        required: false
+        default: ""
+      create_release:
+        description: "Create GitHub Release after build?"
+        type: boolean
+        required: false
+        default: true
+
+# Allow workflow to create releases
+permissions:
+  contents: write
+
+jobs:
+  # ─── Linux Build ──────────────────────────────────────────────────────────────
+  build-linux:
+    name: 🐧 Linux (AppImage + .deb)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: 🛠️ Install system build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential \
+            python3 \
+            python3-pip \
+            python3-setuptools \
+            fakeroot \
+            dpkg-dev \
+            rpm \
+            libsecret-1-dev
+
+      - name: 📦 Install npm packages (runs electron-rebuild via postinstall)
+        run: npm ci
+        env:
+          npm_config_build_from_source: true
+          CXXFLAGS: -std=c++20
+
+      - name: 🔨 Build Linux packages
+        run: npx electron-builder --linux --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📤 Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          retention-days: 7
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+
+  # ─── Windows Build ────────────────────────────────────────────────────────────
+  build-windows:
+    name: 🪟 Windows (Portable + ZIP)
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: 🛠️ Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install npm packages (runs electron-rebuild via postinstall)
+        run: npm ci
+        env:
+          npm_config_msvs_version: 2022
+          CXXFLAGS: /std:c++20
+
+      - name: 🔨 Build Windows packages
+        run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Disable code-signing (no cert on CI)
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 📤 Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          retention-days: 7
+          path: |
+            dist/*.exe
+            dist/*.zip
+
+  # ─── macOS Build (x64 + arm64) ───────────────────────────────────────────────
+  # macos-13 is no longer available — cross-compile both arches from macos-latest
+  build-macos-x64:
+    name: 🍎 macOS Intel x64 (cross-compiled)
+    runs-on: macos-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: 🛠️ Install Python setuptools (distutils for node-gyp)
+        run: brew install python-setuptools || true
+
+      - name: 📦 Install npm packages (skip postinstall rebuild — we do it manually below)
+        run: npm ci --ignore-scripts
+        env:
+          CXXFLAGS: -std=c++20
+
+      - name: 🔧 Rebuild native modules for x64
+        run: npx electron-rebuild --arch x64 -f -w better-sqlite3
+        env:
+          CXXFLAGS: -std=c++20
+
+      - name: 🔨 Build macOS x64 DMG (cross-compile)
+        run: npx electron-builder --mac dmg zip --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 📤 Upload macOS x64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-builds
+          retention-days: 7
+          path: |
+            dist/*.dmg
+            dist/*.zip
+
+  build-macos-arm64:
+    name: 🍎 macOS Apple Silicon arm64
+    runs-on: macos-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: 🛠️ Install Python setuptools (distutils for node-gyp)
+        run: brew install python-setuptools || true
+
+      - name: 📦 Install npm packages (skip postinstall rebuild — we do it manually below)
+        run: npm ci --ignore-scripts
+        env:
+          CXXFLAGS: -std=c++20
+
+      - name: 🔧 Rebuild native modules for arm64
+        run: npx electron-rebuild --arch arm64 -f -w better-sqlite3
+        env:
+          CXXFLAGS: -std=c++20
+
+      - name: 🔨 Build macOS arm64 DMG
+        run: npx electron-builder --mac dmg zip --arm64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 📤 Upload macOS arm64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64-builds
+          retention-days: 7
+          path: |
+            dist/*.dmg
+            dist/*.zip
+
+  # ─── GitHub Release ───────────────────────────────────────────────────────────
+  release:
+    name: 🚀 Publish GitHub Release
+    needs: [build-linux, build-windows, build-macos-x64, build-macos-arm64]
+    runs-on: ubuntu-latest
+    # Run even if some builds failed/cancelled — publish whatever succeeded
+    if: |
+      always() &&
+      !cancelled() &&
+      (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos-x64.result == 'success' || needs.build-macos-arm64.result == 'success') &&
+      (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true' && github.event.inputs.version != ''))
+
+    steps:
+      - name: 📥 Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 📋 List artifacts
+        run: find artifacts -type f | sort
+
+      - name: 🏷️ Determine version tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "EtherX Browser ${{ steps.tag.outputs.tag }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          files: |
+            artifacts/*.AppImage
+            artifacts/*.deb
+            artifacts/*.exe
+            artifacts/*.zip
+            artifacts/*.dmg
+          body: |
+            ## 🚀 EtherX Browser ${{ steps.tag.outputs.tag }}
+
+            Built automatically by GitHub Actions.
+
+            ### 📥 Downloads
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | 🐧 **Linux** | `.AppImage` | Portable, runs on any distro |
+            | 🐧 **Linux** | `.deb` | Ubuntu / Debian installer |
+            | 🪟 **Windows** | `.exe` | Portable, no install needed |
+            | 🪟 **Windows** | `.zip` | ZIP archive |
+            | 🍎 **macOS** | `.dmg` | Disk image |
+
+            ### ⚙️ Install Notes
+
+            **Linux AppImage:**
+            ```bash
+            chmod +x "EtherX Browser-*.AppImage"
+            ./"EtherX Browser-*.AppImage" --no-sandbox
+            ```
+
+            **Linux .deb:**
+            ```bash
+            sudo dpkg -i etherx-browser_*.deb
+            ```
+
+            **Windows:** Double-click `.exe` — no installation required.
+
+            **macOS:** Open `.dmg`, drag to Applications. Note: unsigned build, you may need to allow via System Settings → Privacy & Security.
+
+            ---
+            © 2024–2026 kriptoentuzijasti.io. All Rights Reserved. — [Proprietary License](https://github.com/ktrucek/etherx-browser/blob/main/LICENSE)
