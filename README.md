@@ -1,64 +1,62 @@
-# EtherX Standalone Browser
+# EtherX Browser — Standalone Build
 
-**Complete standalone version** — Electron desktop app + web browser.
+Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 
-## ✨ Features (v2.4.26)
+## Što je uključeno
 
-### 🆕 Latest Updates
-- ✅ **Memory Saver** — Auto-suspend inactive tabs (5-60 min)
-- ✅ **GPU Acceleration Status** — WebGL renderer detection
-- ✅ **GitHub Auto-Updater** — Check for updates directly in browser
-- ✅ **8 New Settings Panels** — History, Cookies, Permissions, Shortcuts, Cache, DNS, Updates, Backup
-- ✅ **Performance Optimizations** — CSS will-change, contain properties
+✅ Sve browser funkcije (kartice, bookmarks, povijest, itd.)  
+✅ Ad Blocker  
+✅ AI sažetak stranica (Gemini API)  
+✅ Password manager (Bitwarden integracija)  
+✅ QR sinkronizacija  
+✅ Privatno pregledavanje  
+✅ Developer Tools  
+✅ Postavke (14 novih sekcija):
 
-### 🔒 Core Features
-- 🤖 **AI Agent Integration** — n8n workflow automation
-- �� **Password Manager** — Encrypted local storage
-- 🚫 **Ad Blocker** — Built-in with EasyList filters
-- 📱 **QR Sync** — Cross-device synchronization
-- 💰 **Crypto Wallet** — Web3 integration
-- 🌐 **Multi-language** — i18n support
+- Povijest
+- Kolačići
+- Dozvole (notifikacije, lokacija, kamera, mikrofon)
+- Preuzimanja
+- Pretraživač
+- Prečaci
+- Cache
+- Sigurnost
+- DNS over HTTPS
+- Developer opcije
+- Nadogradnje
+- Backup/Restore
+- **AI Agent postavke** (Gemini + OpenAI API ključevi)
 
-## 🚀 Downloads
+✅ Vizualni live preview u Appearance postavkama  
+✅ Performance optimizacije (in-memory cache, debounced save)  
+✅ i18n podrška (HR/EN)
 
-Visit [GitHub Releases](https://github.com/ktrucek/etherx-standalone/releases) for:
-- 🐧 **Linux**: AppImage + .deb
-- 🪟 **Windows**: Portable .exe + ZIP
-- 🍎 **macOS**: DMG (Intel + Apple Silicon)
-- �� **Web**: Open `src/index.html` (no installation)
+## Što je izostavljeno
 
-## 📦 Quick Start
+❌ n8n.kriptoentuzijasti.io proxy linkovi  
+❌ Hardkodirani URL-ovi prema kriptoentuzijasti.io servisima
 
-### Desktop App
-Download from releases and run. No installation needed for portable versions.
+## Deployment
 
-### Web Version
-```bash
-# Just open in browser
-open src/index.html
+### Web verzija (hostanje na bilo kojem serveru):
 
-# Or serve locally
-python3 -m http.server 8000
-# Visit http://localhost:8000/src/index.html
-```
+1. Kopiraj `src/index.html` na server
+2. Kopiraj `assets/` folder
+3. Otvori u browseru
 
-## 🔨 Build from Source
+### Electron verzija:
 
-```bash
-npm install
-npm start          # Run development
-npm run dist:linux # Build Linux (AppImage + .deb)
-npm run dist:win   # Build Windows (portable .exe)
-npm run dist:mac   # Build macOS (DMG)
-```
+1. `npm install`
+2. `npm start` — pokreće Electron app
+3. `npm run build` — kreira distributable pakete
 
-## 📄 License
+## API ključevi
 
-© 2024-2026 kriptoentuzijasti.io. All Rights Reserved.  
-Proprietary License — See LICENSE file.
+Za AI funkcije, korisnici trebaju dodati vlastite API ključeve u **Postavke → AI Agent**:
 
-## 🔗 Links
+- Google Gemini API Key (za sažetak stranica)
+- OpenAI API Key (opcionalno, za ChatGPT integraciju)
 
-- **Website**: [kriptoentuzijasti.io](https://kriptoentuzijasti.io)
-- **Issues**: [GitHub Issues](https://github.com/ktrucek/etherx-standalone/issues)
-- **Main Repo**: [etherx-browser-2](https://github.com/ktrucek/etherx-browser-2)
+## License
+
+© 2024–2026 kriptoentuzijasti.io. Proprietary software.
