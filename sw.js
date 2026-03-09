@@ -3,7 +3,7 @@
 //  Provides: Offline support, caching, background sync
 // ============================================================
 
-const CACHE_VERSION = 'etherx-v2.4.33';
+const CACHE_VERSION = 'etherx-v2.4.34';
 const CACHE_ASSETS = [
     '/standalone-browser/src/index.html',
     '/standalone-browser/assets/filters/filters.txt',

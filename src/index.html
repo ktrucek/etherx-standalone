@@ -7820,7 +7820,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.33</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.34</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8077,7 +8077,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.33</span></div>
+                id="helpVersionNum2">2.4.34</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8099,7 +8099,7 @@
           <div class="s-row">
             <div class="s-row-left">
               <div class="s-row-label">Provjeri dostupne nadogradnje</div>
-              <div class="s-row-desc">Provjeri github.com/ktrucek/etherx-standalone za novu verziju.</div>
+              <div class="s-row-desc">Provjeri git.kasp.top/ktrucek/etherx-standalone za novu verziju.</div>
             </div>
             <button class="s-btn s-btn-primary" id="btnCheckUpdates" style="min-width:110px">🔍 Provjeri sada</button>
           </div>
@@ -8118,8 +8118,8 @@
               <a id="updDownloadLink" href="#" target="_blank"
                 style="display:none;padding:7px 16px;background:var(--accent);border-radius:7px;color:#fff;font-size:12px;font-weight:700;text-decoration:none">⬇️
                 Preuzmi</a>
-              <a id="updReleasesLink" href="https://github.com/ktrucek/etherx-standalone/releases" target="_blank"
-                style="padding:7px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none">📋
+              <a id="updReleasesLink" href="https://git.kasp.top/ktrucek/etherx-standalone/releases" target="_blank"
+                style="padding:7px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none">📦
                 Sve verzije</a>
             </div>
           </div>
@@ -8135,9 +8135,9 @@
               <div class="s-row-label">Preuzmi najnoviju verziju</div>
               <div class="s-row-desc">Otvori GitHub Releases stranicu za ručno preuzimanje.</div>
             </div>
-            <a href="https://github.com/ktrucek/etherx-standalone/releases/latest" target="_blank"
-              style="padding:6px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none;white-space:nowrap">🐙
-              GitHub Releases</a>
+            <a href="https://git.kasp.top/ktrucek/etherx-standalone/releases/latest" target="_blank"
+              style="padding:6px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none;white-space:nowrap">📦
+              Gitea Releases</a>
           </div>
           <div class="s-row">
             <div class="s-row-left">
@@ -15888,7 +15888,7 @@
             if (newLabel) { newLabel.style.color = 'var(--accent)'; newLabel.textContent = '🎉 Nova verzija dostupna!'; }
             if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
             const htmlAsset = (data.assets || []).find(a => a.name?.endsWith('.html'));
-            if (dlLink) { dlLink.style.display = 'inline-block'; dlLink.href = htmlAsset?.url || 'https://github.com/ktrucek/etherx-standalone/releases/latest'; }
+            if (dlLink) { dlLink.style.display = 'inline-block'; dlLink.href = htmlAsset?.url || 'https://git.kasp.top/ktrucek/etherx-standalone/releases/latest'; }
           } else {
             if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
             if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
@@ -15910,14 +15910,16 @@
             data = await window.etherx.update.check();
             if (!data.ok) throw new Error(data.error || 'Nepoznata greška');
           } else {
-            // ── Web fallback: public API only (no token needed for public repo) ──
-            const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
-              headers: { 'Accept': 'application/vnd.github+json' }
+            // ── Web fallback: Gitea API (git.kasp.top) ──
+            const res = await fetch('https://git.kasp.top/api/v1/repos/ktrucek/etherx-standalone/releases?limit=1', {
+              headers: { 'Accept': 'application/json' }
             });
-            if (!res.ok) throw new Error('GitHub API error: ' + res.status);
-            const raw = await res.json();
+            if (!res.ok) throw new Error('Gitea API greška: ' + res.status);
+            const releases = await res.json();
+            const raw = Array.isArray(releases) ? releases[0] : releases;
+            if (!raw) throw new Error('Nema dostupnih verzija');
             const latestTag = (raw.tag_name || '').replace(/^v/, '');
-            data = { ok: true, latest: latestTag, current: currentTag, isNew: semverNewer(latestTag, currentTag), body: raw.body || '', assets: (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url })) };
+            data = { ok: true, latest: latestTag, current: currentTag, isNew: semverNewer(latestTag, currentTag), body: raw.body || '', assets: (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.download_url || '' })) };
           }
           _applyUpdateResult(data, currentTag);
           if (!silent) showToast(data.isNew ? ('⬆️ Nova verzija: v' + data.latest + ' dostupna!') : ('✓ Browser je ažuran — v' + currentTag));
