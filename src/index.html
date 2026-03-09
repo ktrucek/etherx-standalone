@@ -8099,7 +8099,7 @@
           <div class="s-row">
             <div class="s-row-left">
               <div class="s-row-label">Provjeri dostupne nadogradnje</div>
-              <div class="s-row-desc">Provjeri git.kasp.top/ktrucek/etherx-standalone za novu verziju.</div>
+              <div class="s-row-desc">Provjeri github.com/ktrucek/etherx-standalone za novu verziju.</div>
             </div>
             <button class="s-btn s-btn-primary" id="btnCheckUpdates" style="min-width:110px">🔍 Provjeri sada</button>
           </div>
@@ -8118,7 +8118,7 @@
               <a id="updDownloadLink" href="#" target="_blank"
                 style="display:none;padding:7px 16px;background:var(--accent);border-radius:7px;color:#fff;font-size:12px;font-weight:700;text-decoration:none">⬇️
                 Preuzmi</a>
-              <a id="updReleasesLink" href="https://git.kasp.top/ktrucek/etherx-standalone/releases" target="_blank"
+              <a id="updReleasesLink" href="https://github.com/ktrucek/etherx-standalone/releases" target="_blank"
                 style="padding:7px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none">📦
                 Sve verzije</a>
             </div>
@@ -8135,9 +8135,9 @@
               <div class="s-row-label">Preuzmi najnoviju verziju</div>
               <div class="s-row-desc">Otvori GitHub Releases stranicu za ručno preuzimanje.</div>
             </div>
-            <a href="https://git.kasp.top/ktrucek/etherx-standalone/releases/latest" target="_blank"
+            <a href="https://github.com/ktrucek/etherx-standalone/releases/latest" target="_blank"
               style="padding:6px 14px;background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-size:12px;text-decoration:none;white-space:nowrap">📦
-              Gitea Releases</a>
+              GitHub Releases</a>
           </div>
           <div class="s-row">
             <div class="s-row-left">
@@ -15888,7 +15888,7 @@
             if (newLabel) { newLabel.style.color = 'var(--accent)'; newLabel.textContent = '🎉 Nova verzija dostupna!'; }
             if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
             const htmlAsset = (data.assets || []).find(a => a.name?.endsWith('.html'));
-            if (dlLink) { dlLink.style.display = 'inline-block'; dlLink.href = htmlAsset?.url || 'https://git.kasp.top/ktrucek/etherx-standalone/releases/latest'; }
+            if (dlLink) { dlLink.style.display = 'inline-block'; dlLink.href = htmlAsset?.url || 'https://github.com/ktrucek/etherx-standalone/releases/latest'; }
           } else {
             if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
             if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
@@ -15910,11 +15910,11 @@
             data = await window.etherx.update.check();
             if (!data.ok) throw new Error(data.error || 'Nepoznata greška');
           } else {
-            // ── Web fallback: Gitea API (git.kasp.top) ──
-            const res = await fetch('https://git.kasp.top/api/v1/repos/ktrucek/etherx-standalone/releases?limit=1', {
-              headers: { 'Accept': 'application/json' }
+            // ── Web fallback: GitHub API (uvijek javno dostupan) ──
+            const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
+              headers: { 'Accept': 'application/vnd.github+json' }
             });
-            if (!res.ok) throw new Error('Gitea API greška: ' + res.status);
+            if (!res.ok) throw new Error('GitHub API greška: ' + res.status);
             const releases = await res.json();
             const raw = Array.isArray(releases) ? releases[0] : releases;
             if (!raw) throw new Error('Nema dostupnih verzija');

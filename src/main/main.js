@@ -18,12 +18,24 @@ const { execFile } = require('child_process');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
-// Only apply on Linux headless/CI environments
+// Only apply on Linux headless/CI environments (not on regular desktop)
+const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+const isHeadless = process.env.DISPLAY === undefined && process.platform === 'linux';
+
 if (process.platform !== 'darwin') {
   app.commandLine.appendSwitch('no-sandbox');
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
   app.commandLine.appendSwitch('disable-dev-shm-usage');
+
+  // Disable GPU only in CI/headless environments — on desktop keep GPU enabled for WebGL2
+  if (isCI || isHeadless) {
+    app.commandLine.appendSwitch('disable-gpu');
+    app.commandLine.appendSwitch('disable-software-rasterizer');
+  } else {
+    // Enable hardware acceleration on desktop
+    app.commandLine.appendSwitch('enable-gpu-rasterization');
+    app.commandLine.appendSwitch('enable-zero-copy');
+    app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  }
 }
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
@@ -545,7 +557,8 @@ function setupIPC() {
   ipcMain.handle('ai:summarizePage', async (_e, url, htmlContent) => {
     if (!ai) return noAi();
     const settings = db ? db.getSettings() : {};
-    const geminiKey = (settings.gemini_api_key) || process.env.GEMINI_API_KEY || '';
+    // Support both camelCase (geminiApiKey) and snake_case (gemini_api_key) storage
+    const geminiKey = settings.geminiApiKey || settings.gemini_api_key || process.env.GEMINI_API_KEY || '';
     return ai.summarizePage(url, htmlContent, geminiKey, db);
   });
 
@@ -610,6 +623,8 @@ function setupIPC() {
 
   // ── Navigation helpers ─────────────────────────────────────────────────────
   ipcMain.handle('nav:openExternal', (_e, url) => shell.openExternal(url));
+  ipcMain.handle('shell:showItemInFolder', (_e, fullPath) => { shell.showItemInFolder(fullPath); return { ok: true }; });
+  ipcMain.handle('shell:openPath', (_e, fullPath) => shell.openPath(fullPath).then(err => ({ ok: !err, error: err })));
   ipcMain.handle('app:openApplePasswords', async () => {
     if (process.platform !== 'darwin') return { ok: false, error: 'Apple Passwords available only on macOS.' };
     const tryExec = (file, args = []) => new Promise(resolve => {
@@ -813,12 +828,11 @@ function setupIPC() {
       },
     });
     setupDownloadTracking(win.webContents.session);
-    win.loadFile(path.join(__dirname, 'src', 'index.html'));
-    if (url) {
-      win.webContents.on('did-finish-load', () => {
-        win.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
-      });
-    }
+    // Load with a hash flag so restoreSession() in the renderer skips
+    // restoring the previous session and opens only this single moved tab.
+    win.loadFile(path.join(__dirname, 'src', 'index.html'), {
+      hash: 'move-tab=' + encodeURIComponent(url || ''),
+    });
     return { ok: true };
   });
 
@@ -919,6 +933,64 @@ function setupIPC() {
       const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
       const dataUrl = `data:${mime};base64,${data.toString('base64')}`;
       return { ok: true, dataUrl };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ── Auto-update (GitHub Releases) ─────────────────────────────────────────
+  // Token is stored ONLY in SQLite — never returned to the renderer.
+  ipcMain.handle('update:saveToken', (_e, token) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    db.saveSettings({ ...db.getSettings(), githubUpdateToken: token.trim() });
+    return { ok: true };
+  });
+  ipcMain.handle('update:hasToken', () => {
+    if (!db) return false;
+    const s = db.getSettings();
+    return !!(s.githubUpdateToken && s.githubUpdateToken.length > 0);
+  });
+  ipcMain.handle('update:check', async () => {
+    try {
+      const s = db ? db.getSettings() : {};
+      const token = s.giteaUpdateToken || s.githubUpdateToken || '';
+      const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/vnd.github+json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const { net } = require('electron');
+      // ── GitHub API — javno dostupan, bez autentikacije ─────────────────────
+      const GITHUB_API = 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest';
+      const result = await new Promise((resolve, reject) => {
+        const req = net.request({ method: 'GET', url: GITHUB_API, headers });
+        let body = '';
+        req.on('response', (res) => {
+          res.on('data', (chunk) => { body += chunk.toString(); });
+          res.on('end', () => {
+            if (res.statusCode === 404) {
+              resolve({ ok: false, error: 'Nema objavljenih verzija na GitHub-u' }); return;
+            }
+            if (res.statusCode !== 200) {
+              resolve({ ok: false, error: 'GitHub API greška: HTTP ' + res.statusCode }); return;
+            }
+            try {
+              const data = JSON.parse(body);
+              const latest = (data.tag_name || '').replace(/^v/, '');
+              const current = app.getVersion();
+              const assets = (data.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || '', size: a.size }));
+              resolve({
+                ok: true, current, latest,
+                isNew: latest !== current && latest > current,
+                name: data.name || data.tag_name,
+                body: data.body || '',
+                assets,
+                publishedAt: data.published_at || '',
+              });
+            } catch (e) { resolve({ ok: false, error: 'Parse error: ' + e.message }); }
+          });
+        });
+        req.on('error', (e) => reject(e));
+        req.end();
+      });
+      return result;
     } catch (e) {
       return { ok: false, error: e.message };
     }
