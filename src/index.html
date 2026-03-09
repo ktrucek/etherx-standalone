@@ -8,10 +8,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EtherX Browser">
-  <meta name="theme-color" content="#0d0d1a">
+  <meta name="theme-color" content="#667eea">
   <meta name="msapplication-navbutton-color" content="#0d0d1a">
-  <link rel="manifest"
-    href="data:application/json;base64,eyJuYW1lIjoiRXRoZXJYIEJyb3dzZXIiLCJzaG9ydF9uYW1lIjoiRXRoZXJYIiwiZGVzY3JpcHRpb24iOiJXZWIzIEJyb3dzZXIgd2l0aCBidWlsdC1pbiB3YWxsZXQsIEFJIGFnZW50IGFuZCBEZXZUb29scyIsInN0YXJ0X3VybCI6Ii9icm93c2VyLmh0bWwiLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjMGQwZDFhIiwidGhlbWVfY29sb3IiOiIjMGQwZDFhIiwiaWNvbnMiOlt7InNyYyI6ImRhdGE6aW1hZ2Uvc3ZnK3htbCw8c3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDEwMCAxMDAnPjxyZWN0IHdpZHRoPScxMDAnIGhlaWdodD0nMTAwJyByeD0nMjAnIGZpbGw9JyMwZDBkMWEnLz48dGV4dCB4PSc1MCcgeT0nNjUnIGZvbnQtc2l6ZT0nNTAnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGZpbGw9JyM2NjdlZWEnPkU8L3RleHQ+PC9zdmc+Iiwic2l6ZXMiOiIyNTZ4MjU2IiwidHlwZSI6ImltYWdlL3N2Zyt4bWwifV19">
+  <!-- PWA manifest — points to /standalone-browser/manifest.json on GitHub Pages -->
+  <link rel="manifest" href="/standalone-browser/manifest.json">
+  <!-- Apple touch icon for iOS "Add to Home Screen" -->
+  <link rel="apple-touch-icon" href="/standalone-browser/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/standalone-browser/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/standalone-browser/assets/icon-512.png">
   <title>EtherX Browser</title>
   <style>
     * {
@@ -6777,6 +6781,28 @@
                 </div>
               </div>
             </div>
+
+            <!-- GitHub token — developer only, hidden in web mode -->
+            <div class="s-group" id="updTokenGroup"
+              style="display:none;margin-top:16px;border-color:rgba(255,189,46,.25);background:rgba(255,189,46,.04)">
+              <div class="s-group-title" style="color:#ffbd2e">🔑 GitHub Update Token (developer)</div>
+              <div class="s-row" style="flex-direction:column;align-items:flex-start;gap:8px;border:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">Personal Access Token</div>
+                  <div class="s-row-desc">Samo ako je repozitorij <strong>privatan</strong>. Token se sprema isključivo
+                    u lokalnu SQLite bazu — nikad ne prolazi kroz renderer. Za javni repo ovaj token nije potreban.
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;width:100%;align-items:center">
+                  <input type="password" id="updGithubToken" placeholder="github_pat_…" autocomplete="off"
+                    spellcheck="false"
+                    style="flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;padding:7px 12px;color:var(--text);font-size:12px;font-family:monospace;outline:none">
+                  <button class="s-btn" id="btnSaveGithubToken"
+                    style="white-space:nowrap;border-color:rgba(255,189,46,.4);color:#ffbd2e">💾 Spremi token</button>
+                </div>
+                <div id="updTokenStatus" style="font-size:11px;color:var(--text3)"></div>
+              </div>
+            </div>
           </div>
           <!-- FEATURE FLAGS -->
           <div class="s-tab-pane" id="stab-flags">
@@ -7794,7 +7820,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.32</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.33</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8051,7 +8077,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.32</span></div>
+                id="helpVersionNum2">2.4.33</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8282,7 +8308,7 @@
         <div id="ascBullets" style="display:none"></div>
       </div>
       <div class="asc-footer">
-        <span id="ascMeta">gemini-2.5-flash</span>
+        <span id="ascMeta" style="display:none"></span>
         <span id="ascCached" style="color:var(--green)"></span>
       </div>
     </div>
@@ -13671,17 +13697,24 @@
       const saveBtn = document.getElementById('saveAiSettings');
       if (saveBtn) saveBtn.addEventListener('click', () => {
         const p = providerSel?.value || 'gemini';
+        const gKey = geminiKeyEl?.value.trim() || '';
+        const oKey = openaiKeyEl?.value.trim() || '';
+        const aKey = anthropicKeyEl?.value.trim() || '';
         DB.saveSetting('aiProvider', p);
         DB.saveSetting('aiModel', modelSel.value);
-        DB.saveSetting('geminiApiKey', geminiKeyEl?.value.trim() || '');
-        DB.saveSetting('openaiApiKey', openaiKeyEl?.value.trim() || '');
-        DB.saveSetting('anthropicApiKey', anthropicKeyEl?.value.trim() || '');
+        DB.saveSetting('geminiApiKey', gKey);
+        DB.saveSetting('openaiApiKey', oKey);
+        DB.saveSetting('anthropicApiKey', aKey);
         // Also save legacy snake_case aliases so other code finds them
-        DB.saveSetting('gemini_api_key', geminiKeyEl?.value.trim() || '');
-        DB.saveSetting('openai_api_key', openaiKeyEl?.value.trim() || '');
+        DB.saveSetting('gemini_api_key', gKey);
+        DB.saveSetting('openai_api_key', oKey);
         if (tempSlider) DB.saveSetting('aiTemperature', Number(tempSlider.value));
+        // ── Sync to Electron SQLite so main process IPC handlers can read the keys ──
+        if (window.etherx?.db?.settings?.save) {
+          window.etherx.db.settings.save(DB.getSettings()).catch(() => { });
+        }
         showToast('✅ AI postavke spremljene');
-        showBanner(true, 'Postavke spremljene. Model: <strong>' + modelSel.value + '</strong>');
+        showBanner(true, 'Postavke spremljene.');
       });
 
       // ── Test ALL AI functions ──
@@ -15798,69 +15831,103 @@
       const _curVerMain = document.getElementById('helpVersionNum');
       if (_curVerMain && _curVerSpan) _curVerSpan.textContent = _curVerMain.textContent;
 
-      async function checkForUpdates(silent = false) {
-        const btn = document.getElementById('btnCheckUpdates');
+      // ── GitHub token setup (Electron only) ──────────────────────────────────
+      (async function initUpdateToken() {
+        if (!window.etherx?.update) return; // web mode — hide token group entirely
+        const tokenGroup = document.getElementById('updTokenGroup');
+        if (tokenGroup) tokenGroup.style.display = '';
+        const tokenInput = document.getElementById('updGithubToken');
+        const tokenStatus = document.getElementById('updTokenStatus');
+        const saveTokenBtn = document.getElementById('btnSaveGithubToken');
+        // Show masked placeholder if token already saved
+        const hasToken = await window.etherx.update.hasToken();
+        if (hasToken && tokenStatus) tokenStatus.textContent = '✅ Token je pohranjen. Unesi novi da zamijeniš.';
+        if (saveTokenBtn) saveTokenBtn.addEventListener('click', async () => {
+          const val = tokenInput?.value.trim() || '';
+          if (!val) { if (tokenStatus) { tokenStatus.style.color = '#e74c3c'; tokenStatus.textContent = '⚠️ Token ne može biti prazan.'; } return; }
+          saveTokenBtn.disabled = true; saveTokenBtn.textContent = '⏳';
+          const r = await window.etherx.update.saveToken(val);
+          saveTokenBtn.disabled = false; saveTokenBtn.textContent = '💾 Spremi token';
+          if (r.ok) {
+            if (tokenInput) tokenInput.value = '';
+            if (tokenStatus) { tokenStatus.style.color = '#27c93f'; tokenStatus.textContent = '✅ Token pohranjen. Možeš sada provjeri ažuriranja.'; }
+            showToast('✅ GitHub token pohranjen');
+          } else {
+            if (tokenStatus) { tokenStatus.style.color = '#e74c3c'; tokenStatus.textContent = '❌ Greška: ' + (r.error || 'nepoznata'); }
+          }
+        });
+      })();
+
+      function semverNewer(latest, current) {
+        const a = latest.split('.').map(Number);
+        const b = current.split('.').map(Number);
+        for (let i = 0; i < 3; i++) { if ((a[i] || 0) > (b[i] || 0)) return true; if ((a[i] || 0) < (b[i] || 0)) return false; }
+        return false;
+      }
+
+      function _applyUpdateResult(data, currentTag) {
         const badge = document.getElementById('updStatusBadge');
         const resultBox = document.getElementById('updResultBox');
         const lastCheckedEl = document.getElementById('updLastChecked');
+        const now = new Date().toLocaleString('hr-HR');
+        if (lastCheckedEl) lastCheckedEl.textContent = 'Zadnja provjera: ' + now;
+        const latestTag = data.latest || data.tag_name?.replace(/^v/, '') || '';
+        const isNew = data.isNew ?? semverNewer(latestTag, currentTag);
+        if (isNew) {
+          if (badge) { badge.textContent = '⬆ Dostupno v' + latestTag; badge.style.background = 'rgba(255,189,46,.1)'; badge.style.color = '#ffbd2e'; badge.style.borderColor = 'rgba(255,189,46,.3)'; }
+        } else {
+          if (badge) { badge.textContent = '✓ Ažuran'; badge.style.background = 'rgba(39,201,63,.1)'; badge.style.color = '#27c93f'; badge.style.borderColor = 'rgba(39,201,63,.25)'; }
+        }
+        if (resultBox) {
+          resultBox.style.display = 'block';
+          const newLabel = document.getElementById('updNewVerLabel');
+          const newNum = document.getElementById('updNewVerNum');
+          const dlLink = document.getElementById('updDownloadLink');
+          const notes = document.getElementById('updReleaseNotes');
+          if (isNew) {
+            if (newLabel) { newLabel.style.color = 'var(--accent)'; newLabel.textContent = '🎉 Nova verzija dostupna!'; }
+            if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
+            const htmlAsset = (data.assets || []).find(a => a.name?.endsWith('.html'));
+            if (dlLink) { dlLink.style.display = 'inline-block'; dlLink.href = htmlAsset?.url || 'https://github.com/ktrucek/etherx-standalone/releases/latest'; }
+          } else {
+            if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
+            if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
+            if (dlLink) dlLink.style.display = 'none';
+          }
+          if (notes) notes.textContent = (data.body || '').replace(/\r\n/g, '\n').slice(0, 600) || (isNew ? '' : '');
+        }
+      }
+
+      async function checkForUpdates(silent = false) {
+        const btn = document.getElementById('btnCheckUpdates');
+        const badge = document.getElementById('updStatusBadge');
+        const currentTag = (document.getElementById('helpVersionNum')?.textContent || '0.0.0').replace(/^v/, '');
         if (btn) { btn.textContent = '⏳ Provjera…'; btn.disabled = true; }
         try {
-          // Fetch GitHub Releases API
-          const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
-            headers: { 'Accept': 'application/vnd.github+json' }
-          });
-          if (!res.ok) throw new Error('GitHub API error: ' + res.status);
-          const data = await res.json();
-          const latestTag = (data.tag_name || '').replace(/^v/, '');
-          const currentTag = (document.getElementById('helpVersionNum')?.textContent || '0.0.0').replace(/^v/, '');
-          const now = new Date().toLocaleString('hr-HR');
-          if (lastCheckedEl) lastCheckedEl.textContent = 'Zadnja provjera: ' + now;
-          await saveSettings({ last_update_check: now });
-
-          function semverNewer(latest, current) {
-            const a = latest.split('.').map(Number);
-            const b = current.split('.').map(Number);
-            for (let i = 0; i < 3; i++) { if ((a[i] || 0) > (b[i] || 0)) return true; if ((a[i] || 0) < (b[i] || 0)) return false; }
-            return false;
-          }
-
-          if (semverNewer(latestTag, currentTag)) {
-            if (badge) { badge.textContent = '⬆ Dostupno v' + latestTag; badge.style.background = 'rgba(255,189,46,.1)'; badge.style.color = '#ffbd2e'; badge.style.borderColor = 'rgba(255,189,46,.3)'; }
-            if (resultBox) {
-              resultBox.style.display = 'block';
-              const newLabel = document.getElementById('updNewVerLabel');
-              const newNum = document.getElementById('updNewVerNum');
-              const dlLink = document.getElementById('updDownloadLink');
-              const notes = document.getElementById('updReleaseNotes');
-              if (newLabel) newLabel.textContent = '🎉 Nova verzija dostupna!';
-              if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
-              // Find HTML asset download link
-              const htmlAsset = data.assets?.find(a => a.name?.endsWith('.html'));
-              if (dlLink) {
-                dlLink.style.display = 'inline-block';
-                dlLink.href = htmlAsset?.browser_download_url || data.html_url;
-              }
-              if (notes) notes.textContent = data.body ? data.body.replace(/\r\n/g, '\n').slice(0, 600) : 'Nema release notes.';
-            }
-            if (!silent) showToast('⬆️ Nova verzija: v' + latestTag + ' — provjeri Ažuriranja!');
+          let data;
+          if (window.etherx?.update?.check) {
+            // ── Electron: IPC route — token stays in main process, never in renderer ──
+            data = await window.etherx.update.check();
+            if (!data.ok) throw new Error(data.error || 'Nepoznata greška');
           } else {
-            if (badge) { badge.textContent = '✓ Ažuran'; badge.style.background = 'rgba(39,201,63,.1)'; badge.style.color = '#27c93f'; badge.style.borderColor = 'rgba(39,201,63,.25)'; }
-            if (resultBox) {
-              resultBox.style.display = 'block';
-              const newLabel = document.getElementById('updNewVerLabel');
-              const newNum = document.getElementById('updNewVerNum');
-              const dlLink = document.getElementById('updDownloadLink');
-              const notes = document.getElementById('updReleaseNotes');
-              if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
-              if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
-              if (dlLink) dlLink.style.display = 'none';
-              if (notes) notes.textContent = data.body ? data.body.replace(/\r\n/g, '\n').slice(0, 600) : '';
-            }
-            if (!silent) showToast('✓ Browser je ažuran — v' + currentTag);
+            // ── Web fallback: public API only (no token needed for public repo) ──
+            const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
+              headers: { 'Accept': 'application/vnd.github+json' }
+            });
+            if (!res.ok) throw new Error('GitHub API error: ' + res.status);
+            const raw = await res.json();
+            const latestTag = (raw.tag_name || '').replace(/^v/, '');
+            data = { ok: true, latest: latestTag, current: currentTag, isNew: semverNewer(latestTag, currentTag), body: raw.body || '', assets: (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url })) };
           }
+          _applyUpdateResult(data, currentTag);
+          if (!silent) showToast(data.isNew ? ('⬆️ Nova verzija: v' + data.latest + ' dostupna!') : ('✓ Browser je ažuran — v' + currentTag));
         } catch (err) {
           if (badge) { badge.textContent = '? Greška'; badge.style.background = 'rgba(255,95,86,.1)'; badge.style.color = '#ff5f56'; badge.style.borderColor = 'rgba(255,95,86,.3)'; }
           if (!silent) showToast('❌ Greška pri provjeri: ' + err.message);
+          // Show error in result box
+          const resultBox = document.getElementById('updResultBox');
+          const newLabel = document.getElementById('updNewVerLabel');
+          if (resultBox) { resultBox.style.display = 'block'; if (newLabel) { newLabel.style.color = '#e74c3c'; newLabel.textContent = '❌ ' + err.message; } const newNum = document.getElementById('updNewVerNum'); if (newNum) newNum.textContent = ''; const dlLink = document.getElementById('updDownloadLink'); if (dlLink) dlLink.style.display = 'none'; }
         } finally {
           if (btn) { btn.textContent = '🔍 Provjeri sada'; btn.disabled = false; }
         }
