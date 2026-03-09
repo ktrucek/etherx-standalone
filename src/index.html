@@ -5840,13 +5840,16 @@
     <div class="panel" id="dlPanel">
       <div class="panel-header"><span class="panel-title">⬇️ Downloads</span><button class="panel-close"
           id="closeDlPanel">×</button></div>
-      <div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--border);align-items:center">
+        <button id="dlOpenFolder"
+          style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);padding:2px 8px;cursor:pointer;font-size:11px"
+          title="Otvori folder preuzimanja">📂 Otvori folder</button>
         <button id="dlClearAll"
           style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);padding:2px 8px;cursor:pointer;font-size:11px">🗑
-          Clear All</button>
+          Obriši sve</button>
       </div>
       <div class="panel-body" id="dlList">
-        <div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No downloads yet</div>
+        <div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">Nema preuzimanja</div>
       </div>
     </div>
     <div class="panel" id="settingsPanel" style="width:min(580px,96vw)">
@@ -7791,7 +7794,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.31</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.32</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8048,7 +8051,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.31</span></div>
+                id="helpVersionNum2">2.4.32</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8127,14 +8130,31 @@
       <div class="panel-header" style="padding:8px 12px">
         <span class="panel-title">💰 BOBIAI Wallet</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <button id="walletMenuBtn" title="Wallet opcije"
-            style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 6px"
-            onclick="walletShowMenu(event)">⋮</button>
+          <button id="walletPopout" title="Otvori u novom tabu"
+            style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:14px;padding:2px 6px"
+            onclick="window.open('https://wallet.kriptoentuzijasti.io','_blank')">↗</button>
+          <button id="walletReload" title="Reload"
+            style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:14px;padding:2px 6px">↺</button>
           <button class="panel-close" id="closeWalletPanel">×</button>
         </div>
       </div>
-      <!-- ── Wallet Inner ─────────────────────────────────────────────────────── -->
-      <div id="wlt-root" style="flex:1;overflow-y:auto;padding:0"></div>
+      <div style="flex:1;position:relative;overflow:hidden">
+        <div id="walletLoading"
+          style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--bg);z-index:2">
+          <div style="font-size:32px">💰</div>
+          <div style="font-size:13px;color:var(--text2)">Loading Wallet…</div>
+          <div style="width:40px;height:3px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div
+              style="height:100%;width:40%;background:var(--accent);border-radius:2px;animation:walletLoad 1s infinite alternate">
+            </div>
+          </div>
+        </div>
+        <iframe id="walletFrame" src="https://wallet.kriptoentuzijasti.io"
+          style="width:100%;height:100%;border:none;display:block"
+          allow="clipboard-read; clipboard-write; web-share; camera; microphone"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+          title="BOBIAI Wallet" onload="document.getElementById('walletLoading').style.display='none'"></iframe>
+      </div>
     </div>
     <!-- BobiAI Studio Panel -->
     <div class="panel" id="bobiaiPanel" style="width:420px">
@@ -9926,7 +9946,13 @@
       if (wl) wl.style.display = 'flex';
       if (wf) { wf.src = ''; setTimeout(() => { wf.src = 'https://wallet.kriptoentuzijasti.io'; }, 50); }
     });
-    document.getElementById('btnWallet').addEventListener('click', () => { togglePanel('walletPanel'); _wltInit(); });
+    document.getElementById('btnWallet').addEventListener('click', () => { togglePanel('walletPanel'); });
+    document.getElementById('bobiaiReload')?.addEventListener('click', () => {
+      const bl = document.getElementById('bobiaiLoading');
+      const bf = document.getElementById('bobiaiFrame');
+      if (bl) bl.style.display = 'flex';
+      if (bf) { bf.src = ''; setTimeout(() => { bf.src = 'https://bobiai.kriptoentuzijasti.io'; }, 50); }
+    });
     document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel('bobiaiPanel'));
 
     // ── Gemini Page Summarizer (multi-provider) ─────────────────────────────
@@ -10177,35 +10203,221 @@
     document.getElementById('clearHistBtn').addEventListener('click', () => { DB.clearHistory(); renderHistoryPanel(); showToast('History cleared'); });
 
     // ── Downloads Panel Renderer ──────────────────────────────────────────────
+    // In-memory map of active downloads (id → data) for live progress updates
+    const _activeDownloads = new Map();
+
+    function _fmtBytes(b) {
+      if (!b || b <= 0) return '';
+      if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+      if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+      if (b >= 1024) return (b / 1024).toFixed(0) + ' KB';
+      return b + ' B';
+    }
+
+    function _dlStatusIcon(status) {
+      if (status === 'completed') return '✅';
+      if (status === 'failed' || status === 'cancelled') return '❌';
+      if (status === 'paused') return '⏸️';
+      if (status === 'progressing' || status === 'started') return '⏬';
+      return '⬇️';
+    }
+
     function renderDownloadsPanel() {
       const list = document.getElementById('dlList');
-      const downloads = DB.getDownloads();
-      if (downloads.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No downloads yet</div>'; return; }
+      // Merge DB downloads with in-memory active ones (active overrides DB for same id)
+      const dbDownloads = DB.getDownloads();
+      const merged = new Map();
+      dbDownloads.forEach(d => merged.set(d.id, d));
+      _activeDownloads.forEach((d, id) => merged.set(id, { ...merged.get(id), ...d }));
+      const downloads = [...merged.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+      if (downloads.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">⬇️ Nema preuzimanja</div>';
+        return;
+      }
       list.innerHTML = '';
       downloads.forEach(d => {
-        const el = document.createElement('div'); el.className = 'p-entry';
-        const fname = d.filename || d.url?.split('/').pop() || 'download';
-        const size = d.size ? (d.size > 1048576 ? (d.size / 1048576).toFixed(1) + ' MB' : (d.size / 1024).toFixed(0) + ' KB') : '';
-        const status = d.status === 'completed' ? '✅' : d.status === 'failed' ? '❌' : '⏳';
-        el.innerHTML = `<div class="p-entry-icon">⬇️</div><div class="p-entry-title" title="${d.url || ''}">${status} ${fname}</div><div class="p-entry-meta">${size} ${timeAgo(d.ts)}</div><button class="p-entry-del">×</button>`;
-        el.querySelector('.p-entry-title').addEventListener('click', () => { if (d.url) navigateTo(d.url); });
-        el.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); DB.deleteDownload(d.id); renderDownloadsPanel(); });
+        const el = document.createElement('div');
+        el.className = 'p-entry';
+        el.style.cssText = 'flex-direction:column;align-items:stretch;gap:0;padding:8px 10px;';
+        el.dataset.dlid = d.id;
+
+        const fname = d.filename || d.url?.split('/').pop()?.split('?')[0] || 'download';
+        const isActive = d.status === 'progressing' || d.status === 'started';
+        const isDone = d.status === 'completed';
+        const isFailed = d.status === 'failed' || d.status === 'cancelled';
+        const hasSavePath = !!(d.savePath);
+
+        // Progress
+        const pct = (d.totalBytes > 0) ? Math.round((d.receivedBytes / d.totalBytes) * 100) : (isDone ? 100 : 0);
+        const recvStr = _fmtBytes(d.receivedBytes);
+        const totalStr = _fmtBytes(d.totalBytes);
+        const sizeStr = isDone ? totalStr : (recvStr && totalStr ? recvStr + ' / ' + totalStr : recvStr || totalStr || '');
+
+        // Top row: icon + name + delete
+        const topRow = document.createElement('div');
+        topRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+        topRow.innerHTML = `
+          <span style="font-size:14px">${_dlStatusIcon(d.status)}</span>
+          <span class="dl-fname" title="${escHtml(d.url || '')}" style="flex:1;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escHtml(fname)}</span>
+          <span style="font-size:10px;color:var(--text3);white-space:nowrap">${timeAgo(d.ts)}</span>
+          <button class="p-entry-del" style="flex-shrink:0">×</button>
+        `;
+        el.appendChild(topRow);
+
+        // Progress bar (samo za aktivne ili ako imamo postotak)
+        if (isActive || (pct > 0 && pct < 100)) {
+          const barWrap = document.createElement('div');
+          barWrap.style.cssText = 'margin-top:5px;background:var(--bg3);border-radius:3px;height:4px;overflow:hidden;';
+          const bar = document.createElement('div');
+          bar.className = 'dl-progress-bar';
+          bar.style.cssText = `height:100%;background:var(--accent);border-radius:3px;width:${pct}%;transition:width .3s;`;
+          barWrap.appendChild(bar);
+          el.appendChild(barWrap);
+        }
+
+        // Meta row: size + action buttons
+        const metaRow = document.createElement('div');
+        metaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px;';
+        let metaHTML = `<span style="font-size:10px;color:var(--text3);flex:1">${escHtml(sizeStr)}`;
+        if (isActive && pct > 0) metaHTML += ` &mdash; ${pct}%`;
+        metaHTML += `</span>`;
+
+        // Action buttons — only in Electron where savePath is available
+        if (isDone && hasSavePath) {
+          metaHTML += `
+            <button class="dl-btn-open" title="Otvori fajl" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">▶ Otvori</button>
+            <button class="dl-btn-folder" title="Prikaži u folderu" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">📂 Folder</button>
+          `;
+        } else if (!isDone && !isFailed) {
+          // Show URL as clickable
+          metaHTML += `<span style="font-size:10px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" class="dl-url-lnk" title="${escHtml(d.url || '')}">${escHtml((d.url || '').replace(/^https?:\/\//, '').slice(0, 40))}</span>`;
+        }
+        metaRow.innerHTML = metaHTML;
+        el.appendChild(metaRow);
+
+        // Events
+        topRow.querySelector('.dl-fname').addEventListener('click', () => { if (d.url) navigateTo(d.url); });
+        el.querySelector('.p-entry-del').addEventListener('click', ev => {
+          ev.stopPropagation();
+          _activeDownloads.delete(d.id);
+          DB.deleteDownload(d.id);
+          renderDownloadsPanel();
+          _updateDlBadge();
+        });
+        if (isDone && hasSavePath) {
+          metaRow.querySelector('.dl-btn-open')?.addEventListener('click', ev => {
+            ev.stopPropagation();
+            window.etherx?.shell?.openPath(d.savePath).catch?.(() => { });
+          });
+          metaRow.querySelector('.dl-btn-folder')?.addEventListener('click', ev => {
+            ev.stopPropagation();
+            window.etherx?.shell?.showItemInFolder(d.savePath).catch?.(() => { });
+          });
+        }
+        metaRow.querySelector('.dl-url-lnk')?.addEventListener('click', ev => {
+          ev.stopPropagation();
+          if (d.url) navigateTo(d.url);
+        });
+
         list.appendChild(el);
       });
     }
+
+    function _updateDlBadge() {
+      const activeCount = [..._activeDownloads.values()].filter(d => d.status === 'progressing' || d.status === 'started').length;
+      let badge = document.getElementById('dlBadge');
+      const btn = document.getElementById('btnDownloads');
+      if (!btn) return;
+      if (activeCount > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.id = 'dlBadge';
+          badge.style.cssText = 'position:absolute;top:0;right:0;background:var(--accent);color:#fff;border-radius:8px;font-size:8px;font-weight:700;padding:1px 4px;pointer-events:none;line-height:1.4';
+          btn.style.position = 'relative';
+          btn.appendChild(badge);
+        }
+        badge.textContent = activeCount;
+      } else {
+        badge?.remove();
+      }
+    }
+
     function openDownloadsPanelWithRefresh() {
       renderDownloadsPanel();
-      document.getElementById('dlPanel')?.classList.add('open');
+      const panel = document.getElementById('dlPanel');
+      if (panel && !panel.classList.contains('open')) {
+        closeAllPanels();
+        panel.classList.add('open');
+      }
     }
-    document.getElementById('dlClearAll')?.addEventListener('click', () => { DB.clearDownloads(); renderDownloadsPanel(); showToast('Downloads cleared'); });
+
+    document.getElementById('dlClearAll')?.addEventListener('click', () => {
+      _activeDownloads.clear();
+      DB.clearDownloads();
+      renderDownloadsPanel();
+      _updateDlBadge();
+      showToast('Preuzimanja obrisana');
+    });
+
+    document.getElementById('dlOpenFolder')?.addEventListener('click', () => {
+      if (window.etherx?.shell) {
+        // Try to open the most recent download's folder, or default downloads dir
+        const recent = DB.getDownloads().find(d => d.savePath);
+        if (recent?.savePath) {
+          window.etherx.shell.showItemInFolder(recent.savePath);
+        } else {
+          // Open system downloads folder
+          window.etherx.nav?.openExternal('file://' + (window._downloadsDir || ''));
+        }
+      } else {
+        showToast('Dostupno samo u Electron verziji');
+      }
+    });
+
     document.getElementById('btnDownloads').addEventListener('click', () => { renderDownloadsPanel(); togglePanel('dlPanel'); });
+
     if (window.etherx?.on) {
       window.etherx.on('download-update', (download) => {
-        DB.upsertDownload(download || {});
-        renderDownloadsPanel();
-        if (download?.status === 'started' || download?.status === 'progressing' || download?.status === 'completed') {
+        if (!download?.id) return;
+        if (download.status === 'completed' || download.status === 'failed' || download.status === 'cancelled') {
+          _activeDownloads.delete(download.id);
+          DB.upsertDownload(download);
+        } else {
+          // Keep active in memory for live progress
+          _activeDownloads.set(download.id, download);
+        }
+        // Auto-open panel on first start
+        if (download.status === 'started') {
+          openDownloadsPanelWithRefresh();
+          showToast('⬇️ Preuzimanje započeto: ' + (download.filename || ''));
+        }
+        // Show completion toast
+        if (download.status === 'completed') {
+          showToast('✅ Preuzeto: ' + (download.filename || ''));
           openDownloadsPanelWithRefresh();
         }
+        if (download.status === 'failed') {
+          showToast('❌ Preuzimanje nije uspjelo: ' + (download.filename || ''));
+        }
+        // Live update existing entry if panel is open
+        const panel = document.getElementById('dlPanel');
+        if (panel?.classList.contains('open')) {
+          // Try to update just the progress bar without full re-render
+          const entryEl = document.querySelector(`[data-dlid="${download.id}"]`);
+          if (entryEl) {
+            const pct = (download.totalBytes > 0) ? Math.round((download.receivedBytes / download.totalBytes) * 100) : 0;
+            const bar = entryEl.querySelector('.dl-progress-bar');
+            if (bar) bar.style.width = pct + '%';
+            const recvStr = _fmtBytes(download.receivedBytes);
+            const totalStr = _fmtBytes(download.totalBytes);
+            const metaSpan = entryEl.querySelector('span[style*="flex:1"]');
+            if (metaSpan) metaSpan.textContent = (recvStr && totalStr ? recvStr + ' / ' + totalStr : recvStr || '') + (pct > 0 ? ' — ' + pct + '%' : '');
+          } else {
+            renderDownloadsPanel();
+          }
+        }
+        _updateDlBadge();
       });
     }
 
@@ -16307,510 +16519,6 @@
 
     })();
     // ══ End Bookmark Manager ═══════════════════════════════════════════════
-
-    // ══ BOBIAI Wallet (embedded, no iframe) ════════════════════════════════
-    // Storage: localStorage['ex_wallet'] = { encrypted, address, network, createdAt }
-    // Encrypted: AES-GCM / PBKDF2 via Web Crypto API
-    // ethers.js v6 UMD loaded from ../assets/ethers.umd.min.js
-    (function () {
-      'use strict';
-
-      const LS_KEY = 'ex_wallet';
-      let _wltSession = null; // { wallet: ethers.Wallet, address, network }
-
-      // ── Persist helpers ─────────────────────────────────────────────────
-      function _wltLoad() {
-        try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch { return null; }
-      }
-      function _wltSave(data) {
-        localStorage.setItem(LS_KEY, JSON.stringify(data));
-        // Sync to SQLite if Electron
-        if (window.etherx?.app) {
-          window.electronAPI?.invoke('db:saveUserProfile', {
-            walletAddress: data.address || '',
-            walletEncrypted: data.encrypted || ''
-          }).catch(() => { });
-        }
-      }
-
-      // ── Web Crypto AES-GCM helpers ───────────────────────────────────────
-      async function _deriveKey(password, salt) {
-        const enc = new TextEncoder();
-        const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-        return crypto.subtle.deriveKey(
-          { name: 'PBKDF2', salt, iterations: 210_000, hash: 'SHA-256' },
-          keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
-        );
-      }
-      async function _encrypt(plaintext, password) {
-        const salt = crypto.getRandomValues(new Uint8Array(16));
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const key = await _deriveKey(password, salt);
-        const enc = new TextEncoder();
-        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
-        // Pack: salt(16) + iv(12) + ciphertext, base64 encoded
-        const combined = new Uint8Array(16 + 12 + ct.byteLength);
-        combined.set(salt, 0); combined.set(iv, 16); combined.set(new Uint8Array(ct), 28);
-        return btoa(String.fromCharCode(...combined));
-      }
-      async function _decrypt(b64, password) {
-        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-        const salt = bytes.slice(0, 16);
-        const iv = bytes.slice(16, 28);
-        const ct = bytes.slice(28);
-        const key = await _deriveKey(password, salt);
-        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
-        return new TextDecoder().decode(plain);
-      }
-
-      // ── Ethers helpers ──────────────────────────────────────────────────
-      function _ethers() { return window.ethers; }
-      function _hasEthers() { return !!(window.ethers && window.ethers.Wallet); }
-
-      async function _createWallet() {
-        if (!_hasEthers()) throw new Error('ethers.js nije učitan');
-        const e = _ethers();
-        const wallet = e.Wallet.createRandom();
-        return wallet;
-      }
-      async function _walletFromMnemonic(mnemonic) {
-        if (!_hasEthers()) throw new Error('ethers.js nije učitan');
-        const e = _ethers();
-        const wallet = e.Wallet.fromPhrase(mnemonic.trim());
-        return wallet;
-      }
-      async function _walletFromPrivateKey(pk) {
-        if (!_hasEthers()) throw new Error('ethers.js nije učitan');
-        const e = _ethers();
-        const wallet = new e.Wallet(pk.trim());
-        return wallet;
-      }
-
-      // ── Balance fetch ──────────────────────────────────────────────────
-      const RPC_ENDPOINTS = {
-        ethereum: 'https://cloudflare-eth.com',
-        polygon: 'https://polygon-rpc.com',
-        bsc: 'https://bsc-dataseed.binance.org',
-        arbitrum: 'https://arb1.arbitrum.io/rpc',
-      };
-      async function _fetchBalance(address, network) {
-        const rpc = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.ethereum;
-        try {
-          const resp = await fetch(rpc, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 })
-          });
-          const data = await resp.json();
-          if (data.result) {
-            const wei = BigInt(data.result);
-            const eth = Number(wei) / 1e18;
-            return eth.toFixed(6);
-          }
-        } catch { }
-        return null;
-      }
-
-      // ── Render functions ───────────────────────────────────────────────
-      function _wltRoot() { return document.getElementById('wlt-root'); }
-
-      function _wltRenderLoading(msg) {
-        const r = _wltRoot(); if (!r) return;
-        r.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:48px 24px">
-          <div style="font-size:36px">💰</div>
-          <div style="font-size:13px;color:var(--text2)">${msg || 'Učitavam…'}</div>
-          <div style="width:40px;height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:40%;background:var(--accent);border-radius:2px;animation:walletLoad 1s infinite alternate"></div></div>
-        </div>`;
-      }
-
-      function _wltRenderSetup() {
-        const r = _wltRoot(); if (!r) return;
-        r.innerHTML = `
-        <div style="padding:24px 16px 16px">
-          <div style="text-align:center;margin-bottom:20px">
-            <div style="font-size:40px;margin-bottom:8px">🔐</div>
-            <div style="font-size:15px;font-weight:700;color:var(--text)">BOBIAI Wallet</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px">Privatni ključevi ostaju na uređaju</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <button onclick="_wltShowCreate()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:12px;width:100%">✨ Kreiraj novi wallet</button>
-            <button onclick="_wltShowImport()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);cursor:pointer;font-size:13px;padding:12px;width:100%">📥 Uvezi wallet (seed ili ključ)</button>
-          </div>
-          <div style="margin-top:16px;padding:10px 12px;background:#1a1a2e;border-radius:6px;border:1px solid #2a2a4e">
-            <div style="font-size:10px;color:#6c7a9c;line-height:1.6">
-              🛡️ Wallet podaci su šifrirani AES-256 i pohranjeni lokalno — nikada se ne šalju na server.
-            </div>
-          </div>
-        </div>`;
-      }
-
-      function _wltShowCreate() {
-        const r = _wltRoot(); if (!r) return;
-        r.innerHTML = `
-        <div style="padding:16px">
-          <button onclick="_wltRenderSetup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-bottom:12px">← Natrag</button>
-          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Kreiraj novi wallet</div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:16px">Bit će generirana nova recovery fraza (12 riječi).</div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Lozinka (za šifriranje)</label>
-            <input type="password" id="wlt-pwd1" placeholder="Min. 8 znakova" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
-          </div>
-          <div style="margin-bottom:16px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Potvrdi lozinku</label>
-            <input type="password" id="wlt-pwd2" placeholder="Ponovi lozinku" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
-          </div>
-          <button onclick="_wltDoCreate()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:11px;width:100%">Generiraj wallet</button>
-        </div>`;
-      }
-
-      function _wltShowImport() {
-        const r = _wltRoot(); if (!r) return;
-        r.innerHTML = `
-        <div style="padding:16px">
-          <button onclick="_wltRenderSetup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-bottom:12px">← Natrag</button>
-          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Uvezi wallet</div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:16px">Unesi 12/24-riječnu frazu ili privatni ključ (0x…)</div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Recovery fraza ili privatni ključ</label>
-            <textarea id="wlt-seed" rows="3" placeholder="word1 word2 word3… ili 0xPrivateKey" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:12px;font-family:monospace;resize:none;box-sizing:border-box"></textarea>
-          </div>
-          <div style="margin-bottom:12px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Lozinka za šifriranje</label>
-            <input type="password" id="wlt-imp-pwd1" placeholder="Min. 8 znakova" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
-          </div>
-          <div style="margin-bottom:16px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Potvrdi lozinku</label>
-            <input type="password" id="wlt-imp-pwd2" placeholder="Ponovi lozinku" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box">
-          </div>
-          <button onclick="_wltDoImport()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:11px;width:100%">Uvezi wallet</button>
-        </div>`;
-      }
-
-      function _wltRenderUnlock() {
-        const stored = _wltLoad();
-        const r = _wltRoot(); if (!r) return;
-        r.innerHTML = `
-        <div style="padding:24px 16px">
-          <div style="text-align:center;margin-bottom:20px">
-            <div style="font-size:36px;margin-bottom:8px">🔒</div>
-            <div style="font-size:14px;font-weight:700;color:var(--text)">Otključaj wallet</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px;font-family:monospace">${(stored.address || '').slice(0, 10)}…${(stored.address || '').slice(-6)}</div>
-          </div>
-          <div style="margin-bottom:14px">
-            <input type="password" id="wlt-unlock-pwd" placeholder="Lozinka walletа" autofocus
-              style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:10px 12px;font-size:13px;box-sizing:border-box"
-              onkeydown="if(event.key==='Enter')_wltDoUnlock()">
-          </div>
-          <button onclick="_wltDoUnlock()" style="background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:11px;width:100%;margin-bottom:8px">🔓 Otključaj</button>
-          <button onclick="_wltRenderSetup()" style="background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text3);cursor:pointer;font-size:11px;padding:7px;width:100%">Koristi drugi wallet…</button>
-        </div>`;
-        document.getElementById('wlt-unlock-pwd')?.focus();
-      }
-
-      async function _wltRenderMain() {
-        const r = _wltRoot(); if (!r || !_wltSession) return;
-        const { address, network } = _wltSession;
-        const netLabel = { ethereum: 'Ethereum', polygon: 'Polygon', bsc: 'BNB Chain', arbitrum: 'Arbitrum' };
-        r.innerHTML = `
-        <div style="padding:0">
-          <!-- Header / Balance -->
-          <div style="background:linear-gradient(135deg,#1a1f4e,#0d0f2b);padding:16px;text-align:center">
-            <div style="font-size:28px;margin-bottom:4px">💰</div>
-            <div style="font-size:11px;color:#7a86c0;margin-bottom:2px">${netLabel[network] || network}</div>
-            <div id="wlt-balance" style="font-size:22px;font-weight:700;color:#fff;margin-bottom:6px">…</div>
-            <div style="font-size:10px;color:#5a6890;font-family:monospace;cursor:pointer;word-break:break-all" onclick="navigator.clipboard&&navigator.clipboard.writeText('${address}').then(()=>showToast('📋 Adresa kopirana'))" title="Klikni za kopiranje">
-              ${address.slice(0, 10)}…${address.slice(-8)}
-            </div>
-            <div style="display:flex;justify-content:center;gap:6px;margin-top:10px">
-              ${Object.entries(netLabel).map(([k, v]) => `<button onclick="_wltSwitchNet('${k}')" style="background:${network === k ? 'var(--accent)' : '#1e2456'};border:none;border-radius:12px;color:#fff;cursor:pointer;font-size:9px;padding:3px 8px">${v}</button>`).join('')}
-            </div>
-          </div>
-          <!-- Actions -->
-          <div style="display:flex;gap:8px;padding:12px 16px">
-            <button onclick="_wltShowSend()" style="flex:1;background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:9px">↑ Pošalji</button>
-            <button onclick="_wltShowReceive()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;padding:9px">↓ Primi</button>
-            <button onclick="_wltShowBackup()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);cursor:pointer;font-size:12px;padding:9px" title="Backup / Recovery fraza">🔑</button>
-            <button onclick="_wltLock()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text3);cursor:pointer;font-size:12px;padding:9px" title="Zaključaj">🔒</button>
-          </div>
-          <!-- Adresa puna -->
-          <div style="padding:0 16px 12px">
-            <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px">
-              <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Adresa</div>
-              <div style="font-size:10px;font-family:monospace;color:var(--text);word-break:break-all;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText('${address}').then(()=>showToast('📋 Adresa kopirana'))" title="Klikni za kopiranje">${address} 📋</div>
-            </div>
-          </div>
-          <!-- Detail pane placeholder -->
-          <div id="wlt-detail" style="padding:0 16px 16px"></div>
-        </div>`;
-        // Async balance fetch
-        const balDiv = document.getElementById('wlt-balance');
-        _fetchBalance(address, network).then(bal => {
-          if (balDiv) balDiv.textContent = bal !== null ? bal + ' ETH' : '— (offline)';
-        });
-      }
-
-      function _wltShowSend() {
-        const det = document.getElementById('wlt-detail'); if (!det) return;
-        det.innerHTML = `
-        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px">
-          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">↑ Pošalji ETH</div>
-          <div style="margin-bottom:8px">
-            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Prima (adresa)</label>
-            <input id="wlt-send-to" placeholder="0x…" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:7px 8px;font-size:11px;font-family:monospace;box-sizing:border-box">
-          </div>
-          <div style="margin-bottom:10px">
-            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Iznos (ETH)</label>
-            <input id="wlt-send-amt" type="number" placeholder="0.001" step="0.000001" min="0" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:7px 8px;font-size:12px;box-sizing:border-box">
-          </div>
-          <div style="display:flex;gap:8px">
-            <button onclick="_wltDoSend()" style="flex:1;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:8px">Pošalji</button>
-            <button onclick="document.getElementById('wlt-detail').innerHTML=''" style="background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:12px;padding:8px">Odustani</button>
-          </div>
-          <div id="wlt-send-status" style="margin-top:8px;font-size:10px;color:var(--text3)"></div>
-        </div>`;
-      }
-
-      function _wltShowReceive() {
-        const det = document.getElementById('wlt-detail'); if (!det || !_wltSession) return;
-        const addr = _wltSession.address;
-        // Generate simple QR via API (no ethers needed)
-        det.innerHTML = `
-        <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px;text-align:center">
-          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">↓ Primi ETH</div>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(addr)}&bgcolor=1a1a2e&color=4a9eff" alt="QR" style="border-radius:8px;width:140px;height:140px">
-          <div style="font-size:9px;font-family:monospace;color:var(--text3);word-break:break-all;margin-top:8px;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText('${addr}').then(()=>showToast('📋 Adresa kopirana'))">${addr}</div>
-          <div style="font-size:10px;color:#5a9f5a;margin-top:6px">📋 Klikni na adresu za kopiranje</div>
-          <button onclick="document.getElementById('wlt-detail').innerHTML=''" style="margin-top:8px;background:none;border:1px solid var(--border2);border-radius:6px;color:var(--text3);cursor:pointer;font-size:11px;padding:5px 14px">Zatvori</button>
-        </div>`;
-      }
-
-      function _wltShowBackup() {
-        const r = _wltRoot(); if (!r) return;
-        r.innerHTML = `
-        <div style="padding:16px">
-          <button onclick="_wltRenderMain()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;margin-bottom:12px">← Natrag</button>
-          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">🔑 Backup walletа</div>
-          <div style="font-size:11px;color:#e74c3c;margin-bottom:14px">⚠️ Ne dijeli recovery frazu nikome!</div>
-          <div style="margin-bottom:10px">
-            <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Unesi lozinku za potvrdu</label>
-            <input type="password" id="wlt-backup-pwd" placeholder="Lozinka walletа"
-              style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;box-sizing:border-box"
-              onkeydown="if(event.key==='Enter')_wltDoBackup()">
-          </div>
-          <button onclick="_wltDoBackup()" style="background:#c0392b;border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;padding:10px;width:100%">Prikaži recovery frazu</button>
-          <div id="wlt-backup-out" style="margin-top:14px"></div>
-        </div>`;
-      }
-
-      function _wltLock() {
-        _wltSession = null;
-        _wltRenderUnlock();
-        showToast('🔒 Wallet zaključan');
-      }
-
-      function _wltSwitchNet(net) {
-        if (_wltSession) { _wltSession.network = net; _wltRenderMain(); }
-      }
-
-      // ── Actions ─────────────────────────────────────────────────────────
-      async function _wltDoCreate() {
-        const p1 = document.getElementById('wlt-pwd1')?.value;
-        const p2 = document.getElementById('wlt-pwd2')?.value;
-        if (!p1 || p1.length < 8) { showToast('⚠️ Lozinka mora imati min. 8 znakova'); return; }
-        if (p1 !== p2) { showToast('⚠️ Lozinke se ne podudaraju'); return; }
-        _wltRenderLoading('Generiranje walletа…');
-        try {
-          const wallet = await _createWallet();
-          const mnemonic = wallet.mnemonic.phrase;
-          const encrypted = await _encrypt(JSON.stringify({ mnemonic, privateKey: wallet.privateKey }), p1);
-          _wltSave({ encrypted, address: wallet.address, network: 'ethereum', createdAt: Date.now() });
-          _wltSession = { wallet, address: wallet.address, network: 'ethereum' };
-          // Show mnemonic once
-          const r = _wltRoot(); if (!r) return;
-          r.innerHTML = `
-          <div style="padding:16px">
-            <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">✅ Wallet kreiran!</div>
-            <div style="font-size:11px;color:#e74c3c;margin-bottom:10px">⚠️ Zapiši ovu frazu — prikazuje se samo jednom!</div>
-            <div style="background:#1a0d0d;border:1px solid #5a1a1a;border-radius:8px;padding:14px;font-size:12px;font-family:monospace;color:#f5a623;line-height:1.8;word-spacing:6px;letter-spacing:0.5px;margin-bottom:14px">${mnemonic}</div>
-            <div style="display:flex;gap:8px">
-              <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${mnemonic}').then(()=>showToast('📋 Fraza kopirana'))" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer;font-size:11px;padding:8px">📋 Kopiraj</button>
-              <button onclick="_wltRenderMain()" style="flex:1;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:600;padding:8px">Nastavi →</button>
-            </div>
-          </div>`;
-        } catch (err) {
-          showToast('❌ Greška: ' + err.message);
-          _wltRenderSetup();
-        }
-      }
-
-      async function _wltDoImport() {
-        const seed = document.getElementById('wlt-seed')?.value?.trim();
-        const p1 = document.getElementById('wlt-imp-pwd1')?.value;
-        const p2 = document.getElementById('wlt-imp-pwd2')?.value;
-        if (!seed) { showToast('⚠️ Unesi recovery frazu ili privatni ključ'); return; }
-        if (!p1 || p1.length < 8) { showToast('⚠️ Lozinka mora imati min. 8 znakova'); return; }
-        if (p1 !== p2) { showToast('⚠️ Lozinke se ne podudaraju'); return; }
-        _wltRenderLoading('Uvoz walletа…');
-        try {
-          let wallet;
-          if (seed.startsWith('0x') && seed.length >= 64) {
-            wallet = await _walletFromPrivateKey(seed);
-          } else {
-            wallet = await _walletFromMnemonic(seed);
-          }
-          const mnemonic = wallet.mnemonic?.phrase || '';
-          const encrypted = await _encrypt(JSON.stringify({ mnemonic, privateKey: wallet.privateKey }), p1);
-          _wltSave({ encrypted, address: wallet.address, network: 'ethereum', createdAt: Date.now() });
-          _wltSession = { wallet, address: wallet.address, network: 'ethereum' };
-          showToast('✅ Wallet uvezen: ' + wallet.address.slice(0, 10) + '…');
-          _wltRenderMain();
-        } catch (err) {
-          showToast('❌ Greška: ' + err.message);
-          _wltShowImport();
-        }
-      }
-
-      async function _wltDoUnlock() {
-        const pwd = document.getElementById('wlt-unlock-pwd')?.value;
-        if (!pwd) { showToast('⚠️ Unesi lozinku'); return; }
-        const stored = _wltLoad();
-        if (!stored?.encrypted) { _wltRenderSetup(); return; }
-        _wltRenderLoading('Dešifriranje walletа…');
-        try {
-          const plain = await _decrypt(stored.encrypted, pwd);
-          const { mnemonic, privateKey } = JSON.parse(plain);
-          let wallet;
-          if (mnemonic && _hasEthers()) {
-            wallet = await _walletFromMnemonic(mnemonic);
-          } else if (privateKey && _hasEthers()) {
-            wallet = await _walletFromPrivateKey(privateKey);
-          } else {
-            throw new Error('ethers.js nije dostupan');
-          }
-          _wltSession = { wallet, address: stored.address || wallet.address, network: stored.network || 'ethereum' };
-          showToast('✅ Wallet otključan');
-          _wltRenderMain();
-        } catch (err) {
-          showToast('❌ Pogrešna lozinka ili greška');
-          _wltRenderUnlock();
-        }
-      }
-
-      async function _wltDoSend() {
-        const to = document.getElementById('wlt-send-to')?.value?.trim();
-        const amt = document.getElementById('wlt-send-amt')?.value?.trim();
-        const status = document.getElementById('wlt-send-status');
-        if (!to || !amt) { showToast('⚠️ Popuni sva polja'); return; }
-        if (!_wltSession?.wallet) { showToast('⚠️ Wallet nije otključan'); return; }
-        if (status) status.textContent = 'Priprema transakcije…';
-        try {
-          const e = _ethers();
-          const rpc = RPC_ENDPOINTS[_wltSession.network] || RPC_ENDPOINTS.ethereum;
-          const provider = new e.JsonRpcProvider(rpc);
-          const connected = _wltSession.wallet.connect(provider);
-          const tx = await connected.sendTransaction({ to, value: e.parseEther(amt) });
-          if (status) status.innerHTML = `✅ TX poslan! Hash: <a href="https://etherscan.io/tx/${tx.hash}" target="_blank" style="color:var(--accent);word-break:break-all">${tx.hash.slice(0, 20)}…</a>`;
-          showToast('✅ Transakcija poslana');
-        } catch (err) {
-          if (status) status.textContent = '❌ ' + err.message;
-          showToast('❌ Greška slanja: ' + (err.shortMessage || err.message).slice(0, 60));
-        }
-      }
-
-      async function _wltDoBackup() {
-        const pwd = document.getElementById('wlt-backup-pwd')?.value;
-        if (!pwd) { showToast('⚠️ Unesi lozinku'); return; }
-        const stored = _wltLoad();
-        if (!stored?.encrypted) return;
-        const out = document.getElementById('wlt-backup-out'); if (!out) return;
-        try {
-          const plain = await _decrypt(stored.encrypted, pwd);
-          const { mnemonic, privateKey } = JSON.parse(plain);
-          out.innerHTML = `
-          <div style="margin-bottom:10px">
-            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Recovery fraza (12 riječi)</div>
-            <div style="background:#1a0d0d;border:1px solid #5a1a1a;border-radius:6px;padding:12px;font-size:12px;font-family:monospace;color:#f5a623;line-height:1.8;word-spacing:5px">${mnemonic || '(nema - uvezen privatnim ključem)'}</div>
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Privatni ključ</div>
-            <div style="background:#0d1a0d;border:1px solid #1a5a1a;border-radius:6px;padding:8px 10px;font-size:10px;font-family:monospace;color:#5af55a;word-break:break-all">${privateKey}</div>
-          </div>
-          <div style="display:flex;gap:6px;margin-top:10px">
-            ${mnemonic ? `<button onclick="navigator.clipboard&&navigator.clipboard.writeText('${mnemonic}').then(()=>showToast('📋 Kopirano'))" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);cursor:pointer;font-size:10px;padding:6px">📋 Fraza</button>` : ''}
-            <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${privateKey}').then(()=>showToast('📋 Kopirano'))" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);cursor:pointer;font-size:10px;padding:6px">📋 Ključ</button>
-          </div>`;
-        } catch {
-          out.innerHTML = '<div style="color:#e74c3c;font-size:11px">❌ Pogrešna lozinka</div>';
-        }
-      }
-
-      // ── Context menu ────────────────────────────────────────────────────
-      window.walletShowMenu = function (e) {
-        e.stopPropagation();
-        const items = [
-          { label: '🔄 Osvježi balans', fn: () => _wltSession && _wltRenderMain() },
-          { label: '🔑 Backup / Recovery fraza', fn: () => _wltSession && _wltShowBackup() },
-          { label: '🗑 Ukloni wallet', fn: _wltDoDelete },
-        ];
-        // Simple popover
-        document.querySelectorAll('.wlt-menu').forEach(m => m.remove());
-        const menu = document.createElement('div');
-        menu.className = 'wlt-menu';
-        menu.style.cssText = 'position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 24px #0006;z-index:10000;min-width:180px;padding:4px 0;font-size:12px';
-        const btn = e.currentTarget.getBoundingClientRect();
-        menu.style.top = (btn.bottom + 4) + 'px';
-        menu.style.right = (window.innerWidth - btn.right) + 'px';
-        items.forEach(item => {
-          const mi = document.createElement('div');
-          mi.textContent = item.label;
-          mi.style.cssText = 'padding:8px 14px;cursor:pointer;color:var(--text);transition:background 0.1s';
-          mi.onmouseenter = () => mi.style.background = 'var(--bg3)';
-          mi.onmouseleave = () => mi.style.background = '';
-          mi.onclick = () => { menu.remove(); item.fn(); };
-          menu.appendChild(mi);
-        });
-        document.body.appendChild(menu);
-        setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
-      };
-
-      function _wltDoDelete() {
-        window.customConfirm('⚠️ Obriši wallet iz ovog browsera?\n\nBez backup-a nećeš moći pristupiti sredstvima!', (confirmed) => {
-          if (!confirmed) return;
-          localStorage.removeItem(LS_KEY);
-          window.electronAPI?.invoke('db:saveUserProfile', { walletAddress: '', walletEncrypted: '' }).catch(() => { });
-          _wltSession = null;
-          _wltRenderSetup();
-          showToast('🗑 Wallet obrisan');
-        });
-      }
-
-      // ── Public entry point ───────────────────────────────────────────────
-      window._wltInit = function () {
-        const stored = _wltLoad();
-        if (!stored) {
-          _wltRenderSetup();
-        } else if (_wltSession) {
-          _wltRenderMain();
-        } else {
-          _wltRenderUnlock();
-        }
-      };
-      // Expose helpers globally (called from inline onclick)
-      window._wltRenderSetup = _wltRenderSetup;
-      window._wltShowCreate = _wltShowCreate;
-      window._wltShowImport = _wltShowImport;
-      window._wltDoCreate = _wltDoCreate;
-      window._wltDoImport = _wltDoImport;
-      window._wltDoUnlock = _wltDoUnlock;
-      window._wltRenderMain = _wltRenderMain;
-      window._wltShowSend = _wltShowSend;
-      window._wltShowReceive = _wltShowReceive;
-      window._wltShowBackup = _wltShowBackup;
-      window._wltDoSend = _wltDoSend;
-      window._wltDoBackup = _wltDoBackup;
-      window._wltLock = _wltLock;
-      window._wltSwitchNet = _wltSwitchNet;
-    })();
-    // ══ End BOBIAI Wallet ══════════════════════════════════════════════════
 
     // ── Service Worker Registration ────────────────────────────────────────
     // Only register in web mode (not Electron) and not on file:// protocol
