@@ -181,7 +181,7 @@ if [[ -f "$REPO_DIR/.env.local" ]]; then
   source "$REPO_DIR/.env.local"
 fi
 
-GITHUB_REMOTE_URL="https://${GITHUB_TOKEN:-}@github.com/ktrucek/etherx-standalone.git"
+GITHUB_REMOTE_URL="https://${GITHUB_TOKEN_DEPLOY:-}@github.com/ktrucek/etherx-standalone.git"
 GITEA_REMOTE_URL="https://${GITEA_TOKEN:-}@git.kasp.top/ktrucek/etherx-standalone.git"
 
 # Ensure github remote
