@@ -97,27 +97,64 @@ PYEOF
 success "package.json updated (buildTime: $BUILD_TIME)"
 
 # ── Bump version in src/index.html ─────────────────────────────────────────────
-info "Updating src/index.html version tag → v$NEW_VERSION"
+info "Updating src/index.html version tags → v$NEW_VERSION"
 python3 - <<PYEOF
 import re
 path = 'src/index.html'
 with open(path, 'r', encoding='utf-8') as f:
     content = f.read()
 
-old_pattern = r'(<span id="helpVersionNum">)[^<]*(</span>)'
-new_content = re.sub(old_pattern, r'\g<1>$NEW_VERSION\g<2>', content, count=1)
+# Update helpVersionNum (Help → About section)
+old_pattern1 = r'(<span id="helpVersionNum">)[^<]*(</span>)'
+new_content = re.sub(old_pattern1, r'\g<1>$NEW_VERSION\g<2>', content, count=1)
+
+# Update helpVersionNum2 (Settings → Updates section)
+old_pattern2 = r'(id="helpVersionNum2">)[^<]*(</span>)'
+new_content = re.sub(old_pattern2, r'\g<1>$NEW_VERSION\g<2>', new_content, count=1)
 
 if new_content != content:
     with open(path, 'w', encoding='utf-8') as f:
         f.write(new_content)
-    print("  ✓ src/index.html version updated")
+    print("  ✓ src/index.html version updated (helpVersionNum + helpVersionNum2)")
 else:
-    print("  ⚠ helpVersionNum not found in src/index.html — skipping")
+    print("  ⚠ Version tags not found in src/index.html — skipping")
 PYEOF
+
+# ── Update package-lock.json version ───────────────────────────────────────────
+if [[ -f "package-lock.json" ]]; then
+  info "Updating package-lock.json → v$NEW_VERSION"
+  python3 - <<PYEOF
+import json
+path = 'package-lock.json'
+try:
+    with open(path, 'r') as f:
+        data = json.load(f)
+    
+    # Update root version
+    if 'version' in data:
+        data['version'] = '$NEW_VERSION'
+    
+    # Update packages."" version (npm v7+)
+    if 'packages' in data and '' in data['packages']:
+        data['packages']['']['version'] = '$NEW_VERSION'
+    
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2)
+        f.write('\n')
+    
+    print("  ✓ package-lock.json version updated")
+except Exception as e:
+    print(f"  ⚠ Failed to update package-lock.json: {e}")
+PYEOF
+fi
 
 # ── Git commit and tag ─────────────────────────────────────────────────────────
 info "Committing changes..."
+
+# Add all version-related files
 git add package.json src/index.html 2>/dev/null || true
+[[ -f "package-lock.json" ]] && git add package-lock.json 2>/dev/null || true
+[[ -f "sw.js" ]] && git add sw.js 2>/dev/null || true
 
 if git diff --cached --quiet; then
   warn "No changes to commit (version already set?)"
@@ -174,11 +211,11 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "  📦 Version:   ${CYAN}v${NEW_VERSION}${NC}"
 echo -e "  🔖 Git tag:   ${CYAN}${TAG_NAME}${NC}"
-echo -e "  🌐 GitHub:    ${CYAN}https://github.com/ktrucek/etherx-standalone${NC}"
+echo -e "  🌐 Gitea:     ${CYAN}https://git.kasp.top/ktrucek/etherx-standalone${NC}"
 echo ""
 if [[ "$NO_PUSH" == false ]]; then
-  echo -e "  ${YELLOW}🚀 GitHub Actions should trigger build now...${NC}"
-  echo -e "  ${CYAN}🔗 Check: https://github.com/ktrucek/etherx-standalone/actions${NC}"
+  echo -e "  ${YELLOW}🚀 Gitea Actions will trigger build now...${NC}"
+  echo -e "  ${CYAN}🔗 Check: https://git.kasp.top/ktrucek/etherx-standalone/actions${NC}"
 else
   echo -e "  ${YELLOW}ℹ️  Local only (use git push to deploy)${NC}"
 fi
