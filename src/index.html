@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#667eea">
   <meta name="msapplication-navbutton-color" content="#0d0d1a">
   <!-- PWA manifest — points to /standalone-browser/manifest.json on GitHub Pages -->
-  <link rel="manifest" href="/standalone-browser/manifest.json">
+  <link rel="manifest" href="/etherx-standalone/manifest.json">
   <!-- Apple touch icon for iOS "Add to Home Screen" -->
   <link rel="apple-touch-icon" href="/standalone-browser/assets/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/standalone-browser/assets/icon-192.png">
@@ -15625,7 +15625,7 @@
     });
 
     // PWA Service Worker
-    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => { }); }
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-standalone/sw.js', { scope: '/etherx-standalone/' }).catch(() => { }); }
 
     // ── Cookie Consent Banner ──────────────────────────────────────────────────
     (function initCookieBanner() {
@@ -16595,7 +16595,7 @@
       !window.electronAPI &&
       window.location.protocol !== 'file:') {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/standalone-browser/sw.js', { scope: '/standalone-browser/' })
+        navigator.serviceWorker.register('/etherx-standalone/sw.js', { scope: '/etherx-standalone/' })
           .then(registration => {
             console.log('[SW] Service Worker registered:', registration.scope);
 

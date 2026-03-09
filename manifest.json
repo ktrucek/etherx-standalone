@@ -1,0 +1,48 @@
+{
+  "name": "EtherX Browser",
+  "short_name": "EtherX",
+  "description": "Web3-Native Browser with built-in AI, Wallet and DevTools",
+  "start_url": "/etherx-standalone/src/index.html",
+  "scope": "/etherx-standalone/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0d1a",
+  "theme_color": "#667eea",
+  "lang": "hr",
+  "dir": "ltr",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "/etherx-standalone/assets/icon-192.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/etherx-standalone/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "EtherX Browser"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova kartica",
+      "short_name": "Nova",
+      "description": "Otvori novu karticu",
+      "url": "/etherx-standalone/src/index.html#new-tab",
+      "icons": [
+        {
+          "src": "/etherx-standalone/assets/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

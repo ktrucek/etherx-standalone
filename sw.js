@@ -5,9 +5,9 @@
 
 const CACHE_VERSION = 'etherx-v2.4.34';
 const CACHE_ASSETS = [
-    '/standalone-browser/src/index.html',
-    '/standalone-browser/assets/filters/filters.txt',
-    '/standalone-browser/src/logo_novi.png'
+    '/etherx-standalone/src/index.html',
+    '/etherx-standalone/assets/filters/filters.txt',
+    '/etherx-standalone/src/logo_novi.png'
 ];
 
 // ── Install Event ──────────────────────────────────────────────────────────
