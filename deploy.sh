@@ -4,12 +4,13 @@
 #  Usage:
 #    ./deploy.sh              → auto-increment patch version
 #    ./deploy.sh 2.5.0        → set specific version
-#    ./deploy.sh --no-push    → commit locally, skip GitHub push
+#    ./deploy.sh --no-push    → commit locally, skip push
 #
 #  What it does:
 #   1. Bump version in package.json and src/index.html
 #   2. git commit + tag vX.Y.Z
-#   3. git push to origin (github.com/ktrucek/etherx-standalone)
+#   3. git push to GitHub (triggers GitHub Actions build)
+#   4. git push to Gitea (mirror — GitHub Actions mirrors release back)
 # ============================================================
 
 set -euo pipefail
@@ -174,33 +175,47 @@ fi
 git tag "$TAG_NAME"
 success "Tagged: $TAG_NAME"
 
-# ── Push to GitHub ─────────────────────────────────────────────────────────────
-if [[ "$NO_PUSH" == false ]]; then
-  info "Pushing to origin..."
-  
-  # Check if remote exists
-  if ! git remote get-url origin &>/dev/null; then
-    error "No 'origin' remote configured. Run: git remote add origin <URL>"
-  fi
-  
-  # Push main branch
-  if git push origin main; then
-    success "Pushed to origin/main"
-  else
-    warn "Push to main failed (use --no-push to skip)"
-    exit 1
-  fi
-  
-  # Push tag (force in case it exists on remote)
-  if git push -f origin "$TAG_NAME"; then
-    success "Pushed tag: $TAG_NAME"
-  else
-    warn "Tag push failed"
-    exit 1
-  fi
-  
+# ── Setup remotes ──────────────────────────────────────────────────────────────
+# Load tokens if .env.local exists
+if [[ -f "$REPO_DIR/.env.local" ]]; then
+  source "$REPO_DIR/.env.local"
+fi
+
+GITHUB_REMOTE_URL="https://${GITHUB_TOKEN:-}@github.com/ktrucek/etherx-standalone.git"
+GITEA_REMOTE_URL="https://${GITEA_TOKEN:-}@git.kasp.top/ktrucek/etherx-standalone.git"
+
+# Ensure github remote
+if git remote get-url github &>/dev/null; then
+  git remote set-url github "$GITHUB_REMOTE_URL"
 else
-  warn "--no-push: Skipping GitHub push"
+  git remote add github "$GITHUB_REMOTE_URL"
+fi
+
+# Ensure gitea remote (origin)
+git remote set-url origin "$GITEA_REMOTE_URL"
+
+# ── Push to both remotes ───────────────────────────────────────────────────────
+if [[ "$NO_PUSH" == false ]]; then
+
+  # 1. Push to GitHub → triggers GitHub Actions (Linux + Windows + macOS build)
+  info "Pushing to GitHub (triggers build)..."
+  if git push github main && git push -f github "$TAG_NAME"; then
+    success "Pushed to GitHub → GitHub Actions will build + mirror to Gitea"
+  else
+    warn "GitHub push failed"
+    exit 1
+  fi
+
+  # 2. Push to Gitea (code mirror — release arrives via GitHub Actions mirror job)
+  info "Pushing code mirror to Gitea..."
+  if git push origin main && git push -f origin "$TAG_NAME"; then
+    success "Pushed to Gitea (code mirror)"
+  else
+    warn "Gitea push failed (non-fatal)"
+  fi
+
+else
+  warn "--no-push: Skipping push"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────────
@@ -211,11 +226,14 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "  📦 Version:   ${CYAN}v${NEW_VERSION}${NC}"
 echo -e "  🔖 Git tag:   ${CYAN}${TAG_NAME}${NC}"
+echo -e "  🐙 GitHub:    ${CYAN}https://github.com/ktrucek/etherx-standalone${NC}"
 echo -e "  🌐 Gitea:     ${CYAN}https://git.kasp.top/ktrucek/etherx-standalone${NC}"
 echo ""
 if [[ "$NO_PUSH" == false ]]; then
-  echo -e "  ${YELLOW}🚀 Gitea Actions will trigger build now...${NC}"
-  echo -e "  ${CYAN}🔗 Check: https://git.kasp.top/ktrucek/etherx-standalone/actions${NC}"
+  echo -e "  ${YELLOW}🚀 GitHub Actions će buildati Linux + Windows + macOS...${NC}"
+  echo -e "  ${CYAN}🔗 GitHub Actions: https://github.com/ktrucek/etherx-standalone/actions${NC}"
+  echo -e "  ${CYAN}🔗 Gitea Release:  https://git.kasp.top/ktrucek/etherx-standalone/releases${NC}"
+  echo -e "  ${YELLOW}   (release se automatski zrcali na Gitea po završetku)${NC}"
 else
   echo -e "  ${YELLOW}ℹ️  Local only (use git push to deploy)${NC}"
 fi

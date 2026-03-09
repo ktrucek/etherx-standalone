@@ -276,3 +276,60 @@ jobs:
 
             ---
             © 2024–2026 kriptoentuzijasti.io. All Rights Reserved. — [Proprietary License](https://github.com/ktrucek/etherx-browser/blob/main/LICENSE)
+
+  # ─── Mirror Release to Gitea ──────────────────────────────────────────────────
+  mirror-to-gitea:
+    name: 🔁 Mirror Release to Gitea
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: needs.release.result == 'success'
+
+    steps:
+      - name: 📥 Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 📋 List artifacts
+        run: find artifacts -type f | sort
+
+      - name: 🏷️ Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🚀 Create Gitea Release
+        uses: https://gitea.com/actions/gitea-release-action@latest
+        with:
+          token: ${{ secrets.GITEA_TOKEN }}
+          server_url: https://git.kasp.top
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "EtherX Browser ${{ steps.tag.outputs.tag }}"
+          files: |
+            artifacts/*.AppImage
+            artifacts/*.deb
+            artifacts/*.exe
+            artifacts/*.zip
+            artifacts/*.dmg
+          body: |
+            ## 🚀 EtherX Browser ${{ steps.tag.outputs.tag }}
+
+            Buildano automatski putem GitHub Actions → zrcaljeno na Gitea.
+
+            ### 📥 Preuzimanja
+
+            | Platforma | Fajl | Napomena |
+            |-----------|------|---------|
+            | 🐧 **Linux** | `.AppImage` | Portable, radi na svakom distroju |
+            | 🐧 **Linux** | `.deb` | Ubuntu / Debian |
+            | 🪟 **Windows** | `.exe` | Portable, bez instalacije |
+            | 🪟 **Windows** | `.zip` | ZIP arhiva |
+            | 🍎 **macOS** | `.dmg` | Disk image |
+
+            ---
+            © 2024–2026 kriptoentuzijasti.io
