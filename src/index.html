@@ -5582,7 +5582,9 @@
       <button class="ntp-edit-btn" id="ntpEditBtn">✏ Customize</button>
       <div class="ntp-logo" id="ntpLogo"><img src="logo_novi.png" alt="EtherX"
           style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></div>
-      <h1 id="ntpTitle">EtherX Browser</h1>
+      <h1 id="ntpTitle"
+        style="background: linear-gradient(45deg, #00d4ff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+        EtherX Browser</h1>
       <p id="ntpSubtitle">The Web3-Native Browser Experience</p>
       <input type="text" class="ntp-search" id="ntpSearch" placeholder="Search or enter a web address…">
       <div id="ntpRecentSection" style="text-align:center;margin-bottom:4px;width:100%">
@@ -5881,7 +5883,6 @@
           <button class="sit-btn" data-stab="appearance"><span class="sit-icon">🎨</span>Izgled</button>
           <button class="sit-btn" data-stab="language"><span class="sit-icon">🌍</span>Jezik</button>
           <button class="sit-btn" data-stab="storage"><span class="sit-icon">💾</span>Pohrana</button>
-          <button class="sit-btn" data-stab="downloads"><span class="sit-icon">📥</span>Preuzimanja</button>
           <button class="sit-btn" data-stab="help"><span class="sit-icon">❓</span>Pomoć</button>
           <button class="sit-btn" data-stab="ai"><span class="sit-icon">🤖</span>AI</button>
         </div>
@@ -7484,69 +7485,7 @@
             </div>
           </div>
 
-          <!-- DOWNLOADS -->
-          <div class="s-tab-pane" id="stab-downloads">
-            <div class="s-group">
-              <div class="s-group-title">📥 Download Links Configuration</div>
-              <div
-                style="margin:8px 0;padding:10px;background:rgba(74,158,255,.08);border:1px solid rgba(74,158,255,.25);border-radius:6px;font-size:11px;color:var(--text2)">
-                ℹ️ Configure download links for each platform. These links will appear in <strong>Help → Browser
-                  Versions</strong> menu.
-              </div>
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">🐧 Linux</div>
-                  <div class="s-row-desc">Download link for Linux (.deb, .AppImage, .tar.gz)</div>
-                </div>
-                <input type="text" class="s-input" id="dlLinux" placeholder="https://example.com/etherx-linux.AppImage"
-                  style="flex:1">
-              </div>
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">🪟 Windows</div>
-                  <div class="s-row-desc">Download link for Windows (.exe installer)</div>
-                </div>
-                <input type="text" class="s-input" id="dlWindows" placeholder="https://example.com/etherx-setup.exe"
-                  style="flex:1">
-              </div>
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">🍎 macOS Intel</div>
-                  <div class="s-row-desc">Download link for macOS Intel (.dmg)</div>
-                </div>
-                <input type="text" class="s-input" id="dlMacIntel"
-                  placeholder="https://example.com/etherx-macos-intel.dmg" style="flex:1">
-              </div>
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">🍎 macOS Apple Silicon</div>
-                  <div class="s-row-desc">Download link for macOS ARM64 (.dmg)</div>
-                </div>
-                <input type="text" class="s-input" id="dlMacArm"
-                  placeholder="https://example.com/etherx-macos-arm64.dmg" style="flex:1">
-              </div>
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">🤖 Android</div>
-                  <div class="s-row-desc">Download link for Android (.apk) or Google Play</div>
-                </div>
-                <input type="text" class="s-input" id="dlAndroid"
-                  placeholder="https://play.google.com/store/apps/details?id=io.etherx" style="flex:1">
-              </div>
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">📱 iOS</div>
-                  <div class="s-row-desc">Download link for iOS (App Store or TestFlight)</div>
-                </div>
-                <input type="text" class="s-input" id="dlIOS"
-                  placeholder="https://apps.apple.com/app/etherx-browser/id123456789" style="flex:1">
-              </div>
-              <div style="text-align:center;padding:12px">
-                <button class="s-btn-sm" id="saveDownloadLinks" style="background:#27c93f">💾 Save Download
-                  Links</button>
-              </div>
-            </div>
-          </div>
+
 
           <!-- HELP -->
           <div class="s-tab-pane" id="stab-help">
@@ -7829,6 +7768,20 @@
                   <button onclick="window.open('https://kriptoentuzijasti.io','_blank')"
                     style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">
                     🌐 Posjeti web stranica
+                  </button>
+                </div>
+
+                <!-- Download Latest Version Section -->
+                <div
+                  style="margin-top:16px;padding:12px;background:rgba(74,158,255,.08);border:1px solid rgba(74,158,255,.25);border-radius:8px">
+                  <div style="font-weight:600;margin-bottom:8px;color:var(--text1)">📥 Preuzmi najnoviju verziju</div>
+                  <div id="downloadLatestContainer" style="display:none">
+                    <div id="downloadLatestStatus" style="font-size:11px;color:var(--text3);margin-bottom:8px"></div>
+                    <div id="downloadLatestButtons" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+                  </div>
+                  <button id="btnDownloadLatest" onclick="checkAndShowDownloads()"
+                    style="font-size:11px;padding:6px 12px;background:#4A9EFF;border:none;border-radius:6px;color:white;cursor:pointer">
+                    🔍 Provjeri dostupne verzije
                   </button>
                 </div>
               </div>
@@ -15006,44 +14959,9 @@
 
       showToast('✅ Master password changed successfully!\n\n⚠️ Remember: Master password is NEVER saved anywhere. Keep it safe!');
     });    // ── Download Links Management ─────────────────────────────────────────────
-    function initDownloadsTab() {
-      const s = DB.getSettings();
-      const links = s.download_links || {};
-      ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
-        const el = document.getElementById('dl' + platform);
-        if (el) el.value = links[platform.toLowerCase()] || '';
-      });
-    }
 
-    document.getElementById('saveDownloadLinks')?.addEventListener('click', () => {
-      const links = {};
-      ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
-        const el = document.getElementById('dl' + platform);
-        if (el && el.value.trim()) links[platform.toLowerCase()] = el.value.trim();
-      });
-      DB.saveSetting('download_links', links);
-      showToast('💾 Download links saved');
-    });
 
-    // Init Downloads tab when opened
-    document.querySelectorAll('.sit-btn[data-stab="downloads"]').forEach(btn => {
-      btn.addEventListener('click', () => setTimeout(initDownloadsTab, 50));
-    });
 
-    // ── Help → Browser Versions Buttons ───────────────────────────────────────
-    ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
-      document.getElementById('dlBtn' + platform)?.addEventListener('click', () => {
-        const s = DB.getSettings();
-        const links = s.download_links || {};
-        const url = links[platform.toLowerCase()];
-        if (!url) {
-          showToast('⚠️ No download link configured for ' + platform + '\n\nGo to Settings → Downloads to add links');
-          return;
-        }
-        window.open(url, '_blank');
-        showToast('📥 Opening download for ' + platform);
-      });
-    });
 
     // Mobile Install Button
     document.getElementById('mobileInstallBtn')?.addEventListener('click', () => {
@@ -15975,6 +15893,145 @@
         const autoUpd = document.getElementById('settingAutoUpdate');
         if (autoUpd?.checked) checkForUpdates(true);
       }, 4000);
+
+      // ── Platform Detection & Smart Downloads ────────────────────────────────
+      function detectPlatform() {
+        const ua = navigator.userAgent.toLowerCase();
+        const platform = navigator.platform?.toLowerCase() || '';
+
+        if (ua.includes('android')) return { os: 'android', arch: '', display: '🤖 Android' };
+        if (ua.includes('iphone') || ua.includes('ipad')) return { os: 'ios', arch: '', display: '🍎 iOS' };
+
+        if (ua.includes('win') || platform.includes('win')) {
+          return { os: 'windows', arch: ua.includes('wow64') || ua.includes('win64') ? 'x64' : 'x86', display: '🪟 Windows' };
+        }
+
+        if (ua.includes('mac') || platform.includes('mac')) {
+          const isArm = ua.includes('arm64') || platform.includes('arm');
+          return { os: 'macos', arch: isArm ? 'arm64' : 'x64', display: `🍎 macOS ${isArm ? '(ARM)' : '(Intel)'}` };
+        }
+
+        if (ua.includes('linux') || platform.includes('linux')) {
+          const arch = ua.includes('aarch64') || ua.includes('arm64') ? 'arm64' :
+            ua.includes('armv7') ? 'armv7' :
+              ua.includes('x86_64') || ua.includes('amd64') ? 'x64' : 'x86';
+          return { os: 'linux', arch, display: `🐧 Linux (${arch})` };
+        }
+
+        return { os: 'unknown', arch: '', display: '❓ Unknown Platform' };
+      }
+
+      function matchAssetToPlatform(assets, platform) {
+        const results = [];
+
+        for (const asset of assets) {
+          const name = asset.name.toLowerCase();
+          let score = 0;
+          let type = '';
+
+          if (platform.os === 'windows') {
+            if (name.includes('.exe')) { score = 100; type = 'Executable'; }
+            else if (name.includes('win') && name.includes('.zip')) { score = 90; type = 'Portable'; }
+            else if (name.includes('setup') || name.includes('installer')) { score = 85; type = 'Installer'; }
+          }
+
+          else if (platform.os === 'macos') {
+            if (name.includes('.dmg')) {
+              score = 100; type = 'DMG Image';
+              if (platform.arch === 'arm64' && name.includes('arm64')) score = 110;
+              else if (platform.arch === 'x64' && (name.includes('x64') || name.includes('intel'))) score = 110;
+            }
+            else if (name.includes('mac') && name.includes('.zip')) { score = 80; type = 'Archive'; }
+          }
+
+          else if (platform.os === 'linux') {
+            if (name.includes('.appimage')) { score = 100; type = 'AppImage'; }
+            else if (name.includes('.deb')) { score = 95; type = 'Debian Package'; }
+            else if (name.includes('.rpm')) { score = 90; type = 'RPM Package'; }
+            else if (name.includes('linux') && name.includes('.tar.gz')) { score = 85; type = 'Archive'; }
+
+            // Architecture matching
+            if (platform.arch === 'arm64' && name.includes('arm64')) score += 10;
+            else if (platform.arch === 'x64' && (name.includes('x64') || name.includes('amd64'))) score += 10;
+          }
+
+          if (score > 0) {
+            results.push({ asset, score, type, platform: platform.display });
+          }
+        }
+
+        return results.sort((a, b) => b.score - a.score);
+      }
+
+      async function checkAndShowDownloads() {
+        const btn = document.getElementById('btnDownloadLatest');
+        const container = document.getElementById('downloadLatestContainer');
+        const status = document.getElementById('downloadLatestStatus');
+        const buttons = document.getElementById('downloadLatestButtons');
+
+        if (btn) { btn.textContent = '⏳ Provjeravam...'; btn.disabled = true; }
+
+        try {
+          const platform = detectPlatform();
+
+          // Check for updates using existing logic
+          let data;
+          if (window.etherx?.update?.check) {
+            data = await window.etherx.update.check();
+            if (!data.ok) throw new Error(data.error || 'Nepoznata greška');
+          } else {
+            const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest');
+            if (!res.ok) throw new Error('GitHub API greška: ' + res.status);
+            const raw = await res.json();
+            const latestTag = (raw.tag_name || '').replace(/^v/, '');
+            const currentTag = (document.getElementById('helpVersionNum')?.textContent || '0.0.0').replace(/^v/, '');
+            data = {
+              ok: true, latest: latestTag, current: currentTag,
+              isNew: semverNewer(latestTag, currentTag),
+              assets: (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.download_url || '' }))
+            };
+          }
+
+          if (platform.os === 'android' || platform.os === 'ios') {
+            status.innerHTML = `${platform.display}: Mobilna verzija još nije dostupna.<br><small>Koristiš web verziju iz browsera.</small>`;
+            buttons.innerHTML = '';
+          } else {
+            const matches = matchAssetToPlatform(data.assets, platform);
+
+            if (matches.length === 0) {
+              status.innerHTML = `${platform.display}: Nema dostupnih build-ova za tvoj sistem.`;
+              buttons.innerHTML = '';
+            } else {
+              const isNew = data.isNew;
+              status.innerHTML = `${platform.display}: ${isNew ? `Nova verzija v${data.latest} dostupna!` : `Koristiš najnoviju verziju v${data.latest}`}`;
+
+              buttons.innerHTML = matches.slice(0, 3).map(match =>
+                `<button onclick="downloadAsset('${match.asset.url}', '${match.asset.name}')" 
+                   style="font-size:11px;padding:6px 12px;background:${isNew ? '#27c93f' : '#4A9EFF'};border:none;border-radius:6px;color:white;cursor:pointer;white-space:nowrap">
+                   ⬇️ ${match.type} ${isNew ? '(NOVA!)' : ''}
+                 </button>`
+              ).join('');
+            }
+          }
+
+          container.style.display = 'block';
+        } catch (err) {
+          status.innerHTML = `❌ Greška: ${err.message}`;
+          buttons.innerHTML = '';
+          container.style.display = 'block';
+        } finally {
+          if (btn) { btn.textContent = '🔄 Osvježi'; btn.disabled = false; }
+        }
+      }
+
+      function downloadAsset(url, filename) {
+        showToast(`⬇️ Preuzimanje ${filename}...`);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.target = '_blank';
+        a.click();
+      }
 
       // ── Memory Saver ─────────────────────────────────────────────────────────
       let memorySaverInterval = null;

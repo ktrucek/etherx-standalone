@@ -10,7 +10,7 @@
 #   1. Bump version in package.json and src/index.html
 #   2. git commit + tag vX.Y.Z
 #   3. git push to GitHub (triggers GitHub Actions build)
-#   4. git push to Gitea (mirror — GitHub Actions mirrors release back)
+#   4. Update EtherX.io download page with new version
 # ============================================================
 
 set -euo pipefail
@@ -48,6 +48,7 @@ info "Pre-flight checks..."
 [[ -f "src/index.html" ]]         || error "src/index.html not found"
 command -v git  &>/dev/null       || error "git not found"
 command -v python3 &>/dev/null    || error "python3 not found"
+command -v curl &>/dev/null       || error "curl not found"
 
 # Check git status
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -175,14 +176,13 @@ fi
 git tag "$TAG_NAME"
 success "Tagged: $TAG_NAME"
 
-# ── Setup remotes ──────────────────────────────────────────────────────────────
+# ── Setup remote ──────────────────────────────────────────────────────────────
 # Load tokens if .env.local exists
 if [[ -f "$REPO_DIR/.env.local" ]]; then
   source "$REPO_DIR/.env.local"
 fi
 
 GITHUB_REMOTE_URL="https://${GITHUB_TOKEN_DEPLOY:-}@github.com/ktrucek/etherx-standalone.git"
-GITEA_REMOTE_URL="https://${GITEA_TOKEN:-}@git.kasp.top/ktrucek/etherx-standalone.git"
 
 # Ensure github remote
 if git remote get-url github &>/dev/null; then
@@ -191,27 +191,37 @@ else
   git remote add github "$GITHUB_REMOTE_URL"
 fi
 
-# Ensure gitea remote (origin)
-git remote set-url origin "$GITEA_REMOTE_URL"
-
-# ── Push to both remotes ───────────────────────────────────────────────────────
+# ── Push to GitHub ───────────────────────────────────────────────────────
 if [[ "$NO_PUSH" == false ]]; then
 
-  # 1. Push to GitHub → triggers GitHub Actions (Linux + Windows + macOS build)
   info "Pushing to GitHub (triggers build)..."
   if git push github main && git push -f github "$TAG_NAME"; then
-    success "Pushed to GitHub → GitHub Actions will build + mirror to Gitea"
+    success "Pushed to GitHub → GitHub Actions će buildati"
+    
+    # ── Update EtherX.io download page ─────────────────────────────────────────
+    info "Updating EtherX.io download page with new version..."
+    
+    # Wait a moment for GitHub to process the push
+    sleep 3
+    
+    ETHERX_API_URL="https://etherx.io/update_version_api.php"
+    ETHERX_API_KEY="etherx_update_key_2026"
+    
+    UPDATE_RESPONSE=$(curl -s -X POST "$ETHERX_API_URL" \
+      -H "Content-Type: application/json" \
+      -d "{\"version\": \"$NEW_VERSION\", \"api_key\": \"$ETHERX_API_KEY\"}" \
+      --max-time 30 || echo '{"success": false, "message": "Curl failed"}')
+    
+    if echo "$UPDATE_RESPONSE" | grep -q '"success":\s*true'; then
+      success "EtherX.io download page updated to v$NEW_VERSION"
+    else
+      warn "Failed to update EtherX.io page: $UPDATE_RESPONSE"
+      warn "You can manually update at: https://etherx.io/download_stats.php"
+    fi
+    
   else
     warn "GitHub push failed"
     exit 1
-  fi
-
-  # 2. Push to Gitea (code mirror — release arrives via GitHub Actions mirror job)
-  info "Pushing code mirror to Gitea..."
-  if git push origin main && git push -f origin "$TAG_NAME"; then
-    success "Pushed to Gitea (code mirror)"
-  else
-    warn "Gitea push failed (non-fatal)"
   fi
 
 else
@@ -227,13 +237,14 @@ echo ""
 echo -e "  📦 Version:   ${CYAN}v${NEW_VERSION}${NC}"
 echo -e "  🔖 Git tag:   ${CYAN}${TAG_NAME}${NC}"
 echo -e "  🐙 GitHub:    ${CYAN}https://github.com/ktrucek/etherx-standalone${NC}"
-echo -e "  🌐 Gitea:     ${CYAN}https://git.kasp.top/ktrucek/etherx-standalone${NC}"
+echo -e "  🌐 EtherX.io: ${CYAN}https://etherx.io/browser.html${NC}"
 echo ""
 if [[ "$NO_PUSH" == false ]]; then
   echo -e "  ${YELLOW}🚀 GitHub Actions će buildati Linux + Windows + macOS...${NC}"
-  echo -e "  ${CYAN}🔗 GitHub Actions: https://github.com/ktrucek/etherx-standalone/actions${NC}"
-  echo -e "  ${CYAN}🔗 Gitea Release:  https://git.kasp.top/ktrucek/etherx-standalone/releases${NC}"
-  echo -e "  ${YELLOW}   (release se automatski zrcali na Gitea po završetku)${NC}"
+  echo -e "  ${CYAN}🔗 Actions: https://github.com/ktrucek/etherx-standalone/actions${NC}"
+  echo -e "  ${CYAN}🔗 Release: https://github.com/ktrucek/etherx-standalone/releases${NC}"
+  echo -e "  ${CYAN}🔗 Downloads: https://etherx.io/browser.html${NC}"
+  echo -e "  ${CYAN}🔗 Stats: https://etherx.io/download_stats.php${NC}"
 else
   echo -e "  ${YELLOW}ℹ️  Local only (use git push to deploy)${NC}"
 fi

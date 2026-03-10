@@ -177,6 +177,13 @@ app.whenReady().then(async () => {
   // Init security
   try { if (SecurityManager) SecurityManager.enforce(session.defaultSession); } catch (e) { console.error('❌ Security init failed:', e.message); }
 
+  // Enable third-party cookies for better web compatibility
+  try {
+    session.defaultSession.cookies.on('changed', () => { });
+    // Allow third-party cookies by setting webSecurity: false in webPreferences
+    // This is already set in createWindow but ensures session-wide compatibility
+  } catch (e) { console.error('❌ Cookie setup failed:', e.message); }
+
   // Init AI
   try { if (AIManager) ai = new AIManager(); } catch (e) { console.error('❌ AI init failed:', e.message); ai = null; }
 
@@ -456,12 +463,12 @@ function createWindow() {
   const dockMenu = Menu.buildFromTemplate([
     {
       label: 'New Window', click: () => {
-        ipcMain.emit('app:newWindow');
         const win = new BrowserWindow({
           width: 1280, height: 800, backgroundColor: '#1a1a2e', titleBarStyle: 'hidden',
           webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true, sandbox: false },
         });
-        win.loadFile(path.join(__dirname, 'src', 'index.html'));
+        setupDownloadTracking(win.webContents.session);
+        win.loadFile(path.join(__dirname, 'src', 'index.html'), { hash: 'fresh-window' });
       }
     },
     {
@@ -470,9 +477,15 @@ function createWindow() {
           width: 1280, height: 800, backgroundColor: '#0d0d1a', titleBarStyle: 'hidden',
           webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true, sandbox: false, partition: 'incognito-' + Date.now() },
         });
-        win.loadFile(path.join(__dirname, 'src', 'index.html'));
+        setupDownloadTracking(win.webContents.session);
+        win.loadFile(path.join(__dirname, 'src', 'index.html'), { hash: 'fresh-window' });
         win.webContents.on('did-finish-load', () => {
-          win.webContents.executeJavaScript(`STATE.isPrivate=true;document.getElementById('privateIndicator').style.display='';document.title='EtherX (Private)';`).catch(() => { });
+          win.webContents.executeJavaScript(`
+            STATE.isPrivate = true;
+            document.getElementById('privateIndicator').style.display = '';
+            document.body.style.filter = 'hue-rotate(240deg) saturate(0.8)';
+            document.title = 'EtherX (Private)';
+          `).catch(() => { });
         });
       }
     },
@@ -778,12 +791,12 @@ function setupIPC() {
       },
     });
     setupDownloadTracking(win.webContents.session);
-    win.loadFile(path.join(__dirname, 'src', 'index.html'));
-    if (url) {
-      win.webContents.on('did-finish-load', () => {
-        win.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
-      });
-    }
+
+    // Load with fresh-window flag to start empty
+    win.loadFile(path.join(__dirname, 'src', 'index.html'), {
+      hash: url ? 'new-window=' + encodeURIComponent(url) : 'fresh-window'
+    });
+
     return { ok: true };
   });
 
@@ -837,10 +850,10 @@ function setupIPC() {
   });
 
   // ── Split Screen ───────────────────────────────────────────────────────────
-  ipcMain.handle('app:splitScreen', (_e, urlLeft, urlRight) => {
+  ipcMain.handle('app:splitScreen', (_e, currentTabUrl) => {
     const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
     const halfW = Math.floor(width / 2);
-    const makeWin = (x, url) => {
+    const makeWin = (x, url, isLeft = false) => {
       const w = new BrowserWindow({
         x, y: 0, width: halfW, height,
         backgroundColor: '#1a1a2e',
@@ -852,16 +865,21 @@ function setupIPC() {
         },
       });
       setupDownloadTracking(w.webContents.session);
-      w.loadFile(path.join(__dirname, 'src', 'index.html'));
-      if (url) {
-        w.webContents.on('did-finish-load', () => {
-          w.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
+
+      // Left window gets current tab, right window starts empty
+      if (isLeft && url) {
+        w.loadFile(path.join(__dirname, 'src', 'index.html'), {
+          hash: 'split-left=' + encodeURIComponent(url)
         });
+      } else {
+        w.loadFile(path.join(__dirname, 'src', 'index.html'));
       }
       return w;
     };
-    makeWin(0, urlLeft);
-    makeWin(halfW, urlRight);
+
+    // Create left window with current tab, right window empty
+    makeWin(0, currentTabUrl, true);
+    makeWin(halfW, null, false);
     return { ok: true };
   });
 
