@@ -155,9 +155,16 @@ contextBridge.exposeInMainWorld('etherx', {
     loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),
   },
 
+  // ── Shell (file/folder operations) ───────────────────────────────────────────
+  shell: {
+    showItemInFolder: (fullPath) => ipcRenderer.invoke('shell:showItemInFolder', fullPath),
+    openPath: (fullPath) => ipcRenderer.invoke('shell:openPath', fullPath),
+  },
+
   // ── App ───────────────────────────────────────────────────────────────────────
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    getDownloadsPath: () => ipcRenderer.invoke('app:getDownloadsPath'),
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
     getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
     openApplePasswords: () => ipcRenderer.invoke('app:openApplePasswords'),

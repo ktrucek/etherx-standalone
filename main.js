@@ -609,7 +609,11 @@ function setupIPC() {
   });
 
   // ── Navigation helpers ─────────────────────────────────────────────────────
-  ipcMain.handle('nav:openExternal', (_e, url) => shell.openExternal(url));
+  ipcMain.handle('nav:openExternal', (_e, url) => {
+    // Security: only allow http/https/mailto URLs via openExternal
+    if (/^https?:\/\/|^mailto:/i.test(url)) return shell.openExternal(url);
+    return Promise.resolve({ ok: false, error: 'URL scheme not allowed' });
+  });
   ipcMain.handle('app:openApplePasswords', async () => {
     if (process.platform !== 'darwin') return { ok: false, error: 'Apple Passwords available only on macOS.' };
     const tryExec = (file, args = []) => new Promise(resolve => {
@@ -823,10 +827,10 @@ function setupIPC() {
   });
 
   // ── Split Screen ───────────────────────────────────────────────────────────
-  ipcMain.handle('app:splitScreen', (_e, urlLeft, urlRight) => {
+  ipcMain.handle('app:splitScreen', (_e, urlLeft) => {
     const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize;
     const halfW = Math.floor(width / 2);
-    const makeWin = (x, url) => {
+    const makeWin = (x, hash) => {
       const w = new BrowserWindow({
         x, y: 0, width: halfW, height,
         backgroundColor: '#1a1a2e',
@@ -838,18 +842,22 @@ function setupIPC() {
         },
       });
       setupDownloadTracking(w.webContents.session);
-      w.loadFile(path.join(__dirname, 'src', 'index.html'));
-      if (url) {
-        w.webContents.on('did-finish-load', () => {
-          w.webContents.executeJavaScript(`navigateTo(${JSON.stringify(url)})`).catch(() => { });
-        });
-      }
+      w.loadFile(path.join(__dirname, 'src', 'index.html'), { hash });
       return w;
     };
-    makeWin(0, urlLeft);
-    makeWin(halfW, urlRight);
+    // Left window: load the current tab URL via hash; right window: start fresh
+    makeWin(0, urlLeft ? 'split-left=' + encodeURIComponent(urlLeft) : 'fresh-window');
+    makeWin(halfW, 'fresh-window');
     return { ok: true };
   });
+
+  // ── Shell helpers (open folder / file) ────────────────────────────────────
+  ipcMain.handle('shell:showItemInFolder', (_e, fullPath) => {
+    shell.showItemInFolder(fullPath);
+    return { ok: true };
+  });
+  ipcMain.handle('shell:openPath', (_e, fullPath) => shell.openPath(fullPath).then(err => ({ ok: !err, error: err })));
+  ipcMain.handle('app:getDownloadsPath', () => require('electron').app.getPath('downloads'));
 
   // ── Screenshot Region (returns base64) ─────────────────────────────────────
   ipcMain.handle('app:captureRegion', async (_e, rect) => {

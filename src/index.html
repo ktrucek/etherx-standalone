@@ -614,7 +614,7 @@
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      cursor: pointer;
+      cursor: grab;
       transition: border-color .15s, background .15s;
       user-select: none;
     }
@@ -622,6 +622,15 @@
     .ctt-tile:hover {
       background: var(--bg4, rgba(255, 255, 255, .07));
       border-color: var(--border2);
+    }
+
+    .ctt-tile.drag-over {
+      border-color: var(--accent);
+      background: rgba(102, 126, 234, .15);
+    }
+
+    .ctt-tile.dragging {
+      opacity: .4;
     }
 
     .ctt-tile.disabled {
@@ -3831,49 +3840,58 @@
     /* Settings Safari-style */
     .settings-safari {
       display: flex;
-      flex-direction: column;
-      height: 100%
+      flex-direction: row;
+      height: 100%;
+      overflow: hidden;
     }
 
     .settings-icon-tabs {
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      align-items: stretch;
       gap: 2px;
-      padding: 8px 12px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 8px 6px;
+      border-right: 1px solid var(--border);
+      border-bottom: none;
       background: var(--bg2);
-      overflow-x: auto;
-      flex-shrink: 0
+      overflow-y: auto;
+      overflow-x: hidden;
+      flex-shrink: 0;
+      width: 148px;
+      min-width: 148px;
     }
 
     .settings-icon-tabs::-webkit-scrollbar {
-      height: 0
+      width: 0
     }
 
     .sit-btn {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
-      gap: 2px;
-      padding: 6px 10px;
-      border-radius: 8px;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 7px;
       cursor: pointer;
       border: none;
       background: transparent;
       color: var(--text3);
-      font-size: 10px;
+      font-size: 12px;
       white-space: nowrap;
-      min-width: 58px;
-      flex-shrink: 0
+      width: 100%;
+      text-align: left;
+      flex-shrink: 0;
     }
 
     .sit-btn .sit-icon {
-      font-size: 22px
+      font-size: 16px;
+      flex-shrink: 0;
     }
 
     .sit-btn.active {
-      background: rgba(102, 126, 234, .2);
-      color: var(--accent)
+      background: rgba(102, 126, 234, .22);
+      color: var(--accent);
+      font-weight: 600;
     }
 
     .sit-btn:hover:not(.active) {
@@ -3884,7 +3902,8 @@
     .settings-body {
       flex: 1;
       overflow-y: auto;
-      padding: 16px
+      padding: 16px;
+      min-width: 0;
     }
 
     .settings-body::-webkit-scrollbar {
@@ -4720,10 +4739,12 @@
       .settings-icon-tabs {
         flex-direction: row !important;
         overflow-x: auto;
+        overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
         flex-wrap: nowrap;
         max-height: none;
-        width: 100%;
+        width: 100% !important;
+        min-width: 0 !important;
         border-right: none;
         border-bottom: 1px solid var(--border);
         padding: 6px
@@ -4737,7 +4758,7 @@
       }
 
       .sit-btn .sit-icon {
-        margin-bottom: 0 !important;
+        font-size: 14px !important;
         margin-right: 4px
       }
 
@@ -5254,7 +5275,7 @@
         <span>🔧 Customize Toolbar</span>
         <button id="customToolbarClose">✕</button>
       </div>
-      <p class="ctt-desc">Toggle buttons on/off. Right-click a tile to reset its icon.</p>
+      <p class="ctt-desc">Povucite za promjenu reda • Kliknite za uključivanje/isključivanje</p>
       <div id="cttGrid"></div>
       <div id="cttActions">
         <button id="cttReset">↺ Reset to Default</button>
@@ -5858,7 +5879,7 @@
         <div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">Nema preuzimanja</div>
       </div>
     </div>
-    <div class="panel" id="settingsPanel" style="width:min(580px,96vw)">
+    <div class="panel" id="settingsPanel" style="width:min(700px,96vw)">
       <div class="panel-header"><span class="panel-title">Settings</span><button class="panel-close"
           id="closeSettingsPanel">×</button></div>
       <div class="settings-safari">
@@ -9003,6 +9024,8 @@
     let _ctxSelectionText = '';
     let _ctxIsEditable = false;
     let _lastSavePromptKey = '';
+    // Store the element that had focus before a context menu opened so paste targets it correctly
+    let _ctxFocusedEl = null;
     function normalizePwdSite(site) {
       return String(site || '').trim().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase();
     }
@@ -9097,7 +9120,8 @@
         const wv = document.getElementById('browseFrame');
         if (!wv || wv.tagName !== 'WEBVIEW') return;
         wv.addEventListener('did-start-loading', () => setLoading(30));
-        wv.addEventListener('did-stop-loading', () => { setLoading(100); updateAutofillBtnState(); });
+        wv.addEventListener('did-stop-loading', () => { setLoading(100); updateAutofillBtnState(); document.getElementById('sbUrl').textContent = ''; });
+        wv.addEventListener('update-target-url', (e) => { document.getElementById('sbUrl').textContent = e.url || ''; });
         wv.addEventListener('did-fail-load', (e) => {
           if (e.errorCode === -3) return; // Aborted, ignore
           setLoading(0);
@@ -9804,8 +9828,9 @@
         document.getElementById('readerTitle').textContent = tab?.title || '';
         try {
           const doc = frame.contentDocument; const body = doc?.body?.innerText || 'Could not extract content.'; const title = doc?.title || '';
-          document.getElementById('readerContent').innerHTML = '<h1>' + title + '</h1><p>' + body.slice(0, 4000).replace(/\n\n+/g, '</p><p>') + '</p>';
-        } catch (e) { document.getElementById('readerContent').innerHTML = '<h1>Reader Mode</h1><p>Could not extract content from proxied page.</p>'; }
+          const rcEl = document.getElementById('readerContent');
+          if (rcEl) rcEl.innerHTML = '<h1>' + title + '</h1><p>' + body.slice(0, 4000).replace(/\n\n+/g, '</p><p>') + '</p>';
+        } catch (e) { const rcEl = document.getElementById('readerContent'); if (rcEl) rcEl.innerHTML = '<h1>Reader Mode</h1><p>Could not extract content from proxied page.</p>'; }
       } else { rm.classList.remove('show'); }
     }
     document.getElementById('mi-responsive').addEventListener('click', toggleRespMode);
@@ -9835,7 +9860,7 @@
     }
     function toggleTabOverview() { const ov = document.getElementById('tabOverview'); const isOpen = ov.classList.toggle('show'); if (isOpen) renderTabOverview(); }
     function renderTabOverview() {
-      const ov = document.getElementById('tabOverview'); ov.innerHTML = '';
+      const ov = document.getElementById('tabOverview'); if (!ov) return; ov.innerHTML = '';
       STATE.tabs.forEach(tab => {
         const card = document.createElement('div'); card.className = 'to-card' + (tab.id === STATE.activeTabId ? ' active' : '');
         card.innerHTML = `<div class="to-preview">${tab.favicon}</div><div class="to-label">${tab.title}</div><button class="to-close">×</button>`;
@@ -10339,15 +10364,17 @@
       showToast('Preuzimanja obrisana');
     });
 
-    document.getElementById('dlOpenFolder')?.addEventListener('click', () => {
+    document.getElementById('dlOpenFolder')?.addEventListener('click', async () => {
       if (window.etherx?.shell) {
         // Try to open the most recent download's folder, or default downloads dir
         const recent = DB.getDownloads().find(d => d.savePath);
         if (recent?.savePath) {
           window.etherx.shell.showItemInFolder(recent.savePath);
         } else {
-          // Open system downloads folder
-          window.etherx.nav?.openExternal('file://' + (window._downloadsDir || ''));
+          // Resolve downloads folder via IPC then open it
+          const dlPath = await window.etherx.app?.getDownloadsPath?.().catch(() => null);
+          if (dlPath) window.etherx.shell.openPath(dlPath);
+          else showToast('⚠️ Nema preuzetih datoteka');
         }
       } else {
         showToast('Dostupno samo u Electron verziji');
@@ -10872,17 +10899,17 @@
           }).join('') + '</tbody></table>';
       } else if (type === 'sqlite-tabs') {
         c.innerHTML = _sqliteLoading('Open Tabs');
-        // In Electron: fetch from SQLite; in web mode use STATE.tabs
-        const fetchTabs = (window.electronWebview && window.etherx?.tabs?.getAll)
+        // Always use live STATE.tabs as the source of truth; SQLite data may be stale
+        const liveRows = STATE.tabs.map(t => ({ url: t.url, title: t.title, isActive: t.id === STATE.activeTabId, isPinned: t.pinned, groupName: t.group }));
+        const fetchTabs = (window.electronWebview && window.etherx?.tabs?.getAll && !liveRows.length)
           ? window.etherx.tabs.getAll()
-          : Promise.resolve(STATE.tabs.length ? STATE.tabs : []);
+          : Promise.resolve(liveRows);
         fetchTabs.then(rows => {
-          // Merge SQLite result with live STATE.tabs
-          const liveRows = STATE.tabs.map(t => ({ url: t.url, title: t.title, isActive: t.id === STATE.activeTabId, isPinned: t.pinned, groupName: t.group }));
-          const merged = rows && rows.length ? rows : liveRows;
+          // Prefer live STATE.tabs; fall back to SQLite result only if no live tabs
+          const merged = liveRows.length ? liveRows : (rows && rows.length ? rows : []);
           if (!merged || !merged.length) { c.innerHTML = _sqliteEmpty('open_tabs'); return; }
-          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>tabs</strong> • ${merged.length} rows</div>` +
-            '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Title</th><th>Active</th><th>Pinned</th><th>Group</th></tr></thead><tbody>' +
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Tabs • <strong>live</strong> • ${merged.length} otvorenih</div>` +
+            '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Naslov</th><th>Aktivna</th><th>Prikačena</th><th>Grupa</th></tr></thead><tbody>' +
             merged.map((r, i) => {
               const url = r.url || ''; const short = url.length > 45 ? url.slice(0, 45) + '…' : url;
               return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick="navigateTo('${escHtml(url)}');return false" style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || 'New Tab')}</td><td style="text-align:center">${r.isActive || r.is_active ? '✅' : ''}</td><td style="text-align:center">${r.isPinned || r.is_pinned ? '📌' : ''}</td><td style="color:#888">${escHtml(r.groupName || r.group_name || '')}</td></tr>`;
@@ -11032,6 +11059,17 @@
             return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent)">${escHtml(r.site || '')}</td><td style="color:#ccc">${escHtml(r.username || '')}</td><td style="color:#555">••••••••</td><td style="color:#777;white-space:nowrap">${dt}</td></tr>`;
           }).join('') + '</tbody></table>';
 
+      } else if (type === 'indexeddb') {
+        c.innerHTML = '<p style="color:#858585;font-size:11px;padding:8px">⏳ Učitavanje IndexedDB…</p>';
+        if (!window.indexedDB) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">IndexedDB nije dostupan u ovom kontekstu.</p>'; return; }
+        const dbListPromise = (typeof indexedDB.databases === 'function') ? indexedDB.databases() : Promise.resolve([]);
+        dbListPromise.then(dbs => {
+          if (!dbs || !dbs.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:12px">🗄️ Nema IndexedDB baza podataka u ovom kontekstu.<br><small style="color:#444">IndexedDB baze vidljive su samo unutar webviewa (posjeti web stranicu koja ih koristi).</small></p>'; return; }
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">IndexedDB • <strong>${dbs.length}</strong> baza</div>` +
+            '<table class="app-table"><thead><tr><th>Naziv</th><th>Verzija</th></tr></thead><tbody>' +
+            dbs.map(db => `<tr><td style="color:var(--accent)">${escHtml(db.name || '')}</td><td style="color:#888">${db.version || 1}</td></tr>`).join('') +
+            '</tbody></table>';
+        }).catch(() => { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">IndexedDB: greška pri čitanju baza podataka.</p>'; });
       } else {
         c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No data available.</p>';
       }
@@ -12472,6 +12510,7 @@
     const ctxWindowList = document.getElementById('ctxWindowList');
     let _ctxTargetUrl = null; // URL of right-clicked link (if any)
     async function showCtxMenu(x, y, targetUrl, params = {}) {
+      _ctxFocusedEl = document.activeElement; // Save focused element BEFORE menu steals focus
       _ctxTargetUrl = targetUrl || null;
       _ctxSelectionText = String(params.selectionText || window.getSelection()?.toString() || '');
       _ctxIsEditable = !!params.isEditable || ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || !!document.activeElement?.isContentEditable;
@@ -12612,7 +12651,7 @@
     document.getElementById('ctx-paste-text').addEventListener('click', async () => {
       try {
         const text = await navigator.clipboard.readText();
-        const el = document.activeElement;
+        const el = _ctxFocusedEl || document.activeElement;
         if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
           const s = el.selectionStart ?? 0, end = el.selectionEnd ?? 0;
           if (el.isContentEditable) {
@@ -12641,7 +12680,7 @@
     document.addEventListener('click', () => document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')));
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
-    function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
+    function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
     function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const clockColor = cfg.clockColor || '#ffffff'; clockEl.style.color = clockColor; const clockSize = cfg.clockSize || 15; clockEl.style.fontSize = clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) { de.textContent = (datePfx ? datePfx + ' ' : '') + d; const dateColor = cfg.dateColor || '#ffffff'; de.style.color = dateColor; const dateSize = cfg.dateSize || 12; de.style.fontSize = dateSize + 'px'; } }
     updateClock(); setInterval(updateClock, 30000);
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
@@ -14277,31 +14316,93 @@
       if (!overlay || !grid) return;
       const settings = DB.getSettings();
       grid.innerHTML = '';
-      CTT_BUTTONS.forEach(def => {
+      // Load saved order from localStorage
+      let savedOrder = [];
+      try { savedOrder = JSON.parse(localStorage.getItem('ex_toolbar_order') || '[]'); } catch (_) { }
+      // Sort CTT_BUTTONS by saved order, appending any not yet saved
+      const orderedButtons = savedOrder.length
+        ? [...savedOrder.map(key => CTT_BUTTONS.find(b => b.key === key)).filter(Boolean),
+        ...CTT_BUTTONS.filter(b => !savedOrder.includes(b.key))]
+        : CTT_BUTTONS;
+      let _cttDragSrc = null;
+      orderedButtons.forEach(def => {
         const isOn = settings[def.key] !== false;
         const btn = document.getElementById(def.id);
         const tile = document.createElement('div');
         tile.className = 'ctt-tile' + (isOn ? '' : ' disabled');
         tile.dataset.key = def.key;
         tile.dataset.id = def.id;
+        tile.draggable = true;
         // Use actual button icon if button exists and has text
         const liveIcon = btn ? (btn.textContent.trim().charAt(0) || def.icon) : def.icon;
         tile.innerHTML = `<div class="ctt-tile-icon">${liveIcon}</div><div class="ctt-tile-name">${def.name}</div><div class="ctt-tile-dot"></div>`;
+        // Toggle on/off click
         tile.addEventListener('click', () => {
           const on = !tile.classList.contains('disabled');
           const newOn = !on;
           tile.classList.toggle('disabled', !newOn);
           DB.saveSetting(def.key, newOn);
           if (btn) btn.style.display = newOn ? '' : 'none';
-          // Sync the Settings → Appearance toggle too
           const settingToggle = document.querySelector(`#stab-appearance .toggle[data-setting="${def.key}"]`);
           if (settingToggle) { newOn ? settingToggle.classList.add('on') : settingToggle.classList.remove('on'); }
+        });
+        // Drag-and-drop reordering
+        tile.addEventListener('dragstart', (e) => {
+          _cttDragSrc = tile;
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => tile.classList.add('dragging'), 0);
+        });
+        tile.addEventListener('dragend', () => {
+          tile.classList.remove('dragging');
+          grid.querySelectorAll('.ctt-tile').forEach(t => t.classList.remove('drag-over'));
+        });
+        tile.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (_cttDragSrc && _cttDragSrc !== tile) tile.classList.add('drag-over');
+        });
+        tile.addEventListener('dragleave', () => tile.classList.remove('drag-over'));
+        tile.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (_cttDragSrc && _cttDragSrc !== tile) {
+            const tiles = [...grid.querySelectorAll('.ctt-tile')];
+            const srcIdx = tiles.indexOf(_cttDragSrc);
+            const dstIdx = tiles.indexOf(tile);
+            if (srcIdx < dstIdx) tile.after(_cttDragSrc); else tile.before(_cttDragSrc);
+            const newOrder = [...grid.querySelectorAll('.ctt-tile')].map(t => t.dataset.key);
+            localStorage.setItem('ex_toolbar_order', JSON.stringify(newOrder));
+            _applyToolbarOrder(newOrder);
+          }
+          tile.classList.remove('drag-over');
         });
         grid.appendChild(tile);
       });
       overlay.classList.add('show');
       // Close any open dropdowns
       document.querySelectorAll('.menu-item.open').forEach(m => m.classList.remove('open'));
+    }
+
+    function _applyToolbarOrder(orderedKeys) {
+      const keyToId = Object.fromEntries(CTT_BUTTONS.map(b => [b.key, b.id]));
+      const cttIdSet = new Set(CTT_BUTTONS.map(b => b.id));
+      // Build ordered element array
+      const ordered = orderedKeys.map(k => document.getElementById(keyToId[k] || '')).filter(Boolean);
+      CTT_BUTTONS.forEach(b => { if (!orderedKeys.includes(b.key)) { const el = document.getElementById(b.id); if (el && !ordered.includes(el)) ordered.push(el); } });
+      if (!ordered.length) return;
+      const parent = ordered[0].parentNode;
+      if (!parent) return;
+      // Find first non-CTT sibling (will be anchor after we remove CTT buttons)
+      const siblings = Array.from(parent.children);
+      const firstCttIdx = siblings.findIndex(n => cttIdSet.has(n.id));
+      if (firstCttIdx === -1) return;
+      let anchor = null;
+      for (let i = firstCttIdx; i < siblings.length; i++) {
+        if (!cttIdSet.has(siblings[i].id)) { anchor = siblings[i]; break; }
+      }
+      // Detach all CTT buttons and re-insert in new order
+      ordered.forEach(el => el.parentNode && el.parentNode.removeChild(el));
+      ordered.forEach(el => { if (anchor && anchor.parentNode === parent) parent.insertBefore(el, anchor); else parent.appendChild(el); });
     }
 
     document.getElementById('customToolbarClose').addEventListener('click', () => {
