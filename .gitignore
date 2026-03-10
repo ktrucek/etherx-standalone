@@ -23,3 +23,18 @@ pregress.md
 .runner
 runner
 nastavak.md
+deployment.md
+etherx browser.md
+nastavak.md
+pregress.md
+changelog.md
+.env.local
+.env.development
+.env.production
+.env.test
+.env.staging
+.env.*.local
+*.env
+*sync-to-gitea.sh
+*deploy.sh
+*.md
