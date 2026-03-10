@@ -136,7 +136,7 @@ jobs:
           CXXFLAGS: -std=c++20
 
       - name: 🔧 Rebuild native modules for x64
-        run: npx electron-rebuild --arch x64 -f -w better-sqlite3
+        run: npx @electron/rebuild --arch x64 -f -w better-sqlite3
         env:
           CXXFLAGS: -std=c++20
 
@@ -178,7 +178,7 @@ jobs:
           CXXFLAGS: -std=c++20
 
       - name: 🔧 Rebuild native modules for arm64
-        run: npx electron-rebuild --arch arm64 -f -w better-sqlite3
+        run: npx @electron/rebuild --arch arm64 -f -w better-sqlite3
         env:
           CXXFLAGS: -std=c++20
 

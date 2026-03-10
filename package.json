@@ -16,7 +16,10 @@
     "url": "https://kriptoentuzijasti.io"
   },
   "homepage": "https://kriptoentuzijasti.io",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "overrides": {
     "lzma-native": {
       "node-addon-api": "^7.1.0"
@@ -61,14 +64,13 @@
     }
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
-    "electron": "^33.4.11",
-    "electron-builder": "^26.8.1",
-    "electron-rebuild": "^3.2.9"
+    "@electron/rebuild": "^4.0.3",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.8.1"
   },
   "dependencies": {
     "@cliqz/adblocker-electron": "^1.26.8",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "crypto-js": "^4.2.0",
     "electron-store": "^8.1.0",
