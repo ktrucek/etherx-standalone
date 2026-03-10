@@ -20,4 +20,6 @@ deploy.sh
 .env.local
 sync-to-gitea.sh
 pregress.md
+.runner
+runner
 nastavak.md
