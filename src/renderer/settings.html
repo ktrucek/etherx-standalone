@@ -1344,6 +1344,18 @@
             </div>
           </div>
         </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Pregled povijesti</div>
+          <div style="padding:0 0 8px">
+            <input type="text" id="histSearchInput" placeholder="Pretraži povijest…"
+              style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:12px;outline:none;box-sizing:border-box">
+          </div>
+          <div id="historySettingsList"
+            style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--bg)">
+            <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Učitavanje…</div>
+          </div>
+        </div>
       </div>
 
       <!-- Permissions -->
@@ -1585,6 +1597,25 @@
             </div>
           </div>
         </div>
+
+        <!-- Update result card -->
+        <div id="updateResultCard"
+          style="display:none;margin-top:12px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+          <div id="updateResultHeader"
+            style="padding:12px 14px;display:flex;align-items:center;gap:10px;background:var(--bg3);border-bottom:1px solid var(--border)">
+            <span id="updateResultIcon" style="font-size:22px"></span>
+            <div style="flex:1">
+              <div id="updateResultTitle" style="font-size:13px;font-weight:600;color:var(--text)"></div>
+              <div id="updateResultSub" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+            </div>
+          </div>
+          <div id="updateResultBody" style="display:none;padding:12px 14px">
+            <div id="updateChangelog"
+              style="font-size:12px;color:var(--text);background:var(--bg);border-radius:var(--r);padding:10px;max-height:130px;overflow-y:auto;white-space:pre-wrap;margin-bottom:10px;line-height:1.5">
+            </div>
+            <button class="btn btn-primary" id="btnDownloadUpdate" style="width:100%">⬇️ Preuzmi ažuriranje</button>
+          </div>
+        </div>
       </div>
 
       <!-- AI Agent -->
@@ -1698,6 +1729,8 @@
           document.getElementById('section-' + item.dataset.section).classList.add('active');
           // Scroll content to top
           document.getElementById('settingsContent').scrollTop = 0;
+          // Load history entries when switching to history section
+          if (item.dataset.section === 'history') loadSettingsHistory('');
         });
       });
 
@@ -2133,12 +2166,107 @@
         await saveSettings({ auto_update: e.target.checked });
       });
 
+      async function loadSettingsHistory(filter) {
+        const list = document.getElementById('historySettingsList');
+        if (!list) return;
+        let entries = [];
+        try { entries = await etherx.history.getAll() || []; } catch (e) { entries = []; }
+        if (filter) {
+          const f = filter.toLowerCase();
+          entries = entries.filter(h =>
+            (h.url || '').toLowerCase().includes(f) ||
+            (h.title || '').toLowerCase().includes(f)
+          );
+        }
+        if (!entries.length) {
+          list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Nema rezultata u povijesti.</div>';
+          return;
+        }
+        const groups = {};
+        entries.forEach(h => {
+          const d = new Date(h.visited_at || h.ts || Date.now()).toLocaleDateString('hr-HR');
+          (groups[d] = groups[d] || []).push(h);
+        });
+        list.innerHTML = '';
+        const today = new Date().toLocaleDateString('hr-HR');
+        Object.entries(groups).forEach(([day, items]) => {
+          const dt = document.createElement('div');
+          dt.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);padding:6px 12px 4px;background:var(--bg3);position:sticky;top:0;z-index:1;letter-spacing:.5px';
+          dt.textContent = day === today ? 'Danas' : day;
+          list.appendChild(dt);
+          items.forEach(h => {
+            const el = document.createElement('div');
+            el.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s';
+            el.onmouseenter = () => el.style.background = 'rgba(255,255,255,.04)';
+            el.onmouseleave = () => el.style.background = '';
+            const time = new Date(h.visited_at || h.ts || Date.now()).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+            const esc = s => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const faviconUrl = `https://www.google.com/s2/favicons?sz=14&domain_url=${encodeURIComponent(h.url)}`;
+            el.innerHTML = `<img src="${faviconUrl}" width="14" height="14" style="flex-shrink:0;border-radius:2px" onerror="this.style.display='none'">` +
+              `<div style="flex:1;min-width:0">` +
+              `<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(h.title || h.url)}</div>` +
+              `<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(h.url)}</div>` +
+              `</div><span style="font-size:10px;color:var(--dim);flex-shrink:0">${time}</span>`;
+            list.appendChild(el);
+          });
+        });
+      }
+
+      document.getElementById('histSearchInput')?.addEventListener('input', (e) => {
+        loadSettingsHistory(e.target.value);
+      });
+
       document.getElementById('btnCheckUpdates')?.addEventListener('click', async () => {
-        const result = await etherx.updater?.check();
-        if (result?.available) {
-          alert(`Nova verzija dostupna: ${result.version}\n\nPreuzmi sa: ${result.url}`);
-        } else {
-          alert('Browser je ažuran. Koristiš najnoviju verziju.');
+        const btn = document.getElementById('btnCheckUpdates');
+        const card = document.getElementById('updateResultCard');
+        btn.disabled = true;
+        btn.textContent = '⏳ Provjera…';
+        try {
+          const platform = await etherx.app.getPlatform();
+          const result = await etherx.update.check();
+          card.style.display = 'block';
+          const icon = document.getElementById('updateResultIcon');
+          const title = document.getElementById('updateResultTitle');
+          const sub = document.getElementById('updateResultSub');
+          const body = document.getElementById('updateResultBody');
+          const changelog = document.getElementById('updateChangelog');
+          if (!result?.ok) {
+            icon.textContent = '⚠️';
+            title.textContent = 'Greška pri provjeri';
+            sub.textContent = result?.error || 'Nepoznata greška';
+            body.style.display = 'none';
+          } else if (result.isNew) {
+            icon.textContent = '🚀';
+            title.textContent = `Nova verzija dostupna: ${result.latest}`;
+            sub.textContent = `Trenutna: ${result.current}  ·  Objavljeno: ${result.publishedAt ? new Date(result.publishedAt).toLocaleDateString('hr-HR') : '—'}`;
+            changelog.textContent = result.body || 'Nema opisa promjena.';
+            body.style.display = 'block';
+            const dlBtn = document.getElementById('btnDownloadUpdate');
+            dlBtn.onclick = async () => {
+              const assets = result.assets || [];
+              let asset = null;
+              if (platform === 'win32') asset = assets.find(a => a.name.endsWith('.exe') || a.name.includes('Setup'));
+              else if (platform === 'darwin') asset = assets.find(a => a.name.endsWith('.dmg'));
+              else asset = assets.find(a => a.name.endsWith('.AppImage') || a.name.endsWith('.deb'));
+              const dlUrl = asset?.url || `https://github.com/ktrucek/etherx-standalone/releases/tag/v${result.latest}`;
+              await etherx.nav.openExternal(dlUrl);
+            };
+          } else {
+            icon.textContent = '✅';
+            title.textContent = 'Koristiš najnoviju verziju';
+            sub.textContent = `Verzija ${result.current} je ažurna.`;
+            body.style.display = 'none';
+          }
+        } catch (e) {
+          const card2 = document.getElementById('updateResultCard');
+          card2.style.display = 'block';
+          document.getElementById('updateResultIcon').textContent = '⚠️';
+          document.getElementById('updateResultTitle').textContent = 'Greška';
+          document.getElementById('updateResultSub').textContent = e.message;
+          document.getElementById('updateResultBody').style.display = 'none';
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Provjeri sada';
         }
       });
 

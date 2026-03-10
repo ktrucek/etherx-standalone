@@ -4134,6 +4134,7 @@
       style="position:absolute;top:-100px;width:1px;height:1px;opacity:0">📖</button>
     <button class="nav-btn icon-btn" id="btnWallet" title="Wallet">💰</button>
     <button class="nav-btn icon-btn" id="btnBobiAI" title="BobiAI Studio">🎬</button>
+    <button class="nav-btn icon-btn" id="btnSummarizePage" title="AI Sažetak stranice">✨</button>
     <button class="nav-btn icon-btn" id="btnAiAgent" title="AI Agent">🤖</button>
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
@@ -5193,6 +5194,25 @@
           allow="clipboard-read; clipboard-write"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation"
           title="EtherX.io" onload="document.getElementById('etherxLoading').style.display='none'"></iframe>
+      </div>
+    </div>
+    <!-- AI Gemini Summary Card -->
+    <div id="aiSummaryCard">
+      <div class="asc-header">
+        <span>✨ Gemini Sažetek</span>
+        <button class="asc-close" id="ascClose">×</button>
+      </div>
+      <div id="ascTitle" style="padding:6px 14px 0;font-size:11px;color:#aaa;font-style:italic"></div>
+      <div class="asc-body">
+        <div class="asc-loader" id="ascLoader">
+          <div class="asc-spinner"></div>
+          <span>Analizira stranicu…</span>
+        </div>
+        <div id="ascBullets" style="display:none"></div>
+      </div>
+      <div class="asc-footer">
+        <span id="ascMeta"></span>
+        <span id="ascCached" style="color:var(--accent)"></span>
       </div>
     </div>
     <!-- Password Modal -->

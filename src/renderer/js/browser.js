@@ -781,6 +781,8 @@ async function summarizeCurrentPage() {
   const cachedEl = document.getElementById('ascCached');
   const titleEl = document.getElementById('ascTitle');
 
+  if (!card || !loader || !bulletsEl) return { ok: false, error: 'AI summary panel not found in DOM' };
+
   card.classList.add('open');
   loader.style.display = 'flex';
   bulletsEl.style.display = 'none';
@@ -5117,5 +5119,17 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
     // Replace in global scope the best way we can
     try { window.navigateTo = patchedNav; } catch (e) { }
   }
+
+  // ── Auto-update check on startup (silent background check) ──────────────
+  setTimeout(async () => {
+    try {
+      const s = await etherx.settings.get();
+      if (s.auto_update === false) return;
+      const result = await etherx.update.check();
+      if (result?.isNew) {
+        showToast(`🔄 Nova verzija ${result.latest} dostupna! Postavke → Nadogradnje.`);
+      }
+    } catch (e) { /* silent */ }
+  }, 10000);
 
 })();
