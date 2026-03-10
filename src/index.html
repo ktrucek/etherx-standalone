@@ -7800,7 +7800,8 @@
               <div style="font-size:12px;color:var(--text2);line-height:1.7;padding:4px 0">
                 Install EtherX Browser as a Progressive Web App (PWA) on your mobile device:
                 <ol style="margin:8px 0 0;padding-left:18px;color:var(--text3)">
-                  <li style="margin-bottom:4px">Open <strong>n8n.kriptoentuzijasti.io/browser.html</strong> on your
+                  <li style="margin-bottom:4px">Open <strong>ktrucek.github.io/etherx-standalone/src/index.html</strong>
+                    on your
                     phone</li>
                   <li style="margin-bottom:4px">Tap "Share" → "Add to Home Screen"</li>
                   <li>Launch from home screen like a native app</li>
@@ -8402,7 +8403,7 @@
           <div class="cl success"><span class="cp">log</span><span class="cm">⬡ Web3 provider: window.ethereum
               injected</span><span class="csrc">web3.js:1</span></div>
           <div class="cl log"><span class="cp">log</span><span class="cm">Proxy navigation active — all requests via
-              /proxy.php</span><span class="csrc">browser.js:1</span></div>
+              /src/index.html</span><span class="csrc">index.html:1</span></div>
         </div>
         <div class="console-in">
           <span class="console-prompt">❯</span>
@@ -8531,9 +8532,9 @@
         <div class="sources-wrap">
           <div class="sources-tree" id="sourcesTree">
             <div class="src-item folder">📁 top</div>
-            <div class="src-item folder" style="padding-left:20px">📁 n8n.kriptoentuzijasti.io</div>
+            <div class="src-item folder" style="padding-left:20px">📁 ktrucek.github.io/etherx-standalone</div>
             <div class="src-item active" style="padding-left:32px" id="srcBrowserHtml">📄 browser.html</div>
-            <div class="src-item" style="padding-left:32px" id="srcProxyPhp">📄 proxy.php</div>
+
             <div class="src-item folder" style="padding-left:20px">📁 (no domain)</div>
             <div class="src-item" style="padding-left:32px">📄 about:blank</div>
           </div>
@@ -8796,7 +8797,7 @@
     <!-- Site info popup (padlock click) -->
     <div class="site-info-popup" id="siteInfoPopup">
       <div class="sip-header">
-        <div class="sip-site" id="sipSite">n8n.kriptoentuzijasti.io</div>
+        <div class="sip-site" id="sipSite">kriptoentuzijasti.io</div>
         <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px">
           <span id="sipSecIcon" style="font-size:16px">🔒</span>
           <span id="sipSecLabel" style="font-size:11px;color:var(--green)">Secure connection</span>
@@ -9437,8 +9438,7 @@
           }
           _webviewOwnerTabId = id;
         } else {
-          const proxyUrl = '/proxy.php?url=' + encodeURIComponent(tab.url);
-          if (frame.src !== proxyUrl) frame.src = proxyUrl;
+          if (frame.src !== tab.url) frame.src = tab.url;
         }
         showFrame(tab);
       }
@@ -9533,7 +9533,7 @@
         ntp.style.display = 'none'; frame.classList.add('active');
         document.getElementById('blockedOverlay').classList.remove('show');
         document.getElementById('readerMode').classList.remove('show');
-        setLoading(30); _webviewOwnerTabId = tab.id; if (window.electronWebview) { frame.src = url; } else { frame.src = '/proxy.php?url=' + encodeURIComponent(url); }
+        setLoading(30); _webviewOwnerTabId = tab.id; frame.src = url;
         document.getElementById('sbUrl').textContent = url;
       }
       updateTabEl(tab); DB.addHistory({ url, title: tab.title }); saveSessionTabs();
@@ -9548,16 +9548,16 @@
       const tab = getActiveTab(); if (!tab || tab.histIdx <= 0) return;
       tab.histIdx--; const u = tab.history[tab.histIdx]; tab.url = u;
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
-      if (window.electronWebview) { frame.src = u; } else { frame.src = '/proxy.php?url=' + encodeURIComponent(u); } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
+      frame.src = u; setLoading(25); updateNavBtns(tab); updateTabEl(tab);
     });
     document.getElementById('btnFwd').addEventListener('click', () => {
       const tab = getActiveTab(); if (!tab || tab.histIdx >= tab.history.length - 1) return;
       tab.histIdx++; const u = tab.history[tab.histIdx]; tab.url = u;
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
-      if (window.electronWebview) { frame.src = u; } else { frame.src = '/proxy.php?url=' + encodeURIComponent(u); } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
+      frame.src = u; setLoading(25); updateNavBtns(tab); updateTabEl(tab);
     });
     document.getElementById('btnReload').addEventListener('click', () => {
-      const tab = getActiveTab(); if (tab && tab.url) { setLoading(20); if (window.electronWebview && frame.tagName === 'WEBVIEW') { try { frame.reload(); } catch (e) { frame.src = tab.url; } } else { frame.src = '/proxy.php?url=' + encodeURIComponent(tab.url); } consoleLog('log', '↺ Reload: ' + tab.url); }
+      const tab = getActiveTab(); if (tab && tab.url) { setLoading(20); if (window.electronWebview && frame.tagName === 'WEBVIEW') { try { frame.reload(); } catch (e) { frame.src = tab.url; } } else { frame.src = tab.url; } consoleLog('log', '↺ Reload: ' + tab.url); }
     });
     document.getElementById('btnHome').addEventListener('click', () => {
       const cfg = DB.getSettings();
@@ -9724,7 +9724,7 @@
       if (SKIP.some(p => loadedSrc.includes(p))) return;
       try {
         const doc = frame.contentDocument, t = doc?.title;
-        if (t && t !== 'proxy.php' && t !== '') { tab.title = t; document.getElementById('elemTitle').textContent = t; }
+        if (t && t !== '') { tab.title = t; document.getElementById('elemTitle').textContent = t; }
         // Update favicon from Google S2 API only after real page load
         if (tab.url && tab.url.startsWith('http')) {
           tab.faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(tab.url)}`;
@@ -9767,7 +9767,7 @@
             folder.textContent = '📁 ' + (d.origin || '(loaded page)').replace('https://', '').replace('http://', '');
             treeEl.appendChild(folder);
           }
-          const SRC_SKIP = ['proxy.php', 'browser.html', 'n8n.kriptoentuzijasti.io', 'localhost:', 'file://'];
+          const SRC_SKIP = ['browser.html', 'localhost:', 'file://'];
           d.resources.filter(r => !SRC_SKIP.some(skip => r.url.includes(skip))).forEach(r => {
             const rKey = 'src-res-' + btoa(r.url).slice(0, 16);
             if (!document.getElementById(rKey)) {
@@ -9864,7 +9864,7 @@
         document.querySelectorAll('.rp').forEach(b => b.classList.remove('active')); btn.classList.add('active');
         const w = btn.dataset.w, h = btn.dataset.h; const rf = document.getElementById('respFrame');
         rf.style.width = w + 'px'; rf.style.height = h + 'px'; document.getElementById('respSize').textContent = w + ' × ' + h;
-        const tab = getActiveTab(); if (tab?.url) rf.src = window.electronWebview ? tab.url : '/proxy.php?url=' + encodeURIComponent(tab.url);
+        const tab = getActiveTab(); if (tab?.url) rf.src = tab.url;
       });
     });
     function toggleRespMode() {
@@ -9873,7 +9873,7 @@
       if (STATE.respMode) {
         wrap.classList.add('active'); const rf = document.getElementById('respFrame');
         rf.style.width = '375px'; rf.style.height = '812px';
-        const tab = getActiveTab(); if (tab?.url) rf.src = window.electronWebview ? tab.url : '/proxy.php?url=' + encodeURIComponent(tab.url);
+        const tab = getActiveTab(); if (tab?.url) rf.src = tab.url;
         ntp.style.display = 'none'; frame.classList.remove('active'); showToast('📐 Responsive Design Mode');
       } else {
         wrap.classList.remove('active'); document.getElementById('respFrame').src = '';
@@ -10066,7 +10066,7 @@
 
       // Web mode: call Gemini API via settings key (never hardcoded)
       try {
-        const proxyUrl = window.electronWebview ? url : `/proxy.php?url=${encodeURIComponent(url)}&raw=1`;
+        const proxyUrl = url;
         let pageText = '';
         try {
           const resp = await fetch(proxyUrl);
@@ -11269,7 +11269,7 @@
     });
     document.getElementById('mi-find').addEventListener('click', openFind);
     document.getElementById('mi-reload').addEventListener('click', () => document.getElementById('btnReload').click());
-    document.getElementById('mi-hard-reload').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) { frame.src = ''; setTimeout(() => { if (window.electronWebview) { frame.src = t.url; } else { frame.src = '/proxy.php?url=' + encodeURIComponent(t.url); } setLoading(20); }, 50); } });
+    document.getElementById('mi-hard-reload').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) { frame.src = ''; setTimeout(() => { frame.src = t.url; setLoading(20); }, 50); } });
     document.getElementById('mi-zoom-in').addEventListener('click', () => setZoom(STATE.zoom + 10));
     document.getElementById('mi-zoom-out').addEventListener('click', () => setZoom(STATE.zoom - 10));
     document.getElementById('mi-zoom-reset').addEventListener('click', () => setZoom(100));
@@ -11513,7 +11513,7 @@
         } else { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable</div>'; }
         return;
       }
-      fetch('/proxy.php?url=' + encodeURIComponent(url) + '&raw=1').then(r => r.text()).then(src => {
+      fetch(url).then(r => r.text()).then(src => {
         // Syntax-highlight basic HTML/CSS/JS tokens
         const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const highlighted = esc
@@ -11941,7 +11941,7 @@
         set('secCsp', 'Fetching…'); badge('secCspBadge', 'sec-warn', '…');
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 3000);
-        fetch('/proxy.php?url=' + encodeURIComponent(url), { method: 'HEAD', signal: ctrl.signal }).then(r => {
+        fetch(url, { method: 'HEAD', signal: ctrl.signal }).then(r => {
           clearTimeout(tid);
           const csp = r.headers.get('x-etherx-original-csp') || '';
           _secCspCache.set(url, { csp, ts: Date.now() });
@@ -12872,24 +12872,15 @@
       const AI_STORAGE = 'ex_ai_chat';
       const KRIPTO_API = 'https://kriptoentuzijasti.io/wp-json/wp/v2';
 
-      // Route WP REST API through proxy.php to avoid CORS (browser is on n8n.kriptoentuzijasti.io)
+      // Direct fetch WP REST API
       async function proxyFetch(apiPath, timeout) {
         const fullUrl = KRIPTO_API + apiPath;
-        // Try proxy first (avoids CORS)
         try {
-          const r = await fetch('/proxy.php?url=' + encodeURIComponent(fullUrl), {
+          const r = await fetch(fullUrl, {
             signal: AbortSignal.timeout(timeout || 10000)
           });
-          if (r.ok) {
-            const text = await r.text();
-            // proxy.php may wrap HTML; try to extract JSON from the response
-            try { return JSON.parse(text); } catch (e) {
-              // proxy injected HTML — strip injected script and try again
-              const clean = text.replace(/<base[^>]*>/gi, '').replace(/<script[\s\S]*?<\/script>/gi, '');
-              return JSON.parse(clean);
-            }
-          }
-        } catch (e) { /* fall through to direct */ }
+          if (r.ok) return r.json();
+        } catch (e) { /* fall through */ }
         // Fallback: direct fetch (works if CORS is ever enabled on the WP site)
         const r2 = await fetch(fullUrl, { signal: AbortSignal.timeout(timeout || 10000) });
         if (!r2.ok) throw new Error('HTTP ' + r2.status);
@@ -15016,7 +15007,7 @@
 
     // Mobile Install Button
     document.getElementById('mobileInstallBtn')?.addEventListener('click', () => {
-      window.open('https://n8n.kriptoentuzijasti.io/browser.html', '_blank');
+      window.open('https://ktrucek.github.io/etherx-standalone/src/index.html', '_blank');
       showToast('📱 Opening mobile install page...');
     });
 
@@ -15618,9 +15609,9 @@
     document.getElementById('mi-download-app')?.addEventListener('click', () => {
       const cf = document.getElementById('browseFrame');
       if (cf) {
-        if (window.electronWebview) { cf.src = 'https://n8n.kriptoentuzijasti.io/download.html'; }
-        else { cf.src = '/download.html'; }
-        document.getElementById('urlInput').value = 'n8n.kriptoentuzijasti.io/download.html';
+        const ghUrl = 'https://ktrucek.github.io/etherx-standalone/src/index.html';
+        cf.src = ghUrl;
+        document.getElementById('urlInput').value = ghUrl;
       }
     });
 

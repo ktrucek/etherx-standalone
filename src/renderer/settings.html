@@ -603,29 +603,17 @@
       <div class="nav-item" data-section="history">
         <span class="nav-item-icon">📜</span> Povijest
       </div>
-      <div class="nav-item" data-section="cookies">
-        <span class="nav-item-icon">🍪</span> Kolačići
-      </div>
-      <div class="nav-item" data-section="permissions">
-        <span class="nav-item-icon">🔔</span> Dozvole
-      </div>
       <div class="nav-item" data-section="downloads">
         <span class="nav-item-icon">⬇️</span> Preuzimanja
       </div>
       <div class="nav-item" data-section="search">
         <span class="nav-item-icon">🔍</span> Pretraživač
       </div>
-      <div class="nav-item" data-section="shortcuts">
-        <span class="nav-item-icon">⌨️</span> Prečaci
-      </div>
-      <div class="nav-item" data-section="cache">
-        <span class="nav-item-icon">🗄️</span> Cache i podaci
+      <div class="nav-item" data-section="websites">
+        <span class="nav-item-icon">🌍</span> Web stranice
       </div>
       <div class="nav-item" data-section="security">
         <span class="nav-item-icon">🔐</span> Sigurnost
-      </div>
-      <div class="nav-item" data-section="dns">
-        <span class="nav-item-icon">🌐</span> DNS
       </div>
       <div class="nav-item" data-section="developer">
         <span class="nav-item-icon">📊</span> Developer
@@ -633,9 +621,7 @@
       <div class="nav-item" data-section="updates">
         <span class="nav-item-icon">🔄</span> Nadogradnje
       </div>
-      <div class="nav-item" data-section="backup">
-        <span class="nav-item-icon">💾</span> Backup
-      </div>
+
       <div class="nav-item" data-section="agent">
         <span class="nav-item-icon">🤖</span> AI Agent
       </div>
@@ -873,6 +859,103 @@
             <div class="settings-row-control">
               <label class="toggle"><input type="checkbox" id="settingPhishing" checked><span
                   class="toggle-slider"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Kolačići</div>
+          <div class="settings-row">
+            <div class="settings-row-icon">🗑️</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Obriši sve kolačiće</div>
+              <div class="settings-row-desc">Trajno obriši sve pohranjene kolačiće sa svih stranica.</div>
+            </div>
+            <div class="settings-row-control">
+              <button class="btn btn-danger" id="btnClearAllCookies">Obriši sve</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Cache i privremeni podaci</div>
+          <div class="settings-row">
+            <div class="settings-row-icon">📊</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Veličina cache-a</div>
+              <div class="settings-row-desc">Trenutna veličina spremljenih cache podataka.</div>
+            </div>
+            <div class="settings-row-control">
+              <span id="cacheSize" style="color:var(--muted);font-size:13px;">Izračunavanje...</span>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-icon">🗑️</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Očisti cache</div>
+              <div class="settings-row-desc">Obriši sve privremene podatke i cache stranica.</div>
+            </div>
+            <div class="settings-row-control">
+              <button class="btn btn-danger" id="btnClearCache">Očisti cache</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Dozvole stranica</div>
+          <div class="settings-row">
+            <div class="settings-row-icon">🔔</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Push notifikacije</div>
+              <div class="settings-row-desc">Dopusti stranicama da šalju notifikacije.</div>
+            </div>
+            <div class="settings-row-control">
+              <label class="toggle">
+                <input type="checkbox" id="settingNotifications">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-icon">📍</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Pristup lokaciji</div>
+              <div class="settings-row-desc">Stranice mogu zatražiti tvoju geografsku lokaciju.</div>
+            </div>
+            <div class="settings-row-control">
+              <select id="settingGeolocation">
+                <option value="ask" selected>Uvijek pitaj</option>
+                <option value="allow">Uvijek dozvoli</option>
+                <option value="block">Nikad ne dijeli</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-icon">🎤</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Mikrofon</div>
+              <div class="settings-row-desc">Dopusti pristup mikrofonu za video pozive i snimanje.</div>
+            </div>
+            <div class="settings-row-control">
+              <select id="settingMicrophone">
+                <option value="ask" selected>Uvijek pitaj</option>
+                <option value="allow">Uvijek dozvoli</option>
+                <option value="block">Blokiraj</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-icon">📹</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Kamera</div>
+              <div class="settings-row-desc">Dopusti pristup kameri za video pozive.</div>
+            </div>
+            <div class="settings-row-control">
+              <select id="settingCamera">
+                <option value="ask" selected>Uvijek pitaj</option>
+                <option value="allow">Uvijek dozvoli</option>
+                <option value="block">Blokiraj</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1263,131 +1346,7 @@
         </div>
       </div>
 
-      <!-- Cookies -->
-      <div class="settings-section" id="section-cookies">
-        <div class="section-title">🍪 Kolačići (Cookies)</div>
-        <div class="section-desc">Upravljanje kolačićima i podacima stranica.</div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Cookie postavke</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">🍪</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Pravila za kolačiće</div>
-              <div class="settings-row-desc">Kontroliraj kako stranice mogu koristiti kolačiće.</div>
-            </div>
-            <div class="settings-row-control">
-              <select id="settingCookiePolicy">
-                <option value="allow-all" selected>Dozvoli sve kolačiće</option>
-                <option value="block-third-party">Blokiraj samo third-party</option>
-                <option value="block-all">Blokiraj sve kolačiće</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Brisanje kolačića</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">🗑️</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Obriši sve kolačiće</div>
-              <div class="settings-row-desc">Trajno obriši sve pohranjene kolačiće sa svih stranica.</div>
-            </div>
-            <div class="settings-row-control">
-              <button class="btn btn-danger" id="btnClearAllCookies">Obriši sve</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Permissions -->
-      <div class="settings-section" id="section-permissions">
-        <div class="section-title">🔔 Dozvole i notifikacije</div>
-        <div class="section-desc">Kontroliraj koja dopuštenja stranice mogu zatražiti.</div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Notifikacije</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">🔔</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Push notifikacije</div>
-              <div class="settings-row-desc">Dopusti stranicama da šalju notifikacije.</div>
-            </div>
-            <div class="settings-row-control">
-              <label class="toggle">
-                <input type="checkbox" id="settingNotifications">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-icon">🔊</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Zvuk notifikacija</div>
-              <div class="settings-row-desc">Reproduciraj zvuk kada stigne notifikacija.</div>
-            </div>
-            <div class="settings-row-control">
-              <label class="toggle">
-                <input type="checkbox" id="settingNotificationSound" checked>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Lokacija</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">📍</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Pristup lokaciji</div>
-              <div class="settings-row-desc">Stranice mogu zatražiti tvoju geografsku lokaciju.</div>
-            </div>
-            <div class="settings-row-control">
-              <select id="settingGeolocation">
-                <option value="ask" selected>Uvijek pitaj</option>
-                <option value="allow">Uvijek dozvoli</option>
-                <option value="block">Nikad ne dijeli</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Medijske dozvole</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">🎤</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Mikrofon</div>
-              <div class="settings-row-desc">Dopusti pristup mikrofonu za video pozive i snimanje.</div>
-            </div>
-            <div class="settings-row-control">
-              <select id="settingMicrophone">
-                <option value="ask" selected>Uvijek pitaj</option>
-                <option value="allow">Uvijek dozvoli</option>
-                <option value="block">Blokiraj</option>
-              </select>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-icon">📹</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Kamera</div>
-              <div class="settings-row-desc">Dopusti pristup kameri za video pozive.</div>
-            </div>
-            <div class="settings-row-control">
-              <select id="settingCamera">
-                <option value="ask" selected>Uvijek pitaj</option>
-                <option value="allow">Uvijek dozvoli</option>
-                <option value="block">Blokiraj</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Downloads -->
       <div class="settings-section" id="section-downloads">
         <div class="section-title">⬇️ Preuzimanja</div>
         <div class="section-desc">Postav ke za preuzete datoteke.</div>
@@ -1462,63 +1421,10 @@
         </div>
       </div>
 
-      <!-- Shortcuts -->
-      <div class="settings-section" id="section-shortcuts">
-        <div class="section-title">⌨️ Tipkovnički prečaci</div>
-        <div class="section-desc">Popis svih keyboard shortcuts.</div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Navigacija</div>
-          <div style="padding:16px;font-size:13px;line-height:2;">
-            <div><kbd>Ctrl/Cmd + T</kbd> — Nova kartica</div>
-            <div><kbd>Ctrl/Cmd + W</kbd> — Zatvori karticu</div>
-            <div><kbd>Ctrl/Cmd + Tab</kbd> — Sljedeća kartica</div>
-            <div><kbd>Ctrl/Cmd + Shift + Tab</kbd> — Prethodna kartica</div>
-            <div><kbd>Ctrl/Cmd + L</kbd> — Fokusiraj adresnu traku</div>
-            <div><kbd>Ctrl/Cmd + R</kbd> — Osvježi stranicu</div>
-            <div><kbd>Ctrl/Cmd + Shift + R</kbd> — Hard refresh (bez cache)</div>
-            <div><kbd>F11</kbd> — Full screen</div>
-            <div><kbd>F12</kbd> — Developer Tools</div>
-            <div><kbd>Ctrl/Cmd + +/-</kbd> — Zoom in/out</div>
-            <div><kbd>Ctrl/Cmd + 0</kbd> — Reset zoom</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Cache -->
-      <div class="settings-section" id="section-cache">
-        <div class="section-title">🗄️ Cache i podaci</div>
-        <div class="section-desc">Upravljanje privremenim podacima i cache-om.</div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Cache</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">📊</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Veličina cache-a</div>
-              <div class="settings-row-desc">Trenutna veličina spremljenih cache podataka.</div>
-            </div>
-            <div class="settings-row-control">
-              <span id="cacheSize" style="color:var(--muted);font-size:13px;">Izračunavanje...</span>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-icon">🗑️</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Očisti cache</div>
-              <div class="settings-row-desc">Obriši sve privremene podatke i cache stranica.</div>
-            </div>
-            <div class="settings-row-control">
-              <button class="btn btn-danger" id="btnClearCache">Očisti cache</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Security -->
       <div class="settings-section" id="section-security">
         <div class="section-title">🔐 Sigurnost</div>
-        <div class="section-desc">Dodatne sigurnosne funkcije.</div>
+        <div class="section-desc">Dodatne sigurnosne funkcije i sigurnosne kopije.</div>
 
         <div class="settings-group">
           <div class="settings-group-title">Zaštita</div>
@@ -1549,12 +1455,36 @@
             </div>
           </div>
         </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Sigurnosna kopija</div>
+          <div class="settings-row">
+            <div class="settings-row-icon">📤</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Export postavki</div>
+              <div class="settings-row-desc">Spremi sve postavke u JSON datoteku.</div>
+            </div>
+            <div class="settings-row-control">
+              <button class="btn btn-primary" id="btnExportSettings">Export</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-icon">📥</div>
+            <div class="settings-row-text">
+              <div class="settings-row-label">Import postavki</div>
+              <div class="settings-row-desc">Učitaj postavke iz prethodno spremljene datoteke.</div>
+            </div>
+            <div class="settings-row-control">
+              <button class="btn btn-secondary" id="btnImportSettings">Import</button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- DNS -->
-      <div class="settings-section" id="section-dns">
-        <div class="section-title">🌐 DNS postavke</div>
-        <div class="section-desc">DNS over HTTPS (DoH) za sigurnost i privatnost.</div>
+      <!-- Websites -->
+      <div class="settings-section" id="section-websites">
+        <div class="section-title">🌍 Web stranice</div>
+        <div class="section-desc">Postavke za prikaz i ponašanje web stranica.</div>
 
         <div class="settings-group">
           <div class="settings-group-title">DNS over HTTPS</div>
@@ -1652,36 +1582,6 @@
             </div>
             <div class="settings-row-control">
               <button class="btn btn-primary" id="btnCheckUpdates">Provjeri sada</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Backup -->
-      <div class="settings-section" id="section-backup">
-        <div class="section-title">💾 Backup i restore</div>
-        <div class="section-desc">Sigurnosne kopije postavki i podataka.</div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Export / Import</div>
-          <div class="settings-row">
-            <div class="settings-row-icon">📤</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Export postavki</div>
-              <div class="settings-row-desc">Spremi sve postavke u JSON datoteku.</div>
-            </div>
-            <div class="settings-row-control">
-              <button class="btn btn-primary" id="btnExportSettings">Export</button>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-icon">📥</div>
-            <div class="settings-row-text">
-              <div class="settings-row-label">Import postavki</div>
-              <div class="settings-row-desc">Učitaj postavke iz prethodno spremljene datoteke.</div>
-            </div>
-            <div class="settings-row-control">
-              <button class="btn btn-secondary" id="btnImportSettings">Import</button>
             </div>
           </div>
         </div>
@@ -2265,7 +2165,7 @@
           const text = await file.text();
           try {
             const imported = JSON.parse(text);
-            await etherx.settings.set(imported);
+            await etherx.settings.save(imported);
             alert('Postavke uspješno učitane. Browser će se restartirati.');
             window.location.reload();
           } catch (err) {
@@ -2296,13 +2196,13 @@
       if (settings.history_retention_days !== undefined) {
         document.getElementById('settingHistoryDays').value = settings.history_retention_days;
       }
-      if (settings.cookie_policy) {
+      if (settings.cookie_policy && document.getElementById('settingCookiePolicy')) {
         document.getElementById('settingCookiePolicy').value = settings.cookie_policy;
       }
       if (settings.notifications_enabled !== undefined) {
         document.getElementById('settingNotifications').checked = settings.notifications_enabled;
       }
-      if (settings.notification_sound !== undefined) {
+      if (settings.notification_sound !== undefined && document.getElementById('settingNotificationSound')) {
         document.getElementById('settingNotificationSound').checked = settings.notification_sound;
       }
       if (settings.geolocation_policy) {

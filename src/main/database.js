@@ -176,10 +176,12 @@ class DatabaseManager {
           value        TEXT    NOT NULL DEFAULT ''
         );
         INSERT OR IGNORE INTO user_profile (key, value) VALUES
-          ('displayName', 'EtherX User'),
-          ('email',       ''),
-          ('avatar',      ''),
-          ('walletAddress','');
+          ('displayName',    'EtherX User'),
+          ('email',          ''),
+          ('avatar',         ''),
+          ('walletAddress',  ''),
+          ('walletEncrypted',''),
+          ('walletKeyHash',  '');
 
         -- ── Lighthouse Audits ─────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS lighthouse_audits (

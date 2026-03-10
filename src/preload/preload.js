@@ -150,6 +150,19 @@ contextBridge.exposeInMainWorld('etherx', {
     openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
   },
 
+  // ── Update ────────────────────────────────────────────────────────────────────
+  update: {
+    saveToken: (token) => ipcRenderer.invoke('update:saveToken', token),
+    hasToken: () => ipcRenderer.invoke('update:hasToken'),
+    check: () => ipcRenderer.invoke('update:check'),
+  },
+
+  // ── Shell ─────────────────────────────────────────────────────────────────────
+  shell: {
+    showItemInFolder: (path) => ipcRenderer.invoke('shell:showItemInFolder', path),
+    openPath: (path) => ipcRenderer.invoke('shell:openPath', path),
+  },
+
   extensions: {
     chooseFolder: () => ipcRenderer.invoke('extensions:chooseFolder'),
     loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),

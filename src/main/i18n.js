@@ -101,6 +101,41 @@ const STRINGS = {
     aiAssistant: 'AI asistent u adresnoj traci',
     aiAssistantDesc: 'Omogući AI prijedloge i odgovore iz adresne trake',
     geminiNotConfigured: '⚠️ Gemini API key nije konfiguriran. Dodaj ga u Postavke → AI Agent.',
+    // Dark mode
+    darkMode: 'Tamni način',
+    darkModeMethod: 'Metoda tamnog načina',
+    darkModeNative: 'Nativni (preporučeno)',
+    darkModeFilter: 'CSS Invert filtar',
+    darkModeBoth: 'Kombinirano',
+    // Downloads panel
+    dlOpenFolder: 'Otvori folder',
+    dlClearAll: 'Obriši sve',
+    dlProgress: 'Preuzimanje u tijeku',
+    dlCompleted: 'Preuzeto',
+    dlFailed: 'Greška pri preuzimanju',
+    // Updates
+    updCheckNow: 'Provjeri sada',
+    updAvailable: 'Nova verzija dostupna',
+    updUpToDate: 'Browser je ažuran',
+    updLastChecked: 'Zadnja provjera',
+    updAutoCheck: 'Automatska provjera ažuriranja',
+    tabUpdates: 'Ažuriranja',
+    // AI Settings
+    aiProvider: 'AI davatelj',
+    aiModel: 'Model',
+    aiTemperature: 'Temperatura kreativnosti',
+    aiTestAll: 'Testiraj sve AI funkcije',
+    aiSaveSettings: 'Spremi AI postavke',
+    aiKeyConfigured: '✅ API ključ konfiguriran',
+    aiKeyMissing: '⚠️ API ključ nije postavljen',
+    tabAI: 'AI Agent',
+    // Summary card
+    summaryAnalyzing: 'Gemini analizira stranicu…',
+    summaryError: 'Greška pri generiranju sažetka',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Osvježi wallet',
+    walletPopout: 'Otvori u novom prozoru',
   },
 
   en: {
@@ -182,6 +217,41 @@ const STRINGS = {
     aiAssistant: 'AI assistant in address bar',
     aiAssistantDesc: 'Enable AI suggestions and answers from the address bar',
     geminiNotConfigured: '⚠️ Gemini API key not configured. Add it in Settings → AI Agent.',
+    // Dark mode
+    darkMode: 'Dark Mode',
+    darkModeMethod: 'Dark mode method',
+    darkModeNative: 'Native (recommended)',
+    darkModeFilter: 'CSS Invert filter',
+    darkModeBoth: 'Combined',
+    // Downloads panel
+    dlOpenFolder: 'Open folder',
+    dlClearAll: 'Clear all',
+    dlProgress: 'Downloading',
+    dlCompleted: 'Completed',
+    dlFailed: 'Download failed',
+    // Updates
+    updCheckNow: 'Check now',
+    updAvailable: 'New version available',
+    updUpToDate: 'Browser is up to date',
+    updLastChecked: 'Last checked',
+    updAutoCheck: 'Auto-check for updates',
+    tabUpdates: 'Updates',
+    // AI Settings
+    aiProvider: 'AI Provider',
+    aiModel: 'Model',
+    aiTemperature: 'Creativity temperature',
+    aiTestAll: 'Test all AI functions',
+    aiSaveSettings: 'Save AI settings',
+    aiKeyConfigured: '✅ API key configured',
+    aiKeyMissing: '⚠️ API key not set',
+    tabAI: 'AI Agent',
+    // Summary card
+    summaryAnalyzing: 'Gemini is analyzing the page…',
+    summaryError: 'Error generating summary',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Reload wallet',
+    walletPopout: 'Open in new window',
   },
 
   de: {
@@ -252,6 +322,41 @@ const STRINGS = {
     incognitoNote: 'Privates Surfen: Seiten werden nicht im Verlauf gespeichert.',
     setDefaultOk: 'EtherX ist jetzt der Standardbrowser.',
     qrScanInfo: 'Scannen Sie den QR-Code auf einem anderen Gerät zur Synchronisierung.',
+    // Dark mode
+    darkMode: 'Dunkelmodus',
+    darkModeMethod: 'Dunkelmodus-Methode',
+    darkModeNative: 'Nativ (empfohlen)',
+    darkModeFilter: 'CSS Invert Filter',
+    darkModeBoth: 'Kombiniert',
+    // Downloads panel
+    dlOpenFolder: 'Ordner öffnen',
+    dlClearAll: 'Alle löschen',
+    dlProgress: 'Wird heruntergeladen',
+    dlCompleted: 'Abgeschlossen',
+    dlFailed: 'Download fehlgeschlagen',
+    // Updates
+    updCheckNow: 'Jetzt prüfen',
+    updAvailable: 'Neue Version verfügbar',
+    updUpToDate: 'Browser ist aktuell',
+    updLastChecked: 'Zuletzt geprüft',
+    updAutoCheck: 'Automatisch auf Updates prüfen',
+    tabUpdates: 'Aktualisierungen',
+    // AI Settings
+    aiProvider: 'KI-Anbieter',
+    aiModel: 'Modell',
+    aiTemperature: 'Kreativitätstemperatur',
+    aiTestAll: 'Alle KI-Funktionen testen',
+    aiSaveSettings: 'KI-Einstellungen speichern',
+    aiKeyConfigured: '✅ API-Schlüssel konfiguriert',
+    aiKeyMissing: '⚠️ API-Schlüssel nicht gesetzt',
+    tabAI: 'KI-Agent',
+    // Summary card
+    summaryAnalyzing: 'Gemini analysiert die Seite…',
+    summaryError: 'Fehler beim Erstellen der Zusammenfassung',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Wallet neu laden',
+    walletPopout: 'In neuem Fenster öffnen',
   },
 
   fr: {
@@ -286,6 +391,41 @@ const STRINGS = {
     incognitoNote: 'Navigation privée: les pages ne sont pas enregistrées.',
     setDefaultOk: 'EtherX est maintenant le navigateur par défaut.',
     qrScanInfo: 'Scannez le QR code sur un autre appareil pour synchroniser.',
+    // Dark mode
+    darkMode: 'Mode sombre',
+    darkModeMethod: 'Méthode du mode sombre',
+    darkModeNative: 'Natif (recommandé)',
+    darkModeFilter: 'Filtre CSS Invert',
+    darkModeBoth: 'Combiné',
+    // Downloads panel
+    dlOpenFolder: 'Ouvrir le dossier',
+    dlClearAll: 'Tout effacer',
+    dlProgress: 'Téléchargement en cours',
+    dlCompleted: 'Terminé',
+    dlFailed: 'Échec du téléchargement',
+    // Updates
+    updCheckNow: 'Vérifier maintenant',
+    updAvailable: 'Nouvelle version disponible',
+    updUpToDate: 'Le navigateur est à jour',
+    updLastChecked: 'Dernière vérification',
+    updAutoCheck: 'Vérification automatique des mises à jour',
+    tabUpdates: 'Mises à jour',
+    // AI Settings
+    aiProvider: 'Fournisseur IA',
+    aiModel: 'Modèle',
+    aiTemperature: 'Température de créativité',
+    aiTestAll: 'Tester toutes les fonctions IA',
+    aiSaveSettings: 'Enregistrer les paramètres IA',
+    aiKeyConfigured: '✅ Clé API configurée',
+    aiKeyMissing: '⚠️ Clé API non définie',
+    tabAI: 'Agent IA',
+    // Summary card
+    summaryAnalyzing: 'Gemini analyse la page…',
+    summaryError: 'Erreur lors de la génération du résumé',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Recharger le wallet',
+    walletPopout: 'Ouvrir dans une nouvelle fenêtre',
   },
 
   es: {
@@ -320,6 +460,41 @@ const STRINGS = {
     incognitoNote: 'Navegación privada: las páginas no se guardan en el historial.',
     setDefaultOk: 'EtherX es ahora el navegador predeterminado.',
     qrScanInfo: 'Escanea el código QR en otro dispositivo para sincronizar.',
+    // Dark mode
+    darkMode: 'Modo oscuro',
+    darkModeMethod: 'Método de modo oscuro',
+    darkModeNative: 'Nativo (recomendado)',
+    darkModeFilter: 'Filtro CSS Invert',
+    darkModeBoth: 'Combinado',
+    // Downloads panel
+    dlOpenFolder: 'Abrir carpeta',
+    dlClearAll: 'Borrar todo',
+    dlProgress: 'Descargando',
+    dlCompleted: 'Completado',
+    dlFailed: 'Error de descarga',
+    // Updates
+    updCheckNow: 'Comprobar ahora',
+    updAvailable: 'Nueva versión disponible',
+    updUpToDate: 'El navegador está actualizado',
+    updLastChecked: 'Última comprobación',
+    updAutoCheck: 'Comprobación automática de actualizaciones',
+    tabUpdates: 'Actualizaciones',
+    // AI Settings
+    aiProvider: 'Proveedor de IA',
+    aiModel: 'Modelo',
+    aiTemperature: 'Temperatura de creatividad',
+    aiTestAll: 'Probar todas las funciones de IA',
+    aiSaveSettings: 'Guardar configuración de IA',
+    aiKeyConfigured: '✅ Clave API configurada',
+    aiKeyMissing: '⚠️ Clave API no establecida',
+    tabAI: 'Agente IA',
+    // Summary card
+    summaryAnalyzing: 'Gemini está analizando la página…',
+    summaryError: 'Error al generar el resumen',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Recargar wallet',
+    walletPopout: 'Abrir en nueva ventana',
   },
 
   it: {
@@ -390,6 +565,41 @@ const STRINGS = {
     incognitoNote: 'Navigazione privata: le pagine non vengono salvate nella cronologia.',
     setDefaultOk: 'EtherX è ora il browser predefinito.',
     qrScanInfo: 'Scansiona il QR code su un altro dispositivo per sincronizzare.',
+    // Dark mode
+    darkMode: 'Modalità scura',
+    darkModeMethod: 'Metodo modalità scura',
+    darkModeNative: 'Nativo (consigliato)',
+    darkModeFilter: 'Filtro CSS Invert',
+    darkModeBoth: 'Combinato',
+    // Downloads panel
+    dlOpenFolder: 'Apri cartella',
+    dlClearAll: 'Cancella tutto',
+    dlProgress: 'Download in corso',
+    dlCompleted: 'Completato',
+    dlFailed: 'Download fallito',
+    // Updates
+    updCheckNow: 'Controlla ora',
+    updAvailable: 'Nuova versione disponibile',
+    updUpToDate: 'Il browser è aggiornato',
+    updLastChecked: 'Ultimo controllo',
+    updAutoCheck: 'Controllo automatico aggiornamenti',
+    tabUpdates: 'Aggiornamenti',
+    // AI Settings
+    aiProvider: 'Fornitore AI',
+    aiModel: 'Modello',
+    aiTemperature: 'Temperatura creatività',
+    aiTestAll: 'Testa tutte le funzioni AI',
+    aiSaveSettings: 'Salva impostazioni AI',
+    aiKeyConfigured: '✅ Chiave API configurata',
+    aiKeyMissing: '⚠️ Chiave API non impostata',
+    tabAI: 'Agente AI',
+    // Summary card
+    summaryAnalyzing: 'Gemini sta analizzando la pagina…',
+    summaryError: 'Errore nella generazione del riepilogo',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Ricarica wallet',
+    walletPopout: 'Apri in nuova finestra',
   },
 
   pt: {
@@ -424,6 +634,41 @@ const STRINGS = {
     incognitoNote: 'Navegação privada: páginas não são salvas no histórico.',
     setDefaultOk: 'EtherX é agora o navegador padrão.',
     qrScanInfo: 'Escaneie o QR code em outro dispositivo para sincronizar.',
+    // Dark mode
+    darkMode: 'Modo escuro',
+    darkModeMethod: 'Método do modo escuro',
+    darkModeNative: 'Nativo (recomendado)',
+    darkModeFilter: 'Filtro CSS Invert',
+    darkModeBoth: 'Combinado',
+    // Downloads panel
+    dlOpenFolder: 'Abrir pasta',
+    dlClearAll: 'Limpar tudo',
+    dlProgress: 'Baixando',
+    dlCompleted: 'Concluído',
+    dlFailed: 'Falha no download',
+    // Updates
+    updCheckNow: 'Verificar agora',
+    updAvailable: 'Nova versão disponível',
+    updUpToDate: 'O navegador está atualizado',
+    updLastChecked: 'Última verificação',
+    updAutoCheck: 'Verificação automática de atualizações',
+    tabUpdates: 'Atualizações',
+    // AI Settings
+    aiProvider: 'Provedor de IA',
+    aiModel: 'Modelo',
+    aiTemperature: 'Temperatura de criatividade',
+    aiTestAll: 'Testar todas as funções de IA',
+    aiSaveSettings: 'Salvar configurações de IA',
+    aiKeyConfigured: '✅ Chave API configurada',
+    aiKeyMissing: '⚠️ Chave API não definida',
+    tabAI: 'Agente IA',
+    // Summary card
+    summaryAnalyzing: 'Gemini está analisando a página…',
+    summaryError: 'Erro ao gerar o resumo',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Recarregar wallet',
+    walletPopout: 'Abrir em nova janela',
   },
 
   ru: {
@@ -458,6 +703,41 @@ const STRINGS = {
     incognitoNote: 'Приватный режим: страницы не сохраняются в историю.',
     setDefaultOk: 'EtherX теперь браузер по умолчанию.',
     qrScanInfo: 'Отсканируйте QR-код на другом устройстве для синхронизации.',
+    // Dark mode
+    darkMode: 'Тёмный режим',
+    darkModeMethod: 'Метод тёмного режима',
+    darkModeNative: 'Нативный (рекомендуется)',
+    darkModeFilter: 'CSS Invert фильтр',
+    darkModeBoth: 'Комбинированный',
+    // Downloads panel
+    dlOpenFolder: 'Открыть папку',
+    dlClearAll: 'Очистить всё',
+    dlProgress: 'Загружается',
+    dlCompleted: 'Завершено',
+    dlFailed: 'Ошибка загрузки',
+    // Updates
+    updCheckNow: 'Проверить сейчас',
+    updAvailable: 'Доступна новая версия',
+    updUpToDate: 'Браузер обновлён',
+    updLastChecked: 'Последняя проверка',
+    updAutoCheck: 'Автоматическая проверка обновлений',
+    tabUpdates: 'Обновления',
+    // AI Settings
+    aiProvider: 'Поставщик ИИ',
+    aiModel: 'Модель',
+    aiTemperature: 'Температура творчества',
+    aiTestAll: 'Тест всех ИИ функций',
+    aiSaveSettings: 'Сохранить настройки ИИ',
+    aiKeyConfigured: '✅ API ключ настроен',
+    aiKeyMissing: '⚠️ API ключ не задан',
+    tabAI: 'ИИ Агент',
+    // Summary card
+    summaryAnalyzing: 'Gemini анализирует страницу…',
+    summaryError: 'Ошибка генерации резюме',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Обновить wallet',
+    walletPopout: 'Открыть в новом окне',
   },
 
   bs: {
@@ -492,6 +772,41 @@ const STRINGS = {
     incognitoNote: 'Privatno pregledavanje: stranice se ne sprema u historiju.',
     setDefaultOk: 'EtherX je sada zadani preglednik.',
     qrScanInfo: 'Skenirajte QR kod na drugom uređaju za sinhronizaciju.',
+    // Dark mode
+    darkMode: 'Tamni način',
+    darkModeMethod: 'Metoda tamnog načina',
+    darkModeNative: 'Nativni (preporučeno)',
+    darkModeFilter: 'CSS Invert filtar',
+    darkModeBoth: 'Kombinirano',
+    // Downloads panel
+    dlOpenFolder: 'Otvori folder',
+    dlClearAll: 'Obriši sve',
+    dlProgress: 'Preuzimanje u toku',
+    dlCompleted: 'Preuzeto',
+    dlFailed: 'Greška pri preuzimanju',
+    // Updates
+    updCheckNow: 'Provjeri sada',
+    updAvailable: 'Nova verzija dostupna',
+    updUpToDate: 'Browser je ažuriran',
+    updLastChecked: 'Zadnja provjera',
+    updAutoCheck: 'Automatska provjera ažuriranja',
+    tabUpdates: 'Ažuriranja',
+    // AI Settings
+    aiProvider: 'AI davatelj',
+    aiModel: 'Model',
+    aiTemperature: 'Temperatura kreativnosti',
+    aiTestAll: 'Testiraj sve AI funkcije',
+    aiSaveSettings: 'Spremi AI postavke',
+    aiKeyConfigured: '✅ API ključ konfiguriran',
+    aiKeyMissing: '⚠️ API ključ nije postavljen',
+    tabAI: 'AI Agent',
+    // Summary card
+    summaryAnalyzing: 'Gemini analizira stranicu…',
+    summaryError: 'Greška pri generiranju sažetka',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Osvježi wallet',
+    walletPopout: 'Otvori u novom prozoru',
   },
 
   sr: {
@@ -526,6 +841,41 @@ const STRINGS = {
     incognitoNote: 'Privatno pregledanje: stranice se ne čuvaju u istoriji.',
     setDefaultOk: 'EtherX je sada podrazumevani pregledač.',
     qrScanInfo: 'Skenirajte QR kod na drugom uređaju za sinhronizaciju.',
+    // Dark mode
+    darkMode: 'Tamni način',
+    darkModeMethod: 'Metoda tamnog načina',
+    darkModeNative: 'Nativni (preporučeno)',
+    darkModeFilter: 'CSS Invert filter',
+    darkModeBoth: 'Kombinovano',
+    // Downloads panel
+    dlOpenFolder: 'Otvori fasciklu',
+    dlClearAll: 'Obriši sve',
+    dlProgress: 'Preuzimanje u toku',
+    dlCompleted: 'Preuzeto',
+    dlFailed: 'Greška pri preuzimanju',
+    // Updates
+    updCheckNow: 'Proveri sada',
+    updAvailable: 'Nova verzija dostupna',
+    updUpToDate: 'Pregledač je ažuriran',
+    updLastChecked: 'Poslednja provera',
+    updAutoCheck: 'Automatska provera ažuriranja',
+    tabUpdates: 'Ažuriranja',
+    // AI Settings
+    aiProvider: 'AI pružalac',
+    aiModel: 'Model',
+    aiTemperature: 'Temperatura kreativnosti',
+    aiTestAll: 'Testiraj sve AI funkcije',
+    aiSaveSettings: 'Sačuvaj AI podešavanja',
+    aiKeyConfigured: '✅ API ključ konfigurisan',
+    aiKeyMissing: '⚠️ API ključ nije postavljen',
+    tabAI: 'AI Agent',
+    // Summary card
+    summaryAnalyzing: 'Gemini analizira stranicu…',
+    summaryError: 'Greška pri generisanju rezimea',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Osveži wallet',
+    walletPopout: 'Otvori u novom prozoru',
   },
 
   sl: {
@@ -560,6 +910,41 @@ const STRINGS = {
     incognitoNote: 'Zasebno brskanje: strani se ne shranjujejo v zgodovino.',
     setDefaultOk: 'EtherX je zdaj privzeti brskalnik.',
     qrScanInfo: 'Skenirajte QR kodo na drugi napravi za sinhronizacijo.',
+    // Dark mode
+    darkMode: 'Temni način',
+    darkModeMethod: 'Metoda temnega načina',
+    darkModeNative: 'Nativno (priporočeno)',
+    darkModeFilter: 'CSS Invert filter',
+    darkModeBoth: 'Kombinirano',
+    // Downloads panel
+    dlOpenFolder: 'Odpri mapo',
+    dlClearAll: 'Počisti vse',
+    dlProgress: 'Prenos v teku',
+    dlCompleted: 'Preneseno',
+    dlFailed: 'Napaka pri prenosu',
+    // Updates
+    updCheckNow: 'Preveri zdaj',
+    updAvailable: 'Na voljo je nova različica',
+    updUpToDate: 'Brskalnik je posodobljen',
+    updLastChecked: 'Zadnje preverjanje',
+    updAutoCheck: 'Samodejno preverjanje posodobitev',
+    tabUpdates: 'Posodobitve',
+    // AI Settings
+    aiProvider: 'AI ponudnik',
+    aiModel: 'Model',
+    aiTemperature: 'Temperatura ustvarjalnosti',
+    aiTestAll: 'Testiraj vse AI funkcije',
+    aiSaveSettings: 'Shrani AI nastavitve',
+    aiKeyConfigured: '✅ API ključ konfiguriran',
+    aiKeyMissing: '⚠️ API ključ ni nastavljen',
+    tabAI: 'AI Agent',
+    // Summary card
+    summaryAnalyzing: 'Gemini analizira stran…',
+    summaryError: 'Napaka pri ustvarjanju povzetka',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Osveži wallet',
+    walletPopout: 'Odpri v novem oknu',
   },
 
   tr: {
@@ -594,6 +979,41 @@ const STRINGS = {
     incognitoNote: 'Gizli gezinme: sayfalar geçmişe kaydedilmez.',
     setDefaultOk: 'EtherX artık varsayılan tarayıcı.',
     qrScanInfo: 'Senkronizasyon için başka bir cihazda QR kodu tarayın.',
+    // Dark mode
+    darkMode: 'Karanlık mod',
+    darkModeMethod: 'Karanlık mod yöntemi',
+    darkModeNative: 'Yerel (önerilen)',
+    darkModeFilter: 'CSS Invert filtresi',
+    darkModeBoth: 'Kombinasyon',
+    // Downloads panel
+    dlOpenFolder: 'Klasörü aç',
+    dlClearAll: 'Tümünü temizle',
+    dlProgress: 'İndiriliyor',
+    dlCompleted: 'Tamamlandı',
+    dlFailed: 'İndirme hatası',
+    // Updates
+    updCheckNow: 'Şimdi kontrol et',
+    updAvailable: 'Yeni sürüm mevcut',
+    updUpToDate: 'Tarayıcı güncel',
+    updLastChecked: 'Son kontrol',
+    updAutoCheck: 'Otomatik güncelleme kontrolü',
+    tabUpdates: 'Güncellemeler',
+    // AI Settings
+    aiProvider: 'YZ sağlayıcı',
+    aiModel: 'Model',
+    aiTemperature: 'Yaratıcılık sıcaklığı',
+    aiTestAll: 'Tüm YZ işlevlerini test et',
+    aiSaveSettings: 'YZ ayarlarını kaydet',
+    aiKeyConfigured: '✅ API anahtarı yapılandırıldı',
+    aiKeyMissing: '⚠️ API anahtarı ayarlanmadı',
+    tabAI: 'YZ Ajanı',
+    // Summary card
+    summaryAnalyzing: 'Gemini sayfayı analiz ediyor…',
+    summaryError: 'Özet oluşturma hatası',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Wallet yenile',
+    walletPopout: 'Yeni pencerede aç',
   },
 
   pl: {
@@ -628,6 +1048,41 @@ const STRINGS = {
     incognitoNote: 'Przeglądanie prywatne: strony nie są zapisywane w historii.',
     setDefaultOk: 'EtherX jest teraz domyślną przeglądarką.',
     qrScanInfo: 'Zeskanuj kod QR na innym urządzeniu, aby zsynchronizować.',
+    // Dark mode
+    darkMode: 'Tryb ciemny',
+    darkModeMethod: 'Metoda trybu ciemnego',
+    darkModeNative: 'Natywny (zalecany)',
+    darkModeFilter: 'Filtr CSS Invert',
+    darkModeBoth: 'Kombinowany',
+    // Downloads panel
+    dlOpenFolder: 'Otwórz folder',
+    dlClearAll: 'Wyczyść wszystko',
+    dlProgress: 'Pobieranie',
+    dlCompleted: 'Ukończono',
+    dlFailed: 'Błąd pobierania',
+    // Updates
+    updCheckNow: 'Sprawdź teraz',
+    updAvailable: 'Dostępna nowa wersja',
+    updUpToDate: 'Przeglądarka jest aktualna',
+    updLastChecked: 'Ostatnie sprawdzenie',
+    updAutoCheck: 'Automatyczne sprawdzanie aktualizacji',
+    tabUpdates: 'Aktualizacje',
+    // AI Settings
+    aiProvider: 'Dostawca AI',
+    aiModel: 'Model',
+    aiTemperature: 'Temperatura kreatywności',
+    aiTestAll: 'Testuj wszystkie funkcje AI',
+    aiSaveSettings: 'Zapisz ustawienia AI',
+    aiKeyConfigured: '✅ Klucz API skonfigurowany',
+    aiKeyMissing: '⚠️ Klucz API nie ustawiony',
+    tabAI: 'Agent AI',
+    // Summary card
+    summaryAnalyzing: 'Gemini analizuje stronę…',
+    summaryError: 'Błąd generowania podsumowania',
+    // Wallet
+    walletPanel: 'BOBIAI Wallet',
+    walletReload: 'Odśwież wallet',
+    walletPopout: 'Otwórz w nowym oknie',
   },
 };
 

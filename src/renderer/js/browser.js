@@ -555,7 +555,7 @@ frame.addEventListener('load', () => {
   if (SKIP.some(p => loadedSrc.includes(p))) return;
   try {
     const doc = frame.contentDocument, t = doc?.title;
-    if (t && t !== 'proxy.php' && t !== '') { tab.title = t; document.getElementById('elemTitle').textContent = t; }
+    if (t && t !== '') { tab.title = t; document.getElementById('elemTitle').textContent = t; }
     // Update favicon from Google S2 API only after real page load
     if (tab.url && tab.url.startsWith('http')) {
       tab.faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(tab.url)}`;
@@ -747,7 +747,7 @@ document.getElementById('walletReload')?.addEventListener('click', () => {
   if (wl) wl.style.display = 'flex';
   if (wf) { wf.src = ''; setTimeout(() => { wf.src = 'https://wallet.kriptoentuzijasti.io'; }, 50); }
 });
-document.getElementById('btnWallet').addEventListener('click', () => togglePanel('walletPanel'));
+document.getElementById('btnWallet').addEventListener('click', () => { togglePanel('walletPanel'); window._wltInit && window._wltInit(); });
 document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel('bobiaiPanel'));
 
 // ── Gemini Page Summarizer ────────────────────────────────────────────────
@@ -1939,7 +1939,7 @@ function _injectDarkModeIntoFrame() {
   const fr = document.getElementById('browseFrame');
   if (!fr) return;
   try {
-    // Works for same-origin (proxy.php serves frames same-origin)
+    // Works for same-origin frames
     const doc = fr.contentDocument || fr.contentWindow?.document;
     if (!doc) return;
     let st = doc.getElementById(DARK_MODE_STYLE_ID);
@@ -3005,7 +3005,7 @@ document.addEventListener('keydown', e => {
     // Check DevTools
     checks.push(document.getElementById('devtools') ? '\u2705 DevTools dostupni' : '\u274c DevTools nedostupni');
     // Check iframes
-    const iframes = ['walletFrame', 'bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
+    const iframes = ['bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
     let iOk = 0; iframes.forEach(id => { if (document.getElementById(id)) iOk++; });
     checks.push(iOk === iframes.length ? '\u2705 Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '\u26a0\ufe0f Iframes: ' + iOk + '/' + iframes.length);
     // Check localStorage
