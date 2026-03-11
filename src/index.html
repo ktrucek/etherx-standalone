@@ -7519,13 +7519,14 @@
                 <div class="s-row-left">
                   <div class="s-row-label" style="font-weight:600">📊 Storage Usage</div>
                 </div>
-                <button onclick="refreshStorageUsage()"
+                <button id="btnRefreshStorage"
                   style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">↺
                   Refresh</button>
               </div>
               <div id="storageUsageTable" style="margin-top:6px">
                 <!-- filled by JS -->
               </div>
+              <div id="storageEstimateBar"></div>
             </div>
 
             <!-- EXPORT / IMPORT per store -->
@@ -7829,15 +7830,29 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.40</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.41</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
-                <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
-                <div style="margin-top:6px">
+                <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026 Kriptoentuzijasti.io</div>
+                <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
                   <button onclick="window.open('https://kriptoentuzijasti.io','_blank')"
                     style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">
-                    🌐 Posjeti web stranica
+                    🌐 Službena stranica
                   </button>
+                  <button onclick="window.open('mailto:info@kriptoentuzijasti.io','_blank')"
+                    style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">
+                    ✉️ info@kriptoentuzijasti.io
+                  </button>
+                </div>
+
+                <!-- Kontakt -->
+                <div style="margin-top:14px;padding:12px;background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px">
+                  <div style="font-weight:600;margin-bottom:8px;color:var(--text1)">📬 Kontakt</div>
+                  <div style="font-size:11px;color:var(--text2);line-height:2">
+                    <div>🌐 Web: <a href="https://kriptoentuzijasti.io" target="_blank" style="color:#4A9EFF;text-decoration:none">https://kriptoentuzijasti.io</a></div>
+                    <div>✉️ E-mail: <a href="mailto:info@kriptoentuzijasti.io" style="color:#4A9EFF;text-decoration:none">info@kriptoentuzijasti.io</a></div>
+                    <div style="margin-top:6px;color:var(--text3);font-size:10.5px">Za pitanja, prijave grešaka ili licencne upite obratite se putem gore navedenih kanala.</div>
+                  </div>
                 </div>
 
                 <!-- Download Latest Version Section -->
@@ -8111,7 +8126,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.40</span></div>
+                id="helpVersionNum2">2.4.41</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9299,7 +9314,7 @@
     const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false };
     const DB = {
       getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
-      addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
+      addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); const existing = h.find(x => x.url === e.url); const vc = (existing?.visit_count || 0) + 1; h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now(), visit_count: vc }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
       clearHistory() { localStorage.removeItem('ex_hist') },
       getTopVisited(limit = 10) {
         const hist = this.getHistory();
@@ -9354,6 +9369,10 @@
       else {
         const cfg = DB.getSettings();
         if (cfg.newTabWith === 'Homepage' && cfg.homepage) { navigateTo(cfg.homepage, id); }
+        else if (active) {
+          // Focus the URL bar so the user can start typing immediately
+          setTimeout(() => { const inp = document.getElementById('urlInput'); if (inp) { inp.focus(); inp.select(); } }, 80);
+        }
       }
       return tab;
     }
@@ -9999,6 +10018,15 @@
     });
     function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
+    // Close panels when clicking outside (on the content/browser area)
+    document.addEventListener('mousedown', e => {
+      const anyOpen = ['bmPanel','histPanel','dlPanel','settingsPanel','walletPanel','bobiaiPanel','aiAgentPanel','kriptoPanel','etherxPanel']
+        .some(id => document.getElementById(id)?.classList.contains('open'));
+      if (!anyOpen) return;
+      // If the click is inside any open panel or on a toolbar button, do not close
+      const inPanel = e.target.closest('.panel, .nav-btn, .toolbar, #tabBar, #ctxMenu, .dropdown-menu, .modal, [id$="Panel"]');
+      if (!inPanel) closeAllPanels();
+    }, true);
     document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
     document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
     document.getElementById('btnSettings')?.addEventListener('click', () => { const wasOpen = document.getElementById('settingsPanel').classList.contains('open'); togglePanel('settingsPanel'); document.getElementById('settingsBackdrop')?.classList.toggle('open', !wasOpen); if (!wasOpen) { updateSettingsExtCount && updateSettingsExtCount(); renderSitePermsList && renderSitePermsList(); _refreshSettingsToggles(); } });
@@ -11870,6 +11898,7 @@
       const ntpcClose = document.getElementById('ntpCustomizeClose');
       if (ntpcClose) ntpcClose.addEventListener('click', () => document.getElementById('ntpCustomize').classList.remove('show'));
       document.querySelectorAll('.ntpc-color').forEach(c => c.addEventListener('click', () => { document.querySelectorAll('.ntpc-color').forEach(x => x.classList.remove('sel')); c.classList.add('sel'); }));
+      ['ntpcShowRecent', 'ntpcShowCards', 'ntpcShowQL'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('click', () => el.classList.toggle('on')); });
       const ntpcApply = document.getElementById('ntpcApply');
       if (ntpcApply) ntpcApply.addEventListener('click', () => {
         const s = {};
@@ -12026,8 +12055,9 @@
     });
 
     // User Agent
-    const UA_PRESETS = { 'default': navigator.userAgent, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
-    let activeUA = navigator.userAgent;
+    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) EtherXBrowser/2.4.40 Chrome/138.0.7204.251 Electron/37.10.3 Safari/537.36';
+    const UA_PRESETS = { 'default': ETHERX_DEFAULT_UA, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
+    let activeUA = localStorage.getItem('ex_ua') || ETHERX_DEFAULT_UA;
     document.addEventListener('DOMContentLoaded', () => {
       const uaCurrent = document.getElementById('uaCurrent');
       if (uaCurrent) uaCurrent.textContent = activeUA;
@@ -12304,6 +12334,27 @@
     document.body.appendChild(afBox);
 
     function hideAutofillBox() { afBox.style.display = 'none'; }
+    function injectAutofillIntoPage(username, password) {
+      const wv = document.getElementById('browseFrame');
+      if (!wv || typeof wv.executeJavaScript !== 'function') {
+        navigator.clipboard?.writeText(password);
+        showToast('🔑 Password copied to clipboard');
+        return;
+      }
+      const script = `(function() {
+        const ns = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        const pwField = document.querySelector('input[type=password]');
+        if (pwField) { ns.call(pwField, ${JSON.stringify(password)}); pwField.dispatchEvent(new Event('input',{bubbles:true})); pwField.dispatchEvent(new Event('change',{bubbles:true})); }
+        const sels = ['input[type=email]','input[name*=user]','input[name*=email]','input[id*=user]','input[id*=email]','input[name*=login]','input[id*=login]','input[type=text]'];
+        let uf = null; for (const s of sels) { uf = document.querySelector(s); if (uf && uf !== pwField) break; }
+        if (uf) { ns.call(uf, ${JSON.stringify(username)}); uf.dispatchEvent(new Event('input',{bubbles:true})); uf.dispatchEvent(new Event('change',{bubbles:true})); }
+        return !!(pwField || uf);
+      })()`;
+      wv.executeJavaScript(script).then(ok => {
+        showToast(ok ? '🔑 Credentials filled!' : '🔑 No form found — password copied');
+        if (!ok) navigator.clipboard?.writeText(password);
+      }).catch(() => { navigator.clipboard?.writeText(password); showToast('🔑 Password copied to clipboard'); });
+    }
     function showAutofillBox(x, y, items, onSelect) {
       afBox.innerHTML = '';
       if (!items.length) return;
@@ -12342,9 +12393,7 @@
       if (pwds.length) {
         const rect = document.getElementById('urlInput').getBoundingClientRect();
         showAutofillBox(rect.left, rect.bottom + 4, pwds, (item) => {
-          navigateTo(t.url); // just navigate, can't inject into iframe directly
-          showToast('🔑 ' + item.username + ' — copied to clipboard');
-          navigator.clipboard?.writeText(item.password);
+          injectAutofillIntoPage(item.username, item.password);
         });
       }
     });
@@ -12379,8 +12428,7 @@
           if (!all.length) { showToast('🔑 No saved passwords or cards for this site'); return; }
           showAutofillBox(rect.left - 200, rect.bottom + 8, all, (item) => {
             if (item._type === 'password') {
-              navigator.clipboard?.writeText(item.password);
-              showToast('🔑 Password for ' + item.username + ' copied!');
+              injectAutofillIntoPage(item.username, item.password);
             } else {
               navigator.clipboard?.writeText(item.number);
               showToast('💳 Card ' + item.last4 + ' number copied!');
@@ -12395,8 +12443,7 @@
           const rect = btn.getBoundingClientRect();
           showAutofillBox(rect.left - 200, rect.bottom + 8, all, (item) => {
             if (item._type === 'password') {
-              navigator.clipboard?.writeText(item.password);
-              showToast('🔑 Password for ' + item.username + ' copied!');
+              injectAutofillIntoPage(item.username, item.password);
             } else {
               navigator.clipboard?.writeText(item.number);
               showToast('💳 Card ' + item.last4 + ' number copied!');
@@ -12759,7 +12806,7 @@
       else if (ctrl && e.key === 'b') { e.preventDefault(); renderBookmarksPanel(); togglePanel('bmPanel'); }
       else if (ctrl && e.key === 'j') { e.preventDefault(); togglePanel('dlPanel'); }
       else if (ctrl && e.key === 'l') { e.preventDefault(); urlInput.focus(); urlInput.select(); }
-      else if (ctrl && e.key === '=') { e.preventDefault(); setZoom(STATE.zoom + 10); }
+      else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); setZoom(STATE.zoom + 10); }
       else if (ctrl && e.key === '-') { e.preventDefault(); setZoom(STATE.zoom - 10); }
       else if (ctrl && e.key === '0') { e.preventDefault(); setZoom(100); }
       else if (ctrl && shift && e.key === 'M') { e.preventDefault(); toggleRespMode(); }
@@ -12792,6 +12839,15 @@
       else if (e.key === 'Escape') { closeFind(); closeAllPanels(); ctxMenu.classList.remove('show'); document.getElementById('tabOverview').classList.remove('show'); }
       else if (e.altKey && e.key === 'ArrowLeft') { document.getElementById('btnBack').click(); }
       else if (e.altKey && e.key === 'ArrowRight') { document.getElementById('btnFwd').click(); }
+      else if (!ctrl && !e.altKey && !isInput && e.key.length === 1 && e.key !== ' ') {
+        // Redirect typing to URL bar when on a blank/NTP tab
+        const activeTab = STATE.tabs.find(t => t.id === STATE.activeTabId);
+        if (!activeTab?.url) {
+          e.preventDefault();
+          const inp = document.getElementById('urlInput');
+          if (inp) { inp.focus(); inp.value = e.key; inp.setSelectionRange(1, 1); }
+        }
+      }
     });
     // ── Data Migration ──
     (function initMigration() {
@@ -15005,12 +15061,18 @@
       { id: 'dl', label: '⬇️ Downloads', defaultKey: 'ex_dl' },
       { id: 'passwords', label: '🔑 Passwords', defaultKey: 'ex_passwords' },
       { id: 'sessions', label: '🗄️ Sessions', defaultKey: 'ex_sessions' },
+      { id: 'ai_chat', label: '🤖 AI Cache / Chat', defaultKey: 'ex_ai_chat' },
       { id: 'storage_cfg', label: '🗺️ Storage Config', defaultKey: 'ex_storage_cfg' },
     ];
 
     function refreshStorageUsage() {
       const t = document.getElementById('storageUsageTable'); if (!t) return;
+      // Visual feedback so the user knows the refresh ran
+      const btn = document.getElementById('btnRefreshStorage');
+      if (btn) { btn.textContent = '↺ ...'; btn.disabled = true; }
+
       let totalBytes = 0;
+      const knownKeys = new Set(STORE_DEFS.map(s => DB.getStorageKey(s.id)));
       const rows = STORE_DEFS.map(s => {
         const key = DB.getStorageKey(s.id);
         const raw = localStorage.getItem(key) || '';
@@ -15018,11 +15080,17 @@
         totalBytes += bytes;
         return { label: s.label, key, bytes };
       });
-      const other = Object.keys(localStorage).filter(k => !STORE_DEFS.map(s => DB.getStorageKey(s.id)).includes(k));
-      other.forEach(k => { const raw = localStorage.getItem(k) || ''; totalBytes += new Blob([raw]).size; });
+      // Include any extra keys not in STORE_DEFS
+      Object.keys(localStorage).filter(k => !knownKeys.has(k)).forEach(k => {
+        const raw = localStorage.getItem(k) || '';
+        const bytes = new Blob([raw]).size;
+        totalBytes += bytes;
+        rows.push({ label: '📎 ' + k, key: k, bytes });
+      });
       const fmt = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+      const now = new Date().toLocaleTimeString();
       t.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text2)">
-        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text3)"><th style="text-align:left;padding:4px 8px">Store</th><th style="text-align:left;padding:4px 8px">Key</th><th style="text-align:right;padding:4px 8px">Size</th><th style="text-align:right;padding:4px 8px">%</th></tr></thead>
+        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text3)"><th style="text-align:left;padding:4px 8px">Store</th><th style="text-align:left;padding:4px 8px">Key</th><th style="text-align:right;padding:4px 8px">Veličina</th><th style="text-align:right;padding:4px 8px">%</th></tr></thead>
         <tbody>` +
         rows.map(r => `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
           <td style="padding:3px 8px">${r.label}</td>
@@ -15030,8 +15098,25 @@
           <td style="padding:3px 8px;text-align:right;color:var(--text3)">${fmt(r.bytes)}</td>
           <td style="padding:3px 8px;text-align:right;color:var(--text3)">${totalBytes ? ((r.bytes / totalBytes * 100).toFixed(1)) : '0'}%</td>
         </tr>`).join('') +
-        `<tr style="border-top:1px solid var(--border2);font-weight:600"><td colspan="2" style="padding:4px 8px;color:var(--text)">Total localStorage</td><td colspan="2" style="padding:4px 8px;text-align:right;color:var(--text)">${fmt(totalBytes)}</td></tr>
-        </tbody></table>`;
+        `<tr style="border-top:1px solid var(--border2);font-weight:600"><td colspan="2" style="padding:4px 8px;color:var(--text)">Ukupno localStorage</td><td colspan="2" style="padding:4px 8px;text-align:right;color:var(--text)">${fmt(totalBytes)}</td></tr>
+        </tbody></table>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:right">Ažurirano: ${now}</div>`;
+
+      // Also query full origin storage estimate (includes IndexedDB, SQLite, Cache API)
+      if (navigator.storage && navigator.storage.estimate) {
+        navigator.storage.estimate().then(est => {
+          const used = fmt(est.usage || 0);
+          const quota = fmt(est.quota || 0);
+          const bar = document.getElementById('storageEstimateBar');
+          if (bar) bar.innerHTML = `<div style="font-size:11px;color:var(--text2);margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid var(--border2)">
+            📦 <b>Ukupna pohrana (sve):</b> ${used} / ${quota}
+            &nbsp;<span style="color:var(--text3)">— uključuje SQLite, IndexedDB, Cache API</span></div>`;
+        }).catch(() => {});
+      }
+
+      if (btn) {
+        setTimeout(() => { btn.textContent = '↺ Refresh'; btn.disabled = false; }, 400);
+      }
     }
 
     function initStorageTab() {
@@ -15135,6 +15220,10 @@
     // Init storage tab when it becomes active
     document.querySelectorAll('.sit-btn[data-stab="storage"]').forEach(btn => {
       btn.addEventListener('click', () => setTimeout(initStorageTab, 50));
+    });
+    // Wire Refresh button via JS to avoid any inline-onclick scope issues
+    document.addEventListener('click', e => {
+      if (e.target && e.target.id === 'btnRefreshStorage') refreshStorageUsage();
     });
 
     // ── Master Password Change ────────────────────────────────────────────────
@@ -15302,6 +15391,18 @@
       document.getElementById('settingsPanel').classList.remove('open');
     });
     initSettingsPanel();
+
+    // ── Show/hide Develop menu based on showDevelop setting ───────────────────
+    (function () {
+      const devMenu = document.querySelector('[data-menu="develop"]');
+      if (!devMenu) return;
+      if (DB.getSettings().showDevelop === false) devMenu.style.display = 'none';
+      document.querySelectorAll('[data-setting="showDevelop"]').forEach(el => {
+        el.addEventListener('click', () => setTimeout(() => {
+          devMenu.style.display = el.classList.contains('on') ? '' : 'none';
+        }, 0));
+      });
+    })();
 
     // ── Site Permissions list in Settings → Websites ──────────────────────────
     function renderSitePermsList() {
