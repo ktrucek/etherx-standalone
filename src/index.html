@@ -5636,6 +5636,18 @@
   <div class="content-area" id="contentArea">
     <div class="loading-bar" id="loadingBar"></div>
     <div class="ntp" id="ntpPage">
+      <!-- Update notification banner (shown when new version is available) -->
+      <div id="ntpUpdateBanner"
+        style="display:none;position:absolute;top:0;left:0;right:0;background:linear-gradient(90deg,rgba(255,189,46,.12),rgba(255,189,46,.08));border-bottom:1px solid rgba(255,189,46,.3);padding:8px 16px;display:none;align-items:center;gap:10px;font-size:12px;z-index:50">
+        <span style="font-size:16px">⬆️</span>
+        <span id="ntpUpdateText" style="flex:1;color:#ffbd2e;font-weight:600"></span>
+        <button
+          onclick="document.querySelectorAll('.sit-btn[data-stab=updates]').forEach(b=>b.click());document.getElementById('btnSettings')?.click();"
+          style="padding:4px 12px;background:#ffbd2e;border:none;border-radius:6px;color:#000;font-size:11px;font-weight:700;cursor:pointer">⬇
+          Ažuriraj</button>
+        <button onclick="document.getElementById('ntpUpdateBanner').style.display='none'"
+          style="background:transparent;border:none;color:rgba(255,189,46,.6);font-size:16px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+      </div>
       <button class="ntp-edit-btn" id="ntpEditBtn">✏ Customize</button>
       <div class="ntp-logo" id="ntpLogo"><img src="logo_novi.png" alt="EtherX"
           style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></div>
@@ -5922,6 +5934,8 @@
         <!-- Icon tab bar -->
         <div class="settings-icon-tabs" id="settingsIconTabs">
           <button class="sit-btn active" data-stab="general"><span class="sit-icon">⚙️</span>Općenito</button>
+          <button class="sit-btn" data-stab="updates" id="sitBtnUpdates"><span
+              class="sit-icon">🔄</span>Ažuriranja</button>
           <button class="sit-btn" data-stab="tabs"><span class="sit-icon">🗂</span>Tabovi</button>
           <button class="sit-btn" data-stab="autofill"><span class="sit-icon">✏️</span>Auto. popunjavanje</button>
           <button class="sit-btn" data-stab="passwords"><span class="sit-icon">🔑</span>Lozinke</button>
@@ -5934,7 +5948,6 @@
           <button class="sit-btn" data-stab="extensions"><span class="sit-icon">🧩</span>Proširenja</button>
           <button class="sit-btn" data-stab="advanced"><span class="sit-icon">🔧</span>Napredno</button>
           <button class="sit-btn" data-stab="developer"><span class="sit-icon">⌨️</span>Razvoj</button>
-          <button class="sit-btn" data-stab="updates"><span class="sit-icon">🔄</span>Ažuriranja</button>
           <button class="sit-btn" data-stab="flags"><span class="sit-icon">��</span>Značajke</button>
           <button class="sit-btn" data-stab="migration"><span class="sit-icon">📥</span>Uvoz podataka</button>
           <button class="sit-btn" data-stab="appearance"><span class="sit-icon">🎨</span>Izgled</button>
@@ -6076,6 +6089,15 @@
                   </div>
                 </div>
                 <div class="toggle on" data-setting="openSafeFiles"></div>
+              </div>
+            </div>
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Zadani preglednik</div>
+                  <div class="s-row-desc">Postavi EtherX kao zadani preglednik za otvaranje web linkova.</div>
+                </div>
+                <button class="s-btn s-btn-primary" id="btnSetDefaultBrowser">🌐 Postavi kao zadani</button>
               </div>
             </div>
           </div>
@@ -7830,10 +7852,11 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.41</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.42</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
-                <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026 Kriptoentuzijasti.io</div>
+                <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
+                  Kriptoentuzijasti.io</div>
                 <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
                   <button onclick="window.open('https://kriptoentuzijasti.io','_blank')"
                     style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">
@@ -7846,12 +7869,16 @@
                 </div>
 
                 <!-- Kontakt -->
-                <div style="margin-top:14px;padding:12px;background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px">
+                <div
+                  style="margin-top:14px;padding:12px;background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px">
                   <div style="font-weight:600;margin-bottom:8px;color:var(--text1)">📬 Kontakt</div>
                   <div style="font-size:11px;color:var(--text2);line-height:2">
-                    <div>🌐 Web: <a href="https://kriptoentuzijasti.io" target="_blank" style="color:#4A9EFF;text-decoration:none">https://kriptoentuzijasti.io</a></div>
-                    <div>✉️ E-mail: <a href="mailto:info@kriptoentuzijasti.io" style="color:#4A9EFF;text-decoration:none">info@kriptoentuzijasti.io</a></div>
-                    <div style="margin-top:6px;color:var(--text3);font-size:10.5px">Za pitanja, prijave grešaka ili licencne upite obratite se putem gore navedenih kanala.</div>
+                    <div>🌐 Web: <a href="https://kriptoentuzijasti.io" target="_blank"
+                        style="color:#4A9EFF;text-decoration:none">https://kriptoentuzijasti.io</a></div>
+                    <div>✉️ E-mail: <a href="mailto:info@kriptoentuzijasti.io"
+                        style="color:#4A9EFF;text-decoration:none">info@kriptoentuzijasti.io</a></div>
+                    <div style="margin-top:6px;color:var(--text3);font-size:10.5px">Za pitanja, prijave grešaka ili
+                      licencne upite obratite se putem gore navedenih kanala.</div>
                   </div>
                 </div>
 
@@ -8126,7 +8153,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.41</span></div>
+                id="helpVersionNum2">2.4.42</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9527,6 +9554,7 @@
     const frame = document.getElementById('browseFrame');
     const ntp = document.getElementById('ntpPage');
     function normalizeUrl(raw) {
+      if (!raw || typeof raw !== 'string') return '';
       raw = raw.trim(); if (!raw) return '';
       if (/^0x[0-9a-fA-F]{40}$/.test(raw)) return 'https://etherscan.io/address/' + raw;
       if (/\.eth$/i.test(raw)) return 'https://app.ens.domains/name/' + raw;
@@ -9545,6 +9573,7 @@
       document.getElementById('btnReader').style.display = 'none';
       document.getElementById('urlInput').value = ''; updateUrlIcon(''); setLoading(0);
       renderQuickLinks();
+      renderRecentSites();
     }
     function showFrame(tab) { ntp.style.display = 'none'; frame.classList.add('active'); document.getElementById('blockedOverlay').classList.remove('show'); }
     function shouldOpenGoogleExternally(rawUrl) {
@@ -10020,7 +10049,7 @@
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     // Close panels when clicking outside (on the content/browser area)
     document.addEventListener('mousedown', e => {
-      const anyOpen = ['bmPanel','histPanel','dlPanel','settingsPanel','walletPanel','bobiaiPanel','aiAgentPanel','kriptoPanel','etherxPanel']
+      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
       if (!anyOpen) return;
       // If the click is inside any open panel or on a toolbar button, do not close
@@ -10211,10 +10240,6 @@
       document.getElementById('aiSummaryCard').classList.remove('open');
     });
     document.getElementById('btnAiAgent').addEventListener('click', () => togglePanel('aiAgentPanel'));
-    document.getElementById('bobiaiReload')?.addEventListener('click', () => {
-      const bl = document.getElementById('bobiaiLoading'); bl.style.display = 'flex';
-      document.getElementById('bobiaiFrame').src = 'https://bobiai.kriptoentuzijasti.io';
-    });
     document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
     document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
     document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
@@ -15111,7 +15136,7 @@
           if (bar) bar.innerHTML = `<div style="font-size:11px;color:var(--text2);margin-top:6px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px;border:1px solid var(--border2)">
             📦 <b>Ukupna pohrana (sve):</b> ${used} / ${quota}
             &nbsp;<span style="color:var(--text3)">— uključuje SQLite, IndexedDB, Cache API</span></div>`;
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       if (btn) {
@@ -15616,6 +15641,18 @@
     document.getElementById('sSetCurrentPage')?.addEventListener('click', () => {
       const t = getActiveTab(); if (t?.url) { const el = document.getElementById('sHomepage'); if (el) el.value = t.url; DB.saveSetting('homepage', t.url); showToast('Homepage set to current page'); }
     });
+    document.getElementById('btnSetDefaultBrowser')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btnSetDefaultBrowser');
+      btn.disabled = true; btn.textContent = '⏳ Postavljanje…';
+      try {
+        await window.etherx.defaultBrowser.set();
+        showToast('✅ EtherX je postavljen kao zadani preglednik');
+      } catch (e) {
+        showToast('⚠️ Nije moguće automatski postaviti — promijeni u sistemskim postavkama');
+      } finally {
+        btn.disabled = false; btn.textContent = '🌐 Postavi kao zadani';
+      }
+    });
     document.getElementById('sClearHistory')?.addEventListener('click', () => { window.customConfirm('Remove all website data?', (c) => { if (c) { DB.clearHistory(); showToast('Website data cleared'); } }); });
 
     // ── Clear browsing data buttons ──────────────────────────────────────────
@@ -16074,6 +16111,13 @@
       // NEW SETTINGS SECTIONS HANDLERS
       // ══════════════════════════════════════════════════════════════════════════
 
+      // Helper: save a partial settings object to both localStorage and SQLite
+      async function saveSettings(partial) {
+        try {
+          Object.entries(partial).forEach(([k, v]) => DB.saveSetting(k, v));
+        } catch (e) { console.warn('saveSettings error:', e); }
+      }
+
       // ── History ──────────────────────────────────────────────────────────────
       document.getElementById('settingHistoryDays')?.addEventListener('change', async (e) => {
         await saveSettings({ history_retention_days: parseInt(e.target.value) });
@@ -16130,7 +16174,8 @@
       (async () => {
         const size = await etherx.cache?.getSize() || 0;
         const mb = (size / 1024 / 1024).toFixed(2);
-        document.getElementById('cacheSize').textContent = `${mb} MB`;
+        const el = document.getElementById('cacheSize');
+        if (el) el.textContent = `${mb} MB`;
       })();
 
       document.getElementById('btnClearCache')?.addEventListener('click', async () => {
@@ -16139,7 +16184,8 @@
           alert('Cache očišćen.');
           const size = await etherx.cache?.getSize() || 0;
           const mb = (size / 1024 / 1024).toFixed(2);
-          document.getElementById('cacheSize').textContent = `${mb} MB`;
+          const el = document.getElementById('cacheSize');
+          if (el) el.textContent = `${mb} MB`;
         }
       });
 
@@ -16209,7 +16255,16 @@
             if (newLabel) { newLabel.style.color = 'var(--accent)'; newLabel.textContent = '🎉 Nova verzija dostupna!'; }
             if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
             const htmlAsset = (data.assets || []).find(a => a.name?.endsWith('.html'));
-            if (dlLink) { dlLink.style.display = 'inline-block'; dlLink.href = htmlAsset?.url || 'https://github.com/ktrucek/etherx-standalone/releases/latest'; }
+            if (dlLink) {
+              dlLink.style.display = 'inline-block';
+              const _dlUrl = htmlAsset?.url || ('https://github.com/ktrucek/etherx-standalone/releases/tag/v' + latestTag);
+              dlLink.href = '#';
+              dlLink.onclick = function (e) {
+                e.preventDefault();
+                if (window.etherx?.nav?.openExternal) window.etherx.nav.openExternal(_dlUrl);
+                else window.open(_dlUrl, '_blank');
+              };
+            }
           } else {
             if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
             if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
@@ -16257,10 +16312,25 @@
       }
 
       document.getElementById('btnCheckUpdates')?.addEventListener('click', () => checkForUpdates(false));
-      // Auto-check on load if enabled
+      // Auto-check on load if enabled — and show NTP banner if update found
       setTimeout(() => {
         const autoUpd = document.getElementById('settingAutoUpdate');
-        if (autoUpd?.checked) checkForUpdates(true);
+        const autoEnabled = autoUpd ? autoUpd.checked : (DB.getSettings().auto_update !== false);
+        if (autoEnabled) {
+          checkForUpdates(true).then(() => {
+            // After check — if badge shows update available, show NTP banner too
+            const badge = document.getElementById('updStatusBadge');
+            const banner = document.getElementById('ntpUpdateBanner');
+            const bannerText = document.getElementById('ntpUpdateText');
+            if (banner && badge && badge.textContent.startsWith('⬆')) {
+              if (bannerText) bannerText.textContent = badge.textContent + ' — Nova verzija dostupna!';
+              banner.style.display = 'flex';
+              // Also highlight the Ažuriranja sidebar button
+              document.getElementById('sitBtnUpdates')?.style.setProperty('border-left', '3px solid #ffbd2e');
+              document.getElementById('sitBtnUpdates')?.style.setProperty('color', '#ffbd2e');
+            }
+          }).catch(() => { });
+        }
       }, 4000);
 
       // ── Platform Detection & Smart Downloads ────────────────────────────────
