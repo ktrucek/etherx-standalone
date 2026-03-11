@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('etherx', {
   settings: {
     get: () => ipcRenderer.invoke('db:getSettings'),
     save: (s) => ipcRenderer.invoke('db:saveSettings', s),
+    applyDoH: (enabled) => ipcRenderer.invoke('settings:applyDoH', enabled),
   },
 
   // ── Network Monitoring ───────────────────────────────────────────────────────

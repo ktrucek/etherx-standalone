@@ -47,6 +47,30 @@ try { UserAgentManager = require('./src/main/userAgent'); } catch (e) { console.
 try { I18nManager = require('./src/main/i18n'); } catch (e) { console.error('❌ i18n module failed:', e.message); }
 try { AIManager = require('./src/main/ai'); } catch (e) { console.error('❌ ai module failed:', e.message); }
 
+// ─── DoH startup config ───────────────────────────────────────────────────────
+// Read DoH preference from a small JSON config file (written by renderer at runtime)
+// and apply before app.ready (commandLine changes require this)
+(function applyStartupDoH() {
+  try {
+    const cfgPath = path.join(app.getPath('userData'), 'etherx_doh.json');
+    if (fs.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (cfg.enabled) {
+        const provider = cfg.provider || 'cloudflare';
+        const templates = {
+          cloudflare: 'https://cloudflare-dns.com/dns-query{?dns}',
+          google: 'https://dns.google/dns-query{?dns}',
+          quad9: 'https://dns.quad9.net/dns-query{?dns}',
+        };
+        const tmpl = templates[provider] || templates.cloudflare;
+        app.commandLine.appendSwitch('enable-features', 'DnsOverHttps');
+        app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
+        app.commandLine.appendSwitch('dns-over-https-server-uri-template', tmpl);
+      }
+    }
+  } catch (_) { /* ignore */ }
+})();
+
 // ─── Global state ─────────────────────────────────────────────────────────────
 let mainWindow = null;
 let db = null;
@@ -508,6 +532,16 @@ function setupIPC() {
   // ── Settings ───────────────────────────────────────────────────────────────
   ipcMain.handle('db:getSettings', () => db ? db.getSettings() : {});
   ipcMain.handle('db:saveSettings', (_e, s) => db ? db.saveSettings(s) : noDb());
+
+  // ── DoH runtime toggle ─────────────────────────────────────────────────────
+  ipcMain.handle('settings:applyDoH', (_e, enabled) => {
+    try {
+      const cfgPath = path.join(app.getPath('userData'), 'etherx_doh.json');
+      const provider = db ? (db.getSettings()['doh_provider'] || 'cloudflare') : 'cloudflare';
+      fs.writeFileSync(cfgPath, JSON.stringify({ enabled: !!enabled, provider }, null, 2));
+    } catch (_) { /* ignore */ }
+    return { ok: true, requiresRestart: true };
+  });
 
   // ── Passwords ─────────────────────────────────────────────────────────────
   ipcMain.handle('passwords:save', (_e, site, username, encryptedPayload) =>

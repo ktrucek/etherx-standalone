@@ -3895,6 +3895,8 @@
       flex-shrink: 0;
       width: 148px;
       min-width: 148px;
+      position: relative;
+      z-index: 10;
     }
 
     .settings-icon-tabs::-webkit-scrollbar {
@@ -3938,8 +3940,11 @@
     .settings-body {
       flex: 1;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 16px;
       min-width: 0;
+      position: relative;
+      z-index: 1;
     }
 
     .settings-body::-webkit-scrollbar {
@@ -3951,7 +3956,9 @@
     }
 
     .s-tab-pane {
-      display: none
+      display: none;
+      max-width: 100%;
+      overflow-x: hidden;
     }
 
     .s-tab-pane.active {
@@ -7086,6 +7093,26 @@
                 </div>
               </div>
             </div>
+            <div class="s-group" style="margin-top:12px">
+              <div class="s-group-title">⭐ Bookmark Toolbar</div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Show Bookmark Toolbar</div>
+                  <div class="s-row-desc">Show a bar of bookmarks below the address bar</div>
+                </div>
+                <label class="s-toggle">
+                  <input type="checkbox" id="settingShowBookmarkBar" data-setting="show_bookmark_bar">
+                  <span class="s-toggle-track"></span>
+                </label>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Max bookmarks shown</div>
+                  <div class="s-row-desc">Number of bookmarks to display in the toolbar (1–20)</div>
+                </div>
+                <input type="number" class="s-select" id="settingBookmarkBarMax" data-setting="bookmark_bar_max" min="1" max="20" value="8" style="width:60px;text-align:center">
+              </div>
+            </div>
             <div class="s-group" id="toolbarIconRows">
               <div class="s-row">
                 <div class="s-row-left">
@@ -7852,7 +7879,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.42</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.44</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8153,7 +8180,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.42</span></div>
+                id="helpVersionNum2">2.4.44</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9252,6 +9279,10 @@
               updateTabEl(tab);
             }
             DB.addHistory({ url: e.url, title: tab.title || e.url });
+            // Also persist to Electron SQLite when available
+            if (!STATE.isPrivate && window.etherx?.history?.add) {
+              window.etherx.history.add({ url: e.url, title: tab.title || e.url, visited_at: Date.now() }).catch(() => { });
+            }
           }
         });
         wv.addEventListener('did-navigate-in-page', (e) => {
@@ -9444,9 +9475,14 @@
         const dragDistance = Math.abs(e.clientY - el._dragStartY);
 
         if (dragDistance > 80 || e.clientY < tabBarRect.top - 50 || e.clientY > tabBarRect.bottom + 50) {
-          // Tear off: open in new window
+          // Tear off: open in new Electron window (not external browser)
           const url = tab.url || 'about:blank';
-          window.open(url, '_blank', 'width=1200,height=800');
+          if (window.electronAPI?.invoke) {
+            window.electronAPI.invoke('app:moveTabToWindow', url, tab.title || '').catch(() => {});
+          } else {
+            showToast('🪟 Tab tear-off requires the desktop app');
+            return; // don't close the tab if we can't open a new window
+          }
           closeTab(tab.id);
           showToast('🪟 Tab opened in new window');
         }
@@ -11380,7 +11416,7 @@
     document.getElementById('mi-always-toolbar').addEventListener('click', () => { const chk = document.getElementById('mi-always-toolbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; DB.saveSetting('alwaysToolbar', !on); showToast((on ? 'Hide' : 'Show') + ' toolbar in full screen'); });
     document.getElementById('mi-customise-toolbar').addEventListener('click', () => { openCustomToolbar(); });
     document.getElementById('mi-always-tab-bar').addEventListener('click', () => { const chk = document.getElementById('mi-always-tab-bar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; const tb = document.getElementById('tabBar'); tb.style.display = on ? 'none' : 'flex'; showToast((on ? 'Hide' : 'Always show') + ' Tab Bar'); });
-    document.getElementById('mi-show-favbar').addEventListener('click', () => { const chk = document.getElementById('mi-show-favbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; let fb = document.getElementById('favBar'); if (!on) { if (!fb) { fb = document.createElement('div'); fb.id = 'favBar'; fb.style.cssText = 'height:28px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;font-size:11px;overflow-x:auto'; const bms = DB.getBookmarks().slice(0, 8); if (bms.length === 0) { fb.innerHTML = '<span style="color:var(--text3);padding:0 8px">Add bookmarks to see them here</span>'; } else { bms.forEach(b => { const btn = document.createElement('button'); btn.style.cssText = 'background:var(--bg3);border:1px solid var(--border2);border-radius:10px;color:var(--text2);padding:2px 10px;cursor:pointer;font-size:11px;white-space:nowrap'; btn.textContent = '🌐 ' + (b.title || b.url).slice(0, 18); btn.addEventListener('click', () => navigateTo(b.url)); fb.appendChild(btn); }); } const navBar = document.querySelector('.nav-bar'); navBar.parentNode.insertBefore(fb, navBar.nextSibling); } fb.style.display = 'flex'; showToast('⭐ Favourites Bar shown'); } else { if (fb) fb.style.display = 'none'; showToast('⭐ Favourites Bar hidden'); } });
+    document.getElementById('mi-show-favbar').addEventListener('click', () => { const chk = document.getElementById('mi-show-favbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; DB.saveSetting('show_bookmark_bar', !on); const stChk = document.getElementById('settingShowBookmarkBar'); if (stChk) stChk.checked = !on; let fb = document.getElementById('favBar'); if (!on) { if (!fb) { fb = document.createElement('div'); fb.id = 'favBar'; fb.style.cssText = 'height:28px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;font-size:11px;overflow-x:auto'; const maxBm = parseInt(DB.getSettings().bookmark_bar_max) || 8; const bms = DB.getBookmarks().slice(0, maxBm); if (bms.length === 0) { fb.innerHTML = '<span style="color:var(--text3);padding:0 8px">Add bookmarks to see them here</span>'; } else { bms.forEach(b => { const btn = document.createElement('button'); btn.style.cssText = 'background:var(--bg3);border:1px solid var(--border2);border-radius:10px;color:var(--text2);padding:2px 10px;cursor:pointer;font-size:11px;white-space:nowrap'; btn.textContent = '🌐 ' + (b.title || b.url).slice(0, 18); btn.addEventListener('click', () => navigateTo(b.url)); fb.appendChild(btn); }); } const navBar = document.querySelector('.nav-bar'); navBar.parentNode.insertBefore(fb, navBar.nextSibling); } fb.style.display = 'flex'; showToast('⭐ Favourites Bar shown'); } else { if (fb) fb.style.display = 'none'; showToast('⭐ Favourites Bar hidden'); } });
     document.getElementById('mi-show-statusbar').addEventListener('click', () => { const chk = document.getElementById('mi-show-statusbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; const sb = document.querySelector('.status-bar'); sb.style.display = on ? 'none' : 'flex'; showToast((on ? 'Hide' : 'Show') + ' Status Bar'); });
     document.getElementById('mi-show-sidebar').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); document.getElementById('mi-show-sidebar-chk').style.opacity = document.getElementById('bmPanel').classList.contains('open') ? '1' : '0'; });
     document.getElementById('mi-show-bm-sidebar').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); document.getElementById('mi-show-bm-sidebar-chk').style.opacity = document.getElementById('bmPanel').classList.contains('open') ? '1' : '0'; });
@@ -11677,7 +11713,17 @@
     document.getElementById('mi-arrange-tabs').addEventListener('click', () => { STATE.tabs.sort((a, b) => a.title.localeCompare(b.title)); document.querySelectorAll('.tab').forEach(el => el.remove()); const nb = document.getElementById('newTabBtn'); STATE.tabs.forEach(t => { renderTab(t); }); switchTab(STATE.activeTabId); showToast('⇅ Tabs arranged by title'); });
     document.getElementById('mi-prev-tab-group').addEventListener('click', () => { const i = STATE.tabs.findIndex(t => t.id === STATE.activeTabId); if (i > 0) switchTab(STATE.tabs[i - 1].id); });
     document.getElementById('mi-next-tab-group').addEventListener('click', () => { const i = STATE.tabs.findIndex(t => t.id === STATE.activeTabId); if (i < STATE.tabs.length - 1) switchTab(STATE.tabs[i + 1].id); });
-    document.getElementById('mi-move-tab-window').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) { window.open('/browser.html#' + encodeURIComponent(t.url), '_blank'); closeTab(t.id); } else showToast('No page to move'); });
+    document.getElementById('mi-move-tab-window').addEventListener('click', () => {
+      const t = getActiveTab();
+      if (!t?.url) { showToast('No page to move'); return; }
+      if (window.electronAPI?.invoke) {
+        window.electronAPI.invoke('app:moveTabToWindow', t.url, t.title).then(() => closeTab(t.id)).catch(() => {
+          showToast('🪟 Cannot open new window in web mode');
+        });
+      } else {
+        showToast('🪟 Move to new window requires the desktop app');
+      }
+    });
     document.getElementById('mi-bring-front').addEventListener('click', () => { window.focus(); showToast('⬆ Brought to front'); });
     document.getElementById('mi-open-location').addEventListener('click', () => { urlInput.focus(); urlInput.select(); });
     document.getElementById('mi-print').addEventListener('click', () => { try { frame.contentWindow.print(); } catch (e) { showToast('Cannot print cross-origin page'); } });
@@ -15417,6 +15463,98 @@
     });
     initSettingsPanel();
 
+    // ── DoH: ensure correct toggle state on security tab open and apply via IPC ──
+    (function () {
+      // Refresh DoH checkbox whenever the privacy/security tab is activated
+      document.querySelector('[data-stab="privacy"]')?.addEventListener('click', () => {
+        const dohEl = document.getElementById('settingDoH');
+        if (dohEl) {
+          const saved = DB.getSettings()['dns_over_https'];
+          if (saved !== undefined) dohEl.checked = saved;
+        }
+      });
+      // Apply DoH to Electron main process via IPC when the setting changes
+      const dohEl = document.getElementById('settingDoH');
+      if (dohEl) {
+        dohEl.addEventListener('change', () => {
+          const enabled = dohEl.checked;
+          DB.saveSetting('dns_over_https', enabled);
+          if (window.etherx?.settings?.applyDoH) {
+            window.etherx.settings.applyDoH(enabled).catch(() => { });
+          } else if (window.electronAPI?.invoke) {
+            window.electronAPI.invoke('settings:applyDoH', enabled).catch?.(() => { });
+          }
+          showToast(enabled ? '🔒 DNS over HTTPS enabled (restart may be needed)' : '🔓 DNS over HTTPS disabled');
+        });
+      }
+    })();
+
+    // ── Bookmark toolbar: auto-restore on load + settings toggle sync ─────────
+    (function () {
+      // Rebuild the favBar DOM from bookmarks
+      function _buildFavBar() {
+        let fb = document.getElementById('favBar');
+        if (!fb) {
+          fb = document.createElement('div');
+          fb.id = 'favBar';
+          fb.style.cssText = 'height:28px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;font-size:11px;overflow-x:auto';
+          const navBar = document.querySelector('.nav-bar');
+          if (navBar) navBar.parentNode.insertBefore(fb, navBar.nextSibling);
+        }
+        const maxBm = parseInt(DB.getSettings().bookmark_bar_max) || 8;
+        const bms = DB.getBookmarks().slice(0, maxBm);
+        fb.innerHTML = '';
+        if (bms.length === 0) {
+          fb.innerHTML = '<span style="color:var(--text3);padding:0 8px">Add bookmarks to see them here</span>';
+        } else {
+          bms.forEach(b => {
+            const btn = document.createElement('button');
+            btn.style.cssText = 'background:var(--bg3);border:1px solid var(--border2);border-radius:10px;color:var(--text2);padding:2px 10px;cursor:pointer;font-size:11px;white-space:nowrap';
+            btn.textContent = '🌐 ' + (b.title || b.url).slice(0, 18);
+            btn.addEventListener('click', () => navigateTo(b.url));
+            fb.appendChild(btn);
+          });
+        }
+        fb.style.display = 'flex';
+        return fb;
+      }
+      // Auto-restore on startup
+      try {
+        if (DB.getSettings().show_bookmark_bar === true) {
+          setTimeout(() => {
+            _buildFavBar();
+            const chk = document.getElementById('mi-show-favbar-chk');
+            if (chk) chk.style.opacity = '1';
+            const stChk = document.getElementById('settingShowBookmarkBar');
+            if (stChk) stChk.checked = true;
+          }, 400);
+        }
+      } catch (e) { /* ignore */ }
+      // Settings toggle → rebuild or hide bar
+      const stChk = document.getElementById('settingShowBookmarkBar');
+      if (stChk) {
+        stChk.addEventListener('change', () => {
+          const enabled = stChk.checked;
+          const menuChk = document.getElementById('mi-show-favbar-chk');
+          if (menuChk) menuChk.style.opacity = enabled ? '1' : '0';
+          if (enabled) {
+            _buildFavBar();
+          } else {
+            const fb = document.getElementById('favBar');
+            if (fb) fb.style.display = 'none';
+          }
+        });
+      }
+      // Max count input → rebuild visible bar
+      const maxEl = document.getElementById('settingBookmarkBarMax');
+      if (maxEl) {
+        maxEl.addEventListener('change', () => {
+          const fb = document.getElementById('favBar');
+          if (fb && fb.style.display !== 'none') _buildFavBar();
+        });
+      }
+    })();
+
     // ── Show/hide Develop menu based on showDevelop setting ───────────────────
     (function () {
       const devMenu = document.querySelector('[data-menu="develop"]');
@@ -15466,8 +15604,19 @@
       try {
         if (window.etherx?.history?.getAll) {
           entries = await window.etherx.history.getAll() || [];
+        }
+        // Always merge/fallback with localStorage — SQLite may be empty on first run or macOS
+        const localEntries = DB.getHistory() || [];
+        if (!entries.length) {
+          entries = localEntries;
         } else {
-          entries = DB.getHistory() || [];
+          // Merge: add any localStorage entries not already in IPC result (dedup by URL+ts)
+          const ipcUrls = new Set(entries.map(h => (h.url || '') + '|' + (h.visited_at || h.ts || 0)));
+          localEntries.forEach(h => {
+            const key = (h.url || '') + '|' + (h.visited_at || h.ts || 0);
+            if (!ipcUrls.has(key)) entries.push({ ...h, visited_at: h.visited_at || h.ts });
+          });
+          entries.sort((a, b) => (b.visited_at || b.ts || 0) - (a.visited_at || a.ts || 0));
         }
       } catch (e) { entries = DB.getHistory() || []; }
       if (filter) {
@@ -16622,11 +16771,99 @@
       document.querySelector('[data-stab="flags"]')?.addEventListener('click', () => {
         detectGPU();
         updateServiceWorkerStatus();
+        applyExperimentalFlags(); // refresh status display
       });
 
       // Run GPU detection once on init (so status is ready when tab is first opened)
       detectGPU();
       updateServiceWorkerStatus();
+
+      // ── Experimental Flags: actual implementations ────────────────────────────
+      function applyExperimentalFlags() {
+        const cfg = DB.getSettings();
+
+        // WebGPU: detect native availability (Chrome/Electron 113+ has it without flags)
+        const webgpuToggle = document.querySelector('[data-setting="webgpu"]');
+        if (webgpuToggle) {
+          const gpuAvail = !!navigator.gpu;
+          if (!gpuAvail) {
+            webgpuToggle.title = 'WebGPU not available in this build — requires Electron 28+ or Chrome 113+';
+          } else {
+            webgpuToggle.title = 'WebGPU is natively available in this browser';
+          }
+        }
+
+        // CSS will-change: inject a style sheet when enabled
+        const willChange = cfg.cssWillChange !== false; // default ON
+        let wcStyle = document.getElementById('_etx_willchange_style');
+        if (willChange) {
+          if (!wcStyle) {
+            wcStyle = document.createElement('style');
+            wcStyle.id = '_etx_willchange_style';
+            wcStyle.textContent = '.tab,.nav-bar,.panel,.ctx-menu,.settings-icon-tabs,.settings-body{will-change:transform,opacity;}';
+            document.head.appendChild(wcStyle);
+          }
+        } else if (wcStyle) {
+          wcStyle.remove();
+        }
+
+        // CSS contain: inject contain styles when enabled
+        const contain = cfg.cssContain !== false; // default ON
+        let cStyle = document.getElementById('_etx_contain_style');
+        if (contain) {
+          if (!cStyle) {
+            cStyle = document.createElement('style');
+            cStyle.id = '_etx_contain_style';
+            cStyle.textContent = '.tab,.p-entry,.ext-item,.net-table tr,.app-table tr{contain:layout style;}';
+            document.head.appendChild(cStyle);
+          }
+        } else if (cStyle) {
+          cStyle.remove();
+        }
+
+        // CSS Houdini: detect availability
+        const houdiniToggle = document.querySelector('[data-setting="cssHoudini"]');
+        if (houdiniToggle) {
+          const houdiniAvail = typeof CSS !== 'undefined' && !!CSS.paintWorklet;
+          houdiniToggle.title = houdiniAvail
+            ? '✓ CSS Houdini Paint Worklets are available'
+            : 'CSS Houdini not available in this environment';
+        }
+
+        // Web Notifications API: request permission when enabled
+        if (cfg.webNotif !== false && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+
+        // EIP-6963: inject wallet discovery into active webview
+        if (cfg.eip6963 !== false) {
+          const activeWv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
+          if (activeWv && activeWv.isConnected) {
+            try {
+              activeWv.executeJavaScript(`
+                (function(){
+                  if (window.__etx_eip6963_injected) return;
+                  window.__etx_eip6963_injected = true;
+                  window.addEventListener('eip6963:requestProvider', () => {
+                    window.dispatchEvent(new CustomEvent('eip6963:announceProvider', {
+                      detail: {
+                        info: { uuid: 'etherx-browser', name: 'EtherX Browser', icon: '', rdns: 'io.kriptoentuzijasti.etherx' },
+                        provider: window.ethereum || null
+                      }
+                    }));
+                  });
+                })();
+              `).catch(() => {});
+            } catch (_) {}
+          }
+        }
+      }
+
+      // Apply flags on startup and whenever a toggle changes in the Flags tab
+      applyExperimentalFlags();
+      document.querySelectorAll('[data-setting="cssWillChange"],[data-setting="cssContain"],[data-setting="webgpu"],[data-setting="cssHoudini"],[data-setting="lazyIframe"],[data-setting="webNotif"],[data-setting="eip6963"]').forEach(el => {
+        el.addEventListener('click', () => setTimeout(applyExperimentalFlags, 100));
+      });
 
       // ── Backup ───────────────────────────────────────────────────────────────
       document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
