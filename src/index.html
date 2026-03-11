@@ -696,6 +696,42 @@
       opacity: .88;
     }
 
+    /* ── Toolbar icon rows – drag-to-reorder in settings ── */
+    .tir-drag {
+      cursor: grab;
+      color: var(--text3);
+      font-size: 15px;
+      padding: 0 6px 0 0;
+      user-select: none;
+      flex-shrink: 0;
+      line-height: 1;
+      opacity: .45;
+      transition: opacity .15s;
+    }
+
+    .tir-drag:hover {
+      opacity: 1;
+    }
+
+    .tir-drag:active {
+      cursor: grabbing;
+    }
+
+    #toolbarIconRows .s-row[draggable] {
+      border-radius: 6px;
+      transition: background .1s, opacity .15s;
+    }
+
+    #toolbarIconRows .s-row.tir-drag-over {
+      background: rgba(102, 126, 234, .14);
+      outline: 1px dashed rgba(102, 126, 234, .4);
+      border-radius: 6px;
+    }
+
+    #toolbarIconRows .s-row.tir-dragging {
+      opacity: .35;
+    }
+
     .s-icon-edit-btn:hover {
       background: var(--border2);
     }
@@ -5574,7 +5610,7 @@
       style="position:absolute;top:-100px;width:1px;height:1px;opacity:0">📖</button>
     <button class="nav-btn icon-btn" id="btnWallet" title="Wallet">💰</button>
     <button class="nav-btn icon-btn" id="btnBobiAI" title="BobiAI Studio">🎬</button>
-    <button class="nav-btn icon-btn" id="btnSummarizePage" title="Sažetak stranice (Gemini AI)">✨</button>
+    <button class="nav-btn icon-btn" id="btnSummarizePage" title="Sažetak stranice (BobiAI)">✨</button>
     <button class="nav-btn icon-btn" id="btnAiAgent" title="AI Agent">🤖</button>
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
@@ -7028,92 +7064,104 @@
                 </div>
               </div>
             </div>
-            <div class="s-group">
+            <div class="s-group" id="toolbarIconRows">
               <div class="s-row">
                 <div class="s-row-left">
                   <div class="s-row-label" style="font-weight:600">Toolbar Icons</div>
-                  <div class="s-row-desc">Show or hide icons in the navigation bar</div>
+                  <div class="s-row-desc">Uključi/isključi ili povuci ⠏ za promjenu redoslijeda</div>
                 </div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnBookmarkPage">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnBookmarkPage" title="Promijeni ikonu">🔖</button>
                   <div class="s-row-label">Bookmark Page</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnBookmarkPage" data-icon="btnBookmarkPage"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnWallet">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnWallet" title="Promijeni ikonu">💰</button>
                   <div class="s-row-label">Wallet</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnWallet" data-icon="btnWallet"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnBobiAI">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnBobiAI" title="Promijeni ikonu">🎬</button>
                   <div class="s-row-label">BobiAI Studio</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnBobiAI" data-icon="btnBobiAI"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnAiAgent">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnAiAgent" title="Promijeni ikonu">🤖</button>
                   <div class="s-row-label">AI Agent</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnAiAgent" data-icon="btnAiAgent"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnKripto">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnKripto" title="Promijeni ikonu">📰</button>
                   <div class="s-row-label">Kriptoentuzijasti.io</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnKripto" data-icon="btnKripto"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnEtherX">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnEtherX" title="Promijeni ikonu">👥</button>
                   <div class="s-row-label">EtherX.io Social</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnEtherX" data-icon="btnEtherX"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnExtensions">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnExtensions" title="Promijeni ikonu">🧩</button>
                   <div class="s-row-label">Proširenja</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnExtensions" data-icon="btnExtensions"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnBookmarks">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnBookmarks" title="Promijeni ikonu">⭐</button>
                   <div class="s-row-label">Bookmarks Panel</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnBookmarks" data-icon="btnBookmarks"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnHistory">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnHistory" title="Promijeni ikonu">🕒</button>
                   <div class="s-row-label">History</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnHistory" data-icon="btnHistory"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnDownloads">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnDownloads" title="Promijeni ikonu">⬇️</button>
                   <div class="s-row-label">Preuzimanja</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnDownloads" data-icon="btnDownloads"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnSettings">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnSettings" title="Promijeni ikonu">⚙️</button>
                   <div class="s-row-label">Settings</div>
                 </div>
                 <div class="toggle on" data-setting="showBtnSettings" data-icon="btnSettings"></div>
               </div>
-              <div class="s-row">
+              <div class="s-row" draggable="true" data-icon-key="showBtnDevtools">
                 <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
                   <button class="s-icon-edit-btn" data-icon-target="btnDevtools" title="Promijeni ikonu">🛠️</button>
                   <div class="s-row-label">DevTools</div>
                 </div>
@@ -7781,7 +7829,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.39</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.40</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8042,6 +8090,17 @@
             </div>
           </div>
         </div>
+        <div class="s-group">
+          <div class="s-group-title">Pregled povijesti</div>
+          <div style="padding:0 0 8px">
+            <input type="text" id="histSearchInputIdx" placeholder="Pretraži povijest…"
+              style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box">
+          </div>
+          <div id="historyIdxList"
+            style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+            <div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Učitavanje…</div>
+          </div>
+        </div>
       </div>
 
       <!-- ── Updates ─────────────────────────────────────────── -->
@@ -8052,7 +8111,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.39</span></div>
+                id="helpVersionNum2">2.4.40</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8272,13 +8331,13 @@
     <!-- AI Gemini Summary Card -->
     <div id="aiSummaryCard">
       <div class="asc-header">
-        <span>✨ <span id="ascTitle">Gemini Sažetak</span></span>
+        <span>✨ <span id="ascTitle">BobiAI Sažetak</span></span>
         <button class="asc-close" id="ascClose">×</button>
       </div>
       <div class="asc-body" id="ascBody">
         <div class="asc-loader" id="ascLoader">
           <div class="asc-spinner"></div>
-          <span>Gemini analizira stranicu…</span>
+          <span>BobiAI analizira stranicu…</span>
         </div>
         <div id="ascBullets" style="display:none"></div>
       </div>
@@ -12974,7 +13033,7 @@
               addMsg('⚠️ ' + (result.error || 'Greška pri generiranju sažetka.'), 'bot');
             } else {
               const cacheNote = result.cached ? ' _(iz cache-a)_' : '';
-              let resp = `✨ **Gemini sažetak: ${new URL(tab.url).hostname}**${cacheNote}\n\n`;
+              let resp = `✨ **BobiAI sažetak: ${new URL(tab.url).hostname}**${cacheNote}\n\n`;
               const cache = _summaryCache[_md5Hash(tab.url)];
               if (cache?.bullets?.length) {
                 cache.bullets.forEach((b, i) => {
@@ -13500,6 +13559,58 @@
           DB.saveSetting(key, on);
           if (btn) btn.style.display = on ? '' : 'none';
           showToast(on ? '✓ Icon shown' : '✗ Icon hidden');
+        });
+      });
+    })();
+
+    // ── Toolbar icon rows drag-to-reorder (Settings → Appearance) ────────────────────
+    (function initToolbarRowDrag() {
+      const group = document.getElementById('toolbarIconRows');
+      if (!group) return;
+      // Restore persisted order: move rows to match saved order
+      try {
+        const saved = JSON.parse(localStorage.getItem('ex_toolbar_order') || '[]');
+        if (saved.length) {
+          const header = group.querySelector('.s-row:not([draggable])');
+          const rows = [...group.querySelectorAll('.s-row[draggable]')];
+          const ordered = [
+            ...saved.map(k => rows.find(r => r.dataset.iconKey === k)).filter(Boolean),
+            ...rows.filter(r => !saved.includes(r.dataset.iconKey)),
+          ];
+          ordered.forEach(r => group.appendChild(r));
+        }
+      } catch (_) { }
+
+      let _dragSrc = null;
+      group.querySelectorAll('.s-row[draggable]').forEach(row => {
+        row.addEventListener('dragstart', e => {
+          _dragSrc = row;
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => row.classList.add('tir-dragging'), 0);
+        });
+        row.addEventListener('dragend', () => {
+          row.classList.remove('tir-dragging');
+          group.querySelectorAll('.s-row').forEach(r => r.classList.remove('tir-drag-over'));
+        });
+        row.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (_dragSrc && _dragSrc !== row) row.classList.add('tir-drag-over');
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('tir-drag-over'));
+        row.addEventListener('drop', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!_dragSrc || _dragSrc === row) return;
+          const rows = [...group.querySelectorAll('.s-row[draggable]')];
+          const srcIdx = rows.indexOf(_dragSrc);
+          const dstIdx = rows.indexOf(row);
+          if (srcIdx < dstIdx) row.after(_dragSrc); else row.before(_dragSrc);
+          row.classList.remove('tir-drag-over');
+          // Save new order and apply to actual toolbar
+          const newOrder = [...group.querySelectorAll('.s-row[draggable]')].map(r => r.dataset.iconKey);
+          localStorage.setItem('ex_toolbar_order', JSON.stringify(newOrder));
+          if (typeof _applyToolbarOrder === 'function') _applyToolbarOrder(newOrder);
         });
       });
     })();
@@ -15220,6 +15331,62 @@
     document.querySelector('[data-stab="websites"]')?.addEventListener('click', renderSitePermsList);
     // Also render immediately in case settings panel opens on websites tab
     renderSitePermsList();
+
+    // ── History viewer in Settings → History ──────────────────────────────────
+    async function loadIndexHistory(filter) {
+      const list = document.getElementById('historyIdxList');
+      if (!list) return;
+      let entries = [];
+      try {
+        if (window.etherx?.history?.getAll) {
+          entries = await window.etherx.history.getAll() || [];
+        } else {
+          entries = DB.getHistory() || [];
+        }
+      } catch (e) { entries = DB.getHistory() || []; }
+      if (filter) {
+        const f = filter.toLowerCase();
+        entries = entries.filter(h =>
+          (h.url || '').toLowerCase().includes(f) ||
+          (h.title || '').toLowerCase().includes(f)
+        );
+      }
+      if (!entries.length) {
+        list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12px">Nema rezultata u povijesti.</div>';
+        return;
+      }
+      const groups = {};
+      entries.forEach(h => {
+        const d = new Date(h.visited_at || h.ts || Date.now()).toLocaleDateString('hr-HR');
+        (groups[d] = groups[d] || []).push(h);
+      });
+      list.innerHTML = '';
+      const today = new Date().toLocaleDateString('hr-HR');
+      Object.entries(groups).forEach(([day, items]) => {
+        const dt = document.createElement('div');
+        dt.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);padding:6px 12px 4px;background:var(--bg3);position:sticky;top:0;z-index:1;letter-spacing:.5px';
+        dt.textContent = day === today ? 'Danas' : day;
+        list.appendChild(dt);
+        items.forEach(h => {
+          const el = document.createElement('div');
+          el.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s';
+          el.onmouseenter = () => el.style.background = 'rgba(255,255,255,.04)';
+          el.onmouseleave = () => el.style.background = '';
+          const time = new Date(h.visited_at || h.ts || Date.now()).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+          const esc = s => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const fav = `https://www.google.com/s2/favicons?sz=14&domain_url=${encodeURIComponent(h.url)}`;
+          el.innerHTML = `<img src="${fav}" width="14" height="14" style="flex-shrink:0;border-radius:2px" onerror="this.style.display='none'">` +
+            `<div style="flex:1;min-width:0">` +
+            `<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(h.title || h.url)}</div>` +
+            `<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(h.url)}</div>` +
+            `</div><span style="font-size:10px;color:var(--text3);flex-shrink:0">${time}</span>`;
+          el.addEventListener('click', () => { navigateTo(h.url); closeAllPanels(); });
+          list.appendChild(el);
+        });
+      });
+    }
+    document.getElementById('histSearchInputIdx')?.addEventListener('input', e => loadIndexHistory(e.target.value));
+    document.querySelector('[data-stab="history"]')?.addEventListener('click', () => loadIndexHistory(''));
 
     window.customPrompt = function (message, defaultValue, callback) {
       const overlay = document.createElement('div');
