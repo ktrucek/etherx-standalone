@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.44",
+  "version": "2.4.45",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -80,5 +80,5 @@
     "qrcode": "^1.5.3",
     "uuid": "^9.0.0"
   },
-  "buildTime": "2026-03-11T03:35:19Z"
+  "buildTime": "2026-03-11T23:38:42Z"
 }
