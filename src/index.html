@@ -5229,6 +5229,7 @@
   </style>
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js" defer></script>
   <script src="../assets/ethers.umd.min.js"></script>
+  <script src="../assets/jsQR.js"></script>
 </head>
 
 <body>
@@ -7880,7 +7881,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.47</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.48</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8181,7 +8182,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.47</span></div>
+                id="helpVersionNum2">2.4.48</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -11587,19 +11588,59 @@
       });
 
       // Camera scan (basic — opens device camera)
+      let _qrScanInterval;
       document.getElementById('qrsCameraBtn').addEventListener('click', async () => {
         const preview = document.getElementById('qrsCameraPreview');
         try {
+          if (preview.srcObject) {
+            // Stop camera if already running
+            const stream = preview.srcObject;
+            stream.getTracks().forEach(t => t.stop());
+            preview.srcObject = null;
+            preview.style.display = 'none';
+            clearInterval(_qrScanInterval);
+            document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
+            return;
+          }
+          
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
           preview.srcObject = stream;
+          preview.setAttribute('playsinline', true);
           preview.style.display = 'block';
+          preview.play();
           document.getElementById('qrsCameraBtn').textContent = '⏹ Stop Camera';
-          document.getElementById('qrsCameraBtn').addEventListener('click', () => {
-            stream.getTracks().forEach(t => t.stop());
-            preview.style.display = 'none';
-            document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
-          }, { once: true });
-          showToast('📷 Camera active — QR scanning requires a native app');
+          
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          
+          _qrScanInterval = setInterval(() => {
+            if (preview.readyState === preview.HAVE_ENOUGH_DATA) {
+              canvas.height = preview.videoHeight;
+              canvas.width = preview.videoWidth;
+              ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              if (window.jsQR) {
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                  inversionAttempts: 'dontInvert',
+                });
+                if (code && code.data) {
+                  clearInterval(_qrScanInterval);
+                  stream.getTracks().forEach(t => t.stop());
+                  preview.srcObject = null;
+                  preview.style.display = 'none';
+                  document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
+                  document.getElementById('qrsImportText').value = code.data;
+                  showToast('✅ QR Code detected!');
+                  // Auto-click import
+                  document.getElementById('qrsImportBtn').click();
+                }
+              }
+            }
+          }, 300);
+          
+          if (!window.jsQR) {
+            showToast('📷 Camera active — waiting for jsQR library to load');
+          }
         } catch (err) {
           showToast('❌ Camera: ' + err.message);
         }
@@ -12573,16 +12614,29 @@
       });
     })();
 
-    document.getElementById('extAddBtn').addEventListener('click', () => {
+    document.getElementById('extAddBtn').addEventListener('click', async () => {
       const val = document.getElementById('extAddUrl').value.trim(); if (!val) return;
       let id = val, name = val, icon = '\uD83E\uDDE9', desc = 'Installed from Chrome Web Store';
       const m = val.match(/[a-z]{32}/i); if (m) id = m[0];
       const known = { MetaMask: 'nkbihfbeogaeaoehlefnkodbefgpgknn', 'uBlock Origin': 'cjpalhdlnbpafiamejdnhcphjbkeiagm', Grammarly: 'kbfnbcaeplbcioakkpcpgfkobkghlhen', Honey: 'bmnlcjabgnpnenekpadlanbbkooimhnj', LastPass: 'hdokiejnpimakedhajhdlcegeplioahd', 'Crypto Price Tracker': 'djpcnbhbkplhbnkppfopnnejhaigffjn', 'iCloud Passwords': 'pejdijmoenmkgeppbflobdenhhabjlaj' };
       const icons = { MetaMask: '\uD83E\uDD8A', 'uBlock Origin': '\uD83D\uDEE1\uFE0F', Grammarly: '\uD83D\uDCDD', Honey: '\uD83C\uDF6F', LastPass: '\uD83D\uDD11', 'Crypto Price Tracker': '\uD83D\uDCC8', 'iCloud Passwords': '\uD83D\uDD11' };
       for (const [n, kid] of Object.entries(known)) { if (val.includes(kid) || val.toLowerCase().includes(n.toLowerCase())) { name = n; id = kid; icon = icons[n] || '\uD83E\uDDE9'; } }
-      EXT_DB.add({ id, name, desc: 'Chrome Web Store shortcut — direct install remains limited in Electron; use Load Unpacked for real extension runtime.', icon, enabled: true, source: val, installMode: 'cws-shortcut', installedAt: Date.now() });
-      renderExtList(); document.getElementById('extAddUrl').value = '';
-      showToast('🧩 Shortcut saved: ' + name + ' — use Load Unpacked for working runtime'); consoleLog('success', '🧩 Extension shortcut saved: ' + name);
+      
+      if (window.etherx?.extensions?.downloadFromCWS && m) {
+        showToast('⏳ Downloading from Web Store...');
+        const result = await window.etherx.extensions.downloadFromCWS(id);
+        if (result && result.ok) {
+          EXT_DB.add({ id: result.id, name: result.name || name, desc: 'Loaded downloaded extension v' + (result.version || '?'), icon, enabled: true, source: val, installMode: 'unpacked', path: result.path, installedAt: Date.now() });
+          renderExtList(); document.getElementById('extAddUrl').value = '';
+          showToast('✅ Extension installed: ' + (result.name || name));
+        } else {
+          showToast('❌ Install failed: ' + (result?.error || 'Unknown error'));
+        }
+      } else {
+        EXT_DB.add({ id, name, desc: 'Chrome Web Store shortcut — direct install remains limited in Electron; use Load Unpacked for real extension runtime.', icon, enabled: true, source: val, installMode: 'cws-shortcut', installedAt: Date.now() });
+        renderExtList(); document.getElementById('extAddUrl').value = '';
+        showToast('🧩 Shortcut saved: ' + name + ' — use Load Unpacked for working runtime');
+      }
     });
     document.getElementById('btnLoadUnpackedExt')?.addEventListener('click', async () => {
       const chosen = await window.etherx?.extensions?.chooseFolder?.();
@@ -12635,26 +12689,51 @@
 
     // ── Featured Extensions Install ──
     document.querySelectorAll('.ext-install-btn').forEach(btn => {
-      btn.addEventListener('click', function () {
+      btn.addEventListener('click', async function () {
         const item = this.closest('.ext-feat-item');
         const name = this.dataset.name || 'Extension';
         const desc = this.dataset.desc || '';
         const icon = item?.querySelector('.ext-feat-icon')?.textContent || '🧩';
         const extId = this.dataset.id || name.toLowerCase().replace(/\s+/g, '-');
         const cwsUrl = 'https://chromewebstore.google.com/detail/' + extId;
-        // Open in system browser via shell.openExternal (most reliable — avoids CWS blocking Electron webview)
-        if (window.etherx?.openExternal) {
-          window.etherx.openExternal(cwsUrl);
-          showToast('🌐 Otvaranje u sistemskom pregledniku: ' + name);
-        } else if (typeof require !== 'undefined') {
-          try { require('electron').shell.openExternal(cwsUrl); showToast('🌐 Otvaram CWS: ' + name); }
-          catch (e) { navigateTo(cwsUrl); document.getElementById('extPanel')?.classList.remove('open'); }
+
+        // Auto-download CRX if in Electron
+        if (window.etherx?.extensions?.downloadFromCWS) {
+          showToast('⏳ Downloading & installing ' + name + '...');
+          const result = await window.etherx.extensions.downloadFromCWS(extId);
+          if (result && result.ok) {
+            EXT_DB.add({ 
+              id: result.id || extId, 
+              name: result.name || name, 
+              icon: icon, 
+              desc: 'Loaded unpacked extension v' + (result.version || '?'), 
+              enabled: true, 
+              installMode: 'unpacked', 
+              path: result.path, 
+              source: cwsUrl, 
+              installedAt: Date.now() 
+            });
+            showToast('✅ Installed ' + name);
+          } else {
+            showToast('❌ Install failed: ' + (result?.error || 'Unknown error'));
+            return;
+          }
         } else {
-          navigateTo(cwsUrl);
-          document.getElementById('extPanel')?.classList.remove('open');
+          // Open in system browser via shell.openExternal
+          if (window.etherx?.openExternal) {
+            window.etherx.openExternal(cwsUrl);
+            showToast('🌐 Otvaranje u sistemskom pregledniku: ' + name);
+          } else if (typeof require !== 'undefined') {
+            try { require('electron').shell.openExternal(cwsUrl); showToast('🌐 Otvaram CWS: ' + name); }
+            catch (e) { navigateTo(cwsUrl); document.getElementById('extPanel')?.classList.remove('open'); }
+          } else {
+            navigateTo(cwsUrl);
+            document.getElementById('extPanel')?.classList.remove('open');
+          }
+          // Register locally as a shortcut
+          EXT_DB.add({ id: extId, name, icon, desc: desc || 'Chrome Web Store shortcut — use Load Unpacked for real runtime.', enabled: true, source: cwsUrl, installMode: 'cws-shortcut', installedAt: Date.now() });
         }
-        // Register locally as a shortcut; real runtime install in Electron needs unpacked loading
-        EXT_DB.add({ id: extId, name, icon, desc: desc || 'Chrome Web Store shortcut — use Load Unpacked for real runtime.', enabled: true, source: cwsUrl, installMode: 'cws-shortcut', installedAt: Date.now() });
+
         renderExtList();
         document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active'));
