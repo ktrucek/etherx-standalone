@@ -4560,6 +4560,7 @@
       flex: 1;
       overflow-y: auto;
       padding: 12px;
+      padding-bottom: 24px;
       display: flex;
       flex-direction: column;
       gap: 8px
@@ -5244,8 +5245,6 @@
     <div class="title-text">EtherX Browser</div>
     <div class="title-right electron-no-drag"><span id="privateIndicator">🕶 Private</span><span id="titleDate"
         style="opacity:0.7"></span><span id="titleClock"></span>
-      <button class="nav-btn icon-btn" id="btnTabOverview" title="Show Tab Overview (Ctrl+Shift+\\)"
-        style="margin-left:8px;font-size:15px">⧉</button>
       <div style="position:relative"><button id="titleProfileBtn"
           style="background:var(--bg3);border:1px solid var(--border2);border-radius:12px;padding:2px 10px;color:var(--text2);cursor:pointer;font-size:11px;display:flex;align-items:center;gap:4px">👤
           <span id="activeProfileName">Default</span> ▾</button>
@@ -5253,11 +5252,17 @@
       </div>
       <!-- Installed extensions icon strip -->
       <div id="extIconBar"></div>
-      <button id="btnShare" title="Share"
-        style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:5px;transition:background .15s;line-height:1"
-        onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='none'">⬆</button>
+      <button id="btnCryptoPrice" title="Crypto Price Tracker"
+        style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:5px;transition:background .15s;line-height:1;margin-left:4px;"
+        onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='none'">📈</button>
+      <button id="btnShare" class="nav-btn icon-btn" title="Share"
+        style="width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--text3);transition:.15s;padding:0;margin-left:4px">⬆</button>
+      <button class="nav-btn icon-btn" id="btnTabOverview" title="Show Tab Overview (Ctrl+Shift+\\)"
+        style="width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--text3);transition:.15s;padding:0;margin-left:4px">
+        ⧉
+      </button>
       <button id="btnWindowSwitcher" title="Window Switcher"
-        style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:5px;transition:background .15s;line-height:1"
+        style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px 6px;border-radius:5px;transition:background .15s;line-height:1;display:none"
         onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='none'">⧉</button>
     </div>
   </div>
@@ -5621,7 +5626,9 @@
     <button class="nav-btn icon-btn" id="btnSummarizePage" title="Sažetak stranice (BobiAI)">✨</button>
     <button class="nav-btn icon-btn" id="btnAiAgent" title="AI Agent">🤖</button>
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
+    <button class="nav-btn icon-btn" id="btnCryptoTracker" title="Crypto Price Tracker">📈</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
+    <button class="nav-btn icon-btn" id="btnCryptoTracker" title="Crypto Price Tracker">📈</button>
     <button class="nav-btn icon-btn" id="btnExtensions" title="Extensions">🧩</button>
     <button class="nav-btn icon-btn" id="btnBookmarks" title="Bookmarks (Ctrl+B)">⭐</button>
     <button class="nav-btn icon-btn" id="btnHistory" title="History (Ctrl+H)">🕒</button>
@@ -7162,6 +7169,23 @@
                 </div>
                 <div class="toggle on" data-setting="showBtnKripto" data-icon="btnKripto"></div>
               </div>
+              <div class="s-row" draggable="true" data-icon-key="showBtnCryptoTracker">
+                <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
+                  <button class="s-icon-edit-btn" data-icon-target="btnCryptoTracker"
+                    title="Promijeni ikonu">📈</button>
+                  <div class="s-row-label">Crypto Price Tracker</div>
+                </div>
+                <div class="toggle on" data-setting="showBtnCryptoTracker" data-icon="btnCryptoTracker"></div>
+              </div>
+              <div class="s-row" draggable="true" data-icon-key="showBtnCryptoPrice">
+                <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
+                  <button class="s-icon-edit-btn" data-icon-target="btnCryptoPrice" title="Promijeni ikonu">📈</button>
+                  <div class="s-row-label">Crypto Price Tracker</div>
+                </div>
+                <div class="toggle on" data-setting="showBtnCryptoPrice" data-icon="btnCryptoPrice"></div>
+              </div>
               <div class="s-row" draggable="true" data-icon-key="showBtnEtherX">
                 <div class="s-row-left">
                   <span class="tir-drag" title="Pomakni">⠏</span>
@@ -7881,7 +7905,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.48</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.49</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8182,7 +8206,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.48</span></div>
+                id="helpVersionNum2">2.4.49</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8257,6 +8281,21 @@
       </div>
 
     </div>
+
+    <!-- Crypto Price Tracker Panel -->
+    <div class="panel" id="cryptoPricePanel" style="width:400px;right:60px">
+      <div class="panel-header" style="background:var(--bg2)">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">📈</span>
+          <span style="font-weight:700">Crypto Price Tracker</span>
+        </div>
+        <button class="panel-close" id="closeCryptoPricePanel">×</button>
+      </div>
+      <div class="panel-content" style="padding:0;overflow:hidden">
+        <iframe src="../CryptoPriceTracker/html/main.html" style="width:100%;height:100%;border:none;"></iframe>
+      </div>
+    </div>
+
     <div class="panel" id="walletPanel" style="width:420px">
       <div class="panel-header" style="padding:8px 12px">
         <span class="panel-title">💰 BOBIAI Wallet</span>
@@ -8337,6 +8376,18 @@
           <input type="text" class="ai-chat-input" id="aiChatInput" placeholder="Pitaj AI agenta..." autocomplete="off">
           <button class="ai-chat-send" id="aiChatSend">↑</button>
         </div>
+      </div>
+    </div>
+    <!-- Crypto Price Tracker Panel -->
+    <div class="panel" id="cryptoTrackerPanel" style="width:420px;height:500px">
+      <div class="panel-header" style="padding:8px 12px;background:linear-gradient(135deg,#0e8529 0%,#09591a 100%)">
+        <span class="panel-title">📈 Crypto Price Tracker</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button class="panel-close" id="closeCryptoTrackerPanel">×</button>
+        </div>
+      </div>
+      <div style="flex:1;position:relative">
+        <iframe id="cryptoTrackerFrame" src="" style="width:100%;height:100%;border:none;background:var(--bg)"></iframe>
       </div>
     </div>
     <!-- Kriptoentuzijasti Panel -->
@@ -9283,6 +9334,7 @@
               updateTabEl(tab);
             }
             DB.addHistory({ url: e.url, title: tab.title || e.url });
+            addRecentSite(e.url, tab.title || e.url); // update recently visited automatically
             // Also persist to Electron SQLite when available
             if (!STATE.isPrivate && window.etherx?.history?.add) {
               window.etherx.history.add({ url: e.url, title: tab.title || e.url, visited_at: Date.now() }).catch(() => { });
@@ -9371,9 +9423,12 @@
         window.etherx.on('webview-context-menu', (params) => {
           showCtxMenu(params.x, params.y, params.linkURL || null, params || {});
         });
+        window.etherx.on('app:createTab', (url) => {
+          createTab(url);
+        });
       }
     }
-    const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false };
+    const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false, autoBookmark: false };
     const DB = {
       getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
       addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); const existing = h.find(x => x.url === e.url); const vc = (existing?.visit_count || 0) + 1; h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now(), visit_count: vc }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
@@ -9385,7 +9440,7 @@
         return Object.values(counts).sort((a, b) => b.visits - a.visits).slice(0, limit);
       },
       getBookmarks: () => JSON.parse(localStorage.getItem('ex_bm') || '[]'),
-      addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { showToast('Already bookmarked'); return; } b.unshift({ ...e, folder: e.folder || '', ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); showToast('⭐ Bookmarked: ' + e.title) },
+      addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { if (!e.silent) showToast('Already bookmarked'); return; } b.unshift({ ...e, folder: e.folder || '', ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); if (!e.silent) showToast('⭐ Bookmarked: ' + e.title) },
       removeBookmark(u) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().filter(x => x.url !== u))) },
       updateBookmark(url, data) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().map(b => b.url === url ? { ...b, ...data } : b))) },
       getBookmarkFolders() { const folders = new Set(['']); this.getBookmarks().forEach(b => { if (b.folder) folders.add(b.folder); }); return [...folders]; },
@@ -9567,12 +9622,20 @@
       saveSessionTabs();
     }
     function saveSessionTabs() {
+      // Use window-specific keys to avoid overwriting state between windows
+      let windowId = 'main';
+      try {
+        if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+          windowId = window.electronAPI.windowId() || 'main';
+        }
+      } catch (e) { }
+
       const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
-      localStorage.setItem('ex_session_tabs', JSON.stringify(session));
-      localStorage.setItem('ex_session_active', STATE.activeTabId);
+      localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
+      localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
       // Also persist to SQLite when running inside Electron
       if (window.electronAPI) {
-        try { window.electronAPI.invoke('db:saveSession', { name: '__autosave__', tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
+        try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
       }
     }
     function closeTab(id) {
@@ -10085,11 +10148,11 @@
       document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
       showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
     });
-    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'cryptoTrackerPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     // Close panels when clicking outside (on the content/browser area)
     document.addEventListener('mousedown', e => {
-      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel']
+      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'cryptoTrackerPanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
       if (!anyOpen) return;
       // If the click is inside any open panel or on a toolbar button, do not close
@@ -10213,7 +10276,10 @@
         }
 
         // Read API key from user settings — supports both camelCase and snake_case storage
-        const _s = DB.getSettings();
+        let _s = DB.getSettings();
+        if (window.etherx && window.etherx.settings) {
+          _s = await window.etherx.settings.get();
+        }
         const userApiKey = _s.geminiApiKey || _s.gemini_api_key || '';
         if (!userApiKey) {
           loader.style.display = 'none';
@@ -10281,10 +10347,21 @@
     });
     document.getElementById('btnAiAgent').addEventListener('click', () => togglePanel('aiAgentPanel'));
     document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
+    document.getElementById('btnCryptoTracker')?.addEventListener('click', () => {
+      togglePanel('cryptoTrackerPanel');
+      const frame = document.getElementById('cryptoTrackerFrame');
+      if (frame && !frame.src) {
+        // Fallback for file protocol vs dev server
+        const trackerUrl = window.location.protocol === 'file:'
+          ? window.location.href.replace('src/index.html', 'CryptoPriceTracker/html/main.html')
+          : '/etherx-standalone/CryptoPriceTracker/html/main.html';
+        frame.src = trackerUrl;
+      }
+    });
     document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
     document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
     document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closeCryptoTrackerPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
     function renderBookmarksPanel() {
       const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
       if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -11602,17 +11679,17 @@
             document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
             return;
           }
-          
+
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
           preview.srcObject = stream;
           preview.setAttribute('playsinline', true);
           preview.style.display = 'block';
           preview.play();
           document.getElementById('qrsCameraBtn').textContent = '⏹ Stop Camera';
-          
+
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
-          
+
           _qrScanInterval = setInterval(() => {
             if (preview.readyState === preview.HAVE_ENOUGH_DATA) {
               canvas.height = preview.videoHeight;
@@ -11637,7 +11714,7 @@
               }
             }
           }, 300);
-          
+
           if (!window.jsQR) {
             showToast('📷 Camera active — waiting for jsQR library to load');
           }
@@ -11936,6 +12013,7 @@
     const DEFAULT_QUICKLINKS = [{ url: 'https://en.wikipedia.org', label: 'Wiki', icon: '📖' }, { url: 'https://github.com', label: 'GitHub', icon: '��' }, { url: 'https://app.uniswap.org', label: 'Uniswap', icon: '🦄' }, { url: 'https://etherscan.io', label: 'Etherscan', icon: '🔍' }];
     function renderQuickLinks() {
       const ql = document.getElementById('quickLinks');
+      if (!ql) return;
       // Show top 10 most visited sites based on history frequency
       const topVisited = DB.getTopVisited(10);
       let links;
@@ -11957,12 +12035,14 @@
 
     // Recently Visited
     function addRecentSite(url, title) {
-      if (!url || url === 'about:blank' || STATE.isPrivate) return;
+      if (!url || url === 'about:blank' || url === 'etherx://newtab' || STATE.isPrivate) return;
       let r = JSON.parse(localStorage.getItem('ex_recent') || '[]');
       r = r.filter(x => x.url !== url);
       try { const h = new URL(url).hostname; title = title || h; } catch (e) { }
       r.unshift({ url, title: title || url, ts: Date.now() });
       localStorage.setItem('ex_recent', JSON.stringify(r.slice(0, 20)));
+      renderRecentSites();
+      renderQuickLinks();
     }
     function getSiteFavicon(url) {
       try {
@@ -12621,7 +12701,7 @@
       const known = { MetaMask: 'nkbihfbeogaeaoehlefnkodbefgpgknn', 'uBlock Origin': 'cjpalhdlnbpafiamejdnhcphjbkeiagm', Grammarly: 'kbfnbcaeplbcioakkpcpgfkobkghlhen', Honey: 'bmnlcjabgnpnenekpadlanbbkooimhnj', LastPass: 'hdokiejnpimakedhajhdlcegeplioahd', 'Crypto Price Tracker': 'djpcnbhbkplhbnkppfopnnejhaigffjn', 'iCloud Passwords': 'pejdijmoenmkgeppbflobdenhhabjlaj' };
       const icons = { MetaMask: '\uD83E\uDD8A', 'uBlock Origin': '\uD83D\uDEE1\uFE0F', Grammarly: '\uD83D\uDCDD', Honey: '\uD83C\uDF6F', LastPass: '\uD83D\uDD11', 'Crypto Price Tracker': '\uD83D\uDCC8', 'iCloud Passwords': '\uD83D\uDD11' };
       for (const [n, kid] of Object.entries(known)) { if (val.includes(kid) || val.toLowerCase().includes(n.toLowerCase())) { name = n; id = kid; icon = icons[n] || '\uD83E\uDDE9'; } }
-      
+
       if (window.etherx?.extensions?.downloadFromCWS && m) {
         showToast('⏳ Downloading from Web Store...');
         const result = await window.etherx.extensions.downloadFromCWS(id);
@@ -12702,16 +12782,16 @@
           showToast('⏳ Downloading & installing ' + name + '...');
           const result = await window.etherx.extensions.downloadFromCWS(extId);
           if (result && result.ok) {
-            EXT_DB.add({ 
-              id: result.id || extId, 
-              name: result.name || name, 
-              icon: icon, 
-              desc: 'Loaded unpacked extension v' + (result.version || '?'), 
-              enabled: true, 
-              installMode: 'unpacked', 
-              path: result.path, 
-              source: cwsUrl, 
-              installedAt: Date.now() 
+            EXT_DB.add({
+              id: result.id || extId,
+              name: result.name || name,
+              icon: icon,
+              desc: 'Loaded unpacked extension v' + (result.version || '?'),
+              enabled: true,
+              installMode: 'unpacked',
+              path: result.path,
+              source: cwsUrl,
+              installedAt: Date.now()
             });
             showToast('✅ Installed ' + name);
           } else {
@@ -13222,7 +13302,7 @@
       function checkSystemHealth() {
         const checks = [];
         // Check panels exist
-        const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
+        const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'cryptoTrackerPanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
         let panelsOk = 0;
         panels.forEach(id => { if (document.getElementById(id)) panelsOk++; });
         checks.push(panelsOk === panels.length ? '\u2705 Svi paneli ucitani (' + panelsOk + '/' + panels.length + ')' : '\u26a0\ufe0f Paneli: ' + panelsOk + '/' + panels.length + ' ucitano');
@@ -13246,9 +13326,9 @@
         }
         // Check connection
         if (navigator.onLine) checks.push('🌐 Internet: Online');
-        else checks.push('\u274c Internet: Offline');
+        else checks.push('❌ Internet: Offline');
         // Check service worker / PWA
-        if ('serviceWorker' in navigator) checks.push('\u2705 PWA podrska dostupna');
+        if ('serviceWorker' in navigator) checks.push('✅ PWA podrska dostupna');
         // Check theme
         const theme = DB.getSettings().theme || 'dark';
         checks.push('🎨 Tema: ' + theme);
@@ -13267,6 +13347,70 @@
       async function getSmartResponse(msg) {
         const m = msg.toLowerCase().trim();
 
+        // ── Help and predefined prompts ──
+        if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
+          return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
+
+**1. Analiza sadržaja**
+• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
+
+**2. Dijagnostika browsera**
+• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
+• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
+
+**3. Edukacija o kriptovalutama**
+• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
+• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
+
+**4. Navigacija**
+• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
+
+Sve se izvršava optimalno i brzo! Što te zanima?`;
+        }
+
+        if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
+          if (performance && performance.memory) {
+            const mb = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
+            const total = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
+            return `Trenutno koristimo **${mb} MB** memorije (od dozvoljenih ${total} MB za ovaj tab). Browser radi stabilno!`;
+          }
+          return "Nažalost ne mogu pročitati točnu potrošnju memorije u ovom okruženju, ali browser radi unutar normalnih parametara.";
+        }
+
+        // ── Navigation & Actions ──
+        if (m.startsWith('otvori ') || m.startsWith('open ')) {
+          let targetUrl = m.replace('otvori ', '').replace('open ', '').trim();
+          if (!targetUrl.startsWith('http')) {
+            targetUrl = 'https://' + targetUrl;
+          }
+          createTab(targetUrl);
+          return `Otvaram ${targetUrl} u novom tabu!`;
+        }
+
+        if (m.includes('zatvori tab') || m.includes('close tab')) {
+          const t = getActiveTab();
+          if (t) {
+            closeTab(t.id);
+            return 'Trenutni tab je zatvoren.';
+          }
+          return 'Nema aktivnog taba za zatvoriti.';
+        }
+
+        if (m.includes('osvježi') || m.includes('refresh') || m.includes('reload')) {
+          const t = getActiveTab();
+          if (t) {
+            const wv = document.getElementById('wv-' + t.id);
+            if (wv) wv.reload();
+            return 'Stranica se osvježava...';
+          }
+          return 'Nema aktivne stranice za osvježiti.';
+        }
+
+        if (m.includes('očisti povijest') || m.includes('clear history')) {
+          DB.clearHistory();
+          return 'Povijest pregledavanja je uspješno obrisana.';
+        }
+
         // ── Summarize current page ──
         if (m.includes('sažetak') || m.includes('sazet') || m.includes('summar') || m.includes('analiz') || m.includes('što piše') || m.includes('sta pise') || m.includes('o čemu') || m.includes('o cemu')) {
           const tab = getActiveTab();
@@ -13276,7 +13420,8 @@
           addMsg(m, 'user'); input.value = '';
           const typing = document.createElement('div'); typing.className = 'ai-msg bot ai-typing';
           typing.innerHTML = '<span></span><span></span><span></span>';
-          msgs.appendChild(typing); msgs.scrollTop = msgs.scrollHeight;
+          msgs.appendChild(typing);
+          setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
           summarizeCurrentPage().then(result => {
             typing.remove();
             if (!result.ok) {
@@ -13425,7 +13570,8 @@
         // Make links clickable
         html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="#" onclick="navigateTo(\'$1\');return false" style="color:var(--accent);text-decoration:underline">$1</a>');
         d.innerHTML = html + '<span class="ai-time">' + (type === 'bot' ? '🤖 AI Agent' : '') + ' ' + time + '</span>';
-        msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+        msgs.appendChild(d);
+        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
       }
 
       async function send() {
@@ -13433,7 +13579,8 @@
         addMsg(text, 'user'); input.value = '';
         const typing = document.createElement('div'); typing.className = 'ai-msg bot ai-typing';
         typing.innerHTML = '<span></span><span></span><span></span>';
-        msgs.appendChild(typing); msgs.scrollTop = msgs.scrollHeight;
+        msgs.appendChild(typing);
+        setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
         try {
           const resp = await getSmartResponse(text);
           typing.remove();
@@ -13923,8 +14070,9 @@
       if (!modelSel) return;
 
       // ── Helper: read API key (supports both camelCase and snake_case storage) ──
-      function getStoredApiKey(provider) {
-        const s = DB.getSettings();
+      async function getStoredApiKey(provider) {
+        let s = DB.getSettings();
+        if (window.etherx && window.etherx.settings) s = await window.etherx.settings.get();
         if (provider === 'gemini') return s.geminiApiKey || s.gemini_api_key || '';
         if (provider === 'openai') return s.openaiApiKey || s.openai_api_key || '';
         if (provider === 'anthropic') return s.anthropicApiKey || s.anthropic_api_key || '';
@@ -13936,11 +14084,11 @@
         if (m.startsWith('claude')) return 'anthropic';
         return 'gemini';
       }
-      function currentApiKey() {
+      async function currentApiKey() {
         const p = currentProvider();
-        if (p === 'gemini') return geminiKeyEl?.value.trim() || getStoredApiKey('gemini');
-        if (p === 'openai') return openaiKeyEl?.value.trim() || getStoredApiKey('openai');
-        if (p === 'anthropic') return anthropicKeyEl?.value.trim() || getStoredApiKey('anthropic');
+        if (p === 'gemini') return geminiKeyEl?.value.trim() || await getStoredApiKey('gemini');
+        if (p === 'openai') return openaiKeyEl?.value.trim() || await getStoredApiKey('openai');
+        if (p === 'anthropic') return anthropicKeyEl?.value.trim() || await getStoredApiKey('anthropic');
         return '';
       }
 
@@ -13958,18 +14106,21 @@
       const savedProvider = cfg.aiProvider || (cfg.aiModel?.startsWith('gpt') ? 'openai' : cfg.aiModel?.startsWith('claude') ? 'anthropic' : 'gemini');
       if (providerSel) providerSel.value = savedProvider;
       if (cfg.aiModel) modelSel.value = cfg.aiModel;
-      const gk = getStoredApiKey('gemini');
-      const ok_ = getStoredApiKey('openai');
-      const ak = getStoredApiKey('anthropic');
-      if (gk && geminiKeyEl) geminiKeyEl.value = gk;
-      if (ok_ && openaiKeyEl) openaiKeyEl.value = ok_;
-      if (ak && anthropicKeyEl) anthropicKeyEl.value = ak;
-      if (cfg.aiTemperature !== undefined && tempSlider) { tempSlider.value = cfg.aiTemperature; if (tempVal) tempVal.textContent = cfg.aiTemperature; }
+      getStoredApiKey('gemini').then(gk => {
+        if (gk && geminiKeyEl) geminiKeyEl.value = gk;
+        getStoredApiKey('openai').then(ok_ => {
+          if (ok_ && openaiKeyEl) openaiKeyEl.value = ok_;
+          getStoredApiKey('anthropic').then(ak => {
+            if (ak && anthropicKeyEl) anthropicKeyEl.value = ak;
+            if (cfg.aiTemperature !== undefined && tempSlider) { tempSlider.value = cfg.aiTemperature; if (tempVal) tempVal.textContent = cfg.aiTemperature; }
 
-      // Show initial status
-      const hasKey = gk || ok_ || ak;
-      if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || 'gemini-2.5-flash') + '</strong>');
-      else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+            // Show initial status
+            const hasKey = gk || ok_ || ak;
+            if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || 'gemini-2.5-flash') + '</strong>');
+            else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+          });
+        });
+      });
 
       // ── Provider selector changes key rows ──
       function updateKeyRows() {
@@ -14072,7 +14223,7 @@
       // ── Test ALL AI functions ──
       const testBtn = document.getElementById('testAiSettings');
       if (testBtn) testBtn.addEventListener('click', async () => {
-        const key = currentApiKey();
+        const key = await currentApiKey();
         if (!key) { showBanner(false, 'API ključ nije unesen. Unesi ključ i klikni Spremi.'); return; }
         const model = modelSel.value;
         const provider = currentProvider();
@@ -14662,7 +14813,9 @@
       { id: 'btnBobiAI', key: 'showBtnBobiAI', icon: '🎬', name: 'Bobi AI' },
       { id: 'btnAiAgent', key: 'showBtnAiAgent', icon: '🤖', name: 'AI Agent' },
       { id: 'btnKripto', key: 'showBtnKripto', icon: '📰', name: 'Kripto' },
+      { id: 'btnCryptoTracker', key: 'showBtnCryptoTracker', icon: '📈', name: 'CryptoTracker' },
       { id: 'btnEtherX', key: 'showBtnEtherX', icon: '👥', name: 'EtherX' },
+      { id: 'btnCryptoPrice', key: 'showBtnCryptoPrice', icon: '📈', name: 'Crypto Tracker' },
       { id: 'btnExtensions', key: 'showBtnExtensions', icon: '🧩', name: 'Extensions' },
       { id: 'btnBookmarks', key: 'showBtnBookmarks', icon: '⭐', name: 'Bookmarks' },
       { id: 'btnHistory', key: 'showBtnHistory', icon: '🕒', name: 'History' },
@@ -14913,8 +15066,16 @@
         consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
         return;
       }
-      const saved = localStorage.getItem('ex_session_tabs');
-      const savedActiveIdx = parseInt(localStorage.getItem('ex_session_active') || '0', 10);
+      // Use window-specific keys to avoid overwriting state between windows
+      let windowId = 'main';
+      try {
+        if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+          windowId = window.electronAPI.windowId() || 'main';
+        }
+      } catch (e) { }
+
+      const saved = localStorage.getItem('ex_session_tabs_' + windowId) || localStorage.getItem('ex_session_tabs');
+      const savedActiveIdx = parseInt(localStorage.getItem('ex_session_active_' + windowId) || localStorage.getItem('ex_session_active') || '0', 10);
       if (saved) {
         try {
           const tabs = JSON.parse(saved);
@@ -15014,6 +15175,7 @@
     }
     function closeWindowSwitcher() { document.getElementById('windowSwitcher').classList.remove('show'); }
     document.getElementById('btnWindowSwitcher').addEventListener('click', openWindowSwitcher);
+    document.getElementById('btnCryptoPrice').addEventListener('click', () => togglePanel('cryptoPricePanel'));
     document.getElementById('wswClose').addEventListener('click', closeWindowSwitcher);
     document.getElementById('windowSwitcher').addEventListener('click', e => { if (e.target === document.getElementById('windowSwitcher')) closeWindowSwitcher(); });
     document.getElementById('wswNewTab').addEventListener('click', () => { createTab(); closeWindowSwitcher(); });
@@ -16322,9 +16484,9 @@
       };
 
       // Bookmarks
-      const _origAddBm = DB.addBookmark.bind(DB);
+      const _origAddBm2 = DB.addBookmark.bind(DB);
       DB.addBookmark = function (entry) {
-        _origAddBm(entry);
+        _origAddBm2(entry);
         etherx.bookmarks.add({ url: entry.url, title: entry.title || entry.url }).catch(() => { });
       };
       const _origRemoveBm = DB.removeBookmark.bind(DB);
@@ -16389,6 +16551,41 @@
           Object.entries(partial).forEach(([k, v]) => DB.saveSetting(k, v));
         } catch (e) { console.warn('saveSettings error:', e); }
       }
+
+      // Restore setting values into DOM
+      setTimeout(async () => {
+        let s = DB.getSettings();
+        if (window.etherx && window.etherx.settings) {
+          s = await window.etherx.settings.get();
+        }
+        if (s.history_retention_days !== undefined && document.getElementById('settingHistoryDays')) {
+          document.getElementById('settingHistoryDays').value = s.history_retention_days;
+        }
+        if (s.cookie_policy !== undefined && document.getElementById('settingCookiePolicy')) {
+          document.getElementById('settingCookiePolicy').value = s.cookie_policy;
+        }
+        if (s.notifications_enabled !== undefined && document.getElementById('settingNotifications')) {
+          document.getElementById('settingNotifications').checked = s.notifications_enabled;
+        }
+        if (s.notification_sound !== undefined && document.getElementById('settingNotificationSound')) {
+          document.getElementById('settingNotificationSound').checked = s.notification_sound;
+        }
+        if (s.geolocation_policy !== undefined && document.getElementById('settingGeolocation')) {
+          document.getElementById('settingGeolocation').value = s.geolocation_policy;
+        }
+        if (s.microphone_policy !== undefined && document.getElementById('settingMicrophone')) {
+          document.getElementById('settingMicrophone').value = s.microphone_policy;
+        }
+        if (s.camera_policy !== undefined && document.getElementById('settingCamera')) {
+          document.getElementById('settingCamera').value = s.camera_policy;
+        }
+        // Bookmarks auto creation (hidden internal setting, def to off now unless saved otherwise)
+        if (s.auto_bookmark !== undefined) {
+          STATE.autoBookmark = s.auto_bookmark;
+        } else {
+          STATE.autoBookmark = false; // default off 
+        }
+      }, 500);
 
       // ── History ──────────────────────────────────────────────────────────────
       document.getElementById('settingHistoryDays')?.addEventListener('change', async (e) => {
@@ -16761,20 +16958,21 @@
 
         memorySaverInterval = setInterval(() => {
           const now = Date.now();
-          TABS.forEach((tab, idx) => {
-            if (idx === activeTabIndex || !tab.lastActive) return; // Skip active tab
+          STATE.tabs.forEach((tab, id) => {
+            if (id === STATE.activeTabId || !tab.lastActive) return; // Skip active tab
             const inactiveDuration = now - tab.lastActive;
-            if (inactiveDuration > timeout && !suspendedTabs.has(idx)) {
+            if (inactiveDuration > timeout && !suspendedTabs.has(id)) {
               // Suspend this tab
-              const frame = document.getElementById('f' + idx);
-              if (frame && frame.src && frame.src !== 'about:blank') {
-                suspendedTabs.set(idx, { originalSrc: frame.src });
-                frame.src = 'about:blank';
+              const webview = document.getElementById('wv-' + id);
+              if (webview && webview.src && webview.src !== 'about:blank') {
+                suspendedTabs.set(id, { originalSrc: webview.src, html: tab.htmlContent });
+                webview.src = 'about:blank';
                 tab.suspended = true;
-                tab.title = '💤 ' + (tab.title || 'Suspended Tab');
-                document.getElementById('elemTitle').textContent = tab.title;
+                tab.title = '💤 ' + (tab.title || 'Suspended');
+                const tEl = document.getElementById('tab-' + id);
+                if (tEl) tEl.querySelector('.tab-title').textContent = tab.title;
                 updateMemorySaverStatus();
-                console.log(`[Memory Saver] Suspended tab ${idx} after ${Math.round(inactiveDuration / 60000)}min inactive`);
+                console.log(`[Memory Saver] Suspended tab ${id} after ${Math.round(inactiveDuration / 60000)}min inactive`);
               }
             }
           });
@@ -16792,7 +16990,17 @@
       });
 
       // Start Memory Saver if enabled
-      setTimeout(() => {
+      setTimeout(async () => {
+        let s = DB.getSettings();
+        if (window.etherx && window.etherx.settings) {
+          s = await window.etherx.settings.get();
+        }
+        if (s.memory_saver_enabled !== undefined && document.getElementById('settingMemorySaver')) {
+          document.getElementById('settingMemorySaver').checked = s.memory_saver_enabled;
+        }
+        if (s.memory_saver_timeout !== undefined && document.getElementById('settingMemorySaverTimeout')) {
+          document.getElementById('settingMemorySaverTimeout').value = s.memory_saver_timeout;
+        }
         if (document.getElementById('settingMemorySaver')?.checked) startMemorySaver();
       }, 5000);
 
@@ -17414,20 +17622,26 @@
         // Populate folder select
         const folders = DB.getBookmarkFolderList();
         const sel = document.getElementById('bmEditFolder');
-        sel.innerHTML = '<option value="">— Bez foldera —</option>' +
-          folders.map(f => `<option value="${escHtml(f)}" ${(b.folder || '') === f ? 'selected' : ''}>${escHtml(f)}</option>`).join('');
-        document.getElementById('bmEditFolderNew').value = '';
+        if (sel) {
+          sel.innerHTML = '<option value="">— Bez foldera —</option>' +
+            folders.map(f => `<option value="${escHtml(f)}" ${(b.folder || '') === f ? 'selected' : ''}>${escHtml(f)}</option>`).join('');
+        }
+        const foldNew = document.getElementById('bmEditFolderNew');
+        if (foldNew) foldNew.value = '';
 
-        document.getElementById('bmEditDrawer').style.display = 'block';
-        document.getElementById('bmEditTitle').focus();
+        const draw = document.getElementById('bmEditDrawer');
+        if (draw) draw.style.display = 'block';
+        const titleEl = document.getElementById('bmEditTitle');
+        if (titleEl) titleEl.focus();
       }
 
-      document.getElementById('bmEditCancel').addEventListener('click', () => {
-        document.getElementById('bmEditDrawer').style.display = 'none';
+      document.getElementById('bmEditCancel')?.addEventListener('click', () => {
+        const draw = document.getElementById('bmEditDrawer');
+        if (draw) draw.style.display = 'none';
         _bmEditingUrl = null;
       });
 
-      document.getElementById('bmEditSave').addEventListener('click', () => {
+      document.getElementById('bmEditSave')?.addEventListener('click', () => {
         const title = document.getElementById('bmEditTitle').value.trim();
         const url = document.getElementById('bmEditUrl').value.trim();
         const desc = document.getElementById('bmEditDesc').value.trim();
@@ -17461,7 +17675,8 @@
           showToast('💾 Bookmark spremljen');
         }
 
-        document.getElementById('bmEditDrawer').style.display = 'none';
+        const draw = document.getElementById('bmEditDrawer');
+        if (draw) draw.style.display = 'none';
         _bmEditingUrl = null;
         _bmRenderTree();
         _bmRenderList();
@@ -17471,8 +17686,8 @@
       // Enter to save in edit drawer
       ['bmEditTitle', 'bmEditUrl', 'bmEditDesc', 'bmEditTags', 'bmEditFolderNew'].forEach(id => {
         document.getElementById(id)?.addEventListener('keydown', e => {
-          if (e.key === 'Enter') document.getElementById('bmEditSave').click();
-          if (e.key === 'Escape') document.getElementById('bmEditCancel').click();
+          if (e.key === 'Enter') document.getElementById('bmEditSave')?.click();
+          if (e.key === 'Escape') document.getElementById('bmEditCancel')?.click();
         });
       });
 
