@@ -7110,7 +7110,8 @@
                   <div class="s-row-label">Max bookmarks shown</div>
                   <div class="s-row-desc">Number of bookmarks to display in the toolbar (1–20)</div>
                 </div>
-                <input type="number" class="s-select" id="settingBookmarkBarMax" data-setting="bookmark_bar_max" min="1" max="20" value="8" style="width:60px;text-align:center">
+                <input type="number" class="s-select" id="settingBookmarkBarMax" data-setting="bookmark_bar_max" min="1"
+                  max="20" value="8" style="width:60px;text-align:center">
               </div>
             </div>
             <div class="s-group" id="toolbarIconRows">
@@ -7879,7 +7880,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.46</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.47</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8180,7 +8181,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.46</span></div>
+                id="helpVersionNum2">2.4.47</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9121,7 +9122,9 @@
       try {
         if (window.self !== window.top) {
           // We are inside an iframe — if loaded as a page, break out
-          document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+          if (document.documentElement) {
+            document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+          }
           window.stop && window.stop();
           return;
         }
@@ -9478,7 +9481,7 @@
           // Tear off: open in new Electron window (not external browser)
           const url = tab.url || 'about:blank';
           if (window.electronAPI?.invoke) {
-            window.electronAPI.invoke('app:moveTabToWindow', url, tab.title || '').catch(() => {});
+            window.electronAPI.invoke('app:moveTabToWindow', url, tab.title || '').catch(() => { });
           } else {
             showToast('🪟 Tab tear-off requires the desktop app');
             return; // don't close the tab if we can't open a new window
@@ -10290,8 +10293,8 @@
       toolbar.style.cssText = 'display:flex;gap:6px;padding:4px 8px;border-bottom:1px solid var(--border)';
       toolbar.innerHTML = '<button id="bmAddFolder" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);padding:2px 8px;cursor:pointer;font-size:11px">📁 New Folder</button>';
       list.appendChild(toolbar);
-      toolbar.querySelector('#bmAddFolder').addEventListener('click', () => {
-        const name = prompt('Folder name:');
+      toolbar.querySelector('#bmAddFolder').addEventListener('click', async () => {
+        const name = await showPrompt('Folder name:');
         if (name && name.trim()) { DB.createBookmarkFolder(name.trim()); renderBookmarksPanel(); }
       });
       // Group by folder
@@ -10325,11 +10328,11 @@
       el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${b.url}">${b.title || b.url}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-move" title="Move to folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;margin-right:4px">📁</button><button class="p-entry-del">×</button>`;
       el.querySelector('.p-entry-title').addEventListener('click', () => { navigateTo(b.url); closeAllPanels(); });
       el.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); DB.removeBookmark(b.url); renderBookmarksPanel(); });
-      el.querySelector('.p-entry-move').addEventListener('click', e => {
+      el.querySelector('.p-entry-move').addEventListener('click', async e => {
         e.stopPropagation();
         const folders = DB.getBookmarkFolderList();
         if (folders.length === 0) { showToast('Create a folder first'); return; }
-        const choice = prompt('Move to folder:\\n' + folders.map((f, i) => (i + 1) + '. ' + f).join('\\n') + '\\n\\nEnter folder name or number:');
+        const choice = await showPrompt('Move to folder:\\n' + folders.map((f, i) => (i + 1) + '. ' + f).join('\\n') + '\\n\\nEnter folder name or number:');
         if (!choice) return;
         const target = folders[parseInt(choice) - 1] || choice;
         DB.updateBookmark(b.url, { folder: target });
@@ -10802,7 +10805,9 @@
               <div style="margin-top:8px">You can still inspect the <strong>browser UI</strong> by clicking ↺ Refresh when no page is loaded.</div>
             </div>
           </div>`;
-          consoleLog('error', 'DOM tree render failed: ' + e.message, 'Elements');
+          if (!e.message?.includes('cross-origin') && !e.message?.includes('Blocked a frame') && !e.message?.includes('named property')) {
+            consoleLog('error', 'DOM tree render failed: ' + e.message, 'Elements');
+          }
         }
       }, 50);
     }
@@ -11237,11 +11242,11 @@
     }
 
     // ── Application tab CRUD helpers ──────────────────────────────────────────
-    function _editSetting(k) {
+    async function _editSetting(k) {
       const HIDDEN = ['gemini_api_key', 'openai_api_key', 'api_key'];
       const s = DB.getSettings();
       const cur = HIDDEN.some(h => k.includes(h)) ? '' : (s[k] !== undefined ? String(s[k]) : '');
-      const nv = prompt('Edit setting: ' + k, cur);
+      const nv = await showPrompt('Edit setting: ' + k, cur);
       if (nv === null) return;
       let parsed = nv;
       if (nv === 'true') parsed = true; else if (nv === 'false') parsed = false; else if (!isNaN(nv) && nv !== '') parsed = Number(nv);
@@ -11265,16 +11270,16 @@
       renderAppTab('sqlite-settings');
       showToast('✅ Setting "' + k + '" added');
     }
-    function _editUserField(f) {
+    async function _editUserField(f) {
       const u = DB.getUser();
-      const nv = prompt('Edit ' + f + ':', u[f] || '');
+      const nv = await showPrompt('Edit ' + f + ':', u[f] || '');
       if (nv === null) return;
       DB.saveUser({ [f]: nv });
       renderAppTab('sqlite-user');
       showToast('✅ User ' + f + ' updated');
     }
-    function _changeUserAvatar() {
-      const choice = prompt('Avatar options:\n1. Enter emoji (e.g. 👤 🦊 🎮)\n2. Type "upload" to upload an image\n\nEnter emoji or "upload":', DB.getUser().avatar || '👤');
+    async function _changeUserAvatar() {
+      const choice = await showPrompt('Avatar options:\n1. Enter emoji (e.g. 👤 🦊 🎮)\n2. Type "upload" to upload an image\n\nEnter emoji or "upload":', DB.getUser().avatar || '👤');
       if (choice === null) return;
       if (choice.toLowerCase() === 'upload') {
         if (window.electronAPI) {
@@ -11304,12 +11309,12 @@
       renderAppTab('sqlite-notes');
       showToast('📝 Note added: ' + t);
     }
-    function _editNote(id) {
+    async function _editNote(id) {
       const n = DB.getNotes().find(x => x.id === id);
       if (!n) return;
-      const nt = prompt('Title:', n.title || '');
+      const nt = await showPrompt('Title:', n.title || '');
       if (nt === null) return;
-      const nb = prompt('Content:', n.content || '');
+      const nb = await showPrompt('Content:', n.content || '');
       if (nb === null) return;
       DB.updateNote(id, { title: nt, content: nb });
       renderAppTab('sqlite-notes');
@@ -11424,8 +11429,8 @@
     document.getElementById('mi-show-shared').addEventListener('click', () => showToast('👥 Shared with You — not available in web mode'));
     document.getElementById('mi-show-downloads-view').addEventListener('click', () => togglePanel('dlPanel'));
     document.getElementById('mi-stop').addEventListener('click', () => { frame.src = 'about:blank'; setLoading(0); showToast('✕ Stopped'); consoleLog('warn', '✕ Page load stopped'); });
-    document.getElementById('mi-translation').addEventListener('click', () => { const t = getActiveTab(); if (!t?.url) { showToast('No page to translate'); return; } const lang = prompt('Translate to (e.g. hr, de, fr, es):', 'hr'); if (lang) { navigateTo('https://translate.google.com/translate?sl=auto&tl=' + lang + '&u=' + encodeURIComponent(t.url)); } });
-    document.getElementById('mi-text-encoding').addEventListener('click', () => { const enc = prompt('Text encoding (e.g. UTF-8, ISO-8859-1):', 'UTF-8'); if (enc) showToast('⌘ Encoding set to: ' + enc); });
+    document.getElementById('mi-translation').addEventListener('click', async () => { const t = getActiveTab(); if (!t?.url) { showToast('No page to translate'); return; } const lang = await showPrompt('Translate to (e.g. hr, de, fr, es):', 'hr'); if (lang) { navigateTo('https://translate.google.com/translate?sl=auto&tl=' + lang + '&u=' + encodeURIComponent(t.url)); } });
+    document.getElementById('mi-text-encoding').addEventListener('click', async () => { const enc = await showPrompt('Text encoding (e.g. UTF-8, ISO-8859-1):', 'UTF-8'); if (enc) showToast('⌘ Encoding set to: ' + enc); });
     document.getElementById('mi-show-history').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
     document.getElementById('mi-back-menu').addEventListener('click', () => document.getElementById('btnBack').click());
     document.getElementById('mi-fwd-menu').addEventListener('click', () => document.getElementById('btnFwd').click());
@@ -11443,8 +11448,8 @@
         showToast('🔖 Added ' + count + ' bookmarks');
       }
     });
-    document.getElementById('mi-add-bm-folder').addEventListener('click', () => {
-      const name = prompt('Folder name:');
+    document.getElementById('mi-add-bm-folder').addEventListener('click', async () => {
+      const name = await showPrompt('Folder name:');
       if (name) { const folders = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); folders.push({ name, ts: Date.now() }); localStorage.setItem('ex_bm_folders', JSON.stringify(folders)); showToast('📁 Folder "' + name + '" created'); }
     });
     // Reading List
@@ -11645,10 +11650,12 @@
       if (window.electronWebview) {
         const wv = document.getElementById('browseFrame');
         if (wv && typeof wv.executeJavaScript === 'function') {
-          wv.executeJavaScript('document.documentElement.outerHTML').then(src => {
-            const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            codeEl.innerHTML = '<pre style="white-space:pre-wrap;color:#d4d4d4;font-size:12px;padding:12px">' + esc + '</pre>';
-          }).catch(() => { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable in Electron mode</div>'; });
+          try {
+            wv.executeJavaScript('document.documentElement.outerHTML').then(src => {
+              const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              codeEl.innerHTML = '<pre style="white-space:pre-wrap;color:#d4d4d4;font-size:12px;padding:12px">' + esc + '</pre>';
+            }).catch(() => { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable in Electron mode</div>'; });
+          } catch (_) { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable</div>'; }
         } else { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable</div>'; }
         return;
       }
@@ -12071,19 +12078,21 @@
           else { set('secCsp', 'N/A — nije dostupno (proxy mode)'); badge('secCspBadge', 'sec-warn', 'N/A'); }
         } else if (wv && wv.executeJavaScript) {
           set('secCsp', '…'); badge('secCspBadge', 'sec-warn', '…');
-          Promise.race([
-            wv.executeJavaScript('(()=>{const m=document.querySelector(\'meta[http-equiv="Content-Security-Policy"]\');return m?m.content:"";})()'),
-            new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1500))
-          ]).then(csp => {
-            csp = csp || '';
-            _secCspCache.set(url, { csp, ts: Date.now() });
-            if (t) t._csp = csp;
-            if (csp) { set('secCsp', csp.slice(0, 120) + (csp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
-            else { set('secCsp', 'No CSP header (meta)'); badge('secCspBadge', 'sec-warn', 'Missing'); }
-          }).catch(() => {
-            _secCspCache.set(url, { csp: '', ts: Date.now() });
-            set('secCsp', 'Not accessible'); badge('secCspBadge', 'sec-warn', 'Unknown');
-          });
+          try {
+            Promise.race([
+              wv.executeJavaScript('(()=>{const m=document.querySelector(\'meta[http-equiv="Content-Security-Policy"]\');return m?m.content:"";})()'),
+              new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1500))
+            ]).then(csp => {
+              csp = csp || '';
+              _secCspCache.set(url, { csp, ts: Date.now() });
+              if (t) t._csp = csp;
+              if (csp) { set('secCsp', csp.slice(0, 120) + (csp.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
+              else { set('secCsp', 'No CSP header (meta)'); badge('secCspBadge', 'sec-warn', 'Missing'); }
+            }).catch(() => {
+              _secCspCache.set(url, { csp: '', ts: Date.now() });
+              set('secCsp', 'Not accessible'); badge('secCspBadge', 'sec-warn', 'Unknown');
+            });
+          } catch (_) { set('secCsp', 'Not accessible'); badge('secCspBadge', 'sec-warn', 'Unknown'); }
         } else {
           set('secCsp', 'Not accessible'); badge('secCspBadge', 'sec-warn', 'Unknown');
         }
@@ -12421,10 +12430,12 @@
         if (uf) { ns.call(uf, ${JSON.stringify(username)}); uf.dispatchEvent(new Event('input',{bubbles:true})); uf.dispatchEvent(new Event('change',{bubbles:true})); }
         return !!(pwField || uf);
       })()`;
-      wv.executeJavaScript(script).then(ok => {
-        showToast(ok ? '🔑 Credentials filled!' : '🔑 No form found — password copied');
-        if (!ok) navigator.clipboard?.writeText(password);
-      }).catch(() => { navigator.clipboard?.writeText(password); showToast('🔑 Password copied to clipboard'); });
+      try {
+        wv.executeJavaScript(script).then(ok => {
+          showToast(ok ? '🔑 Credentials filled!' : '🔑 No form found — password copied');
+          if (!ok) navigator.clipboard?.writeText(password);
+        }).catch(() => { navigator.clipboard?.writeText(password); showToast('🔑 Password copied to clipboard'); });
+      } catch (_) { navigator.clipboard?.writeText(password); showToast('🔑 Password copied to clipboard'); }
     }
     function showAutofillBox(x, y, items, onSelect) {
       afBox.innerHTML = '';
@@ -12550,11 +12561,11 @@
         });
       }
       renderCardList();
-      addCardBtn?.addEventListener('click', () => {
-        const holder = prompt('Cardholder name:'); if (!holder) return;
-        const number = prompt('Card number (16 digits):'); if (!number) return;
-        const expiry = prompt('Expiry (MM/YY):'); if (!expiry) return;
-        const cvv = prompt('CVV:'); if (!cvv) return;
+      addCardBtn?.addEventListener('click', async () => {
+        const holder = await showPrompt('Cardholder name:'); if (!holder) return;
+        const number = await showPrompt('Card number (16 digits):'); if (!number) return;
+        const expiry = await showPrompt('Expiry (MM/YY):'); if (!expiry) return;
+        const cvv = await showPrompt('CVV:'); if (!cvv) return;
         const last4 = number.replace(/\s/g, '').slice(-4);
         const cards = getCards();
         cards.push({ holder, number: number.replace(/\s/g, ''), last4, expiry, cvv, ts: Date.now() });
@@ -12797,9 +12808,9 @@
         const a = document.createElement('a'); a.href = _ctxTargetUrl; a.download = ''; a.click(); showToast('⬇️ Download started');
       }
     });
-    document.getElementById('ctx-download-link-as').addEventListener('click', () => {
+    document.getElementById('ctx-download-link-as').addEventListener('click', async () => {
       if (_ctxTargetUrl) {
-        const name = prompt('Save as:', _ctxTargetUrl.split('/').pop() || 'file');
+        const name = await showPrompt('Save as:', _ctxTargetUrl.split('/').pop() || 'file');
         if (name) {
           DB.upsertDownload({ id: `manual-${Date.now()}`, url: _ctxTargetUrl, filename: name, status: 'started', ts: Date.now() });
           openDownloadsPanelWithRefresh();
@@ -12858,6 +12869,39 @@
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
     function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
+    function showPrompt(message, defaultVal = '', opts = {}) {
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--bg1,#1e1e1e);border:1px solid var(--border,#444);border-radius:10px;padding:20px 24px;min-width:320px;max-width:480px;font-family:system-ui,sans-serif;font-size:13px;color:var(--text1,#e8e8e8);box-shadow:0 8px 32px rgba(0,0,0,.6)';
+        const msg = document.createElement('div');
+        msg.style.cssText = 'margin-bottom:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word';
+        msg.textContent = message;
+        const input = document.createElement('input');
+        input.type = opts.password ? 'password' : 'text';
+        input.value = String(defaultVal ?? '');
+        input.style.cssText = 'width:100%;box-sizing:border-box;padding:7px 10px;background:var(--bg2,#2a2a2a);border:1px solid var(--border2,#555);border-radius:6px;color:var(--text1,#e8e8e8);font-size:13px;outline:none;margin-bottom:14px';
+        const btns = document.createElement('div');
+        btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = 'padding:6px 16px;background:var(--bg3,#333);border:1px solid var(--border2,#555);border-radius:6px;color:var(--text2,#aaa);cursor:pointer;font-size:12px';
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'OK';
+        okBtn.style.cssText = 'padding:6px 16px;background:var(--accent,#4c8ef7);border:none;border-radius:6px;color:#fff;cursor:pointer;font-size:12px;font-weight:500';
+        const done = val => { overlay.remove(); resolve(val); };
+        okBtn.addEventListener('click', () => done(input.value));
+        cancelBtn.addEventListener('click', () => done(null));
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') done(input.value); if (e.key === 'Escape') done(null); });
+        overlay.addEventListener('click', e => { if (e.target === overlay) done(null); });
+        btns.append(cancelBtn, okBtn);
+        box.append(msg, input, btns);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        setTimeout(() => { input.focus(); input.select(); }, 10);
+      });
+    }
     function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const clockColor = cfg.clockColor || '#ffffff'; clockEl.style.color = clockColor; const clockSize = cfg.clockSize || 15; clockEl.style.fontSize = clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) { de.textContent = (datePfx ? datePfx + ' ' : '') + d; const dateColor = cfg.dateColor || '#ffffff'; de.style.color = dateColor; const dateSize = cfg.dateSize || 12; de.style.fontSize = dateSize + 'px'; } }
     updateClock(); setInterval(updateClock, 30000);
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
@@ -13483,10 +13527,10 @@
       }
       authInput?.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
       modal?.addEventListener('click', e => { if (e.target === modal) closePwdModal(); });
-      addBtn?.addEventListener('click', () => {
-        const site = prompt('Website:'); if (!site) return;
-        const username = prompt('Username/Email:'); if (!username) return;
-        const password = prompt('Password:'); if (!password) return;
+      addBtn?.addEventListener('click', async () => {
+        const site = await showPrompt('Website:'); if (!site) return;
+        const username = await showPrompt('Username/Email:'); if (!username) return;
+        const password = await showPrompt('Password:', '', { password: true }); if (!password) return;
         const passwords = getPasswords(); passwords.push({ site, username, password, ts: Date.now() });
         savePasswords(passwords); renderPwdList(); updateAutofillBtnState(); showToast('🔑 Password saved');
       });
@@ -14262,8 +14306,8 @@
             if (result?.ok && result.dataUrl) { DB.saveUser({ avatarUrl: result.dataUrl }); refreshPreview(); showToast('📸 Profile picture updated'); }
           } else { showToast('⚠️ Not available in browser mode'); }
         });
-        if (emojiBtn) emojiBtn.addEventListener('click', () => {
-          const nv = prompt('Enter emoji or text for avatar:', DB.getUser().avatar || '👤');
+        if (emojiBtn) emojiBtn.addEventListener('click', async () => {
+          const nv = await showPrompt('Enter emoji or text for avatar:', DB.getUser().avatar || '👤');
           if (nv === null) return;
           DB.saveUser({ avatar: nv, avatarUrl: null });
           refreshPreview();
@@ -15298,8 +15342,8 @@
     });
 
     // ── Master Password Change ────────────────────────────────────────────────
-    document.getElementById('sChangeMasterPwd')?.addEventListener('click', () => {
-      const oldPwd = prompt('🔐 Enter your CURRENT master password:\n\n⚠️ Master password is NEVER saved. It\'s only used to encrypt/decrypt your data.');
+    document.getElementById('sChangeMasterPwd')?.addEventListener('click', async () => {
+      const oldPwd = await showPrompt('🔐 Enter your CURRENT master password:\n\n⚠️ Master password is NEVER saved. It\'s only used to encrypt/decrypt your data.', '', { password: true });
       if (!oldPwd) return;
 
       // Verify current password by trying to decrypt something
@@ -15319,10 +15363,10 @@
         }
       }
 
-      const newPwd = prompt('🔐 Enter your NEW master password:\n\n⚠️ You will need this password to unlock your data. DO NOT FORGET IT!');
+      const newPwd = await showPrompt('🔐 Enter your NEW master password:\n\n⚠️ You will need this password to unlock your data. DO NOT FORGET IT!', '', { password: true });
       if (!newPwd || newPwd.length < 4) { showToast('⚠️ New password must be at least 4 characters'); return; }
 
-      const confirmPwd = prompt('🔐 Confirm NEW master password:');
+      const confirmPwd = await showPrompt('🔐 Confirm NEW master password:', '', { password: true });
       if (confirmPwd !== newPwd) { showToast('❌ Passwords do not match'); return; }
 
       // Store encrypted verification token
@@ -16832,7 +16876,7 @@
 
         // Web Notifications API: request permission when enabled
         if (cfg.webNotif !== false && 'Notification' in window && Notification.permission === 'default') {
-          Notification.requestPermission().catch(() => {});
+          Notification.requestPermission().catch(() => { });
         }
 
         // EIP-6963: inject wallet discovery into active webview
@@ -16853,8 +16897,8 @@
                     }));
                   });
                 })();
-              `).catch(() => {});
-            } catch (_) {}
+              `).catch(() => { });
+            } catch (_) { }
           }
         }
       }
@@ -17185,8 +17229,8 @@
       });
 
       // ── Add Folder ──────────────────────────────────────────────────────
-      document.getElementById('bmMgrAddFolder').addEventListener('click', () => {
-        const name = prompt('Naziv novog foldera:');
+      document.getElementById('bmMgrAddFolder').addEventListener('click', async () => {
+        const name = await showPrompt('Naziv novog foldera:');
         if (name && name.trim()) {
           DB.createBookmarkFolder(name.trim());
           _bmActiveFolder = name.trim();
