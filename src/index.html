@@ -5626,9 +5626,7 @@
     <button class="nav-btn icon-btn" id="btnSummarizePage" title="Sažetak stranice (BobiAI)">✨</button>
     <button class="nav-btn icon-btn" id="btnAiAgent" title="AI Agent">🤖</button>
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
-    <button class="nav-btn icon-btn" id="btnCryptoTracker" title="Crypto Price Tracker">📈</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
-    <button class="nav-btn icon-btn" id="btnCryptoTracker" title="Crypto Price Tracker">📈</button>
     <button class="nav-btn icon-btn" id="btnExtensions" title="Extensions">🧩</button>
     <button class="nav-btn icon-btn" id="btnBookmarks" title="Bookmarks (Ctrl+B)">⭐</button>
     <button class="nav-btn icon-btn" id="btnHistory" title="History (Ctrl+H)">🕒</button>
@@ -7169,23 +7167,6 @@
                 </div>
                 <div class="toggle on" data-setting="showBtnKripto" data-icon="btnKripto"></div>
               </div>
-              <div class="s-row" draggable="true" data-icon-key="showBtnCryptoTracker">
-                <div class="s-row-left">
-                  <span class="tir-drag" title="Pomakni">⠏</span>
-                  <button class="s-icon-edit-btn" data-icon-target="btnCryptoTracker"
-                    title="Promijeni ikonu">📈</button>
-                  <div class="s-row-label">Crypto Price Tracker</div>
-                </div>
-                <div class="toggle on" data-setting="showBtnCryptoTracker" data-icon="btnCryptoTracker"></div>
-              </div>
-              <div class="s-row" draggable="true" data-icon-key="showBtnCryptoPrice">
-                <div class="s-row-left">
-                  <span class="tir-drag" title="Pomakni">⠏</span>
-                  <button class="s-icon-edit-btn" data-icon-target="btnCryptoPrice" title="Promijeni ikonu">📈</button>
-                  <div class="s-row-label">Crypto Price Tracker</div>
-                </div>
-                <div class="toggle on" data-setting="showBtnCryptoPrice" data-icon="btnCryptoPrice"></div>
-              </div>
               <div class="s-row" draggable="true" data-icon-key="showBtnEtherX">
                 <div class="s-row-left">
                   <span class="tir-drag" title="Pomakni">⠏</span>
@@ -7905,7 +7886,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.51</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.52</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8206,7 +8187,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.51</span></div>
+                id="helpVersionNum2">2.4.52</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8376,18 +8357,6 @@
           <input type="text" class="ai-chat-input" id="aiChatInput" placeholder="Pitaj AI agenta..." autocomplete="off">
           <button class="ai-chat-send" id="aiChatSend">↑</button>
         </div>
-      </div>
-    </div>
-    <!-- Crypto Price Tracker Panel -->
-    <div class="panel" id="cryptoTrackerPanel" style="width:420px;height:500px">
-      <div class="panel-header" style="padding:8px 12px;background:linear-gradient(135deg,#0e8529 0%,#09591a 100%)">
-        <span class="panel-title">📈 Crypto Price Tracker</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <button class="panel-close" id="closeCryptoTrackerPanel">×</button>
-        </div>
-      </div>
-      <div style="flex:1;position:relative">
-        <iframe id="cryptoTrackerFrame" src="" style="width:100%;height:100%;border:none;background:var(--bg)"></iframe>
       </div>
     </div>
     <!-- Kriptoentuzijasti Panel -->
@@ -10148,11 +10117,11 @@
       document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
       showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
     });
-    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'cryptoTrackerPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     // Close panels when clicking outside (on the content/browser area)
     document.addEventListener('mousedown', e => {
-      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'cryptoTrackerPanel']
+      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
       if (!anyOpen) return;
       // If the click is inside any open panel or on a toolbar button, do not close
@@ -10347,27 +10316,10 @@
     });
     document.getElementById('btnAiAgent').addEventListener('click', () => togglePanel('aiAgentPanel'));
     document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
-    document.getElementById('btnCryptoTracker')?.addEventListener('click', () => {
-      togglePanel('cryptoTrackerPanel');
-      const frame = document.getElementById('cryptoTrackerFrame');
-      if (frame && !frame.src) {
-        // Fallback for file protocol vs dev server
-        let trackerUrl = '/etherx-standalone/CryptoPriceTracker/html/main.html';
-        if (window.location.protocol === 'file:') {
-          const p = window.location.pathname;
-          if (p.includes('app.asar')) {
-            trackerUrl = 'file://' + p.split('app.asar')[0] + 'app.asar/CryptoPriceTracker/html/main.html';
-          } else {
-            trackerUrl = window.location.href.replace('src/index.html', 'CryptoPriceTracker/html/main.html');
-          }
-        }
-        frame.src = trackerUrl;
-      }
-    });
     document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
     document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
     document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closeCryptoTrackerPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
     function renderBookmarksPanel() {
       const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
       if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -13308,7 +13260,7 @@
       function checkSystemHealth() {
         const checks = [];
         // Check panels exist
-        const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'cryptoTrackerPanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
+        const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
         let panelsOk = 0;
         panels.forEach(id => { if (document.getElementById(id)) panelsOk++; });
         checks.push(panelsOk === panels.length ? '\u2705 Svi paneli ucitani (' + panelsOk + '/' + panels.length + ')' : '\u26a0\ufe0f Paneli: ' + panelsOk + '/' + panels.length + ' ucitano');
@@ -14819,9 +14771,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       { id: 'btnBobiAI', key: 'showBtnBobiAI', icon: '🎬', name: 'Bobi AI' },
       { id: 'btnAiAgent', key: 'showBtnAiAgent', icon: '🤖', name: 'AI Agent' },
       { id: 'btnKripto', key: 'showBtnKripto', icon: '📰', name: 'Kripto' },
-      { id: 'btnCryptoTracker', key: 'showBtnCryptoTracker', icon: '📈', name: 'CryptoTracker' },
       { id: 'btnEtherX', key: 'showBtnEtherX', icon: '👥', name: 'EtherX' },
-      { id: 'btnCryptoPrice', key: 'showBtnCryptoPrice', icon: '📈', name: 'Crypto Tracker' },
       { id: 'btnExtensions', key: 'showBtnExtensions', icon: '🧩', name: 'Extensions' },
       { id: 'btnBookmarks', key: 'showBtnBookmarks', icon: '⭐', name: 'Bookmarks' },
       { id: 'btnHistory', key: 'showBtnHistory', icon: '🕒', name: 'History' },
