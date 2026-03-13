@@ -202,20 +202,30 @@ if [[ -f "$REPO_DIR/.env.local" ]]; then
   source "$REPO_DIR/.env.local"
 fi
 
-GITHUB_REMOTE_URL="https://${GITHUB_TOKEN_DEPLOY:-}@github.com/ktrucek/etherx-standalone.git"
+# Token se NIKAD ne upisuje u .git/config — koristi se samo za push komandu
+GITHUB_REPO_URL="https://github.com/ktrucek/etherx-standalone.git"
 
-# Ensure github remote
+# Ensure github remote points to clean URL (without token)
 if git remote get-url github &>/dev/null; then
-  git remote set-url github "$GITHUB_REMOTE_URL"
+  git remote set-url github "$GITHUB_REPO_URL"
 else
-  git remote add github "$GITHUB_REMOTE_URL"
+  git remote add github "$GITHUB_REPO_URL"
 fi
 
 # ── Push to GitHub ───────────────────────────────────────────────────────
 if [[ "$NO_PUSH" == false ]]; then
 
+  # Provjera tokena
+  if [[ -z "${GITHUB_TOKEN_DEPLOY:-}" ]]; then
+    error "GITHUB_TOKEN_DEPLOY nije postavljen u .env.local — ne mogu pushati na GitHub"
+  fi
+
+  # Credentials via -c http.extraHeader — ne upisuje se u .git/config, vidljivo samo za ovaj poziv
+  GIT_AUTH=(-c "http.extraHeader=Authorization: Basic $(echo -n "x-token:${GITHUB_TOKEN_DEPLOY}" | base64 -w0)")
+
   info "Pushing to GitHub (triggers build)..."
-  if git push --force-with-lease github main && git push -f github "$TAG_NAME"; then
+  if git "${GIT_AUTH[@]}" push --force-with-lease github main && \
+     git "${GIT_AUTH[@]}" push -f github "$TAG_NAME"; then
     success "Pushed to GitHub → GitHub Actions će buildati"
     
     # ── Update EtherX.io download page ─────────────────────────────────────────

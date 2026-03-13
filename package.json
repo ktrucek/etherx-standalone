@@ -37,6 +37,9 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "!src/**/*.backup*",
+      "!src/**/*.bak",
+      "!src/**/*.tmp",
       "assets/**/*",
       "package.json",
       "node_modules/**/*"
