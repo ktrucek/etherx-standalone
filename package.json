@@ -67,7 +67,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
     "electron": "^37.10.3",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^24.13.3"
   },
   "dependencies": {
     "@cliqz/adblocker-electron": "^1.26.8",
