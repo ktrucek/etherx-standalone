@@ -3,7 +3,9 @@
   try {
     if (window.self !== window.top) {
       // We are inside an iframe — if loaded as a page, break out
-      document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+      if (document.documentElement) {
+        document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+      }
       window.stop && window.stop();
       return;
     }
@@ -83,7 +85,7 @@ const DB = {
   addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
   clearHistory() { localStorage.removeItem('ex_hist') },
   getBookmarks: () => JSON.parse(localStorage.getItem('ex_bm') || '[]'),
-  addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { showToast('Already bookmarked'); return; } b.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); showToast('⭐ Bookmarked: ' + e.title) },
+  addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { if (!e.silent) showToast('Already bookmarked'); return; } b.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); if (!e.silent) showToast('⭐ Bookmarked: ' + e.title) },
   removeBookmark(u) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().filter(x => x.url !== u))) },
   getSettings: () => {
     const now = Date.now();
@@ -297,9 +299,16 @@ function switchTab(id) {
   saveSessionTabs();
 }
 function saveSessionTabs() {
+  let windowId = 'main';
+  try {
+    if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+      windowId = window.electronAPI.windowId() || 'main';
+    }
+  } catch (e) { }
+
   const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
-  localStorage.setItem('ex_session_tabs', JSON.stringify(session));
-  localStorage.setItem('ex_session_active', STATE.activeTabId);
+  localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
+  localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
 }
 function closeTab(id) {
   const idx = STATE.tabs.findIndex(t => t.id === id); if (idx === -1) return;
@@ -734,8 +743,8 @@ document.getElementById('mi-new-private').addEventListener('click', () => {
   document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
   showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
 });
-function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
-function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
+function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel?.classList.contains('open'); closeAllPanels(); if (!wasOpen && panel) panel.classList.add('open'); }
 document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
 document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
 document.getElementById('btnDownloads').addEventListener('click', () => togglePanel('dlPanel'));
@@ -753,8 +762,14 @@ document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel
 // ── Gemini Page Summarizer ────────────────────────────────────────────────
 // API key is loaded from user settings (Settings → AI) — never hardcoded
 const GEMINI_MODEL = 'gemini-2.5-flash';
-function getGeminiEndpoint() {
-  const key = (typeof DB !== 'undefined' && DB.getSettings().gemini_api_key) || '';
+async function getGeminiEndpoint() {
+  let key = '';
+  if (window.etherx && window.etherx.settings) {
+    const s = await window.etherx.settings.get();
+    key = s.geminiApiKey || s.gemini_api_key || '';
+  } else {
+    key = (typeof DB !== 'undefined' && DB.getSettings().gemini_api_key) || '';
+  }
   return key ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}` : null;
 }
 
@@ -858,7 +873,7 @@ async function summarizeCurrentPage() {
 
     const prompt = `You are a concise summarizer. Respond with exactly 3 bullet points using the • character. Each bullet is one clear sentence in Croatian language. No intro text, no conclusion.\n\nSummarize the key points of this web page in 3 bullet points:\n\nURL: ${url}\n\n${pageText}`;
 
-    const GEMINI_ENDPOINT = getGeminiEndpoint();
+    const GEMINI_ENDPOINT = await getGeminiEndpoint();
     if (!GEMINI_ENDPOINT) {
       loader.style.display = 'none';
       _renderSummaryError(bulletsEl, 'Gemini API ključ nije postavljen. Idi u Postavke → AI i unesi API ključ.');
@@ -928,7 +943,7 @@ document.getElementById('btnKripto').addEventListener('click', () => togglePanel
 document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
 document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
 document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
 function renderBookmarksPanel() {
   const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
   if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -1159,7 +1174,9 @@ function renderDOMTree() {
       showToast('🔄 DOM tree refreshed');
     } catch (e) {
       view.innerHTML = `<div style="color:#f48771;padding:8px">⚠️ Cannot access frame document (cross-origin or error)</div>`;
-      consoleLog('error', 'DOM tree render failed: ' + e.message, 'Elements');
+      if (!e.message?.includes('cross-origin') && !e.message?.includes('Blocked a frame') && !e.message?.includes('named property')) {
+        consoleLog('error', 'DOM tree render failed: ' + e.message, 'Elements');
+      }
     }
   }, 50);
 }
@@ -1776,19 +1793,59 @@ document.getElementById('mi-network').addEventListener('click', () => document.q
   });
 
   // Camera scan (basic — opens device camera)
+  let _qrScanInterval;
   document.getElementById('qrsCameraBtn').addEventListener('click', async () => {
     const preview = document.getElementById('qrsCameraPreview');
     try {
+      if (preview.srcObject) {
+        // Stop camera if already running
+        const stream = preview.srcObject;
+        stream.getTracks().forEach(t => t.stop());
+        preview.srcObject = null;
+        preview.style.display = 'none';
+        clearInterval(_qrScanInterval);
+        document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       preview.srcObject = stream;
+      preview.setAttribute('playsinline', true); // required to tell iOS safari we don't want fullscreen
       preview.style.display = 'block';
+      preview.play();
       document.getElementById('qrsCameraBtn').textContent = '⏹ Stop Camera';
-      document.getElementById('qrsCameraBtn').addEventListener('click', () => {
-        stream.getTracks().forEach(t => t.stop());
-        preview.style.display = 'none';
-        document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
-      }, { once: true });
-      showToast('📷 Camera active — QR scanning requires a native app');
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      _qrScanInterval = setInterval(() => {
+        if (preview.readyState === preview.HAVE_ENOUGH_DATA) {
+          canvas.height = preview.videoHeight;
+          canvas.width = preview.videoWidth;
+          ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          if (window.jsQR) {
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+            if (code && code.data) {
+              clearInterval(_qrScanInterval);
+              stream.getTracks().forEach(t => t.stop());
+              preview.srcObject = null;
+              preview.style.display = 'none';
+              document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
+              document.getElementById('qrsImportText').value = code.data;
+              showToast('✅ QR Code detected!');
+              // Auto-click import
+              document.getElementById('qrsImportBtn').click();
+            }
+          }
+        }
+      }, 300);
+
+      if (!window.jsQR) {
+        showToast('📷 Camera active — waiting for jsQR library to load');
+      }
     } catch (err) {
       showToast('❌ Camera: ' + err.message);
     }
@@ -2237,7 +2294,7 @@ const EXT_DB = { get: () => JSON.parse(localStorage.getItem('ex_extensions') || 
 // Seed default extensions on first run
 (function seedDefaultExtensions() {
   const defaults = [
-    { id: 'djpcnbhbkplhbnkppfopnnejhaigffjn', name: 'Crypto Price Tracker', icon: '📈', desc: 'Real-time crypto price tracking for 1000+ coins', enabled: true, source: 'https://chromewebstore.google.com/detail/crypto-price-tracker/djpcnbhbkplhbnkppfopnnejhaigffjn', installedAt: Date.now() },
+
     { id: 'pejdijmoenmkgeppbflobdenhhabjlaj', name: 'iCloud Passwords', icon: '🔑', desc: 'Use iCloud Keychain passwords in your browser', enabled: true, source: 'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj', installedAt: Date.now() }
   ];
   const existing = EXT_DB.get();
@@ -2612,7 +2669,8 @@ document.getElementById('extAddBtn').addEventListener('click', () => {
   const val = document.getElementById('extAddUrl').value.trim(); if (!val) return;
   let id = val, name = val, icon = '\uD83E\uDDE9', desc = 'Installed from Chrome Web Store';
   const m = val.match(/[a-z]{32}/i); if (m) id = m[0];
-  const known = { MetaMask: 'nkbihfbeogaeaoehlefnkodbefgpgknn', 'uBlock Origin': 'cjpalhdlnbpafiamejdnhcphjbkeiagm', Grammarly: 'kbfnbcaeplbcioakkpcpgfkobkghlhen', Honey: 'bmnlcjabgnpnenekpadlanbbkooimhnj', LastPass: 'hdokiejnpimakedhajhdlcegeplioahd', 'Crypto Price Tracker': 'djpcnbhbkplhbnkppfopnnejhaigffjn', 'iCloud Passwords': 'pejdijmoenmkgeppbflobdenhhabjlaj' };
+
+  const known = { MetaMask: "nkbihfbeogaeaoehlefnkodbefgpgknn", "uBlock Origin": "cjpalhdlnbpafiamejdnhcphjbkeiagm", Grammarly: "kbfnbcaeplbcioakkpcpgfkobkghlhen", Honey: "bmnlcjabgnpnenekpadlanbbkooimhnj", LastPass: "hdokiejnpimakedhajhdlcegeplioahd", "iCloud Passwords": "pejdijmoenmkgeppbflobdenhhabjlaj" };
   const icons = { MetaMask: '\uD83E\uDD8A', 'uBlock Origin': '\uD83D\uDEE1\uFE0F', Grammarly: '\uD83D\uDCDD', Honey: '\uD83C\uDF6F', LastPass: '\uD83D\uDD11', 'Crypto Price Tracker': '\uD83D\uDCC8', 'iCloud Passwords': '\uD83D\uDD11' };
   for (const [n, kid] of Object.entries(known)) { if (val.includes(kid) || val.toLowerCase().includes(n.toLowerCase())) { name = n; id = kid; icon = icons[n] || '\uD83E\uDDE9'; } }
   EXT_DB.add({ id, name, desc, icon, enabled: true, source: val, installedAt: Date.now() });
@@ -2997,19 +3055,19 @@ document.addEventListener('keydown', e => {
   function checkSystemHealth() {
     const checks = [];
     // Check panels exist
-    const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
+    const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
     let panelsOk = 0;
     panels.forEach(id => { if (document.getElementById(id)) panelsOk++; });
-    checks.push(panelsOk === panels.length ? '\u2705 Svi paneli ucitani (' + panelsOk + '/' + panels.length + ')' : '\u26a0\ufe0f Paneli: ' + panelsOk + '/' + panels.length + ' ucitano');
+    checks.push(panelsOk === panels.length ? '✅ Svi paneli ucitani (' + panelsOk + '/' + panels.length + ')' : '⚠️ Paneli: ' + panelsOk + '/' + panels.length + ' ucitano');
     // Check tabs
     const tabCount = document.querySelectorAll('.tab').length;
-    checks.push('\u2705 Aktivnih tabova: ' + tabCount);
+    checks.push('✅ Aktivnih tabova: ' + tabCount);
     // Check DevTools
-    checks.push(document.getElementById('devtools') ? '\u2705 DevTools dostupni' : '\u274c DevTools nedostupni');
+    checks.push(document.getElementById('devtools') ? '✅ DevTools dostupni' : '❌ DevTools nedostupni');
     // Check iframes
     const iframes = ['bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
     let iOk = 0; iframes.forEach(id => { if (document.getElementById(id)) iOk++; });
-    checks.push(iOk === iframes.length ? '\u2705 Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '\u26a0\ufe0f Iframes: ' + iOk + '/' + iframes.length);
+    checks.push(iOk === iframes.length ? '✅ Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '⚠️ Iframes: ' + iOk + '/' + iframes.length);
     // Check localStorage
     const storageKeys = ['ex_settings', 'ex_bookmarks', 'ex_history', 'ex_downloads', 'ex_profiles', 'ex_passwords'];
     let sOk = 0; storageKeys.forEach(k => { if (localStorage.getItem(k)) sOk++; });
@@ -3021,9 +3079,9 @@ document.addEventListener('keydown', e => {
     }
     // Check connection
     if (navigator.onLine) checks.push('🌐 Internet: Online');
-    else checks.push('\u274c Internet: Offline');
+    else checks.push('❌ Internet: Offline');
     // Check service worker / PWA
-    if ('serviceWorker' in navigator) checks.push('\u2705 PWA podrska dostupna');
+    if ('serviceWorker' in navigator) checks.push('✅ PWA podrska dostupna');
     // Check theme
     const theme = DB.getSettings().theme || 'dark';
     checks.push('🎨 Tema: ' + theme);
@@ -3041,6 +3099,82 @@ document.addEventListener('keydown', e => {
   // ── Smart response engine ──
   async function getSmartResponse(msg) {
     const m = msg.toLowerCase().trim();
+
+    // ── Help and predefined prompts ──
+    if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
+      return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
+
+**1. Analiza sadržaja**
+• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
+
+**2. Dijagnostika browsera**
+• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
+• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
+
+**3. Edukacija o kriptovalutama**
+• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
+• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
+
+**4. Navigacija**
+• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
+
+Sve se izvršava optimalno i brzo! Što te zanima?`;
+    }
+
+    if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
+      if (performance && performance.memory) {
+        const mb = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
+        const total = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
+        return `Trenutno koristimo **${mb} MB** memorije (od dozvoljenih ${total} MB za ovaj tab). Browser radi stabilno!`;
+      }
+      return "Nažalost ne mogu pročitati točnu potrošnju memorije u ovom okruženju, ali browser radi unutar normalnih parametara.";
+    }
+
+    if (m.startsWith('otvori ') || m.startsWith('open ')) {
+      let targetUrl = m.replace('otvori ', '').replace('open ', '').trim();
+      if (!targetUrl.startsWith('http')) {
+        targetUrl = 'https://' + targetUrl;
+      }
+      createTab(targetUrl);
+      return `Otvaram ${targetUrl} u novom tabu!`;
+    }
+    if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
+      return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
+
+**1. Analiza sadržaja**
+• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
+
+**2. Dijagnostika browsera**
+• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
+• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
+
+**3. Edukacija o kriptovalutama**
+• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
+• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
+
+**4. Navigacija**
+• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
+
+Sve se izvršava optimalno i brzo! Što te zanima?`;
+    }
+
+    if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
+      if (performance && performance.memory) {
+        const mb = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
+        const total = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
+        return `Trenutno koristimo **${mb} MB** memorije (od dozvoljenih ${total} MB za ovaj tab). Browser radi stabilno!`;
+      }
+      return "Nažalost ne mogu pročitati točnu potrošnju memorije u ovom okruženju, ali browser radi unutar normalnih parametara.";
+    }
+
+    if (m.startsWith('otvori ') || m.startsWith('open ')) {
+      let targetUrl = m.replace('otvori ', '').replace('open ', '').trim();
+      if (!targetUrl.startsWith('http')) {
+        targetUrl = 'https://' + targetUrl;
+      }
+      createTab(targetUrl);
+      return `Otvaram ${targetUrl} u novom tabu!`;
+    }
 
     // ── Summarize current page ──
     if (m.includes('sažetak') || m.includes('sazet') || m.includes('summar') || m.includes('analiz') || m.includes('što piše') || m.includes('sta pise') || m.includes('o čemu') || m.includes('o cemu')) {
@@ -3200,7 +3334,8 @@ document.addEventListener('keydown', e => {
     // Make links clickable
     html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="#" onclick="navigateTo(\'$1\');return false" style="color:var(--accent);text-decoration:underline">$1</a>');
     d.innerHTML = html + '<span class="ai-time">' + (type === 'bot' ? '🤖 AI Agent' : '') + ' ' + time + '</span>';
-    msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+    msgs.appendChild(d);
+    setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
   }
 
   async function send() {
@@ -3208,7 +3343,8 @@ document.addEventListener('keydown', e => {
     addMsg(text, 'user'); input.value = '';
     const typing = document.createElement('div'); typing.className = 'ai-msg bot ai-typing';
     typing.innerHTML = '<span></span><span></span><span></span>';
-    msgs.appendChild(typing); msgs.scrollTop = msgs.scrollHeight;
+    msgs.appendChild(typing);
+    setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
     try {
       const resp = await getSmartResponse(text);
       typing.remove();
@@ -3720,7 +3856,6 @@ const CTT_BUTTONS = [
   { id: 'btnSettings', key: 'showBtnSettings', icon: '⚙️', name: 'Settings' },
   { id: 'btnDevtools', key: 'showBtnDevtools', icon: '🛠️', name: 'DevTools' },
 ];
-
 function openCustomToolbar() {
   const overlay = document.getElementById('customToolbarOverlay');
   const grid = document.getElementById('cttGrid');
@@ -3850,8 +3985,17 @@ document.getElementById('cttReset').addEventListener('click', () => {
 
 // ── Restore last session tabs ─────────────────────────────────────────────
 (function restoreSession() {
-  const saved = localStorage.getItem('ex_session_tabs');
-  const activeId = parseInt(localStorage.getItem('ex_session_active') || '0', 10);
+  let windowId = 'main';
+  try {
+    if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+      windowId = window.electronAPI.windowId() || 'main';
+    }
+  } catch (e) { }
+
+  const saved = localStorage.getItem('ex_session_tabs_' + windowId) || localStorage.getItem('ex_session_tabs');
+  const activeIdStr = localStorage.getItem('ex_session_active_' + windowId) || localStorage.getItem('ex_session_active') || '0';
+  const activeId = parseInt(activeIdStr, 10);
+
   if (saved) {
     try {
       const tabs = JSON.parse(saved);
@@ -3947,6 +4091,7 @@ function openWindowSwitcher() {
 }
 function closeWindowSwitcher() { document.getElementById('windowSwitcher').classList.remove('show'); }
 document.getElementById('btnWindowSwitcher').addEventListener('click', openWindowSwitcher);
+document.getElementById('btnCryptoPrice').addEventListener('click', () => togglePanel('cryptoPricePanel'));
 document.getElementById('wswClose').addEventListener('click', closeWindowSwitcher);
 document.getElementById('windowSwitcher').addEventListener('click', e => { if (e.target === document.getElementById('windowSwitcher')) closeWindowSwitcher(); });
 document.getElementById('wswNewTab').addEventListener('click', () => { createTab(); closeWindowSwitcher(); });

@@ -86,6 +86,8 @@ contextBridge.exposeInMainWorld('etherx', {
     groupTabs: (tabs) => ipcRenderer.invoke('ai:groupTabs', tabs),
     translate: (text, targetLang) => ipcRenderer.invoke('ai:translate', text, targetLang),
     summarizePage: (url, html) => ipcRenderer.invoke('ai:summarizePage', url, html),
+    getCachedSummaries: (limit) => ipcRenderer.invoke('ai:getCachedSummaries', limit),
+    clearAiCache: () => ipcRenderer.invoke('ai:clearAiCache'),
   },
 
   // ── Ad Blocker ────────────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ contextBridge.exposeInMainWorld('etherx', {
   extensions: {
     chooseFolder: () => ipcRenderer.invoke('extensions:chooseFolder'),
     loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),
+    downloadFromCWS: (extId) => ipcRenderer.invoke('extensions:downloadFromCWS', extId),
   },
 
   // ── App ───────────────────────────────────────────────────────────────────────
@@ -190,7 +193,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

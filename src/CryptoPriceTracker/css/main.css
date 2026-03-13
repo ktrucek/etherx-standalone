@@ -1,0 +1,349 @@
+/* by SoKo for kriptoentuzijasti.io */
+/* last update: March 4, 2026 */
+
+/* CSS Variables for Theme Colors */
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #f0f2f5;
+    --text-primary: #1a1b1e;
+    --text-secondary: #6c757d;
+    --border-color: #e9ecef;
+    --table-hover: #f1f3f5;
+    --link-color: #228be6;
+    --positive-color: #38d9a9;
+    --negative-color: #ff8787;
+    --button-bg: #ffffff;
+    --button-border: #ced4da;
+    --shadow-color: rgba(0, 0, 0, 0.08);
+    --switch-bg: #e0e0e0;
+    --switch-active: #4CAF50;
+    --border-radius: 12px;
+}
+
+[data-theme="dark"] {
+    --bg-primary: #1a1b1e;
+    --bg-secondary: #25262b;
+    --bg-tertiary: #2c2e33;
+    --text-primary: #e9ecef;
+    --text-secondary: #909296;
+    --border-color: #373a40;
+    --table-hover: #2c2e33;
+    --link-color: #4dabf7;
+    --positive-color: #2b8a3e;
+    --negative-color: #e03131;
+    --button-bg: #25262b;
+    --button-border: #373a40;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --switch-bg: #373a40;
+    --switch-active: #228be6;
+}
+
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+div#main-outer {
+    width: 520px;
+    height: auto;
+    margin: 8px;
+    border-radius: var(--border-radius);
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px var(--shadow-color);
+    overflow: hidden;
+}
+
+div#main-inner {
+    padding: 12px;
+}
+
+div#main-title {
+    font-size: 16px;
+    text-align: center;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+img#main-image {
+    display: block;
+    margin-top: 5px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+div#main-about-text {
+    margin-top: 10px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    background-color: var(--bg-primary);
+}
+
+.table-footer-1 {
+    background-color: var(--bg-secondary);
+}
+
+th {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    padding: 10px 5px;
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+td {
+    padding: 3px 4px;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+    vertical-align: middle;
+}
+
+tr {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+tr:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px var(--shadow-color);
+    position: relative;
+    z-index: 10;
+}
+
+tr:hover td {
+    background-color: var(--table-hover);
+    border-color: transparent;
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: var(--link-color);
+    text-decoration: underline;
+}
+
+/* Currency dropdown styling */
+select#currency {
+    background-color: var(--button-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--button-border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    width: 75px;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+select#currency:focus {
+    outline: none;
+    border-color: var(--link-color);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Theme Toggle Switch - Light Bulb Style */
+.theme-switch-container {
+    padding-right: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.theme-switch {
+    margin: 0px;
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.theme-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--switch-bg);
+    transition: .4s;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 2px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.theme-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.light-icon {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: all 0.4s;
+    z-index: 1;
+    color: #ffa500;
+    opacity: 1;
+}
+
+.moon-icon {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: all 0.4s;
+    z-index: 1;
+    color: #4169e1;
+    opacity: 0.3;
+}
+
+input:checked+.theme-slider {
+    background-color: var(--switch-active);
+}
+
+input:checked+.theme-slider:before {
+    transform: translateX(26px);
+}
+
+input:checked+.theme-slider .light-icon {
+    opacity: 0.3;
+}
+
+input:checked+.theme-slider .moon-icon {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px #4169e1);
+}
+
+.theme-switch:hover .theme-slider {
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 8px rgba(76, 175, 80, 0.3);
+}
+
+[data-theme="dark"] .theme-switch:hover .theme-slider {
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 8px rgba(33, 150, 243, 0.3);
+}
+
+/* Clickable headers styling */
+#rank,
+#name,
+#price,
+#change {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+#rank:hover,
+#name:hover,
+#price:hover,
+#change:hover {
+    color: var(--link-color);
+}
+
+/* Positive/Negative change styling */
+.positive-change {
+    background-color: rgba(56, 217, 169, 0.15) !important;
+    color: var(--positive-color);
+    border-radius: 4px;
+    padding: 3px 15px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.negative-change {
+    background-color: rgba(255, 135, 135, 0.15) !important;
+    color: var(--negative-color);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+/* Loading spinner dark mode support */
+.spinner-grow {
+    color: var(--link-color);
+}
+
+/* Footer styling */
+footer {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Image filters for dark mode */
+[data-theme="dark"] img:not(.no-filter) {
+    filter: brightness(0.9) contrast(1.1);
+}
+
+/* Scrollbar styling for dark mode */
+[data-theme="dark"] ::-webkit-scrollbar {
+    width: 8px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Coin icon standardization */
+.coin-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    border-radius: 50%;
+}
+
+/* SVG Options Icon */
+.options-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.options-icon:hover {
+    color: var(--text-primary);
+    transform: rotate(45deg);
+}
+
+.options-icon svg {
+    stroke: currentColor;
+}

@@ -40,10 +40,13 @@
     html,
     body {
       height: 100%;
-      background: var(--bg);
+      background: rgba(26, 26, 26, 0.85);
+      /* Semi-transparent */
       color: var(--text);
       font-family: var(--font);
       font-size: 14px;
+      backdrop-filter: none;
+      /* No blur */
     }
 
     ::-webkit-scrollbar {
@@ -73,7 +76,8 @@
     .settings-nav {
       width: 220px;
       flex-shrink: 0;
-      background: var(--bg2);
+      background: rgba(37, 37, 37, 0.85);
+      /* Semi-transparent */
       border-right: 1px solid var(--border);
       overflow-y: auto;
       display: flex;
@@ -82,7 +86,7 @@
 
     .settings-nav-header {
       padding: 20px 16px 12px;
-      background: var(--bg2);
+      background: transparent;
       border-bottom: 1px solid var(--border);
     }
 

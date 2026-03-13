@@ -184,7 +184,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

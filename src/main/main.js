@@ -14,6 +14,8 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const AdmZip = require('adm-zip');
 const { execFile } = require('child_process');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
@@ -575,6 +577,10 @@ function setupIPC() {
     return ai.summarizePage(url, htmlContent, geminiKey, db);
   });
 
+  // ── AI: Cache Data for Developer Tools ────────────────────────────────────
+  ipcMain.handle('ai:getCachedSummaries', (_e, limit = 100) => db ? db.getAiCache(limit) : []);
+  ipcMain.handle('ai:clearAiCache', () => db ? db.clearAiCache() : { ok: true });
+
   // ── Ad Blocker ─────────────────────────────────────────────────────────────
   ipcMain.handle('adblock:isEnabled', () => adBlocker ? adBlocker.isEnabled() : false);
   ipcMain.handle('adblock:toggle', (_e, enabled) => adBlocker ? adBlocker.toggle(enabled) : noDb());
@@ -667,6 +673,75 @@ function setupIPC() {
       if (!fs.existsSync(manifestPath)) return { ok: false, error: 'manifest.json not found in selected folder.' };
       const ext = await session.defaultSession.loadExtension(extensionPath, { allowFileAccess: true });
       return { ok: true, id: ext.id, name: ext.name, version: ext.version, path: extensionPath };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('extensions:downloadFromCWS', async (_e, extId) => {
+    try {
+      const userDataDir = app.getPath('userData');
+      const extDir = path.join(userDataDir, 'extensions');
+      if (!fs.existsSync(extDir)) fs.mkdirSync(extDir, { recursive: true });
+
+      const crxFile = path.join(extDir, `${extId}.crx`);
+      const extractDir = path.join(extDir, extId);
+      if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
+
+      const downloadUrl = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=114.0.5735.90&acceptformat=crx2,crx3&x=id%3D${extId}%26uc`;
+
+      await new Promise((resolve, reject) => {
+        function doDownload(url, dest) {
+          https.get(url, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302) {
+              return doDownload(res.headers.location, dest);
+            }
+            if (res.statusCode !== 200) {
+              return reject(new Error(`CWS responded with HTTP ${res.statusCode}`));
+            }
+            const file = fs.createWriteStream(dest);
+            res.pipe(file);
+            file.on('finish', () => file.close(resolve));
+            file.on('error', (err) => {
+              fs.unlink(dest, () => { });
+              reject(err);
+            });
+          }).on('error', reject);
+        }
+        doDownload(downloadUrl, crxFile);
+      });
+
+      // A CRX file is just a ZIP with a custom header.
+      // We need to find the start of the ZIP archive (PK\x03\x04).
+      const buffer = fs.readFileSync(crxFile);
+      let zipStart = -1;
+      for (let i = 0; i < buffer.length - 4; i++) {
+        if (buffer[i] === 0x50 && buffer[i + 1] === 0x4B && buffer[i + 2] === 0x03 && buffer[i + 3] === 0x04) {
+          zipStart = i;
+          break;
+        }
+      }
+
+      if (zipStart === -1) {
+        throw new Error('Could not find ZIP header in CRX file. It might be corrupt or an unsupported format.');
+      }
+
+      const zipBuffer = buffer.slice(zipStart);
+      const zipPath = path.join(extDir, `${extId}.zip`);
+      fs.writeFileSync(zipPath, zipBuffer);
+
+      // Extract ZIP
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(extractDir, true);
+
+      // Cleanup temp files
+      fs.unlinkSync(crxFile);
+      fs.unlinkSync(zipPath);
+
+      // Load it into Electron
+      const ext = await session.defaultSession.loadExtension(extractDir, { allowFileAccess: true });
+      return { ok: true, id: ext.id, name: ext.name, version: ext.version, path: extractDir };
+
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1022,7 +1097,8 @@ function setupIPC() {
       height: 700,
       parent: mainWindow,
       modal: false,
-      backgroundColor: '#1e1e1e',
+      transparent: true,
+      backgroundColor: '#00000000', // transparent
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
@@ -1049,15 +1125,43 @@ app.on('web-contents-created', (_event, contents) => {
     } catch (_) { }
   });
 
-  contents.on('will-navigate', (_e, url) => {
+  // Handle new windows opening (popups, mailto, etc)
+  contents.setWindowOpenHandler((details) => {
     try {
-      const { URL: NURL } = require('url');
-      const parsed = new NURL(url);
-      if (!['http:', 'https:', 'file:', 'about:'].includes(parsed.protocol)) {
-        _e.preventDefault();
+      const parsedUrl = new URL(details.url);
+
+      // Block specific external app protocols that normally open outside the browser
+      if (['mailto:', 'tel:', 'sms:', 'facetime:', 'skype:', 'zoom:', 'magnet:', 'sip:'].includes(parsedUrl.protocol)) {
+        return { action: 'deny' };
+      }
+
+      // Open valid http/https URLs within the app (as a new tab, handled by the renderer)
+      // We deny window creation here so it doesn't spawn a new unmanaged Electron BrowserWindow
+      // The renderer handles opening new tabs via target="_blank"
+      if (['http:', 'https:', 'about:', 'chrome-extension:'].includes(parsedUrl.protocol)) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          // Tell renderer to open this URL in a new tab instead
+          mainWindow.webContents.send('app:createTab', details.url);
+        }
+        return { action: 'deny' };
+      }
+    } catch (_) { }
+
+    // Deny anything else
+    return { action: 'deny' };
+  });
+
+  // Also prevent 'will-navigate' from opening external apps like mailto
+  contents.on('will-navigate', (event, url) => {
+    try {
+      const parsed = new URL(url);
+      if (['mailto:', 'tel:', 'sms:', 'facetime:', 'skype:', 'zoom:', 'magnet:', 'sip:'].includes(parsed.protocol)) {
+        event.preventDefault();
+      } else if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:'].includes(parsed.protocol)) {
+        event.preventDefault();
       }
     } catch {
-      _e.preventDefault();
+      event.preventDefault();
     }
   });
 

@@ -1,0 +1,74 @@
+<!-- by SoKo for kriptoentuzijasti.io -->
+<!-- last update: March 4, 2026 -->
+ 
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="generator"
+    content="HTML Tidy for HTML5 (experimental) for Windows https://github.com/w3c/tidy-html5/tree/c63cc39" />
+  <script type="text/javascript" src="../js/jquery.js"></script>
+  <script type="text/javascript" src="../js/bootstrap.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="../css/bootstrap.min.css" />
+  <link rel="stylesheet" type="text/css" href="../css/options.css" />
+  <script type="text/javascript" src="../js/theme-manager.js"></script>
+  <title>Crypto Price Tracker - Options</title>
+</head>
+
+<body>
+
+  <nav class="navbar navbar-light bg-light">
+    <div class="col-md-8 offset-md-2" align="center" style="position: relative;">
+      <input type="text" class="form-control" placeholder="Search for coin name or symbol"
+        style="width: 50em; display: inline-block;" id="coinSearch" />
+      <div style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">
+        You can search and track any of the <strong>10,000+</strong> tokens available on CoinGecko
+      </div>
+      <div id="theme-toggle-container" style="position: absolute; right: -60px; top: 50%; transform: translateY(-50%);">
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="col-md-8 offset-md-2">
+      <div class="row">
+        <div class="container-fluid col-md-7" style="background-color: var(--bg-primary)">
+          <table class="table table-sm table-hover">
+            <thead>
+              <tr>
+                <th scope="row" style="width: 10%"><img src="../images/CT-logo-38.png" style="width:32px;height:32px;"
+                    class="no-filter"></th>
+                <th scope="row" style="width: 50px">
+                  <div id="rank">Rank</div>
+                </th>
+                <th scope="row">Name</th>
+              </tr>
+            </thead>
+            <tbody id="cryptoTable"></tbody>
+          </table>
+        </div>
+        <div class="container-fluid col-md-5" style="background-color: var(--bg-primary)">
+          <table class="table table-sm table-hover">
+            <thead>
+              <tr>
+                <th scope="row" style="width: 15%"><img src="../images/star-32.png" style="width:32px;height:32px;">
+                </th>
+                <th scope="row" style="width: 70%">Favorites</th>
+                <th scope="row" style="width: 15%; font-size: 10px;" id="resetFav">reset</th>
+              </tr>
+            </thead>
+            <tbody id="displayFavorites"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-copyright navbar-fixed-bottom text-center py-3" style="margin:10px; font-size: 10px">Crypto Price
+      Tracker by <a href="mailto:development@kriptoentuzijasti.io">Soko</a> for Kriptoentuzijasti - 2025-2026
+    </div>
+  </footer>
+
+  <script type="text/javascript" src="../js/options.js"></script>
+</body>
+
+</html>

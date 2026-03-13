@@ -1,0 +1,353 @@
+/* by SoKo for kriptoentuzijasti.io */
+/* last update: March 4, 2026 */
+
+/* CSS Variables for Theme Colors (same as main.css) */
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #f0f2f5;
+    --text-primary: #1a1b1e;
+    --text-secondary: #6c757d;
+    --border-color: #e9ecef;
+    --table-hover: #f1f3f5;
+    --link-color: #228be6;
+    --positive-color: #38d9a9;
+    --negative-color: #ff8787;
+    --button-bg: #ffffff;
+    --button-border: #ced4da;
+    --shadow-color: rgba(0, 0, 0, 0.08);
+    --navbar-bg: #ffffff;
+    --input-bg: #f8f9fa;
+    --switch-bg: #e0e0e0;
+    --switch-active: #4CAF50;
+    --border-radius: 12px;
+}
+
+[data-theme="dark"] {
+    --bg-primary: #1a1b1e;
+    --bg-secondary: #25262b;
+    --bg-tertiary: #2c2e33;
+    --text-primary: #e9ecef;
+    --text-secondary: #909296;
+    --border-color: #373a40;
+    --table-hover: #2c2e33;
+    --link-color: #4dabf7;
+    --positive-color: #2b8a3e;
+    --negative-color: #e03131;
+    --button-bg: #25262b;
+    --button-border: #373a40;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --navbar-bg: #1a1b1e;
+    --input-bg: #25262b;
+    --switch-bg: #373a40;
+    --switch-active: #228be6;
+}
+
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Navbar styling */
+.navbar {
+    background-color: var(--navbar-bg) !important;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.3s ease;
+    padding: 15px 0;
+}
+
+/* Search input styling */
+#coinSearch {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--button-border);
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-size: 15px;
+    transition: all 0.2s ease;
+}
+
+#coinSearch::placeholder {
+    color: var(--text-secondary);
+}
+
+#coinSearch:focus {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    border-color: var(--link-color);
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Theme Toggle Switch - Light Bulb Style (from main.css) */
+.theme-switch-container {
+    padding-right: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.theme-switch {
+    margin: 0px;
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.theme-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--switch-bg);
+    transition: .4s;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 2px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.theme-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.light-icon {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: all 0.4s;
+    z-index: 1;
+    color: #ffa500;
+    opacity: 1;
+}
+
+.moon-icon {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: all 0.4s;
+    z-index: 1;
+    color: #4169e1;
+    opacity: 0.3;
+}
+
+input:checked+.theme-slider {
+    background-color: var(--switch-active);
+}
+
+input:checked+.theme-slider:before {
+    transform: translateX(26px);
+}
+
+input:checked+.theme-slider .light-icon {
+    opacity: 0.3;
+}
+
+input:checked+.theme-slider .moon-icon {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px #4169e1);
+}
+
+.theme-switch:hover .theme-slider {
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 8px rgba(76, 175, 80, 0.3);
+}
+
+[data-theme="dark"] .theme-switch:hover .theme-slider {
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 8px rgba(33, 150, 243, 0.3);
+}
+
+/* Container styling */
+.container {
+    padding-top: 25px;
+    padding-bottom: 40px;
+}
+
+.container-fluid {
+    background-color: var(--bg-primary);
+    transition: background-color 0.3s ease;
+}
+
+/* Table styling */
+.table {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 4px 12px var(--shadow-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    margin-bottom: 25px;
+}
+
+.table th {
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px;
+    border-bottom: 2px solid var(--border-color) !important;
+}
+
+.table td {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    padding: 10px 12px;
+    vertical-align: middle;
+}
+
+.table-hover tbody tr {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.table-hover tbody tr:hover {
+    background-color: var(--table-hover) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px var(--shadow-color);
+    position: relative;
+    z-index: 10;
+}
+
+/* Links */
+a {
+    color: var(--link-color);
+    transition: color 0.2s ease;
+}
+
+a:hover {
+    color: var(--link-color);
+    text-decoration: underline;
+}
+
+/* Footer styling */
+.footer {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+/* Theme Toggle Button */
+.theme-toggle {
+    position: fixed;
+    top: 1%;
+    right: 95%;
+    background: var(--button-bg);
+    border: 1px solid var(--button-border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.theme-toggle:hover {
+    background-color: var(--table-hover);
+    transform: scale(1.1);
+}
+
+/* Reset button styling */
+#resetFav {
+    color: var(--negative-color);
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+#resetFav:hover {
+    color: var(--negative-color);
+    text-decoration: underline;
+}
+
+/* Custom hover effects for coin rows */
+tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+tbody tr:hover {
+    background-color: var(--table-hover) !important;
+}
+
+/* Loading spinner dark mode support */
+.spinner-grow {
+    color: var(--link-color);
+}
+
+/* Image filters for dark mode */
+[data-theme="dark"] img:not(.no-filter) {
+    filter: brightness(0.9) contrast(1.1);
+}
+
+/* Scrollbar styling for dark mode */
+[data-theme="dark"] ::-webkit-scrollbar {
+    width: 8px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Original styles preserved */
+div#options-outer {
+    margin: 5px;
+    background: var(--bg-secondary);
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    transition: background-color 0.3s ease;
+}
+
+div#options-inner {
+    padding: 8px;
+}
+
+div#options-page-title {
+    color: var(--text-primary);
+}
+
+div#options-area {
+    margin-top: 10px;
+}
+
+/* Coin icon standardization */
+.coin-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    border-radius: 50%;
+}

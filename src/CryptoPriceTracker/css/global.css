@@ -1,0 +1,18 @@
+/* by SoKo for kriptoentuzijasti.io */
+/* last update: March 4, 2026 */
+
+div.page-title {
+    font-size: 20px;
+    line-height: 24px;
+}
+
+div.page-subtitle {
+    font-size: 16px;
+    line-height: 20px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}

@@ -1,0 +1,24 @@
+{
+   "manifest_version": 3,
+   "name": "Crypto Price Tracker",
+   "options_page": "html/options.html",
+   "version": "1.5.1",
+   "action": {
+      "default_icon": {
+         "19": "images/CT-logo-19.png",
+         "38": "images/CT-logo-38.png"
+      },
+      "default_popup": "html/main.html",
+      "default_title": "Crypto Price Tracker"
+   },
+   "description": "Stay up-to-date with real-time crypto prices. Track your favorite cryptocurrencies with ease — perfect for every crypto enthusiast.",
+   "homepage_url": "https://kriptoentuzijasti.io",
+   "icons": {
+      "128": "images/CT-logo-128.png",
+      "19": "images/CT-logo-19.png",
+      "38": "images/CT-logo-38.png"
+   },
+   "optional_host_permissions": [
+      "https://api.coingecko.com/*"
+   ]
+}
