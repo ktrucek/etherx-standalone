@@ -130,7 +130,7 @@ jobs:
           Get-ChildItem -Path dist -Recurse | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
         shell: pwsh
 
-      - name: �📤 Upload Windows artifacts
+      - name: 📤 Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
