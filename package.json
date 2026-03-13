@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.53",
+  "version": "2.4.54",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -37,7 +37,6 @@
       "preload.js",
       "src/**/*",
       "assets/**/*",
-      "CryptoPriceTracker/**/*",
       "package.json",
       "node_modules/**/*"
     ],
@@ -82,5 +81,5 @@
     "qrcode": "^1.5.3",
     "uuid": "^9.0.0"
   },
-  "buildTime": "2026-03-12T23:49:13Z"
+  "buildTime": "2026-03-13T00:12:40Z"
 }
