@@ -16,18 +16,6 @@ Thumbs.db
 
 *.tmp
 .env
-deploy.sh
-.env.local
-sync-to-gitea.sh
-pregress.md
-.runner
-runner
-nastavak.md
-deployment.md
-etherx browser.md
-nastavak.md
-pregress.md
-changelog.md
 .env.local
 .env.development
 .env.production
@@ -35,6 +23,5 @@ changelog.md
 .env.staging
 .env.*.local
 *.env
-*sync-to-gitea.sh
-*deploy.sh
-*.md
+.runner
+runner

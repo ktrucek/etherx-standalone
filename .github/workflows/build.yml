@@ -123,7 +123,7 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=4096"
           DEBUG: electron-builder
 
-      - name: � List generated files
+      - name: 📋 List generated files
         if: always()
         run: |
           Write-Host "=== Contents of dist/ directory ==="
