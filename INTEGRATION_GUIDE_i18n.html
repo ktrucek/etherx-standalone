@@ -1,0 +1,350 @@
+<!-- ════════════════════════════════════════════════════════════════
+     PRIMJER INTEGRACIJE i18n sustava u browser.html
+     ════════════════════════════════════════════════════════════════
+     
+     Kopirajte ovaj kod u <head> sekciju browser.html fajla:
+  ════════════════════════════════════════════════════════════════ -->
+
+<!-- Load translations i18n scripts -->
+<script src="../main/i18n.js"></script>
+<script src="../main/i18n-extended.js"></script>
+<script src="../main/i18n-loader.js"></script>
+
+<!-- Initialize translations when DOM is loaded -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Initialize i18n system
+    window.i18n.initI18n();
+    
+    // Add language selector to title bar (or wherever you want)
+    const titleBar = document.querySelector('.title-bar');
+    if (titleBar) {
+      window.i18n.createLanguageSelector(titleBar);
+    }
+    
+    console.log('[EtherX] i18n system initialized');
+  });
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     PRIMJER: Kako ažurirati MENU BAR stavke
+     ════════════════════════════════════════════════════════════════
+     
+     Zamijenite postojeće menu stavke sa ovim:
+  ════════════════════════════════════════════════════════════════ -->
+
+<div class="menu-bar" id="menuBar">
+  <!-- FILE MENU -->
+  <div class="menu-item" data-menu="file">
+    <span data-i18n="menuFile">Datoteka</span>
+    <div class="dropdown">
+      <div class="di" id="mi-new-tab">
+        <span class="icon">➕</span>
+        <span data-i18n="menuFileNewTab">Nova kartica</span>
+        <span class="sc">Ctrl+T</span>
+      </div>
+      <div class="di" id="mi-new-private">
+        <span class="icon">🕶️</span>
+        <span data-i18n="menuFileNewPrivate">Novi privatni prozor</span>
+        <span class="sc">Ctrl+Shift+N</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-open-location">
+        <span class="icon">🌐</span>
+        <span data-i18n="menuFileOpenLocation">Otvori lokaciju…</span>
+        <span class="sc">Ctrl+L</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-close-tab">
+        <span class="icon">⊠</span>
+        <span data-i18n="menuFileCloseTab">Zatvori karticu</span>
+        <span class="sc">Ctrl+W</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-print">
+        <span class="icon">🖨️</span>
+        <span data-i18n="menuFilePrint">Ispis…</span>
+        <span class="sc">Ctrl+P</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT MENU -->
+  <div class="menu-item" data-menu="edit">
+    <span data-i18n="menuEdit">Uredi</span>
+    <div class="dropdown" style="min-width:290px">
+      <div class="di" id="mi-undo">
+        <span class="icon">↩</span>
+        <span data-i18n="menuEditUndo">Poništi tipkanje</span>
+        <span class="sc">Ctrl+Z</span>
+      </div>
+      <div class="di" id="mi-redo">
+        <span class="icon">↪</span>
+        <span data-i18n="menuEditRedo">Ponovi</span>
+        <span class="sc">Ctrl+Shift+Z</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di disabled" id="mi-cut" style="opacity:.4">
+        <span class="icon">✂</span>
+        <span data-i18n="menuEditCut">Izreži</span>
+        <span class="sc">Ctrl+X</span>
+      </div>
+      <div class="di" id="mi-copy">
+        <span class="icon">📋</span>
+        <span data-i18n="menuEditCopy">Kopiraj</span>
+        <span class="sc">Ctrl+C</span>
+      </div>
+      <div class="di" id="mi-paste">
+        <span class="icon">📄</span>
+        <span data-i18n="menuEditPaste">Zalijepi</span>
+        <span class="sc">Ctrl+V</span>
+      </div>
+      <div class="di" id="mi-paste-match">
+        <span class="icon">📄</span>
+        <span data-i18n="menuEditPasteMatch">Zalijepi i uskladi stil</span>
+        <span class="sc">Ctrl+Shift+V</span>
+      </div>
+      <div class="di" id="mi-delete">
+        <span class="icon">🗑</span>
+        <span data-i18n="menuEditDelete">Obriši</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-select-all">
+        <span class="icon">☐</span>
+        <span data-i18n="menuEditSelectAll">Odaberi sve</span>
+        <span class="sc">Ctrl+A</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-autofill-form">
+        <span class="icon">✏️</span>
+        <span data-i18n="menuEditAutoFillForm">Automatski ispuni obrazac</span>
+        <span class="sc">Ctrl+Shift+A</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-find">
+        <span class="icon">🔍</span>
+        <span data-i18n="menuEditFind">Pronađi</span>
+        <span class="sc" style="font-size:10px">▶</span>
+      </div>
+      <div class="di" id="mi-emoji">
+        <span class="icon">😀</span>
+        <span data-i18n="menuEditEmoji">Emoji i simboli</span>
+        <span class="sc">🌐</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW MENU -->
+  <div class="menu-item" data-menu="view">
+    <span data-i18n="menuView">Prikaz</span>
+    <div class="dropdown" style="min-width:310px">
+      <div class="di" id="mi-always-toolbar">
+        <span class="icon" id="mi-always-toolbar-chk">✓</span>
+        <span data-i18n="menuViewAlwaysToolbar">Uvijek prikaži alatnu traku u cijelom zaslonu</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-show-favbar">
+        <span class="icon" id="mi-show-favbar-chk" style="opacity:0">✓</span>
+        <span data-i18n="menuViewShowFavBar">Prikaži traku favorita</span>
+        <span class="sc">⇧⌘B</span>
+      </div>
+      <div class="di" id="mi-show-statusbar">
+        <span class="icon" id="mi-show-statusbar-chk">✓</span>
+        <span data-i18n="menuViewShowStatusBar">Prikaži statusnu traku</span>
+        <span class="sc">⌘'</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-stop">
+        <span class="icon">✕</span>
+        <span data-i18n="menuViewStop">Zaustavi</span>
+        <span class="sc">⌘.</span>
+      </div>
+      <div class="di" id="mi-reload">
+        <span class="icon">↺</span>
+        <span data-i18n="menuViewReload">Osvježi stranicu</span>
+        <span class="sc">Ctrl+R</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-zoom-in">
+        <span class="icon">🔍</span>
+        <span data-i18n="menuViewZoomIn">Povećaj</span>
+        <span class="sc">Ctrl++</span>
+      </div>
+      <div class="di" id="mi-zoom-out">
+        <span class="icon">🔎</span>
+        <span data-i18n="menuViewZoomOut">Smanji</span>
+        <span class="sc">Ctrl+-</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-fullscreen">
+        <span class="icon">⛶</span>
+        <span data-i18n="menuViewFullScreen">Uđi u cijeli zaslon</span>
+        <span class="sc">F11</span>
+      </div>
+      <div class="di" id="mi-responsive">
+        <span class="icon">📐</span>
+        <span data-i18n="menuViewResponsive">Način responzivnog dizajna</span>
+        <span class="sc">Ctrl+Shift+M</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY MENU -->
+  <div class="menu-item" data-menu="history">
+    <span data-i18n="menuHistory">Povijest</span>
+    <div class="dropdown">
+      <div class="di" id="mi-show-history">
+        <span class="icon">🕒</span>
+        <span data-i18n="menuHistoryShow">Prikaži povijest</span>
+        <span class="sc">Ctrl+H</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-back-menu">
+        <span class="icon">◀</span>
+        <span data-i18n="menuHistoryBack">Natrag</span>
+        <span class="sc">Alt+←</span>
+      </div>
+      <div class="di" id="mi-fwd-menu">
+        <span class="icon">▶</span>
+        <span data-i18n="menuHistoryForward">Naprijed</span>
+        <span class="sc">Alt+→</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-clear-history">
+        <span class="icon" style="color:var(--red)">✕</span>
+        <span data-i18n="menuHistoryClear" style="color:var(--red)">Obriši povijest…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOOKMARKS MENU -->
+  <div class="menu-item" data-menu="bookmarks">
+    <span data-i18n="menuBookmarks">Oznake</span>
+    <div class="dropdown" style="min-width:300px">
+      <div class="di" id="mi-start-page">
+        <span class="icon">⊞</span>
+        <span data-i18n="menuBMStartPage">Prikaži početnu stranicu</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-show-bm">
+        <span class="icon">📖</span>
+        <span data-i18n="menuBMShow">Prikaži oznake</span>
+      </div>
+      <div class="di" id="mi-edit-bm">
+        <span class="icon">✏️</span>
+        <span data-i18n="menuBMEdit">Uredi oznake</span>
+        <span class="sc">⌥⌘B</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-add-bm">
+        <span class="icon">🔖</span>
+        <span data-i18n="menuBMAdd">Dodaj oznaku…</span>
+        <span class="sc">Ctrl+D</span>
+      </div>
+      <div class="di" id="mi-add-bm-all-tabs">
+        <span class="icon">📑</span>
+        <span data-i18n="menuBMAddAllTabs">Dodaj oznake za sve otvorene kartice…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEVELOP MENU -->
+  <div class="menu-item" data-menu="develop">
+    <span data-i18n="menuDevelop">Razvoj</span>
+    <div class="dropdown">
+      <div class="di" id="mi-console">
+        <span class="icon">❯_</span>
+        <span data-i18n="menuDevConsole">Prikaži JavaScript konzolu</span>
+        <span class="sc">Ctrl+Shift+J</span>
+      </div>
+      <div class="di" id="mi-page-source">
+        <span class="icon">📄</span>
+        <span data-i18n="menuDevPageSource">Prikaži izvorni kod stranice</span>
+        <span class="sc">Ctrl+U</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-devtools">
+        <span class="icon">🛠️</span>
+        <span data-i18n="menuDevTools">Alati za programere</span>
+        <span class="sc">F12</span>
+      </div>
+      <div class="di" id="mi-network">
+        <span class="icon">📡</span>
+        <span data-i18n="menuDevNetwork">Mrežni inspektor</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WINDOW MENU -->
+  <div class="menu-item" data-menu="window">
+    <span data-i18n="menuWindow">Prozor</span>
+    <div class="dropdown" style="min-width:290px">
+      <div class="di" id="mi-minimise">
+        <span class="icon">▭</span>
+        <span data-i18n="menuWinMinimise">Minimiziraj</span>
+        <span class="sc">⌘M</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-prev-tab">
+        <span class="icon">⊟</span>
+        <span data-i18n="menuWinPrevTab">Prikaži prethodnu karticu</span>
+        <span class="sc">⌃⇧→</span>
+      </div>
+      <div class="di" id="mi-next-tab">
+        <span class="icon">⊞</span>
+        <span data-i18n="menuWinNextTab">Prikaži sljedeću karticu</span>
+        <span class="sc">⌃→</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-pin-tab">
+        <span class="icon">📌</span>
+        <span data-i18n="menuWinPinTab">Prikvači karticu</span>
+      </div>
+      <div class="di" id="mi-dup-tab">
+        <span class="icon">⧉</span>
+        <span data-i18n="menuWinDupTab">Dupliciraj karticu</span>
+      </div>
+      <div class="dsep"></div>
+      <div class="di" id="mi-downloads">
+        <span class="icon">⬇️</span>
+        <span data-i18n="menuWinDownloads">Preuzimanja</span>
+        <span class="sc">Ctrl+J</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP MENU -->
+  <div class="menu-item" data-menu="help">
+    <span data-i18n="menuHelp">Pomoć</span>
+    <div class="dropdown">
+      <div class="di" id="mi-about">
+        <span class="icon">ℹ️</span>
+        <span data-i18n="menuHelpAbout">O EtherX pregledniku</span>
+      </div>
+      <div class="di" id="mi-shortcuts">
+        <span class="icon">⌨️</span>
+        <span data-i18n="menuHelpShortcuts">Tipkovnički prečaci</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     USAGE NOTES / NAPOMENE ZA KORIŠTENJE:
+     ════════════════════════════════════════════════════════════════
+     
+     1. data-i18n="key" - koristi se za prijevod tekstualnog sadržaja
+     2. data-i18n-placeholder="key" - za placeholder atribut (input polja)
+     3. data-i18n-title="key" - za title atribut (tooltips)
+     
+     4. Za dinamičke prijevode u JavaScriptu:
+        window.i18n.t('menuFile')  // vraća prijevod za trenutni jezik
+        
+     5. Za promjenu jezika programski:
+        window.i18n.setLanguage('en')  // prebaci na engleski
+        
+     6. Event listener za promjenu jezika:
+        window.addEventListener('languageChanged', (e) => {
+          console.log('Jezik promijenjen na:', e.detail.lang);
+        });
+  ════════════════════════════════════════════════════════════════ -->

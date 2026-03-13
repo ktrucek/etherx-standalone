@@ -86,10 +86,6 @@ table {
     background-color: var(--bg-primary);
 }
 
-.table-footer-1 {
-    background-color: var(--bg-secondary);
-}
-
 th {
     background-color: var(--bg-secondary);
     color: var(--text-secondary);
@@ -156,7 +152,7 @@ select#currency:focus {
 
 /* Theme Toggle Switch - Light Bulb Style */
 .theme-switch-container {
-    padding-right: 13px;
+    padding: 0;
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -290,13 +286,6 @@ input:checked+.theme-slider .moon-icon {
 /* Loading spinner dark mode support */
 .spinner-grow {
     color: var(--link-color);
-}
-
-/* Footer styling */
-footer {
-    background-color: var(--bg-secondary);
-    color: var(--text-secondary);
-    border-top: 1px solid var(--border-color);
 }
 
 /* Image filters for dark mode */

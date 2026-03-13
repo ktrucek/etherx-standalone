@@ -1,0 +1,297 @@
+<!-- ════════════════════════════════════════════════════════════════
+     PRIMJER INTEGRACIJE i18n sustava u settings.html
+     ════════════════════════════════════════════════════════════════
+     
+     Kopirajte ovaj kod u settings.html fajl:
+  ════════════════════════════════════════════════════════════════ -->
+
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+  <meta charset="UTF-8">
+  <title data-i18n="settingsTitle">EtherX Postavke</title>
+  
+  <!-- Load i18n scripts -->
+  <script src="../main/i18n.js"></script>
+  <script src="../main/i18n-extended.js"></script>
+  <script src="../main/i18n-loader.js"></script>
+  
+  <!-- Existing styles -->
+  <link rel="stylesheet" href="css/browser.css">
+</head>
+<body>
+  
+  <!-- Language Selector Container (add to top-right corner) -->
+  <div id="langSelectorContainer" style="position:fixed;top:10px;right:10px;z-index:9999"></div>
+
+  <div class="settings-container">
+    
+    <!-- SIDEBAR NAVIGATION -->
+    <nav class="sidebar">
+      <div class="nav-item active" data-section="general">
+        <span data-i18n="settingsGeneral">Općenito</span>
+      </div>
+      <div class="nav-item" data-section="tabs">
+        <span data-i18n="settingsTabs">Kartice</span>
+      </div>
+      <div class="nav-item" data-section="autofill">
+        <span data-i18n="settingsAutoFill">Auto ispuna</span>
+      </div>
+      <div class="nav-item" data-section="passwords">
+        <span data-i18n="settingsPasswords">Lozinke</span>
+      </div>
+      <div class="nav-item" data-section="search">
+        <span data-i18n="settingsSearch">Pretraga</span>
+      </div>
+      <div class="nav-item" data-section="security">
+        <span data-i18n="settingsSecurity">Sigurnost</span>
+      </div>
+      <div class="nav-item" data-section="privacy">
+        <span data-i18n="settingsPrivacy">Privatnost</span>
+      </div>
+      <div class="nav-item" data-section="websites">
+        <span data-i18n="settingsWebsites">Web-stranice</span>
+      </div>
+      <div class="nav-item" data-section="profiles">
+        <span data-i18n="settingsProfiles">Profili</span>
+      </div>
+      <div class="nav-item" data-section="extensions">
+        <span data-i18n="settingsExtensions">Proširenja</span>
+      </div>
+      <div class="nav-item" data-section="advanced">
+        <span data-i18n="settingsAdvanced">Napredno</span>
+      </div>
+      <div class="nav-item" data-section="developer">
+        <span data-i18n="settingsDeveloper">Programer</span>
+      </div>
+      <div class="nav-item" data-section="flags">
+        <span data-i18n="settingsFlags">Zastavice</span>
+      </div>
+      <div class="nav-item" data-section="appearance">
+        <span data-i18n="settingsAppearance">Izgled</span>
+      </div>
+      <div class="nav-item" data-section="language">
+        <span data-i18n="settingsLanguage">Jezik</span>
+      </div>
+      <div class="nav-item" data-section="storage">
+        <span data-i18n="settingsStorage">Pohrana</span>
+      </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="content">
+      
+      <!-- ══════════════════════════════════════════
+           OPĆENITO (GENERAL)
+           ══════════════════════════════════════════ -->
+      <section id="section-general" class="active">
+        <h1 data-i18n="settingsGeneral">Općenito</h1>
+        <p data-i18n="settingsGeneralDesc" class="desc">
+          Opće postavke preglednika kao što su početna stranica, stranica nove kartice i zadane radnje.
+        </p>
+        
+        <div class="setting-row">
+          <label data-i18n="settingsGeneralStartup">Prilikom pokretanja:</label>
+          <select id="startup">
+            <option value="newtab" data-i18n="settingsGeneralStartupNewTab">Novu karticu</option>
+            <option value="continue" data-i18n="settingsGeneralStartupContinue">Nastavi s prethodnom sesijom</option>
+            <option value="homepage" data-i18n="settingsGeneralStartupHome">Početnu stranicu</option>
+          </select>
+        </div>
+        
+        <div class="setting-row">
+          <label data-i18n="settingsGeneralHomepage">Početna stranica:</label>
+          <input type="url" id="homepage" data-i18n-placeholder="settingsGeneralHomepagePlace" placeholder="https://etherx.io">
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="show-home-btn">
+          <label for="show-home-btn" data-i18n="settingsGeneralShowHome">Prikaži gumb početne stranice u alatnoj traci</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="new-tab-shows-home">
+          <label for="new-tab-shows-home" data-i18n="settingsGeneralNewTabHome">Nova kartica prikazuje početnu stranicu</label>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           KARTICE (TABS)
+           ══════════════════════════════════════════ -->
+      <section id="section-tabs">
+        <h1 data-i18n="settingsTabs">Kartice</h1>
+        <p data-i18n="settingsTabsDesc" class="desc">
+          Postavke vezane uz upravljanje karticama, njihov izgled i ponašanje.
+        </p>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="tab-bar-visible">
+          <label for="tab-bar-visible" data-i18n="settingsTabsShowBar">Prikaži traku kartica</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="tab-close-btn">
+          <label for="tab-close-btn" data-i18n="settingsTabsCloseBtn">Prikaži gumb za zatvaranje na karticama</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="auto-hide-tabs">
+          <label for="auto-hide-tabs" data-i18n="settingsTabsAutoHide">Automatski sakrij traku kartica kada je otvorena samo jedna kartica</label>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           AUTO ISPUNA (AUTOFILL)
+           ══════════════════════════════════════════ -->
+      <section id="section-autofill">
+        <h1 data-i18n="settingsAutoFill">Auto ispuna</h1>
+        <p data-i18n="settingsAutoFillDesc" class="desc">
+          Upravljajte spremljenim adresama, brojeve kreditnih kartica i ostale podatke za automatsko ispunjavanje obrazaca.
+        </p>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="autofill-enabled">
+          <label for="autofill-enabled" data-i18n="settingsAutoFillEnable">Omogući automatsko ispunjavanje obrazaca</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="autofill-addresses">
+          <label for="autofill-addresses" data-i18n="settingsAutoFillAddresses">Spremi i ispuni adrese</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="autofill-cards">
+          <label for="autofill-cards" data-i18n="settingsAutoFillCards">Spremi i ispuni podatke platnih kartica</label>
+        </div>
+        
+        <button data-i18n="settingsAutoFillManageBtn">Upravljaj spremljenim podacima</button>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           LOZINKE (PASSWORDS)
+           ══════════════════════════════════════════ -->
+      <section id="section-passwords">
+        <h1 data-i18n="settingsPasswords">Lozinke</h1>
+        <p data-i18n="settingsPasswordsDesc" class="desc">
+          Upravljajte spremljenim lozinkama i postavkama za automatsko spremanje.
+        </p>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="save-passwords">
+          <label for="save-passwords" data-i18n="settingsPasswordsSave">Ponudi spremanje lozinki</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="autofill-passwords">
+          <label for="autofill-passwords" data-i18n="settingsPasswordsAutoFill">Automatski ispuni lozinke</label>
+        </div>
+        
+        <button data-i18n="settingsPasswordsManageBtn">Upravljaj spremljenim lozinkama</button>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           PRETRAGA (SEARCH)
+           ══════════════════════════════════════════ -->
+      <section id="section-search">
+        <h1 data-i18n="settingsSearch">Pretraga</h1>
+        <p data-i18n="settingsSearchDesc" class="desc">
+          Upravljajte tražilicama i postavkama pretrage.
+        </p>
+        
+        <div class="setting-row">
+          <label data-i18n="settingsSearchEngine">Zadana tražilica:</label>
+          <select id="search-engine">
+            <option value="google">Google</option>
+            <option value="bing">Bing</option>
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="brave">Brave</option>
+          </select>
+        </div>
+        
+        <button data-i18n="settingsSearchManageBtn">Upravljaj tražilicama</button>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           SIGURNOST (SECURITY)
+           ══════════════════════════════════════════ -->
+      <section id="section-security">
+        <h1 data-i18n="settingsSecurity">Sigurnost</h1>
+        <p data-i18n="settingsSecurityDesc" class="desc">
+          Postavke za zaštitu od zlonamjernih stranica i preuzimanja.
+        </p>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="safe-browsing">
+          <label for="safe-browsing" data-i18n="settingsSecuritySafe">Zaštita od opasnih stranica i preuzimanja</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="https-only">
+          <label for="https-only" data-i18n="settingsSecurityHTTPS">Uvijek koristi HTTPS kada je moguće</label>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════════════════
+           PRIVATNOST (PRIVACY)
+           ══════════════════════════════════════════ -->
+      <section id="section-privacy">
+        <h1 data-i18n="settingsPrivacy">Privatnost</h1>
+        <p data-i18n="settingsPrivacyDesc" class="desc">
+          Upravljajte kolačićima, poviješću pretraživanja i drugim postavkama privatnosti.
+        </p>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="dnt">
+          <label for="dnt" data-i18n="settingsPrivacyDNT">Šalji "Ne prati" zahtjev</label>
+        </div>
+        
+        <div class="setting-row">
+          <input type="checkbox" id="block-3p-cookies">
+          <label for="block-3p-cookies" data-i18n="settingsPrivacyBlock3P">Blokiraj kolačiće treće strane</label>
+        </div>
+        
+        <button data-i18n="settingsPrivacyClearBtn">Obriši podatke pretraživanja</button>
+      </section>
+
+      <!-- Add more sections for: Websites, Profiles, Extensions, Advanced, Developer, Flags, Appearance, Language, Storage -->
+      
+    </main>
+  </div>
+
+  <!-- Initialize i18n -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize i18n system
+      window.i18n.initI18n();
+      
+      // Add language selector to container
+      const container = document.getElementById('langSelectorContainer');
+      window.i18n.createLanguageSelector(container);
+      
+      console.log('[EtherX Settings] i18n system initialized');
+      
+      // Listen for language changes
+      window.addEventListener('languageChanged', (e) => {
+        console.log('Language changed to:', e.detail.lang);
+      });
+    });
+  </script>
+
+</body>
+</html>
+
+<!-- ════════════════════════════════════════════════════════════════
+     NAPOMENE:
+     ════════════════════════════════════════════════════════════════
+     
+     1. Ovaj primjer pokazuje kako dodati data-i18n atribute
+     2. Sidebar navigacija koristi data-i18n za nazive sekcija
+     3. Svaka sekcija ima naslov i opis s data-i18n
+     4. Checkboxi, labele, inputi i buttoni imaju data-i18n
+     5. Input polja koriste data-i18n-placeholder za placeholder tekst
+     6. Language selector se dodaje u fiksni kontejner (top-right)
+     
+     Za pitanja i primjere pogledajte:
+     - src/main/i18n-extended.js (svi prijevodi)
+     - src/main/i18n-loader.js (API dokumentacija)
+  ════════════════════════════════════════════════════════════════ -->
