@@ -18,12 +18,24 @@ const { execFile } = require('child_process');
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
-// Only apply on Linux headless/CI environments
+// Only apply on Linux headless/CI environments — on desktop keep GPU enabled for performance
+const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+const isHeadless = process.env.DISPLAY === undefined && process.platform === 'linux';
+
 if (process.platform !== 'darwin') {
   app.commandLine.appendSwitch('no-sandbox');
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
   app.commandLine.appendSwitch('disable-dev-shm-usage');
+
+  // Disable GPU only in CI/headless environments — on desktop keep GPU enabled for performance
+  if (isCI || isHeadless) {
+    app.commandLine.appendSwitch('disable-gpu');
+    app.commandLine.appendSwitch('disable-software-rasterizer');
+  } else {
+    // Enable hardware acceleration on desktop
+    app.commandLine.appendSwitch('enable-gpu-rasterization');
+    app.commandLine.appendSwitch('enable-zero-copy');
+    app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  }
 }
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
@@ -1001,11 +1013,36 @@ app.on('web-contents-created', (_event, contents) => {
     } catch (_) { }
   });
 
+  // Handle new windows (popups, target="_blank", window.open) — route them as new tabs inside EtherX
+  // Without this handler Electron's default is to open new windows in the system default browser!
+  contents.setWindowOpenHandler((details) => {
+    try {
+      const parsedUrl = new URL(details.url);
+
+      // Block external app protocols
+      if (['mailto:', 'tel:', 'sms:', 'facetime:', 'skype:', 'zoom:', 'magnet:', 'sip:'].includes(parsedUrl.protocol)) {
+        return { action: 'deny' };
+      }
+
+      // Route http/https URLs as new tab inside EtherX instead of spawning a system browser
+      if (['http:', 'https:', 'about:', 'chrome-extension:'].includes(parsedUrl.protocol)) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('app:createTab', details.url);
+        }
+        return { action: 'deny' };
+      }
+    } catch (_) { }
+
+    return { action: 'deny' };
+  });
+
   contents.on('will-navigate', (_e, url) => {
     try {
       const { URL: NURL } = require('url');
       const parsed = new NURL(url);
-      if (!['http:', 'https:', 'file:', 'about:'].includes(parsed.protocol)) {
+      if (['mailto:', 'tel:', 'sms:', 'magnet:'].includes(parsed.protocol)) {
+        _e.preventDefault();
+      } else if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:'].includes(parsed.protocol)) {
         _e.preventDefault();
       }
     } catch {
