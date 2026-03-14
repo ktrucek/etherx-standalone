@@ -190,7 +190,16 @@ configureNativeMenu();
 app.whenReady().then(async () => {
   // Init database (wrapped — better-sqlite3 may fail on wrong arch)
   try {
-    if (DatabaseManager) { db = new DatabaseManager(app.getPath('userData')); await db.init(); }
+    if (DatabaseManager) {
+      db = new DatabaseManager(app.getPath('userData'));
+      await db.init();
+      // Prune history on startup if setting exists
+      const settings = db.getSettings();
+      if (settings.history_retention_days) {
+        const days = parseInt(settings.history_retention_days);
+        if (days > 0) db.pruneHistory(days);
+      }
+    }
   } catch (e) { console.error('❌ DB init failed:', e.message); db = null; }
 
   // Init ad blocker

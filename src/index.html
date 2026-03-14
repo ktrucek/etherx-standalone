@@ -73,6 +73,8 @@
       display: flex;
       align-items: center;
       padding: 0 12px;
+      padding-left: 80px;
+      /* Space for macOS traffic lights */
       gap: 10px;
       border-bottom: 1px solid var(--border);
       user-select: none;
@@ -81,9 +83,19 @@
       min-width: 0;
     }
 
+    /* Hide custom win-btns on macOS because titleBarStyle: hiddenInset handles them */
     .win-btns {
-      display: flex;
+      display: none;
       gap: 6px
+    }
+
+    /* Show win-btns only on non-mac or web mode (where hiddenInset doesn't exist) */
+    body:not(.platform-darwin) .win-btns {
+      display: flex;
+    }
+
+    body.is-web .win-btns {
+      display: flex;
     }
 
     .win-btn {
@@ -5976,50 +5988,52 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">EtherX opens with</div>
+                  <div class="s-row-label" data-i18n="labelOpensWith">EtherX opens with</div>
                 </div>
                 <select class="s-select" data-setting="opensWith">
-                  <option>A new window</option>
-                  <option>A new private window</option>
-                  <option>All windows from last session</option>
+                  <option data-i18n="optNewWindow">A new window</option>
+                  <option data-i18n="optNewPrivateWindow">A new private window</option>
+                  <option data-i18n="optAllLastSession">All windows from last session</option>
                 </select>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">New windows open with</div>
+                  <div class="s-row-label" data-i18n="labelNewWindowWith">New windows open with</div>
                 </div>
                 <select class="s-select" data-setting="newWindowWith">
-                  <option>Start Page</option>
-                  <option>Homepage</option>
-                  <option>Empty Page</option>
-                  <option>Same Page</option>
+                  <option data-i18n="optStartPage">Start Page</option>
+                  <option data-i18n="optHomepage">Homepage</option>
+                  <option data-i18n="optEmptyPage">Empty Page</option>
+                  <option data-i18n="optSamePage">Same Page</option>
                 </select>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">New tabs open with</div>
+                  <div class="s-row-label" data-i18n="labelNewTabWith">New tabs open with</div>
                 </div>
                 <select class="s-select" data-setting="newTabWith">
-                  <option>Start Page</option>
-                  <option>Homepage</option>
-                  <option>Empty Page</option>
+                  <option data-i18n="optStartPage">Start Page</option>
+                  <option data-i18n="optHomepage">Homepage</option>
+                  <option data-i18n="optEmptyPage">Empty Page</option>
                 </select>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Homepage</div>
+                  <div class="s-row-label" data-i18n="labelHomepage">Homepage</div>
                 </div>
-                <input class="s-input" id="sHomepage" data-setting="homepage" placeholder="https://…">
+                <input class="s-input" id="sHomepage" data-setting="homepage" placeholder="https://…"
+                  data-i18n="placeholderUrl">
               </div>
               <div class="s-row" style="justify-content:flex-end">
-                <button class="s-btn-sm" id="sSetCurrentPage">Set to Current Page</button>
+                <button class="s-btn-sm" id="sSetCurrentPage" data-i18n="btnSetToCurrent">Set to Current Page</button>
               </div>
             </div>
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Browser Logo</div>
-                  <div class="s-row-desc">Customize the logo shown in the title bar and start page</div>
+                  <div class="s-row-label" data-i18n="labelBrowserLogo">Browser Logo</div>
+                  <div class="s-row-desc" data-i18n="descBrowserLogo">Customize the logo shown in the title bar and
+                    start page</div>
                 </div>
               </div>
               <div class="s-row" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
@@ -6032,19 +6046,21 @@
                   <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <label
                       style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2)">
-                      📁 Upload image
+                      <span data-i18n="btnUploadImage">📁 Upload image</span>
                       <input type="file" id="logoFileInput" accept="image/*" style="display:none">
                     </label>
-                    <button id="logoEmojiBtn"
+                    <button id="logoEmojiBtn" data-i18n="btnUseEmoji"
                       style="padding:6px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2)">😀
                       Use emoji / text</button>
-                    <button id="logoResetBtn"
+                    <button id="logoResetBtn" data-i18n="btnReset"
                       style="padding:6px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2)">↺
                       Reset</button>
                   </div>
                   <input type="text" id="logoEmojiInput" placeholder="Type emoji or letter, e.g. 🔥 or E" maxlength="8"
+                    data-i18n="placeholderEmoji"
                     style="display:none;padding:6px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:18px;width:100%;box-sizing:border-box">
-                  <div style="font-size:11px;color:var(--text3)">Logo appears in the title bar (top-left E) and on the
+                  <div style="font-size:11px;color:var(--text3)" data-i18n="descLogoAppears">Logo appears in the title
+                    bar (top-left E) and on the
                     start page.</div>
                 </div>
               </div>
@@ -6052,53 +6068,54 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Remove history items</div>
+                  <div class="s-row-label" data-i18n="labelRemoveHistory">Remove history items</div>
                 </div>
                 <select class="s-select" data-setting="historyExpiry">
-                  <option>After one day</option>
-                  <option>After one week</option>
-                  <option>After two weeks</option>
-                  <option selected>After one year</option>
-                  <option>Manually</option>
+                  <option data-i18n="optAfterOneDay">After one day</option>
+                  <option data-i18n="optAfterOneWeek">After one week</option>
+                  <option data-i18n="optAfterTwoWeeks">After two weeks</option>
+                  <option data-i18n="optAfterOneYear" selected>After one year</option>
+                  <option data-i18n="optManually">Manually</option>
                 </select>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Start Page Favourites</div>
+                  <div class="s-row-label" data-i18n="labelStartPageFavs">Start Page Favourites</div>
                 </div>
                 <select class="s-select" data-setting="startPageFavs">
-                  <option>⭐ Favourites</option>
-                  <option>📚 Bookmarks</option>
-                  <option>🕓 History</option>
+                  <option data-i18n="optFavs">⭐ Favourites</option>
+                  <option data-i18n="optBookmarks">📚 Bookmarks</option>
+                  <option data-i18n="optHistory">🕓 History</option>
                 </select>
               </div>
             </div>
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">File download location</div>
+                  <div class="s-row-label" data-i18n="labelFileDownload">File download location</div>
                 </div>
                 <select class="s-select" data-setting="dlLocation">
-                  <option>📁 Downloads</option>
-                  <option>🖥 Desktop</option>
-                  <option>Ask for each download</option>
+                  <option data-i18n="optDownloads">📁 Downloads</option>
+                  <option data-i18n="optDesktop">🖥 Desktop</option>
+                  <option data-i18n="optAskEach">Ask for each download</option>
                 </select>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Remove download list items</div>
+                  <div class="s-row-label" data-i18n="labelRemoveDownload">Remove download list items</div>
                 </div>
                 <select class="s-select" data-setting="dlExpiry">
-                  <option selected>After one day</option>
-                  <option>After one week</option>
-                  <option>Manually</option>
-                  <option>Upon successful download</option>
+                  <option data-i18n="optAfterOneDay" selected>After one day</option>
+                  <option data-i18n="optAfterOneWeek">After one week</option>
+                  <option data-i18n="optManually">Manually</option>
+                  <option data-i18n="optUponSuccess">Upon successful download</option>
                 </select>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Open "safe" files after downloading</div>
-                  <div class="s-row-desc">"Safe" files include movies, pictures, sounds, text documents and archives
+                  <div class="s-row-label" data-i18n="labelOpenSafeFiles">Open "safe" files after downloading</div>
+                  <div class="s-row-desc" data-i18n="descOpenSafeFiles">"Safe" files include movies, pictures, sounds,
+                    text documents and archives
                   </div>
                 </div>
                 <div class="toggle on" data-setting="openSafeFiles"></div>
@@ -6107,10 +6124,12 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Zadani preglednik</div>
-                  <div class="s-row-desc">Postavi EtherX kao zadani preglednik za otvaranje web linkova.</div>
+                  <div class="s-row-label" data-i18n="labelDefaultBrowser">Zadani preglednik</div>
+                  <div class="s-row-desc" data-i18n="descDefaultBrowser">Postavi EtherX kao zadani preglednik za
+                    otvaranje web linkova.</div>
                 </div>
-                <button class="s-btn s-btn-primary" id="btnSetDefaultBrowser">🌐 Postavi kao zadani</button>
+                <button class="s-btn s-btn-primary" id="btnSetDefaultBrowser" data-i18n="btnSetDefault">🌐 Postavi kao
+                  zadani</button>
               </div>
             </div>
           </div>
@@ -6324,7 +6343,7 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Search engine</div>
+                  <div class="s-row-label" data-i18n="labelSearchEngine">Search engine</div>
                 </div><select class="s-select" data-setting="searchEngine">
                   <option>Google</option>
                   <option>DuckDuckGo</option>
@@ -6333,33 +6352,35 @@
                   <option>Startpage</option>
                   <option>Yahoo</option>
                   <option>Ecosia</option>
-                  <option value="custom">Custom…</option>
+                  <option value="custom" data-i18n="optCustom">Custom…</option>
                 </select>
               </div>
               <div class="s-row" id="customSearchRow"
                 style="position:absolute;top:-100px;width:1px;height:1px;opacity:0">
                 <div class="s-row-left">
-                  <div class="s-row-label">Custom search URL</div>
-                  <div class="s-row-desc">Use %s for the search query, e.g. https://search.example.com/?q=%s</div>
+                  <div class="s-row-label" data-i18n="labelCustomSearchUrl">Custom search URL</div>
+                  <div class="s-row-desc" data-i18n="descCustomSearchUrl">Use %s for the search query, e.g.
+                    https://search.example.com/?q=%s</div>
                 </div><input class="s-input" id="sCustomSearchURL" data-setting="customSearchURL"
                   placeholder="https://search.example.com/?q=%s">
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Include search engine suggestions</div>
+                  <div class="s-row-label" data-i18n="labelIncludeSuggest">Include search engine suggestions</div>
                 </div>
                 <div class="toggle on" data-setting="searchSuggest"></div>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Enable Quick Website Search</div>
-                  <div class="s-row-desc">Search specific websites directly from address bar</div>
+                  <div class="s-row-label" data-i18n="labelEnableQuickSearch">Enable Quick Website Search</div>
+                  <div class="s-row-desc" data-i18n="descEnableQuickSearch">Search specific websites directly from
+                    address bar</div>
                 </div>
                 <div class="toggle on" data-setting="quickWebSearch"></div>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Preload Top Hit in the background</div>
+                  <div class="s-row-label" data-i18n="labelPreloadTopHit">Preload Top Hit in the background</div>
                 </div>
                 <div class="toggle" data-setting="preloadTopHit"></div>
               </div>
@@ -7109,7 +7130,27 @@
               <div class="s-group-title">⭐ Bookmark Toolbar</div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Show Bookmark Toolbar</div>
+                  <div class="s-row-label">Show Favourites Bar</div>
+                  <div class="s-row-desc">Prikaži traku s najčešćim stranicama (ikonice)</div>
+                </div>
+                <label class="s-toggle">
+                  <input type="checkbox" id="settingShowFavBar" data-setting="show_fav_bar">
+                  <span class="s-toggle-track"></span>
+                </label>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Show Bookmark Folders</div>
+                  <div class="s-row-desc">Prikaži traku s mapama bookmarka</div>
+                </div>
+                <label class="s-toggle">
+                  <input type="checkbox" id="settingShowBmFolders" data-setting="show_bm_folders">
+                  <span class="s-toggle-track"></span>
+                </label>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Show Bookmark Bar</div>
                   <div class="s-row-desc">Show a bar of bookmarks below the address bar</div>
                 </div>
                 <label class="s-toggle">
@@ -7501,14 +7542,16 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">Interface Language</div>
-                  <div class="s-row-desc">All menus, settings labels and UI text will switch to the selected language
+                  <div class="s-row-label" style="font-weight:600" id="lang-label-interface"
+                    data-i18n="langInterfaceLabel">Interface Language</div>
+                  <div class="s-row-desc" id="lang-desc-interface" data-i18n="langInterfaceDesc">All menus, settings
+                    labels and UI text will switch to the selected language
                   </div>
                 </div>
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Jezik</div>
+                  <div class="s-row-label" id="lang-label-lang" data-i18n="langLabelLang">Jezik</div>
                 </div>
                 <select class="s-select" id="langSelect">
                   <option value="en">🇬🇧 English</option>
@@ -7521,10 +7564,12 @@
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Download language pack</div>
-                  <div class="s-row-desc">Cache translations offline</div>
+                  <div class="s-row-label" id="lang-label-download" data-i18n="langDownloadLabel">Download language pack
+                  </div>
+                  <div class="s-row-desc" id="lang-desc-download" data-i18n="langDownloadDesc">Cache translations
+                    offline</div>
                 </div>
-                <button id="langDownloadBtn"
+                <button id="langDownloadBtn" data-i18n="langDownloadBtn"
                   style="padding:7px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">⬇
                   Download</button>
               </div>
@@ -7533,7 +7578,8 @@
             <div class="s-group" style="margin-top:12px" id="langPreviewGroup">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">Preview</div>
+                  <div class="s-row-label" style="font-weight:600" id="lang-label-preview" data-i18n="langPreviewLabel">
+                    Preview</div>
                   <div class="s-row-desc" id="langPreviewDesc">Current language: English</div>
                 </div>
               </div>
@@ -7556,8 +7602,10 @@
             <div class="s-group">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600;font-size:14px">💾 Storage Management</div>
-                  <div class="s-row-desc">Configure where each data type is saved and manage localStorage keys</div>
+                  <div class="s-row-label" style="font-weight:600;font-size:14px" data-i18n="labelStorageManagement">💾
+                    Storage Management</div>
+                  <div class="s-row-desc" data-i18n="descStorageManagement">Configure where each data type is saved and
+                    manage localStorage keys</div>
                 </div>
               </div>
             </div>
@@ -7566,8 +7614,10 @@
             <div class="s-group" style="margin-top:4px">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">🗄️ Storage Key Mapping</div>
-                  <div class="s-row-desc">Change which localStorage key each data store uses</div>
+                  <div class="s-row-label" style="font-weight:600" data-i18n="labelStorageKeyMapping">🗄️ Storage Key
+                    Mapping</div>
+                  <div class="s-row-desc" data-i18n="descStorageKeyMapping">Change which localStorage key each data
+                    store uses</div>
                 </div>
               </div>
               <div id="storageKeyTable" style="margin-top:6px">
@@ -7579,9 +7629,9 @@
             <div class="s-group" style="margin-top:12px">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">📊 Storage Usage</div>
+                  <div class="s-row-label" style="font-weight:600" data-i18n="labelStorageUsage">📊 Storage Usage</div>
                 </div>
-                <button id="btnRefreshStorage"
+                <button id="btnRefreshStorage" data-i18n="btnRefresh"
                   style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">↺
                   Refresh</button>
               </div>
@@ -7595,8 +7645,10 @@
             <div class="s-group" style="margin-top:12px">
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">📤 Export / Import per Store</div>
-                  <div class="s-row-desc">Backup or restore individual data stores as JSON</div>
+                  <div class="s-row-label" style="font-weight:600" data-i18n="labelExportImportStore">📤 Export / Import
+                    per Store</div>
+                  <div class="s-row-desc" data-i18n="descExportImportStore">Backup or restore individual data stores as
+                    JSON</div>
                 </div>
               </div>
               <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px" id="storeExportList">
@@ -7892,7 +7944,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.68</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.69</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8140,7 +8192,7 @@
             <select class="s-select" id="settingHistoryDays">
               <option value="7">7 dana</option>
               <option value="30">30 dana</option>
-              <option value="90" selected>90 dana</option>
+              <option value="90">90 dana</option>
               <option value="180">6 mjeseci</option>
               <option value="365">1 godina</option>
               <option value="-1">Zauvijek</option>
@@ -8193,7 +8245,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.68</span></div>
+                id="helpVersionNum2">2.4.69</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8752,6 +8804,11 @@
             <div class="app-item" id="appSqliteDownloads">⬇️ Downloads</div>
             <div class="app-item" id="appSqliteSessions">🗄️ Sessions</div>
             <div class="app-item" id="appSqlitePasswords">🔑 Passwords</div>
+            <div style="margin-top:20px;padding:0 10px">
+              <button onclick="syncLocalToSqlite()"
+                style="width:100%;padding:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-size:10px;cursor:pointer">🔄
+                Sync All to SQLite</button>
+            </div>
           </div>
           <div class="app-content" id="appContent"></div>
         </div>
@@ -9403,6 +9460,14 @@
         });
       }
     }
+    // ── Platform and environment init ──
+    (function initEnv() {
+      const isMac = (window.electronAPI?.platform === 'darwin') || navigator.userAgent.includes('Mac');
+      if (isMac) document.body.classList.add('platform-darwin');
+      if (!window.electronAPI) document.body.classList.add('is-web');
+      else document.body.classList.add('is-electron');
+    })();
+
     const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false, autoBookmark: false };
     const DB = {
       getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
@@ -10760,7 +10825,13 @@
       const origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
       console.log = function (...args) { consoleLog('log', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'browser.html'); origLog.apply(console, args); };
       console.warn = function (...args) { consoleLog('warn', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'browser.html'); origWarn.apply(console, args); };
-      console.error = function (...args) { consoleLog('error', args.map(a => a instanceof Error ? (a.message || String(a)) : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '), 'browser.html'); origError.apply(console, args); };
+      console.error = function (...args) {
+        const msg = args.map(a => a instanceof Error ? (a.message || String(a)) : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+        // Silence Electron-internal ERR_ABORTED (-3) which is normal during navigation
+        if (msg.includes('ERR_ABORTED (-3)')) { origError.apply(console, args); return; }
+        consoleLog('error', msg, 'browser.html');
+        origError.apply(console, args);
+      };
       console.info = function (...args) { consoleLog('info', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'browser.html'); origInfo.apply(console, args); };
 
       // Global error handler
@@ -11597,7 +11668,16 @@
     document.getElementById('mi-always-toolbar').addEventListener('click', () => { const chk = document.getElementById('mi-always-toolbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; DB.saveSetting('alwaysToolbar', !on); showToast((on ? 'Hide' : 'Show') + ' toolbar in full screen'); });
     document.getElementById('mi-customise-toolbar').addEventListener('click', () => { openCustomToolbar(); });
     document.getElementById('mi-always-tab-bar').addEventListener('click', () => { const chk = document.getElementById('mi-always-tab-bar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; const tb = document.getElementById('tabBar'); tb.style.display = on ? 'none' : 'flex'; showToast((on ? 'Hide' : 'Always show') + ' Tab Bar'); });
-    document.getElementById('mi-show-favbar').addEventListener('click', () => { const chk = document.getElementById('mi-show-favbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; DB.saveSetting('show_bookmark_bar', !on); const stChk = document.getElementById('settingShowBookmarkBar'); if (stChk) stChk.checked = !on; let fb = document.getElementById('favBar'); if (!on) { if (!fb) { fb = document.createElement('div'); fb.id = 'favBar'; fb.style.cssText = 'height:28px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:4px;flex-shrink:0;font-size:11px;overflow-x:auto'; const maxBm = parseInt(DB.getSettings().bookmark_bar_max) || 8; const bms = DB.getBookmarks().slice(0, maxBm); if (bms.length === 0) { fb.innerHTML = '<span style="color:var(--text3);padding:0 8px">Add bookmarks to see them here</span>'; } else { bms.forEach(b => { const btn = document.createElement('button'); btn.style.cssText = 'background:var(--bg3);border:1px solid var(--border2);border-radius:10px;color:var(--text2);padding:2px 10px;cursor:pointer;font-size:11px;white-space:nowrap'; btn.textContent = '🌐 ' + (b.title || b.url).slice(0, 18); btn.addEventListener('click', () => navigateTo(b.url)); fb.appendChild(btn); }); } const navBar = document.querySelector('.nav-bar'); navBar.parentNode.insertBefore(fb, navBar.nextSibling); } fb.style.display = 'flex'; showToast('⭐ Favourites Bar shown'); } else { if (fb) fb.style.display = 'none'; showToast('⭐ Favourites Bar hidden'); } });
+    document.getElementById('mi-show-favbar').addEventListener('click', () => {
+      const chk = document.getElementById('mi-show-favbar-chk');
+      const on = chk.style.opacity !== '0';
+      const newState = !on;
+      chk.style.opacity = newState ? '1' : '0';
+      DB.saveSetting('show_fav_bar', newState);
+      const stChk = document.getElementById('settingShowFavBar'); if (stChk) stChk.checked = newState;
+      window.toggleFavBar(newState);
+      showToast(newState ? '⭐ Favourites Bar shown' : '⭐ Favourites Bar hidden');
+    });
     document.getElementById('mi-show-statusbar').addEventListener('click', () => { const chk = document.getElementById('mi-show-statusbar-chk'); const on = chk.style.opacity !== '0'; chk.style.opacity = on ? '0' : '1'; const sb = document.querySelector('.status-bar'); sb.style.display = on ? 'none' : 'flex'; showToast((on ? 'Hide' : 'Show') + ' Status Bar'); });
     document.getElementById('mi-show-sidebar').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); document.getElementById('mi-show-sidebar-chk').style.opacity = document.getElementById('bmPanel').classList.contains('open') ? '1' : '0'; });
     document.getElementById('mi-show-bm-sidebar').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); document.getElementById('mi-show-bm-sidebar-chk').style.opacity = document.getElementById('bmPanel').classList.contains('open') ? '1' : '0'; });
@@ -14698,7 +14778,56 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tabSearch: 'Search', tabSecurity: 'Security', tabPrivacy: 'Privacy', tabWebsites: 'Websites',
         tabProfiles: 'Profiles', tabExtensions: 'Extensions', tabAdvanced: 'Advanced',
         tabDeveloper: 'Developer', tabFlags: 'Feature Flags', tabMigration: 'Import Data',
-        tabAppearance: 'Appearance', tabLanguage: 'Language',
+        tabAppearance: 'Appearance', tabLanguage: 'Language', tabUpdates: 'Updates', tabStorage: 'Storage', tabHelp: 'Help', tabAI: 'AI',
+        langInterfaceLabel: 'Interface Language',
+        langInterfaceDesc: 'All menus, settings labels and UI text will switch to the selected language',
+        langLabelLang: 'Language',
+        langDownloadLabel: 'Download language pack',
+        langDownloadDesc: 'Cache translations offline',
+        langDownloadBtn: '⬇ Download',
+        langPreviewLabel: 'Preview',
+        labelOpensWith: 'EtherX opens with',
+        optNewWindow: 'A new window',
+        optNewPrivateWindow: 'A new private window',
+        optAllLastSession: 'All windows from last session',
+        labelNewWindowWith: 'New windows open with',
+        optStartPage: 'Start Page',
+        optHomepage: 'Homepage',
+        optEmptyPage: 'Empty Page',
+        optSamePage: 'Same Page',
+        labelNewTabWith: 'New tabs open with',
+        labelHomepage: 'Homepage',
+        placeholderUrl: 'https://…',
+        btnSetToCurrent: 'Set to Current Page',
+        labelBrowserLogo: 'Browser Logo',
+        descBrowserLogo: 'Customize the logo shown in the title bar and start page',
+        btnUploadImage: '📁 Upload image',
+        btnUseEmoji: '😀 Use emoji / text',
+        btnReset: '↺ Reset',
+        placeholderEmoji: 'Type emoji or letter, e.g. 🔥 or E',
+        descLogoAppears: 'Logo appears in the title bar (top-left E) and on the start page.',
+        labelRemoveHistory: 'Remove history items',
+        optAfterOneDay: 'After one day',
+        optAfterOneWeek: 'After one week',
+        optAfterTwoWeeks: 'After two weeks',
+        optAfterOneMonth: 'After one month',
+        optAfterOneYear: 'After one year',
+        optManually: 'Manually',
+        labelStartPageFavs: 'Start Page Favourites',
+        optFavs: '⭐ Favourites',
+        optBookmarks: '📚 Bookmarks',
+        optHistory: '🕓 History',
+        labelFileDownload: 'File download location',
+        optDownloads: '📁 Downloads',
+        optDesktop: '🖥 Desktop',
+        optAskEach: 'Ask for each download',
+        labelRemoveDownload: 'Remove download list items',
+        optUponSuccess: 'Upon successful download',
+        labelOpenSafeFiles: 'Open "safe" files after downloading',
+        descOpenSafeFiles: '"Safe" files include movies, pictures, sounds, text documents and archives',
+        labelDefaultBrowser: 'Default Browser',
+        descDefaultBrowser: 'Set EtherX as your default browser for opening web links.',
+        btnSetDefault: '🌐 Set as Default',
       },
       hr: {
         name: 'Hrvatski', flag: '🇭🇷',
@@ -14721,7 +14850,56 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tabSearch: 'Pretraga', tabSecurity: 'Sigurnost', tabPrivacy: 'Privatnost', tabWebsites: 'Web-stranice',
         tabProfiles: 'Profili', tabExtensions: 'Proširenja', tabAdvanced: 'Napredno',
         tabDeveloper: 'Programer', tabFlags: 'Zastavice', tabMigration: 'Uvoz podataka',
-        tabAppearance: 'Izgled', tabLanguage: 'Jezik',
+        tabAppearance: 'Izgled', tabLanguage: 'Jezik', tabUpdates: 'Ažuriranja', tabStorage: 'Pohrana', tabHelp: 'Pomoć', tabAI: 'AI',
+        langInterfaceLabel: 'Jezik sučelja',
+        langInterfaceDesc: 'Svi izbornici, oznake postavki i tekst sučelja prebacit će se na odabrani jezik',
+        langLabelLang: 'Jezik',
+        langDownloadLabel: 'Preuzmi jezični paket',
+        langDownloadDesc: 'Spremi prijevode za izvanmrežni rad',
+        langDownloadBtn: '⬇ Preuzmi',
+        langPreviewLabel: 'Pretpregled',
+        labelOpensWith: 'EtherX se otvara s',
+        optNewWindow: 'Novim prozorom',
+        optNewPrivateWindow: 'Novim privatnim prozorom',
+        optAllLastSession: 'Svim prozorima iz zadnje sesije',
+        labelNewWindowWith: 'Novi prozori se otvaraju s',
+        optStartPage: 'Početnom stranicom',
+        optHomepage: 'Početnom stranicom (adresa)',
+        optEmptyPage: 'Praznom stranicom',
+        optSamePage: 'Istom stranicom',
+        labelNewTabWith: 'Nove kartice se otvaraju s',
+        labelHomepage: 'Početna stranica',
+        placeholderUrl: 'https://…',
+        btnSetToCurrent: 'Postavi na trenutnu stranicu',
+        labelBrowserLogo: 'Logotip preglednika',
+        descBrowserLogo: 'Prilagodi logotip prikazan u naslovnoj traci i na početnoj stranici',
+        btnUploadImage: '📁 Prenesi sliku',
+        btnUseEmoji: '😀 Koristi emoji / tekst',
+        btnReset: '↺ Resetiraj',
+        placeholderEmoji: 'Upiši emoji ili slovo, npr. 🔥 ili E',
+        descLogoAppears: 'Logotip se pojavljuje u naslovnoj traci (gore lijevo E) i na početnoj stranici.',
+        labelRemoveHistory: 'Ukloni stavke povijesti',
+        optAfterOneDay: 'Nakon jednog dana',
+        optAfterOneWeek: 'Nakon tjedan dana',
+        optAfterTwoWeeks: 'Nakon dva tjedna',
+        optAfterOneMonth: 'Nakon mjesec dana',
+        optAfterOneYear: 'Nakon godinu dana',
+        optManually: 'Ručno',
+        labelStartPageFavs: 'Favoriti na početnoj stranici',
+        optFavs: '⭐ Favoriti',
+        optBookmarks: '📚 Zabilješke',
+        optHistory: '🕓 Povijest',
+        labelFileDownload: 'Lokacija preuzimanja datoteka',
+        optDownloads: '📁 Preuzimanja',
+        optDesktop: '🖥 Radna površina',
+        optAskEach: 'Pitaj za svako preuzimanje',
+        labelRemoveDownload: 'Ukloni stavke s popisa preuzimanja',
+        optUponSuccess: 'Nakon uspješnog preuzimanja',
+        labelOpenSafeFiles: 'Otvori "sigurne" datoteke nakon preuzimanja',
+        descOpenSafeFiles: '"Sigurne" datoteke uključuju filmove, slike, zvukove, tekstualne dokumente i arhive',
+        labelDefaultBrowser: 'Zadani preglednik',
+        descDefaultBrowser: 'Postavi EtherX kao zadani preglednik za otvaranje web linkova.',
+        btnSetDefault: '🌐 Postavi kao zadani',
       },
       de: {
         name: 'Deutsch', flag: '🇩🇪',
@@ -14830,14 +15008,19 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       miBack: '#mi-back', miForward: '#mi-forward', miReload: '#mi-reload', miHardReload: '#mi-hard-reload',
       miStop: '#mi-stop', miAbout: '#mi-about',
       settingsTitle: '.settings-panel-title-text, .panel-title[data-panel="settings"]',
+      langInterfaceLabel: '#lang-label-interface', langInterfaceDesc: '#lang-desc-interface',
+      langLabelLang: '#lang-label-lang',
+      langDownloadLabel: '#lang-label-download', langDownloadDesc: '#lang-desc-download',
+      langDownloadBtn: '#langDownloadBtn',
+      langPreviewLabel: '#lang-label-preview',
     };
     // Settings sidebar tab buttons
     const LANG_TAB_MAP = {
-      tabGeneral: 'general', tabTabs: 'tabs', tabAutofill: 'autofill', tabPasswords: 'passwords',
+      tabGeneral: 'general', tabUpdates: 'updates', tabTabs: 'tabs', tabAutofill: 'autofill', tabPasswords: 'passwords',
       tabSearch: 'search', tabSecurity: 'security', tabPrivacy: 'privacy', tabWebsites: 'websites',
       tabProfiles: 'profiles', tabExtensions: 'extensions', tabAdvanced: 'advanced',
       tabDeveloper: 'developer', tabFlags: 'flags', tabMigration: 'migration',
-      tabAppearance: 'appearance', tabLanguage: 'language',
+      tabAppearance: 'appearance', tabLanguage: 'language', tabStorage: 'storage', tabHelp: 'help', tabAI: 'ai',
     };
 
     function applyLanguage(code) {
@@ -14874,6 +15057,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       // Settings panel title
       const sTitle = document.querySelector('#settingsPanel .panel-title');
       if (sTitle && lang.settingsTitle) sTitle.textContent = lang.settingsTitle;
+      // Generic data-i18n handling
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.dataset.i18n;
+        if (lang[key]) {
+          if (el.tagName === 'INPUT' && (el.type === 'button' || el.type === 'submit')) el.value = lang[key];
+          else if (el.tagName === 'INPUT' && el.placeholder) el.placeholder = lang[key];
+          else if (el.tagName === 'OPTION') el.textContent = lang[key];
+          else setLabel(el, lang[key]);
+        }
+      });
       // Language preview
       ['lp-file', 'lp-edit', 'lp-view', 'lp-history', 'lp-bookmarks',
         'lp-settings', 'lp-general', 'lp-appearance', 'lp-language',
@@ -16710,10 +16903,13 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       setTimeout(async () => {
         let s = DB.getSettings();
         if (window.etherx && window.etherx.settings) {
-          s = await window.etherx.settings.get();
+          const sqliteS = await window.etherx.settings.get();
+          if (sqliteS && typeof sqliteS === 'object') {
+            s = Object.assign({}, s, sqliteS);
+          }
         }
         if (s.history_retention_days !== undefined && document.getElementById('settingHistoryDays')) {
-          document.getElementById('settingHistoryDays').value = s.history_retention_days;
+          document.getElementById('settingHistoryDays').value = String(s.history_retention_days);
         }
         if (s.cookie_policy !== undefined && document.getElementById('settingCookiePolicy')) {
           document.getElementById('settingCookiePolicy').value = s.cookie_policy;
@@ -16733,6 +16929,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (s.camera_policy !== undefined && document.getElementById('settingCamera')) {
           document.getElementById('settingCamera').value = s.camera_policy;
         }
+        // Toolbars visibility
+        if (s.show_fav_bar !== undefined && document.getElementById('settingShowFavBar')) {
+          document.getElementById('settingShowFavBar').checked = s.show_fav_bar;
+          window.toggleFavBar(s.show_fav_bar);
+          const chk = document.getElementById('mi-show-favbar-chk'); if (chk) chk.style.opacity = s.show_fav_bar ? '1' : '0';
+        }
+        if (s.show_bm_folders !== undefined && document.getElementById('settingShowBmFolders')) {
+          document.getElementById('settingShowBmFolders').checked = s.show_bm_folders;
+          const bf = document.getElementById('bmFolderBar'); if (bf) bf.style.display = s.show_bm_folders ? 'block' : 'none';
+        }
         // Bookmarks auto creation (hidden internal setting, def to off now unless saved otherwise)
         if (s.auto_bookmark !== undefined) {
           STATE.autoBookmark = s.auto_bookmark;
@@ -16744,6 +16950,20 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       // ── History ──────────────────────────────────────────────────────────────
       document.getElementById('settingHistoryDays')?.addEventListener('change', async (e) => {
         await saveSettings({ history_retention_days: parseInt(e.target.value) });
+      });
+
+      document.getElementById('settingShowFavBar')?.addEventListener('change', async (e) => {
+        const on = e.target.checked;
+        await saveSettings({ show_fav_bar: on });
+        const fb = document.getElementById('favBar'); if (fb) fb.style.display = on ? 'flex' : 'none';
+        // Sync menu checkmark if exists
+        const chk = document.getElementById('mi-show-favbar-chk'); if (chk) chk.style.opacity = on ? '1' : '0';
+      });
+
+      document.getElementById('settingShowBmFolders')?.addEventListener('change', async (e) => {
+        const on = e.target.checked;
+        await saveSettings({ show_bm_folders: on });
+        const bf = document.getElementById('bmFolderBar'); if (bf) bf.style.display = on ? 'block' : 'none';
       });
 
       document.getElementById('btnClearAllHistory')?.addEventListener('click', async () => {

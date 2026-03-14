@@ -201,6 +201,16 @@ class DatabaseManager {
     }
   }
 
+  /**
+   * Prune history based on retention setting.
+   */
+  pruneHistory(days) {
+    if (!days || days <= 0) return { ok: true, pruned: 0 };
+    const cutoff = Math.floor(Date.now() / 1000) - (days * 86400);
+    const result = this.db.prepare('DELETE FROM history WHERE last_visited < ?').run(cutoff);
+    return { ok: true, pruned: result.changes };
+  }
+
   // ─── Tabs ─────────────────────────────────────────────────────────────────
 
   /**
