@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   platform: process.platform,
+  windowId: () => ipcRenderer.sendSync('get-window-id'),
   // Generic invoke wrapper for backward compatibility
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
 });
@@ -31,6 +32,35 @@ contextBridge.exposeInMainWorld('etherx', {
     delete: (tabId) => ipcRenderer.invoke('db:deleteTab', tabId),
     clearIncognito: (tabId) => ipcRenderer.invoke('db:clearIncognitoTab', tabId),
     updateOrder: (tabs) => ipcRenderer.invoke('db:updateTabOrder', tabs),
+  },
+
+  // ── Sessions ────────────────────────────────────────────────────────────────
+  sessions: {
+    save: (data) => ipcRenderer.invoke('db:saveSession', data),
+    get: (limit) => ipcRenderer.invoke('db:getSessions', limit),
+    delete: (id) => ipcRenderer.invoke('db:deleteSession', id),
+  },
+
+  // ── Downloads ───────────────────────────────────────────────────────────────
+  downloads: {
+    add: (data) => ipcRenderer.invoke('db:addDownload', data),
+    get: (limit) => ipcRenderer.invoke('db:getDownloads', limit),
+    delete: (id) => ipcRenderer.invoke('db:deleteDownload', id),
+    clear: () => ipcRenderer.invoke('db:clearDownloads'),
+  },
+
+  // ── Notes ───────────────────────────────────────────────────────────────────
+  notes: {
+    add: (data) => ipcRenderer.invoke('db:addNote', data),
+    get: () => ipcRenderer.invoke('db:getNotes'),
+    update: (id, data) => ipcRenderer.invoke('db:updateNote', id, data),
+    delete: (id) => ipcRenderer.invoke('db:deleteNote', id),
+  },
+
+  // ── User Profile ────────────────────────────────────────────────────────────
+  userProfile: {
+    get: () => ipcRenderer.invoke('db:getUserProfile'),
+    save: (data) => ipcRenderer.invoke('db:saveUserProfile', data),
   },
 
   // ── History ─────────────────────────────────────────────────────────────────
@@ -86,6 +116,8 @@ contextBridge.exposeInMainWorld('etherx', {
     groupTabs: (tabs) => ipcRenderer.invoke('ai:groupTabs', tabs),
     translate: (text, targetLang) => ipcRenderer.invoke('ai:translate', text, targetLang),
     summarizePage: (url, html) => ipcRenderer.invoke('ai:summarizePage', url, html),
+    getCachedSummaries: (limit) => ipcRenderer.invoke('db:getAiCache', limit),
+    clearAiCache: () => ipcRenderer.invoke('db:clearAiCache'),
   },
 
   // ── Ad Blocker ────────────────────────────────────────────────────────────────

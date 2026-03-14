@@ -240,7 +240,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.executeJavaScript('saveSessionTabs()').catch(() => { });
+      mainWindow.webContents.executeJavaScript('saveSessionTabs(true)').catch(() => { });
     }
   } catch (e) { /* window already destroyed */ }
 });
@@ -248,9 +248,21 @@ app.on('before-quit', () => {
 // ─── Create main window ───────────────────────────────────────────────────────
 function createWindow() {
   const isMac = process.platform === 'darwin';
+
+  // Load saved bounds
+  let bounds = { width: 1440, height: 900 };
+  try {
+    if (db) {
+      const saved = db.getWindowBounds();
+      if (saved) bounds = saved;
+    }
+  } catch (_) { }
+
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden', // hiddenInset on macOS keeps traffic lights visible + content below
@@ -268,6 +280,17 @@ function createWindow() {
     icon: path.join(__dirname, 'src', 'logo_novi.png'),
     show: false,
   });
+
+  // Save bounds on change
+  const saveBounds = () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed() && db) {
+        db.saveWindowBounds(mainWindow.getBounds());
+      }
+    } catch (_) { }
+  };
+  mainWindow.on('resize', saveBounds);
+  mainWindow.on('move', saveBounds);
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
@@ -512,6 +535,9 @@ function createWindow() {
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 function setupIPC() {
+  ipcMain.on('get-window-id', (event) => {
+    event.returnValue = BrowserWindow.fromWebContents(event.sender)?.id || 'main';
+  });
 
   const noDb = () => ({ ok: false, error: 'Database not available' });
   const noAi = () => ({ ok: false, error: 'AI not available' });
@@ -942,6 +968,9 @@ function setupIPC() {
   // ── Lighthouse Audits (SQLite) ─────────────────────────────────────────────
   ipcMain.handle('db:saveLighthouseAudit', (_e, data) => db ? db.saveLighthouseAudit(data) : noDb());
   ipcMain.handle('db:getLighthouseAudits', (_e, url, limit) => db ? db.getLighthouseAudits(url, limit) : []);
+
+  ipcMain.handle('db:getAiCache', (_e, limit) => db ? db.getAiCache(limit) : []);
+  ipcMain.handle('db:clearAiCache', () => db ? db.clearAiCache() : noDb());
 
   // ── History Top Visited ────────────────────────────────────────────────────
   ipcMain.handle('db:getTopVisited', (_e, limit) => db ? db.getTopVisited(limit) : []);

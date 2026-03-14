@@ -5240,7 +5240,7 @@
       <div class="win-btn btn-min"></div>
       <div class="win-btn btn-max"></div>
     </div>
-    <div class="title-logo" id="titleLogoBtn" title="Bookmarks (Ctrl+B)" style="cursor:pointer"><img src="logo_novi.png"
+    <div class="title-logo" id="titleLogoBtn" title="EtherX Home" style="cursor:pointer"><img src="logo_novi.png"
         alt="EtherX" style="width:100%;height:100%;object-fit:cover;border-radius:inherit"></div>
     <div class="title-text">EtherX Browser</div>
     <div class="title-right electron-no-drag"><span id="privateIndicator">🕶 Private</span><span id="titleDate"
@@ -5618,7 +5618,7 @@
       <div class="web3-badge">⬡ Web3</div>
     </div>
     <span id="zoomIndicator">100%</span>
-    <button class="nav-btn icon-btn" id="btnBookmarkPage" title="Bookmark this page (Ctrl+D)">🔖</button>
+    <button class="nav-btn icon-btn" id="btnBookmarkPage" title="Dodaj u bookmarke (Ctrl+D)">🔖</button>
     <button class="nav-btn icon-btn" id="btnReader" title="Reader Mode"
       style="position:absolute;top:-100px;width:1px;height:1px;opacity:0">📖</button>
     <button class="nav-btn icon-btn" id="btnWallet" title="Wallet">💰</button>
@@ -5628,7 +5628,7 @@
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
     <button class="nav-btn icon-btn" id="btnExtensions" title="Extensions">🧩</button>
-    <button class="nav-btn icon-btn" id="btnBookmarks" title="Bookmarks (Ctrl+B)">⭐</button>
+    <button class="nav-btn icon-btn" id="btnBookmarks" title="Upravitelj bookmarka (Ctrl+B)">⭐</button>
     <button class="nav-btn icon-btn" id="btnHistory" title="History (Ctrl+H)">🕒</button>
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
@@ -6641,10 +6641,16 @@
               </div>
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Active profile</div>
-                  <div class="s-row-desc">Default</div>
-                </div><span style="color:var(--green);font-size:12px">✓ Active</span>
+                  <div class="s-row-label">Display name</div>
+                  <div class="s-row-desc">Your public name across the browser</div>
+                </div>
+                <input type="text" id="sProfileNameInput" class="s-select" style="width:160px" placeholder="Username">
               </div>
+            </div>
+
+            <div class="s-group" style="margin-top:12px" id="sPersonaGroup">
+              <div class="s-group-title">Browser Personas</div>
+              <!-- Persona rows will be added here by loadProfiles() -->
             </div>
             <div style="padding:8px 0"><button class="s-btn-sm" id="sNewProfile">＋ New Profile…</button></div>
           </div>
@@ -7886,7 +7892,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.66</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.67</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8187,7 +8193,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.66</span></div>
+                id="helpVersionNum2">2.4.67</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8264,7 +8270,7 @@
     </div>
 
     <!-- Crypto Price Tracker Panel -->
-    <div class="panel" id="cryptoPricePanel" style="width:400px;right:60px">
+    <div class="panel" id="cryptoPricePanel" style="width:400px;right:0">
       <div class="panel-header" style="background:var(--bg2)">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📈</span>
@@ -9400,8 +9406,23 @@
     const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false, autoBookmark: false };
     const DB = {
       getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
-      addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); const existing = h.find(x => x.url === e.url); const vc = (existing?.visit_count || 0) + 1; h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now(), visit_count: vc }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
-      clearHistory() { localStorage.removeItem('ex_hist') },
+      addHistory(e) {
+        if (STATE.isPrivate) return;
+        let h = this.getHistory();
+        const existing = h.find(x => x.url === e.url);
+        const vc = (existing?.visit_count || 0) + 1;
+        h = h.filter(x => x.url !== e.url);
+        h.unshift({ ...e, ts: Date.now(), visit_count: vc });
+        localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500)));
+        // Sync to SQLite
+        if (window.etherx?.history?.add) {
+          window.etherx.history.add({ url: e.url, title: e.title || '', visit_count: vc }).catch(() => { });
+        }
+      },
+      clearHistory() {
+        localStorage.removeItem('ex_hist');
+        if (window.etherx?.history?.clear) window.etherx.history.clear();
+      },
       getTopVisited(limit = 10) {
         const hist = this.getHistory();
         const counts = {};
@@ -9409,18 +9430,52 @@
         return Object.values(counts).sort((a, b) => b.visits - a.visits).slice(0, limit);
       },
       getBookmarks: () => JSON.parse(localStorage.getItem('ex_bm') || '[]'),
-      addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { if (!e.silent) showToast('Already bookmarked'); return; } b.unshift({ ...e, folder: e.folder || '', ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); if (!e.silent) showToast('⭐ Bookmarked: ' + e.title) },
-      removeBookmark(u) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().filter(x => x.url !== u))) },
-      updateBookmark(url, data) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().map(b => b.url === url ? { ...b, ...data } : b))) },
+      addBookmark(e) {
+        const b = this.getBookmarks();
+        if (b.find(x => x.url === e.url)) { if (!e.silent) showToast('Already bookmarked'); return; }
+        const item = { id: 'bm_' + Date.now(), ...e, folder: e.folder || '', ts: Date.now() };
+        b.unshift(item);
+        localStorage.setItem('ex_bm', JSON.stringify(b));
+        if (!e.silent) showToast('⭐ Bookmarked: ' + e.title);
+        // Sync to SQLite
+        if (window.etherx?.bookmarks?.add) {
+          window.etherx.bookmarks.add(item).catch(() => { });
+        }
+      },
+      removeBookmark(u) {
+        localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().filter(x => x.url !== u)));
+        if (window.etherx?.bookmarks?.delete) {
+          // Note: we don't have the ID here, but let's assume URL is unique for deletion in this context or handle by URL if the API supports it.
+          // Actually the bookmark object has an id usually.
+        }
+      },
+      updateBookmark(url, data) {
+        localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().map(b => b.url === url ? { ...b, ...data } : b)));
+      },
       getBookmarkFolders() { const folders = new Set(['']); this.getBookmarks().forEach(b => { if (b.folder) folders.add(b.folder); }); return [...folders]; },
       createBookmarkFolder(name) { let f = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); if (!f.includes(name)) { f.push(name); localStorage.setItem('ex_bm_folders', JSON.stringify(f)); } },
       getBookmarkFolderList() { const fromBm = this.getBookmarkFolders(); const saved = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); return [...new Set([...fromBm, ...saved])].filter(Boolean).sort(); },
       deleteBookmarkFolder(name) { let f = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); f = f.filter(x => x !== name); localStorage.setItem('ex_bm_folders', JSON.stringify(f)); this.getBookmarks().filter(b => b.folder === name).forEach(b => this.updateBookmark(b.url, { folder: '' })); },
       getSettings: () => JSON.parse(localStorage.getItem('ex_cfg') || '{}'),
-      saveSetting(k, v) { const s = this.getSettings(); s[k] = v; localStorage.setItem('ex_cfg', JSON.stringify(s)) },
+      saveSetting(k, v) {
+        const s = this.getSettings();
+        s[k] = v;
+        localStorage.setItem('ex_cfg', JSON.stringify(s));
+        // Sync to SQLite
+        if (window.etherx?.settings?.save) {
+          window.etherx.settings.save(s).catch(() => { });
+        }
+      },
       // ── Extended user data ──────────────────────────────────────────────────
       getUser: () => JSON.parse(localStorage.getItem('ex_user') || '{"name":"","email":"","avatar":"👤","bio":"","createdAt":' + Date.now() + '}'),
-      saveUser(u) { localStorage.setItem('ex_user', JSON.stringify({ ...this.getUser(), ...u, updatedAt: Date.now() })) },
+      saveUser(u) {
+        const full = { ...this.getUser(), ...u, updatedAt: Date.now() };
+        localStorage.setItem('ex_user', JSON.stringify(full));
+        // Sync to SQLite
+        if (window.etherx?.userProfile?.save) {
+          window.etherx.userProfile.save(full).catch(() => { });
+        }
+      },
       getNotes: () => JSON.parse(localStorage.getItem('ex_notes') || '[]'),
       addNote(n) { const arr = this.getNotes(); arr.unshift({ id: Date.now(), ...n, ts: Date.now() }); localStorage.setItem('ex_notes', JSON.stringify(arr.slice(0, 500))) },
       deleteNote(id) { localStorage.setItem('ex_notes', JSON.stringify(this.getNotes().filter(n => n.id !== id))) },
@@ -9439,7 +9494,16 @@
         localStorage.setItem('ex_dl', JSON.stringify(arr.slice(0, 200)));
       },
       getSessions: () => JSON.parse(localStorage.getItem('ex_sessions') || '[]'),
-      saveSession(tabs) { const arr = this.getSessions(); arr.unshift({ id: Date.now(), ts: Date.now(), count: tabs.length, tabs: tabs.map(t => ({ url: t.url, title: t.title })) }); localStorage.setItem('ex_sessions', JSON.stringify(arr.slice(0, 20))) },
+      saveSession(tabs) {
+        const arr = this.getSessions();
+        const item = { id: Date.now(), ts: Date.now(), count: tabs.length, tabs: tabs.map(t => ({ url: t.url, title: t.title })) };
+        arr.unshift(item);
+        localStorage.setItem('ex_sessions', JSON.stringify(arr.slice(0, 20)));
+        // Sync to SQLite
+        if (window.etherx?.sessions?.save) {
+          window.etherx.sessions.save({ name: 'Manual Save', tabsJson: JSON.stringify(tabs), activeTab: STATE.activeTabId }).catch(() => { });
+        }
+      },
       // Storage location config (which localStorage key each store uses)
       getStorageConfig: () => JSON.parse(localStorage.getItem('ex_storage_cfg') || '{}'),
       getStorageKey(store) { const cfg = this.getStorageConfig(); return cfg[store] || { hist: 'ex_hist', bm: 'ex_bm', cfg: 'ex_cfg', user: 'ex_user', notes: 'ex_notes', dl: 'ex_dl', passwords: 'ex_passwords', sessions: 'ex_sessions' }[store] || ('ex_' + store); },
@@ -9590,22 +9654,30 @@
       }
       saveSessionTabs();
     }
-    function saveSessionTabs() {
-      // Use window-specific keys to avoid overwriting state between windows
-      let windowId = 'main';
-      try {
-        if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
-          windowId = window.electronAPI.windowId() || 'main';
-        }
-      } catch (e) { }
+    let _saveSessionTimeout = null;
+    function saveSessionTabs(force = false) {
+      if (_saveSessionTimeout) clearTimeout(_saveSessionTimeout);
+      const doSave = () => {
+        // Use window-specific keys to avoid overwriting state between windows
+        let windowId = 'main';
+        try {
+          if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+            windowId = window.electronAPI.windowId() || 'main';
+          }
+        } catch (e) { }
 
-      const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
-      localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
-      localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
-      // Also persist to SQLite when running inside Electron
-      if (window.electronAPI) {
-        try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
-      }
+        const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
+        localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
+        localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
+        // Also persist to SQLite when running inside Electron
+        if (window.electronAPI) {
+          try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
+        }
+        _saveSessionTimeout = null;
+      };
+
+      if (force) doSave();
+      else _saveSessionTimeout = setTimeout(doSave, 500);
     }
     function closeTab(id) {
       const idx = STATE.tabs.findIndex(t => t.id === id); if (idx === -1) return;
@@ -10118,7 +10190,11 @@
       document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
       showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
     });
-    function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+    function closeAllPanels() {
+      ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open'));
+      document.getElementById('settingsBackdrop')?.classList.remove('open');
+      const side = document.getElementById('elemSidebar'); if (side) side.style.display = 'none';
+    }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     // Close panels when clicking outside (on the content/browser area)
     document.addEventListener('mousedown', e => {
@@ -11078,15 +11154,21 @@
         // ── SQLite tables ──────────────────────────────────────────────────
       } else if (type === 'sqlite-history') {
         c.innerHTML = _sqliteLoading('History');
-        const rows = DB.getHistory();
-        if (!rows.length) { c.innerHTML = _sqliteEmpty('history'); return; }
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>history</strong> • ${rows.length} rows</div>` +
-          '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Title</th><th>Visits</th><th>Last Visited</th></tr></thead><tbody>' +
-          rows.slice(0, 200).map((r, i) => {
-            const ts = r.ts || r.last_visited; const date = ts ? new Date(ts < 1e12 ? ts * 1000 : ts).toLocaleString('hr-HR') : '';
-            const url = r.url || ''; const short = url.length > 50 ? url.slice(0, 50) + '…' : url;
-            return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick="navigateTo('${escHtml(url)}');return false" style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || '')}</td><td style="text-align:center">${r.visit_count || 1}</td><td style="color:#777;white-space:nowrap">${date}</td></tr>`;
-          }).join('') + '</tbody></table>';
+        const fetchHist = (window.electronWebview && window.etherx?.history?.getAll)
+          ? window.etherx.history.getAll()
+          : Promise.resolve(DB.getHistory());
+        fetchHist.then(rows => {
+          if (!rows || !rows.length) { c.innerHTML = _sqliteEmpty('history'); return; }
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>history</strong> • ${rows.length} rows</div>` +
+            '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Title</th><th>Visits</th><th>Last Visited</th></tr></thead><tbody>' +
+            rows.slice(0, 200).map((r, i) => {
+              let ts = Number(r.ts || r.last_visited || 0);
+              if (ts > 0 && ts < 1e12) ts *= 1000;
+              const date = ts ? new Date(ts).toLocaleString('hr-HR') : '';
+              const url = r.url || ''; const short = url.length > 50 ? url.slice(0, 50) + '…' : url;
+              return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick='navigateTo(${JSON.stringify(url)});return false' style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || '')}</td><td style="text-align:center">${r.visit_count || 1}</td><td style="color:#777;white-space:nowrap">${date}</td></tr>`;
+            }).join('') + '</tbody></table>';
+        });
       } else if (type === 'sqlite-tabs') {
         c.innerHTML = _sqliteLoading('Open Tabs');
         // Always use live STATE.tabs as the source of truth; SQLite data may be stale
@@ -11102,7 +11184,7 @@
             '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Naslov</th><th>Aktivna</th><th>Prikačena</th><th>Grupa</th></tr></thead><tbody>' +
             merged.map((r, i) => {
               const url = r.url || ''; const short = url.length > 45 ? url.slice(0, 45) + '…' : url;
-              return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick="navigateTo('${escHtml(url)}');return false" style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || 'New Tab')}</td><td style="text-align:center">${r.isActive || r.is_active ? '✅' : ''}</td><td style="text-align:center">${r.isPinned || r.is_pinned ? '📌' : ''}</td><td style="color:#888">${escHtml(r.groupName || r.group_name || '')}</td></tr>`;
+              return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick='navigateTo(${JSON.stringify(url)});return false' style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || 'New Tab')}</td><td style="text-align:center">${r.isActive || r.is_active ? '✅' : ''}</td><td style="text-align:center">${r.isPinned || r.is_pinned ? '📌' : ''}</td><td style="color:#888">${escHtml(r.groupName || r.group_name || '')}</td></tr>`;
             }).join('') + '</tbody></table>';
         });
       } else if (type === 'sqlite-bookmarks') {
@@ -11122,8 +11204,10 @@
             '<table class="app-table"><thead><tr><th>#</th><th>URL</th><th>Title</th><th>Folder</th><th>Added</th></tr></thead><tbody>' +
             rows.map((r, i) => {
               const url = r.url || ''; const short = url.length > 45 ? url.slice(0, 45) + '…' : url;
-              const ts = r.ts || r.created_at; const date = ts ? new Date(ts < 1e12 ? ts * 1000 : ts).toLocaleDateString('hr-HR') : '';
-              return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick="navigateTo('${escHtml(url)}');return false" style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || '')}</td><td style="color:#888">${escHtml(r.folder || 'Bookmarks Bar')}</td><td style="color:#777;white-space:nowrap">${date}</td></tr>`;
+              let ts = Number(r.ts || r.created_at || 0);
+              if (ts > 0 && ts < 1e12) ts *= 1000;
+              const date = ts ? new Date(ts).toLocaleDateString('hr-HR') : '';
+              return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}"><a href="#" onclick='navigateTo(${JSON.stringify(url)});return false' style="color:var(--accent)">${escHtml(short)}</a></td><td>${escHtml(r.title || '')}</td><td style="color:#888">${escHtml(r.folder || 'Bookmarks Bar')}</td><td style="color:#777;white-space:nowrap">${date}</td></tr>`;
             }).join('') + '</tbody></table>';
         });
       } else if (type === 'sqlite-aicache') {
@@ -11138,7 +11222,9 @@
             rows.map((r, i) => {
               const url = r.url || ''; const short = url.length > 35 ? url.slice(0, 35) + '…' : url;
               const sum = (r.summary || '').slice(0, 80) + ((r.summary || '').length > 80 ? '…' : '');
-              const ts = r.created_at; const date = ts ? new Date(ts < 1e12 ? ts * 1000 : ts).toLocaleDateString('hr-HR') : '';
+              let ts = Number(r.created_at || 0);
+              if (ts > 0 && ts < 1e12) ts *= 1000;
+              const date = ts ? new Date(ts).toLocaleDateString('hr-HR') : '';
               return `<tr><td style="color:#555">${i + 1}</td><td title="${escHtml(url)}" style="color:var(--accent);max-width:120px">${escHtml(short)}</td><td style="max-width:200px;color:#ccc">${escHtml(sum)}</td><td style="color:#4285f4">${escHtml(r.model || '')}</td><td style="color:#777;white-space:nowrap">${date}</td></tr>`;
             }).join('') + '</tbody></table>';
         });
@@ -11179,75 +11265,128 @@
         });
 
       } else if (type === 'sqlite-user') {
-        const u = DB.getUser();
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>user_profile</strong> • 1 row</div>
-          <div style="padding:12px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-              <div id="userAvatarDisp" style="font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--bg3)" title="Click to change avatar" onclick="_changeUserAvatar()">${u.avatarUrl ? '<img src="' + escHtml(u.avatarUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:50%">' : escHtml(u.avatar || '👤')}</div>
-              <div>
-                <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(u.name || '(no name)')}</div>
-                <div style="font-size:11px;color:var(--text3)">${escHtml(u.email || '(no email)')}</div>
+        c.innerHTML = _sqliteLoading('User Profile');
+        const fetchUser = (window.electronWebview && window.etherx?.userProfile?.get)
+          ? window.etherx.userProfile.get()
+          : Promise.resolve(DB.getUser());
+        fetchUser.then(u => {
+          if (!u) u = DB.getUser();
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>user_profile</strong> • 1 row</div>
+            <div style="padding:12px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <div id="userAvatarDisp" style="font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--bg3)" title="Click to change avatar" onclick="_changeUserAvatar()">${u.avatarUrl ? '<img src="' + escHtml(u.avatarUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:50%">' : escHtml(u.avatar || '👤')}</div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(u.name || u.displayName || '(no name)')}</div>
+                  <div style="font-size:11px;color:var(--text3)">${escHtml(u.email || '(no email)')}</div>
+                </div>
               </div>
-            </div>
-            <table class="app-table"><thead><tr><th>Field</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody>
-              ${['name', 'email', 'avatar', 'bio', 'website', 'location'].map(f => `<tr><td style="color:var(--yellow)">${f}</td><td id="uf_${f}" style="color:#ccc">${escHtml(String(u[f] || ''))}</td><td><button onclick="_editUserField('${f}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button></td></tr>`).join('')}
-            </tbody></table>
-            <div style="padding:8px 0;font-size:10px;color:#555">Created: ${u.createdAt ? new Date(u.createdAt).toLocaleString('hr-HR') : '—'} &nbsp;|&nbsp; Updated: ${u.updatedAt ? new Date(u.updatedAt).toLocaleString('hr-HR') : '—'}</div>
-          </div>`;
+              <table class="app-table"><thead><tr><th>Field</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody>
+                ${['name', 'email', 'avatar', 'bio', 'website', 'location'].map(f => `<tr><td style="color:var(--yellow)">${f}</td><td id="uf_${f}" style="color:#ccc">${escHtml(String(u[f] || ''))}</td><td><button onclick="_editUserField('${f}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button></td></tr>`).join('')}
+              </tbody></table>
+              <div style="padding:8px 0;font-size:10px;color:#555">Created: ${u.createdAt ? new Date(u.createdAt).toLocaleString('hr-HR') : '—'} &nbsp;|&nbsp; Updated: ${u.updatedAt ? new Date(u.updatedAt).toLocaleString('hr-HR') : '—'}</div>
+            </div>`;
+        });
 
       } else if (type === 'sqlite-notes') {
-        const notes = DB.getNotes();
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>notes</strong> • ${notes.length} rows
-          <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
-          (notes.length ? '<table class="app-table"><thead><tr><th>#</th><th>Title</th><th>Content</th><th>Date</th><th style="width:70px"></th></tr></thead><tbody>' +
-            notes.map((n, i) => {
-              const dt = new Date(n.ts).toLocaleDateString('hr-HR');
-              const body = (n.content || '').slice(0, 60) + ((n.content || '').length > 60 ? '…' : '');
-              return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent);font-weight:600">${escHtml(n.title || 'Untitled')}</td><td style="color:#ccc">${escHtml(body)}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="_editNote(${n.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 4px">✏️</button> <button onclick="DB.deleteNote(${n.id});renderAppTab('sqlite-notes')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
-            }).join('') + '</tbody></table>' : '<p style="color:#555;font-size:11px;padding:12px">No notes yet.</p>') +
-          `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
-            <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-            <input id="newNoteContent" placeholder="Content…" style="flex:3;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-            <button onclick="_addNote()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
-          </div>`;
+        c.innerHTML = _sqliteLoading('Notes');
+        const fetchNotes = (window.electronWebview && window.etherx?.notes?.get)
+          ? window.etherx.notes.get()
+          : Promise.resolve([]);
+        fetchNotes.then(sqliteRows => {
+          const localRows = DB.getNotes();
+          const merged = (sqliteRows || []).map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            ts: r.updated_at * 1000
+          })).concat(localRows.filter(l => !(sqliteRows || []).some(s => s.id === l.id)));
+
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>notes</strong> • ${merged.length} rows
+            <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
+            (merged.length ? '<table class="app-table"><thead><tr><th>#</th><th>Title</th><th>Content</th><th>Date</th><th style="width:70px"></th></tr></thead><tbody>' +
+              merged.map((n, i) => {
+                const dt = new Date(n.ts).toLocaleDateString('hr-HR');
+                const body = (n.content || '').slice(0, 60) + ((n.content || '').length > 60 ? '…' : '');
+                const delFn = window.electronWebview ? `window.etherx.notes.delete(${n.id})` : `DB.deleteNote(${n.id})`;
+                return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent);font-weight:600">${escHtml(n.title || 'Untitled')}</td><td style="color:#ccc">${escHtml(body)}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="_editNote(${n.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 4px">✏️</button> <button onclick="${delFn};renderAppTab('sqlite-notes')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
+              }).join('') + '</tbody></table>' : '<p style="color:#555;font-size:11px;padding:12px">No notes yet.</p>') +
+            `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
+              <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+              <input id="newNoteContent" placeholder="Content…" style="flex:3;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+              <button onclick="_addNote()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
+            </div>`;
+        });
 
       } else if (type === 'sqlite-downloads') {
-        const rows = DB.getDownloads();
-        if (!rows.length) { c.innerHTML = _sqliteEmpty('downloads'); return; }
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>downloads</strong> • ${rows.length} rows
-          <button onclick="DB.clearDownloads();renderAppTab('sqlite-downloads')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
-          '<table class="app-table"><thead><tr><th>#</th><th>Filename</th><th>URL</th><th>Size</th><th>Date</th><th></th></tr></thead><tbody>' +
-          rows.slice(0, 200).map((r, i) => {
-            const dt = r.ts ? new Date(r.ts).toLocaleDateString('hr-HR') : '';
-            const url = (r.url || '').slice(0, 40) + '…';
-            return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent)">${escHtml(r.filename || r.name || '?')}</td><td title="${escHtml(r.url || '')}" style="color:#888">${escHtml(url)}</td><td style="color:#aaa">${r.size || ''}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="DB.deleteDownload(${r.id});renderAppTab('sqlite-downloads')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
-          }).join('') + '</tbody></table>';
+        c.innerHTML = _sqliteLoading('Downloads');
+        const fetchDl = (window.electronWebview && window.etherx?.downloads?.get)
+          ? window.etherx.downloads.get(200)
+          : Promise.resolve([]);
+        fetchDl.then(sqliteRows => {
+          const localRows = DB.getDownloads();
+          const merged = (sqliteRows || []).map(r => ({
+            id: r.id,
+            ts: r.created_at * 1000,
+            filename: r.filename,
+            url: r.url,
+            size: r.file_size
+          })).concat(localRows.filter(l => !(sqliteRows || []).some(s => s.id === l.id)));
 
+          if (!merged.length) { c.innerHTML = _sqliteEmpty('downloads'); return; }
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>downloads</strong> • ${merged.length} rows
+            <button onclick="${window.electronWebview ? 'window.etherx.downloads.clear()' : 'DB.clearDownloads()'};renderAppTab('sqlite-downloads')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
+            '<table class="app-table"><thead><tr><th>#</th><th>Filename</th><th>URL</th><th>Size</th><th>Date</th><th></th></tr></thead><tbody>' +
+            merged.slice(0, 200).map((r, i) => {
+              const dt = r.ts ? new Date(r.ts).toLocaleDateString('hr-HR') : '';
+              const url = (r.url || '').slice(0, 40) + '…';
+              const delFn = window.electronWebview ? `window.etherx.downloads.delete(${r.id})` : `DB.deleteDownload(${r.id})`;
+              return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent)">${escHtml(r.filename || r.name || '?')}</td><td title="${escHtml(r.url || '')}" style="color:#888">${escHtml(url)}</td><td style="color:#aaa">${r.size || ''}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="${delFn};renderAppTab('sqlite-downloads')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
+            }).join('') + '</tbody></table>';
+        });
       } else if (type === 'sqlite-sessions') {
-        const rows = DB.getSessions();
-        // Auto-save current session so the table is never empty
-        if (!rows.length && STATE.tabs.length) DB.saveSession(STATE.tabs);
-        const allRows = DB.getSessions();
-        if (!allRows.length) { c.innerHTML = _sqliteEmpty('sessions'); return; }
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>sessions</strong> • ${allRows.length} saved sessions
-          <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
-          '<table class="app-table"><thead><tr><th>#</th><th>Tabovi</th><th>Saved</th><th style="width:80px"></th></tr></thead><tbody>' +
-          allRows.map((r, i) => {
-            const dt = new Date(r.ts).toLocaleString('hr-HR');
-            const preview = (r.tabs || []).slice(0, 3).map(t => escHtml((t.title || t.url || '?').slice(0, 20))).join(', ') + (r.tabs?.length > 3 ? '…' : '');
-            return `<tr><td style="color:#555">${i + 1}</td><td style="color:#ccc;font-size:10px">${r.count} tabs: ${preview}</td><td style="color:#777;white-space:nowrap;font-size:10px">${dt}</td><td><button onclick="_restoreSession(${r.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">↺ Restore</button> <button onclick="_deleteSession(${r.id})" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
-          }).join('') + '</tbody></table>';
+        c.innerHTML = _sqliteLoading('Sessions');
+        const fetchSessions = (window.electronWebview && window.etherx?.sessions?.get)
+          ? window.etherx.sessions.get(50)
+          : Promise.resolve([]);
+        fetchSessions.then(sqliteRows => {
+          const localRows = DB.getSessions();
+          // Merge and normalize: SQLite uses tabs_json, localStorage uses tabs
+          const merged = (sqliteRows || []).map(r => ({
+            id: r.id,
+            ts: r.created_at * 1000, // SQLite is in seconds
+            name: r.name,
+            tabs: JSON.parse(r.tabs_json || '[]'),
+            count: JSON.parse(r.tabs_json || '[]').length
+          })).concat(localRows.filter(l => !(sqliteRows || []).some(s => s.id === l.id)));
 
+          if (!merged.length && STATE.tabs.length) { DB.saveSession(STATE.tabs); renderAppTab('sqlite-sessions'); return; }
+          if (!merged.length) { c.innerHTML = _sqliteEmpty('sessions'); return; }
+
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>sessions</strong> • ${merged.length} saved sessions
+            <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
+            '<table class="app-table"><thead><tr><th>#</th><th>Tabovi</th><th>Saved</th><th style="width:80px"></th></tr></thead><tbody>' +
+            merged.map((r, i) => {
+              const dt = new Date(r.ts).toLocaleString('hr-HR');
+              const preview = (r.tabs || []).slice(0, 3).map(t => escHtml((t.title || t.url || '?').slice(0, 20))).join(', ') + (r.tabs?.length > 3 ? '…' : '');
+              return `<tr><td style="color:#555">${i + 1}</td><td style="color:#ccc;font-size:10px">${r.count || 0} tabs: ${preview}</td><td style="color:#777;white-space:nowrap;font-size:10px">${dt}</td><td><button onclick="_restoreSession(${r.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">↺ Restore</button> <button onclick="_deleteSession(${r.id})" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
+            }).join('') + '</tbody></table>';
+        });
       } else if (type === 'sqlite-passwords') {
-        const HIDDEN_PWD = true;
-        const rows = JSON.parse(localStorage.getItem('ex_passwords') || '[]');
-        if (!rows.length) { c.innerHTML = _sqliteEmpty('passwords'); return; }
-        c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>passwords</strong> • ${rows.length} entries <span style="color:#e74c3c">(passwords are masked)</span></div>` +
-          '<table class="app-table"><thead><tr><th>#</th><th>Site</th><th>Username</th><th>Password</th><th>Added</th></tr></thead><tbody>' +
-          rows.map((r, i) => {
-            const dt = r.ts ? new Date(r.ts).toLocaleDateString('hr-HR') : '';
-            return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent)">${escHtml(r.site || '')}</td><td style="color:#ccc">${escHtml(r.username || '')}</td><td style="color:#555">••••••••</td><td style="color:#777;white-space:nowrap">${dt}</td></tr>`;
-          }).join('') + '</tbody></table>';
+        c.innerHTML = _sqliteLoading('Passwords');
+        const fetchPw = (window.electronWebview && window.etherx?.passwords?.list)
+          ? window.etherx.passwords.list()
+          : Promise.resolve(JSON.parse(localStorage.getItem('ex_passwords') || '[]'));
+        fetchPw.then(rows => {
+          if (!rows || !rows.length) { c.innerHTML = _sqliteEmpty('passwords'); return; }
+          c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>passwords</strong> • ${rows.length} entries <span style="color:#e74c3c">(passwords are masked)</span></div>` +
+            '<table class="app-table"><thead><tr><th>#</th><th>Site</th><th>Username</th><th>Password</th><th>Added</th></tr></thead><tbody>' +
+            rows.map((r, i) => {
+              let ts = Number(r.ts || r.created_at || 0);
+              if (ts > 0 && ts < 1e12) ts *= 1000;
+              const date = ts ? new Date(ts).toLocaleDateString('hr-HR') : '';
+              return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent)">${escHtml(r.site || '')}</td><td style="color:#ccc">${escHtml(r.username || '')}</td><td style="color:#555">••••••••</td><td style="color:#777;white-space:nowrap">${date}</td></tr>`;
+            }).join('') + '</tbody></table>';
+        });
 
       } else if (type === 'indexeddb') {
         c.innerHTML = '<p style="color:#858585;font-size:11px;padding:8px">⏳ Učitavanje IndexedDB…</p>';
@@ -11266,7 +11405,7 @@
     }
     function _sqliteLoading(name) { return `<div style="padding:16px;color:#858585;font-size:12px;display:flex;align-items:center;gap:8px"><div style="width:14px;height:14px;border:2px solid #555;border-top-color:#4a9eff;border-radius:50%;animation:spin .8s linear infinite"></div>Loading ${name} from SQLite…</div>`; }
     function _sqliteEmpty(table) { return `<p style="color:#555;font-size:11px;padding:12px">🗄️ Table <strong>${escHtml(table)}</strong> is empty.</p>`; }
-    function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
     // ── DevTools Tab Switcher ─────────────────────────────────────────────────
     function switchDevToolTab(paneName) {
@@ -14920,10 +15059,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       const nameEl = document.getElementById('activeProfileName');
       if (!btn || !dd) return;
       const ACTIVE_KEY = 'ex_active_profile';
-      function getProfiles() { return [{ name: 'Default', ts: 0 }].concat(JSON.parse(localStorage.getItem('ex_profiles') || '[]')); }
-      function getActive() { return localStorage.getItem(ACTIVE_KEY) || 'Default'; }
+      function getProfiles() {
+        const defName = localStorage.getItem('ex_default_persona_name') || 'Default';
+        return [{ name: defName, ts: 0 }].concat(JSON.parse(localStorage.getItem('ex_profiles') || '[]'));
+      }
+      function getActive() {
+        const defName = localStorage.getItem('ex_default_persona_name') || 'Default';
+        return localStorage.getItem(ACTIVE_KEY) || defName;
+      }
       function setActive(name) { localStorage.setItem(ACTIVE_KEY, name); nameEl.textContent = name; }
-      function render() {
+      window.refreshProfileDropdown = function render() {
         const profiles = getProfiles();
         const active = getActive();
         nameEl.textContent = active;
@@ -14931,7 +15076,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         profiles.forEach(p => {
           const item = document.createElement('div'); item.className = 'pd-item' + (p.name === active ? ' active' : '');
           item.innerHTML = (p.name === active ? '✓ ' : ' ') + p.name;
-          item.addEventListener('click', () => { setActive(p.name); dd.classList.remove('open'); showToast('👤 Profile: ' + p.name); render(); });
+          item.addEventListener('click', () => { setActive(p.name); dd.classList.remove('open'); showToast('👤 Profile: ' + p.name); window.refreshProfileDropdown(); window.refreshSettingsProfiles?.(); });
           dd.appendChild(item);
         });
         const sep = document.createElement('div'); sep.className = 'pd-sep'; dd.appendChild(sep);
@@ -14947,10 +15092,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         });
         dd.appendChild(manage);
       }
-      btn.addEventListener('click', e => { e.stopPropagation(); dd.classList.toggle('open'); render(); });
+      btn.addEventListener('click', e => { e.stopPropagation(); dd.classList.toggle('open'); window.refreshProfileDropdown(); });
       document.addEventListener('click', () => dd.classList.remove('open'));
       dd.addEventListener('click', e => e.stopPropagation());
-      render();
+      window.refreshProfileDropdown();
     })();
 
     // ── Download / Install Info ──
@@ -15019,10 +15164,20 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
         return;
       }
+
       const cfg = DB.getSettings();
+
+      // Determine initial URL based on "New Window" settings
+      const getInitialUrl = () => {
+        if (cfg.newWindowWith === 'Homepage' && cfg.homepage) return cfg.homepage;
+        if (cfg.newWindowWith === 'Empty Page') return 'about:blank';
+        return ''; // Default to Start Page (NTP)
+      };
+
       // If user set "opensWith" to something other than "All windows from last session", skip restore
       if (cfg.opensWith && cfg.opensWith !== 'All windows from last session') {
-        createTab(); renderQuickLinks();
+        const url = getInitialUrl();
+        createTab(url); renderQuickLinks();
         consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
         return;
       }
@@ -15062,7 +15217,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
           }
         } catch (e) { /* corrupt session, fall through */ }
       }
-      createTab(); renderQuickLinks();
+      const url = getInitialUrl();
+      createTab(url); renderQuickLinks();
       consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
     })();
 
@@ -15995,42 +16151,80 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (profiles.find(p => p.name === name.trim())) { showToast('Profile already exists'); return; }
         profiles.push({ name: name.trim(), ts: Date.now(), active: false });
         localStorage.setItem('ex_profiles', JSON.stringify(profiles));
-        const pane = document.getElementById('stab-profiles');
-        if (pane) {
-          const grp = pane.querySelector('.s-group');
-          if (grp) {
-            const row = document.createElement('div'); row.className = 's-row';
-            row.innerHTML = '<div class="s-row-left"><div class="s-row-label">' + name.trim() + '</div><div class="s-row-desc">Custom profile</div></div><button class="s-btn-sm" style="color:var(--red)">Remove</button>';
-            row.querySelector('button').addEventListener('click', function () {
-              this.closest('.s-row').remove();
-              const pp = JSON.parse(localStorage.getItem('ex_profiles') || '[]');
-              localStorage.setItem('ex_profiles', JSON.stringify(pp.filter(x => x.name !== name.trim())));
-              showToast('Profile removed: ' + name.trim());
-            });
-            grp.appendChild(row);
-          }
-        }
+        window.refreshProfileDropdown?.();
+        window.refreshSettingsProfiles?.();
         showToast('Profile created: ' + name.trim());
       });
     });
+
     // Load saved profiles on init
-    (function loadProfiles() {
-      const profiles = JSON.parse(localStorage.getItem('ex_profiles') || '[]');
-      const pane = document.getElementById('stab-profiles');
-      if (!pane) return;
-      const grp = pane.querySelector('.s-group');
-      if (!grp) return;
-      profiles.forEach(p => {
-        const row = document.createElement('div'); row.className = 's-row';
-        row.innerHTML = '<div class="s-row-left"><div class="s-row-label">' + p.name + '</div><div class="s-row-desc">Custom profile</div></div><button class="s-btn-sm" style="color:var(--red)">Remove</button>';
-        row.querySelector('button').addEventListener('click', function () {
-          this.closest('.s-row').remove();
-          const pp = JSON.parse(localStorage.getItem('ex_profiles') || '[]');
-          localStorage.setItem('ex_profiles', JSON.stringify(pp.filter(x => x.name !== p.name)));
-          showToast('Profile removed: ' + p.name);
+    (function initProfilesUI() {
+      const nameInput = document.getElementById('sProfileNameInput');
+      if (nameInput) {
+        const u = DB.getUser();
+        nameInput.value = u.name || '';
+        nameInput.addEventListener('change', () => { DB.saveUser({ name: nameInput.value }); showToast('✅ Name updated'); });
+      }
+
+      window.refreshSettingsProfiles = function () {
+        const pane = document.getElementById('stab-profiles');
+        const grp = document.getElementById('sPersonaGroup');
+        if (!pane || !grp) return;
+        grp.innerHTML = '<div class="s-group-title">Browser Personas</div>';
+
+        const defName = localStorage.getItem('ex_default_persona_name') || 'Default';
+        const active = localStorage.getItem('ex_active_profile') || defName;
+        const profiles = [{ name: defName, isDefault: true }].concat(JSON.parse(localStorage.getItem('ex_profiles') || '[]'));
+
+        profiles.forEach(p => {
+          const row = document.createElement('div'); row.className = 's-row';
+          const isActive = p.name === active;
+          row.innerHTML = `<div class="s-row-left"><div class="s-row-label">${p.name}</div><div class="s-row-desc">${p.isDefault ? 'System profile' : 'Custom persona'}</div></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              ${isActive ? '<span style="color:var(--green);font-size:11px">✓ Active</span>' : `<button class="s-btn-sm" data-switch="${p.name}">Switch</button>`}
+              <button class="s-btn-sm" data-rename="${p.name}">Rename</button>
+              ${!p.isDefault ? `<button class="s-btn-sm" style="color:var(--red)" data-del="${p.name}">Remove</button>` : ''}
+            </div>`;
+
+          row.querySelector('[data-switch]')?.addEventListener('click', () => {
+            localStorage.setItem('ex_active_profile', p.name);
+            window.refreshProfileDropdown?.();
+            window.refreshSettingsProfiles();
+            showToast('👤 Switched to: ' + p.name);
+          });
+
+          row.querySelector('[data-rename]')?.addEventListener('click', () => {
+            window.customPrompt(`Rename persona "${p.name}" to:`, p.name, (newName) => {
+              if (!newName || !newName.trim() || newName === p.name) return;
+              if (p.isDefault) {
+                localStorage.setItem('ex_default_persona_name', newName.trim());
+              } else {
+                const pp = JSON.parse(localStorage.getItem('ex_profiles') || '[]');
+                const found = pp.find(x => x.name === p.name);
+                if (found) { found.name = newName.trim(); localStorage.setItem('ex_profiles', JSON.stringify(pp)); }
+              }
+              if (active === p.name) localStorage.setItem('ex_active_profile', newName.trim());
+              window.refreshProfileDropdown?.();
+              window.refreshSettingsProfiles();
+              showToast('Profile renamed');
+            });
+          });
+
+          row.querySelector('[data-del]')?.addEventListener('click', () => {
+            window.customConfirm(`Remove persona "${p.name}"?`, (c) => {
+              if (!c) return;
+              const pp = JSON.parse(localStorage.getItem('ex_profiles') || '[]');
+              localStorage.setItem('ex_profiles', JSON.stringify(pp.filter(x => x.name !== p.name)));
+              if (active === p.name) localStorage.setItem('ex_active_profile', defName);
+              window.refreshProfileDropdown?.();
+              window.refreshSettingsProfiles();
+              showToast('Profile removed');
+            });
+          });
+          grp.appendChild(row);
         });
-        grp.appendChild(row);
-      });
+      };
+      window.refreshSettingsProfiles();
     })();
     document.getElementById('sSetCurrentPage')?.addEventListener('click', () => {
       const t = getActiveTab(); if (t?.url) { const el = document.getElementById('sHomepage'); if (el) el.value = t.url; DB.saveSetting('homepage', t.url); showToast('Homepage set to current page'); }
@@ -16918,7 +17112,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         memorySaverInterval = setInterval(() => {
           const now = Date.now();
-          STATE.tabs.forEach((tab, id) => {
+          STATE.tabs.forEach((tab) => {
+            const id = tab.id;
             if (id === STATE.activeTabId || !tab.lastActive) return; // Skip active tab
             const inactiveDuration = now - tab.lastActive;
             if (inactiveDuration > timeout && !suspendedTabs.has(id)) {
@@ -16929,8 +17124,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 webview.src = 'about:blank';
                 tab.suspended = true;
                 tab.title = '💤 ' + (tab.title || 'Suspended');
-                const tEl = document.getElementById('tab-' + id);
-                if (tEl) tEl.querySelector('.tab-title').textContent = tab.title;
+                const tEl = getTabEl(id);
+                if (tEl) {
+                  const titleEl = tEl.querySelector('.tab-title');
+                  if (titleEl) titleEl.textContent = tab.title;
+                }
                 updateMemorySaverStatus();
                 console.log(`[Memory Saver] Suspended tab ${id} after ${Math.round(inactiveDuration / 60000)}min inactive`);
               }

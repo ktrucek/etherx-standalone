@@ -357,23 +357,41 @@ class DatabaseManager {
 
   // ─── Settings ──────────────────────────────────────────────────────────────
 
-  getSettings() {
-    const rows = this.db.prepare('SELECT key, value FROM settings').all();
-    return rows.reduce((acc, r) => {
-      acc[r.key] = r.value;
-      return acc;
-    }, {});
+  saveSettings(settings) {
+    const stmt = this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+    const transaction = this.db.transaction((data) => {
+      for (const [k, v] of Object.entries(data)) {
+        stmt.run(k, String(v));
+      }
+    });
+    transaction(settings);
+    return { ok: true };
   }
 
-  saveSettings(obj) {
-    const upsert = this.db.prepare(
-      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-    );
-    const tx = this.db.transaction((pairs) => {
-      for (const [k, v] of pairs) upsert.run(k, String(v));
-    });
-    tx(Object.entries(obj));
+  getSettings() {
+    const rows = this.db.prepare('SELECT * FROM settings').all();
+    const cfg = {};
+    rows.forEach(r => { cfg[r.key] = r.value; });
+    return cfg;
+  }
+
+  /**
+   * Save window size and position.
+   */
+  saveWindowBounds(bounds) {
+    this.saveSettings({ 'window_bounds': JSON.stringify(bounds) });
     return { ok: true };
+  }
+
+  /**
+   * Get saved window size and position.
+   */
+  getWindowBounds() {
+    const rows = this.db.prepare('SELECT value FROM settings WHERE key = ?').all('window_bounds');
+    if (rows.length && rows[0].value) {
+      try { return JSON.parse(rows[0].value); } catch (_) { return null; }
+    }
+    return null;
   }
 
   // ─── AI Cache ─────────────────────────────────────────────────────────────
