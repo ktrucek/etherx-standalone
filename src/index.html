@@ -5241,8 +5241,8 @@
     }
   </style>
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js" defer></script>
-  <script src="../assets/ethers.umd.min.js"></script>
-  <script src="../assets/jsQR.js"></script>
+  <script src="../assets/ethers.umd.min.js" defer></script>
+  <script src="../assets/jsQR.js" defer></script>
 </head>
 
 <body>
@@ -7944,7 +7944,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.69</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.70</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8245,7 +8245,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.69</span></div>
+                id="helpVersionNum2">2.4.70</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9574,6 +9574,25 @@
       getStorageKey(store) { const cfg = this.getStorageConfig(); return cfg[store] || { hist: 'ex_hist', bm: 'ex_bm', cfg: 'ex_cfg', user: 'ex_user', notes: 'ex_notes', dl: 'ex_dl', passwords: 'ex_passwords', sessions: 'ex_sessions' }[store] || ('ex_' + store); },
       setStorageKey(store, key) { const cfg = this.getStorageConfig(); cfg[store] = key; localStorage.setItem('ex_storage_cfg', JSON.stringify(cfg)); showToast('💾 Storage key for "' + store + '" set to "' + key + '"'); }
     };
+
+    // ── Sync all localStorage data to Electron SQLite backend ──────────────
+    function syncLocalToSqlite() {
+      if (!window.etherx) { showToast('⚠️ SQLite sync not available (no Electron backend)'); return; }
+      let count = 0;
+      try {
+        if (window.etherx.settings?.save) { window.etherx.settings.save(DB.getSettings()).catch(() => { }); count++; }
+        if (window.etherx.userProfile?.save) { window.etherx.userProfile.save(DB.getUser()).catch(() => { }); count++; }
+        if (window.etherx.bookmarks?.sync) { window.etherx.bookmarks.sync(DB.getBookmarks()).catch(() => { }); count++; }
+        if (window.etherx.history?.sync) { window.etherx.history.sync(DB.getHistory()).catch(() => { }); count++; }
+        if (window.etherx.sessions?.sync) { window.etherx.sessions.sync(DB.getSessions()).catch(() => { }); count++; }
+        if (window.etherx.notes?.sync) { window.etherx.notes.sync(DB.getNotes()).catch(() => { }); count++; }
+        if (window.etherx.downloads?.sync) { window.etherx.downloads.sync(DB.getDownloads()).catch(() => { }); count++; }
+        showToast('🔄 Synced ' + count + ' tables to SQLite');
+      } catch (e) {
+        showToast('❌ Sync error: ' + e.message);
+      }
+    }
+
     let tabIdCounter = 0;
     function createTab(url = '', title = 'New Tab', active = true) {
       const id = ++tabIdCounter;
@@ -9988,7 +10007,8 @@
           return;
         }
       });
-      urlInput.addEventListener('input', () => { _acSelIdx = -1; queryAcDropdown(urlInput.value.trim()); });
+      let _acDebounceTimer = null;
+      urlInput.addEventListener('input', () => { _acSelIdx = -1; clearTimeout(_acDebounceTimer); _acDebounceTimer = setTimeout(() => queryAcDropdown(urlInput.value.trim()), 80); });
       urlInput.addEventListener('focus', () => { urlInput.select(); if (urlInput.value.trim()) queryAcDropdown(urlInput.value.trim()); });
       urlInput.addEventListener('blur', () => setTimeout(closeAcDropdown, 150));
     }
@@ -10804,6 +10824,7 @@
       const eb = document.getElementById('dtErrBadge'); const wb = document.getElementById('dtWarnBadge');
       if (eb) eb.textContent = dtErrCount || ''; if (wb) wb.textContent = dtWarnCount || '';
     }
+    let _conFilterTimer = null;
     function consoleLog(type, msg, src) {
       try {
         if (!consoleOutput) return;
@@ -10816,7 +10837,7 @@
         consoleOutput.appendChild(line); consoleOutput.scrollTop = consoleOutput.scrollHeight;
         if (type === 'error') { dtErrCount++; updateDtBadges(); }
         if (type === 'warn') { dtWarnCount++; updateDtBadges(); }
-        applyConsoleFilter();
+        if (!_conFilterTimer) { _conFilterTimer = setTimeout(() => { _conFilterTimer = null; applyConsoleFilter(); }, 150); }
       } catch (e) { /* prevent recursion */ }
     }
 
@@ -10886,12 +10907,16 @@
     const conFilterEl = document.getElementById('conFilter');
     if (conFilterEl) conFilterEl.addEventListener('input', e => { dtTextFilter = e.target.value.toLowerCase(); applyConsoleFilter(); });
     function applyConsoleFilter() {
-      document.querySelectorAll('#consoleOutput .cl').forEach(el => {
-        const msg = (el.querySelector('.cm')?.textContent || '').toLowerCase();
-        const type = [...el.classList].find(c => ['log', 'info', 'warn', 'error', 'success', 'verbose'].includes(c)) || 'log';
+      const els = consoleOutput ? consoleOutput.children : document.querySelectorAll('#consoleOutput .cl');
+      for (let i = 0, len = els.length; i < len; i++) {
+        const el = els[i];
+        if (!el.classList.contains('cl')) continue;
+        const cm = el.querySelector('.cm');
+        const msg = cm ? cm.textContent.toLowerCase() : '';
+        const type = el.classList.contains('error') ? 'error' : el.classList.contains('warn') ? 'warn' : el.classList.contains('info') ? 'info' : el.classList.contains('verbose') ? 'verbose' : 'log';
         const lvl = type === 'success' ? 'log' : type;
         el.style.display = (dtLevelFilter[lvl] !== false && (!dtTextFilter || msg.includes(dtTextFilter))) ? '' : 'none';
-      });
+      }
     }
 
     // ── Clear console
@@ -16112,6 +16137,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         fb.style.display = 'flex';
         return fb;
       }
+
+      // Expose toggleFavBar globally so menu and settings can call it
+      window.toggleFavBar = function (show) {
+        let fb = document.getElementById('favBar');
+        if (show) {
+          if (!fb) fb = _buildFavBar();
+          else { _buildFavBar(); fb.style.display = 'flex'; }
+        } else {
+          if (fb) fb.style.display = 'none';
+        }
+      };
+
       // Auto-restore on startup
       try {
         if (DB.getSettings().show_bookmark_bar === true) {
