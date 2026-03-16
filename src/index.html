@@ -7944,7 +7944,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.70</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.71</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8245,7 +8245,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.70</span></div>
+                id="helpVersionNum2">2.4.71</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8474,7 +8474,8 @@
         <iframe id="etherxFrame" src="https://etherx.io" style="width:100%;height:100%;border:none;display:block"
           allow="clipboard-read; clipboard-write"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" title="EtherX.io"
-          onload="document.getElementById('etherxLoading').style.display='none'"></iframe>
+          onload="document.getElementById('etherxLoading').style.display='none'"
+          onerror="var ld=document.getElementById('etherxLoading');if(ld){ld.querySelector('div:nth-child(2)').textContent='⚠️ Could not load EtherX.io';ld.querySelector('div:last-child').style.display='none'}"></iframe>
       </div>
     </div>
     <!-- AI Gemini Summary Card -->
@@ -9341,10 +9342,19 @@
           if (e.errorCode === -3) return; // Aborted, ignore
           setLoading(0);
           const tab = getActiveTab();
+          const failedUrl = e.validatedURL || (tab ? tab.url : '');
+          const errMsg = e.errorDescription || 'Failed to load page';
           if (tab) {
-            const errMsg = e.errorDescription || 'Failed to load page';
-            consoleLog('error', `Page load failed: ${errMsg} (code: ${e.errorCode})`, tab.url);
+            consoleLog('error', `Page load failed: ${errMsg} (code: ${e.errorCode})`, failedUrl);
+            tab.title = '⚠ ' + (failedUrl ? new URL(failedUrl).hostname : 'Error');
+            updateTabEl(tab);
           }
+          // Show inline error page
+          try {
+            wv.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
+              `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;color:#bbb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}h1{font-size:48px;margin:0 0 8px}p{font-size:14px;color:#888;max-width:440px;line-height:1.5}code{background:#1a1a2e;padding:2px 8px;border-radius:4px;font-size:12px;color:#e06c75}a{color:#667eea;text-decoration:none;margin-top:16px;display:inline-block;font-size:13px}</style></head><body><div><h1>⚠️</h1><p>Could not connect to <b>${failedUrl ? failedUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;') : 'the page'}</b></p><p style="margin-top:4px">${errMsg} <code>ERR ${e.errorCode}</code></p><p style="font-size:12px;margin-top:12px;color:#666">Check your internet connection, or the site may be temporarily down.</p><a href="javascript:location.reload()">↺ Try Again</a></div></body></html>`
+            ));
+          } catch (_) { /* fallback: already logged */ }
         });
         wv.addEventListener('page-title-updated', (e) => {
           const tab = getActiveTab();
@@ -10481,6 +10491,24 @@
     document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
     document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
     document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
+    // Timeout fallback: if etherxFrame or kriptoFrame don't load within 15s, show error
+    ['etherxFrame', 'kriptoFrame'].forEach(fid => {
+      const fr = document.getElementById(fid);
+      if (!fr) return;
+      const loadingId = fid === 'etherxFrame' ? 'etherxLoading' : 'kriptoLoading';
+      let loaded = false;
+      fr.addEventListener('load', () => { loaded = true; });
+      setTimeout(() => {
+        if (loaded) return;
+        const ld = document.getElementById(loadingId);
+        if (ld && ld.style.display !== 'none') {
+          const msgEl = ld.querySelector('div:nth-child(2)');
+          const barEl = ld.querySelector('div:last-child');
+          if (msgEl) msgEl.textContent = '⚠️ Could not connect — check your internet';
+          if (barEl) barEl.style.display = 'none';
+        }
+      }, 15000);
+    });
     ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
     function renderBookmarksPanel() {
       const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
@@ -17713,6 +17741,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
               style="background:none;border:none;color:transparent;cursor:pointer;font-size:13px;padding:0 2px;transition:color .15s">×</button>
           </div>`;
         });
+        if (!tree) return;
         tree.innerHTML = html;
 
         // Active style injection (once)
@@ -17762,7 +17791,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       // ── List Render ─────────────────────────────────────────────────────
       function _bmRenderList(filter) {
         const container = document.getElementById('bmMgrList');
-        const q = (filter ?? document.getElementById('bmSearchInput').value).toLowerCase().trim();
+        if (!container) return;
+        const searchInput = document.getElementById('bmSearchInput');
+        const q = (filter ?? (searchInput ? searchInput.value : '')).toLowerCase().trim();
         let bms = DB.getBookmarks();
 
         // Filter by active folder
@@ -17874,11 +17905,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       // ── Bulk Bar ────────────────────────────────────────────────────────
       function _bmUpdateBulkBar() {
         const bar = document.getElementById('bmBulkBar');
+        if (!bar) return;
         const count = _bmSelected.size;
         bar.style.display = count > 0 ? 'flex' : 'none';
-        document.getElementById('bmBulkCount').textContent = count + ' odabrano';
+        const countEl = document.getElementById('bmBulkCount');
+        if (countEl) countEl.textContent = count + ' odabrano';
         // Populate move select
         const sel = document.getElementById('bmBulkMoveSelect');
+        if (!sel) return;
         const folders = DB.getBookmarkFolderList();
         sel.innerHTML = '<option value="">— Premjesti u folder —</option>' +
           '<option value="__unfiled__">📄 Bez foldera</option>' +

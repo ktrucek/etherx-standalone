@@ -37,6 +37,9 @@ if (process.platform !== 'darwin') {
     app.commandLine.appendSwitch('ignore-gpu-blocklist');
   }
 }
+// Prevent GPU sandbox from crashing the renderer (fixes launch-failed / exit 1003)
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
 app.commandLine.appendSwitch(
@@ -445,9 +448,21 @@ function createWindow() {
   mainWindow.webContents.on('console-message', (e, level, msg, line, sourceId) => {
     if (level >= 2) console.error(`🖥️ Renderer [${level}] ${sourceId}:${line} → ${msg}`);
   });
+  let _rendererRestarts = 0;
   mainWindow.webContents.on('render-process-gone', (e, details) => {
     console.error('❌ render-process-gone:', details.reason, details.exitCode);
-    dialog.showErrorBox('EtherX: Renderer Crashed', `Reason: ${details.reason}\nExit: ${details.exitCode}`);
+    // Auto-recover from launch-failed / crashed — retry up to 3 times
+    if (_rendererRestarts < 3 && (details.reason === 'launch-failed' || details.reason === 'crashed')) {
+      _rendererRestarts++;
+      console.log(`🔄 Attempting renderer restart ${_rendererRestarts}/3...`);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.reload();
+        }
+      }, 1000 * _rendererRestarts);
+    } else {
+      dialog.showErrorBox('EtherX: Renderer Crashed', `Reason: ${details.reason}\nExit: ${details.exitCode}`);
+    }
   });
   mainWindow.webContents.on('unresponsive', () => {
     console.error('⚠️ webContents unresponsive');
@@ -1038,6 +1053,14 @@ function setupIPC() {
 
 // ─── Navigation safety + context-menu passthrough ────────────────────────────
 app.on('web-contents-created', (_event, contents) => {
+  // Gracefully handle load failures in webviews (guest views) to prevent
+  // uncaught "Error invoking remote method 'GUEST_VIEW_MANAGER_CALL'" errors
+  contents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (errorCode === -3) return; // ERR_ABORTED — normal during navigation
+    if (!isMainFrame) return; // Only handle main frame failures
+    console.warn(`[webContents] did-fail-load: ${errorCode} ${errorDescription} — ${validatedURL}`);
+  });
+
   contents.on('before-input-event', (event, input) => {
     if (process.platform !== 'darwin' || !input.meta || input.control || input.alt) return;
     const key = (input.key || '').toLowerCase();
