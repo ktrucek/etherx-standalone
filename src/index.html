@@ -7944,7 +7944,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.73</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.74</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8245,7 +8245,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.73</span></div>
+                id="helpVersionNum2">2.4.74</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9347,16 +9347,16 @@
     if (window.electronWebview) {
       const _wvEl = document.getElementById('browseFrameElectron') || document.getElementById('browseFrame');
       if (_wvEl) _wvEl.id = 'browseFrame';
-      document.addEventListener('DOMContentLoaded', function () {
-        const wv = document.getElementById('browseFrame');
+
+      window.setupWebview = function(wv) {
         if (!wv || wv.tagName !== 'WEBVIEW') return;
-        wv.addEventListener('did-start-loading', () => setLoading(30));
-        wv.addEventListener('did-stop-loading', () => { setLoading(100); updateAutofillBtnState(); document.getElementById('sbUrl').textContent = ''; });
-        wv.addEventListener('update-target-url', (e) => { document.getElementById('sbUrl').textContent = e.url || ''; });
+        wv.addEventListener('did-start-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(30); });
+        wv.addEventListener('did-stop-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) { setLoading(100); updateAutofillBtnState(); document.getElementById('sbUrl').textContent = ''; } });
+        wv.addEventListener('update-target-url', (e) => { if (Number(wv.dataset.tabId) === STATE.activeTabId) document.getElementById('sbUrl').textContent = e.url || ''; });
         wv.addEventListener('did-fail-load', (e) => {
           if (e.errorCode === -3) return; // Aborted, ignore
-          setLoading(0);
-          const tab = getActiveTab();
+          if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(0);
+          const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
           const failedUrl = e.validatedURL || (tab ? tab.url : '');
           const errMsg = e.errorDescription || 'Failed to load page';
           if (tab) {
@@ -9372,19 +9372,21 @@
           } catch (_) { /* fallback: already logged */ }
         });
         wv.addEventListener('page-title-updated', (e) => {
-          const tab = getActiveTab();
+          const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
           if (tab) { tab.title = e.title; updateTabEl(tab); }
         });
         wv.addEventListener('page-favicon-updated', (e) => {
-          if (e.favicons?.length) { const tab = getActiveTab(); if (tab) { tab.faviconUrl = e.favicons[0]; updateTabEl(tab); } }
+          if (e.favicons?.length) { const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId)); if (tab) { tab.faviconUrl = e.favicons[0]; updateTabEl(tab); } }
         });
         wv.addEventListener('did-navigate', (e) => {
-          const tab = getActiveTab();
+          const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
           if (tab && e.url && !e.url.startsWith('about:')) {
             tab.url = e.url;
-            document.getElementById('urlInput').value = e.url;
-            updateUrlIcon(e.url);
-            updateNavBtns(tab);
+            if (Number(wv.dataset.tabId) === STATE.activeTabId) {
+              document.getElementById('urlInput').value = e.url;
+              updateUrlIcon(e.url);
+              updateNavBtns(tab);
+            }
             // Set favicon from Google S2 API as fallback
             if (!tab.faviconUrl || tab.faviconUrl.includes('s2/favicons')) {
               tab.faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(e.url)}`;
@@ -9399,8 +9401,14 @@
           }
         });
         wv.addEventListener('did-navigate-in-page', (e) => {
-          const tab = getActiveTab();
-          if (tab && e.url) { tab.url = e.url; document.getElementById('urlInput').value = e.url; updateAutofillBtnState(); }
+          const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
+          if (tab && e.url) { 
+            tab.url = e.url; 
+            if (Number(wv.dataset.tabId) === STATE.activeTabId) {
+              document.getElementById('urlInput').value = e.url; 
+              updateAutofillBtnState(); 
+            }
+          }
         });
         wv.addEventListener('dom-ready', async () => {
           try {
@@ -9435,8 +9443,10 @@
         wv.addEventListener('console-message', (e) => {
           const msg = String(e.message || '');
           if (msg === '__ETHERX_PAGE_CLICK__') {
-            ctxMenu.classList.remove('show');
-            hideAutofillBox();
+            if (Number(wv.dataset.tabId) === STATE.activeTabId) {
+              ctxMenu.classList.remove('show');
+              hideAutofillBox();
+            }
             return;
           }
           if (!msg.startsWith('__ETHERX_SAVE_PASSWORD__')) return;
@@ -9467,12 +9477,21 @@
         // ── Webview context-menu (Electron fires 'context-menu' on the webview element) ──
         wv.addEventListener('context-menu', (e) => {
           e.preventDefault();
+          if (Number(wv.dataset.tabId) !== STATE.activeTabId) switchTab(Number(wv.dataset.tabId));
           showCtxMenu(e.params?.x ?? e.clientX ?? 0, e.params?.y ?? e.clientY ?? 0, e.params?.linkURL || null, {
             selectionText: e.params?.selectionText || '',
             isEditable: !!e.params?.isEditable,
             pageURL: e.params?.pageURL || ''
           });
         });
+      };
+
+      document.addEventListener('DOMContentLoaded', function () {
+        const wv = origGetElementById.call(document, 'browseFrame');
+        if (wv) {
+          wv.dataset.tabId = "1";
+          window.setupWebview(wv);
+        }
       });
 
       // ── Also receive context-menu info from main process (via IPC) ──────────
@@ -9494,6 +9513,16 @@
     })();
 
     const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false, autoBookmark: false };
+    const origGetElementById = document.getElementById;
+    document.getElementById = function (id) {
+      if (id === 'browseFrame' && window.electronWebview) {
+        if (STATE && STATE.activeTabId) {
+          const activeWv = origGetElementById.call(document, 'browseFrame_' + STATE.activeTabId);
+          if (activeWv) return activeWv;
+        }
+      }
+      return origGetElementById.call(document, id);
+    };
     const DB = {
       getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
       addHistory(e) {
@@ -9623,6 +9652,30 @@
       const id = ++tabIdCounter;
       const tab = { id, url, title, favicon: '🌐', history: [], histIdx: -1, pinned: false, muted: false };
       STATE.tabs.push(tab); renderTab(tab);
+
+      if (window.electronWebview) {
+        if (id === 1) {
+          const origWv = origGetElementById.call(document, 'browseFrame');
+          if (origWv) {
+             origWv.id = 'browseFrame_1';
+             origWv.dataset.tabId = "1";
+          }
+        } else {
+          const parent = origGetElementById.call(document, 'browseFrame_1')?.parentNode || origGetElementById.call(document, 'browseFrameWeb')?.parentNode || document.body;
+          const wv = document.createElement('webview');
+          wv.id = 'browseFrame_' + id;
+          wv.className = 'browse-frame tab-webview';
+          wv.dataset.tabId = id;
+          wv.setAttribute('allowpopups', '');
+          wv.setAttribute('allowfullscreen', '');
+          wv.setAttribute('partition', 'persist:etherx');
+          const navua = navigator.userAgent.replace(/EtherX.*?\s/, '');
+          wv.setAttribute('useragent', navua);
+          parent.appendChild(wv);
+          if (window.setupWebview) window.setupWebview(wv);
+        }
+      }
+
       if (active) switchTab(id);
       if (url) { navigateTo(url, id); }
       else {
@@ -9791,6 +9844,16 @@
     function closeTab(id) {
       const idx = STATE.tabs.findIndex(t => t.id === id); if (idx === -1) return;
       STATE.tabs.splice(idx, 1); const el = getTabEl(id); if (el) el.remove();
+
+      if (window.electronWebview) {
+        const wv = origGetElementById.call(document, 'browseFrame_' + id);
+        if (wv) { wv.src = 'about:blank'; wv.remove(); }
+        if (id === 1) {
+          const origWv = origGetElementById.call(document, 'browseFrame');
+          if (origWv && origWv.dataset.tabId === "1") { origWv.src = 'about:blank'; origWv.remove(); }
+        }
+      }
+
       saveSessionTabs();
       if (STATE.tabs.length === 0) { createTab(); return; }
       switchTab(STATE.tabs[Math.min(idx, STATE.tabs.length - 1)].id);
@@ -9805,7 +9868,8 @@
       if (tab.faviconUrl) { fav.innerHTML = `<img src="${tab.faviconUrl}" onerror="this.parentNode.innerHTML='<span>🌐</span>'">`; }
       else { fav.innerHTML = `<span>${tab.favicon || '🌐'}</span>`; }
     }
-    const frame = document.getElementById('browseFrame');
+    const getFrame = () => document.getElementById('browseFrame');
+    const frame = new Proxy({}, { get: (t, p) => typeof getFrame()[p] === "function" ? getFrame()[p].bind(getFrame()) : getFrame()[p], set: (t, p, v) => { getFrame()[p] = v; return true; } });
     const ntp = document.getElementById('ntpPage');
     function normalizeUrl(raw) {
       if (!raw || typeof raw !== 'string') return '';
@@ -11037,7 +11101,8 @@
     document.getElementById('elemRefreshBtn')?.addEventListener('click', renderDOMTree);
 
     function renderDOMTree() {
-      const frame = document.getElementById('browseFrame');
+      const getFrame = () => document.getElementById('browseFrame');
+      const frame = new Proxy({}, { get: (t, p) => typeof getFrame()[p] === "function" ? getFrame()[p].bind(getFrame()) : getFrame()[p], set: (t, p, v) => { getFrame()[p] = v; return true; } });
       const view = document.getElementById('elemView');
       if (!view) return;
       view.innerHTML = '<div style="color:#888;padding:8px">Loading DOM tree...</div>';
@@ -15624,7 +15689,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       showToast('📷 Snimam zaslon…');
       try {
         let canvas;
-        const frame = document.getElementById('browseFrame');
+        const getFrame = () => document.getElementById('browseFrame');
+        const frame = new Proxy({}, { get: (t, p) => typeof getFrame()[p] === "function" ? getFrame()[p].bind(getFrame()) : getFrame()[p], set: (t, p, v) => { getFrame()[p] = v; return true; } });
         if (window.html2canvas) {
           const target = fullPage ? document.documentElement : (frame || document.documentElement);
           canvas = await window.html2canvas(target, { useCORS: true, allowTaint: true, scale: window.devicePixelRatio || 1, logging: false });
