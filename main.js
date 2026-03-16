@@ -1031,6 +1031,154 @@ function setupIPC() {
     }
   });
 
+  // ── Update: check / token / download / install ───────────────────────────
+  ipcMain.handle('update:saveToken', (_e, token) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    db.saveSettings({ ...db.getSettings(), githubUpdateToken: token.trim() });
+    return { ok: true };
+  });
+  ipcMain.handle('update:hasToken', () => {
+    if (!db) return false;
+    const s = db.getSettings();
+    return !!(s.githubUpdateToken && s.githubUpdateToken.length > 0);
+  });
+  ipcMain.handle('update:check', async () => {
+    try {
+      const s = db ? db.getSettings() : {};
+      const token = s.giteaUpdateToken || s.githubUpdateToken || '';
+      const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/vnd.github+json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const { net } = require('electron');
+      const GITHUB_API = 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest';
+      const result = await new Promise((resolve, reject) => {
+        const req = net.request({ method: 'GET', url: GITHUB_API, headers });
+        let body = '';
+        req.on('response', (res) => {
+          res.on('data', (chunk) => { body += chunk.toString(); });
+          res.on('end', () => {
+            if (res.statusCode === 404) { resolve({ ok: false, error: 'Nema objavljenih verzija na GitHub-u' }); return; }
+            if (res.statusCode !== 200) { resolve({ ok: false, error: 'GitHub API greška: HTTP ' + res.statusCode }); return; }
+            try {
+              const data = JSON.parse(body);
+              const latest = (data.tag_name || '').replace(/^v/, '');
+              const current = app.getVersion();
+              const assets = (data.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || '', size: a.size }));
+              resolve({ ok: true, current, latest, isNew: latest !== current && latest > current, name: data.name || data.tag_name, body: data.body || '', assets, publishedAt: data.published_at || '' });
+            } catch (e) { resolve({ ok: false, error: 'Parse error: ' + e.message }); }
+          });
+        });
+        req.on('error', (e) => reject(e));
+        req.end();
+      });
+      return result;
+    } catch (e) { return { ok: false, error: e.message }; }
+  });
+
+  // Download an update asset to temp, sending progress to renderer
+  ipcMain.handle('update:download', async (_e, url, filename) => {
+    try {
+      const os = require('os');
+      const tmpDir = path.join(os.tmpdir(), 'etherx-update');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      const dest = path.join(tmpDir, filename);
+      // Clean previous download if any
+      if (fs.existsSync(dest)) fs.unlinkSync(dest);
+
+      const { net } = require('electron');
+      const s = db ? db.getSettings() : {};
+      const token = s.giteaUpdateToken || s.githubUpdateToken || '';
+
+      await new Promise((resolve, reject) => {
+        const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/octet-stream' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const req = net.request({ method: 'GET', url, headers, redirect: 'follow' });
+        req.on('response', (res) => {
+          // Follow redirect manually for GitHub asset downloads
+          if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+            const rUrl = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
+            const req2 = net.request({ method: 'GET', url: rUrl });
+            req2.on('response', (res2) => handleResponse(res2));
+            req2.on('error', reject);
+            req2.end();
+            return;
+          }
+          handleResponse(res);
+        });
+        req.on('error', reject);
+        req.end();
+
+        function handleResponse(res) {
+          if (res.statusCode !== 200) {
+            reject(new Error('HTTP ' + res.statusCode));
+            return;
+          }
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let received = 0;
+          const ws = fs.createWriteStream(dest);
+          let lastProgress = 0;
+          res.on('data', (chunk) => {
+            ws.write(chunk);
+            received += chunk.length;
+            const pct = total > 0 ? Math.round((received / total) * 100) : -1;
+            if (pct !== lastProgress) {
+              lastProgress = pct;
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('update:progress', { percent: pct, received, total, filename });
+              }
+            }
+          });
+          res.on('end', () => { ws.end(() => resolve()); });
+          res.on('error', (err) => { ws.destroy(); reject(err); });
+        }
+      });
+
+      return { ok: true, filePath: dest, filename };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Install: open the downloaded file and quit
+  ipcMain.handle('update:install', async (_e, filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) return { ok: false, error: 'Datoteka ne postoji' };
+      const ext = path.extname(filePath).toLowerCase();
+
+      if (process.platform === 'darwin') {
+        // macOS: open DMG or ZIP
+        await shell.openPath(filePath);
+        setTimeout(() => app.quit(), 1500);
+      } else if (process.platform === 'linux') {
+        if (ext === '.appimage') {
+          fs.chmodSync(filePath, 0o755);
+          const { spawn } = require('child_process');
+          spawn(filePath, [], { detached: true, stdio: 'ignore' }).unref();
+          setTimeout(() => app.quit(), 1000);
+        } else if (ext === '.deb') {
+          // Show in folder — user may need sudo
+          shell.showItemInFolder(filePath);
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'EtherX Update',
+            message: 'DEB paket je preuzet.',
+            detail: `Instaliraj s:\nsudo dpkg -i "${path.basename(filePath)}"`,
+            buttons: ['OK'],
+          });
+        } else {
+          await shell.openPath(filePath);
+        }
+      } else {
+        // Windows: open exe/zip
+        await shell.openPath(filePath);
+        setTimeout(() => app.quit(), 1500);
+      }
+
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // ── Open settings page ────────────────────────────────────────────────────
   ipcMain.on('app:openSettings', () => {
     const settingsPath = path.join(__dirname, 'src', 'settings.html');

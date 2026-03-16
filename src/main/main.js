@@ -1104,6 +1104,101 @@ function setupIPC() {
     }
   });
 
+  // Download an update asset to temp, sending progress to renderer
+  ipcMain.handle('update:download', async (_e, url, filename) => {
+    try {
+      const os = require('os');
+      const tmpDir = path.join(os.tmpdir(), 'etherx-update');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      const dest = path.join(tmpDir, filename);
+      if (fs.existsSync(dest)) fs.unlinkSync(dest);
+
+      const { net } = require('electron');
+      const s = db ? db.getSettings() : {};
+      const token = s.giteaUpdateToken || s.githubUpdateToken || '';
+
+      await new Promise((resolve, reject) => {
+        const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/octet-stream' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const req = net.request({ method: 'GET', url, headers, redirect: 'follow' });
+        req.on('response', (res) => {
+          if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+            const rUrl = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
+            const req2 = net.request({ method: 'GET', url: rUrl });
+            req2.on('response', (res2) => handleResponse(res2));
+            req2.on('error', reject);
+            req2.end();
+            return;
+          }
+          handleResponse(res);
+        });
+        req.on('error', reject);
+        req.end();
+
+        function handleResponse(res) {
+          if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode)); return; }
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let received = 0;
+          const ws = fs.createWriteStream(dest);
+          let lastProgress = 0;
+          res.on('data', (chunk) => {
+            ws.write(chunk);
+            received += chunk.length;
+            const pct = total > 0 ? Math.round((received / total) * 100) : -1;
+            if (pct !== lastProgress) {
+              lastProgress = pct;
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('update:progress', { percent: pct, received, total, filename });
+              }
+            }
+          });
+          res.on('end', () => { ws.end(() => resolve()); });
+          res.on('error', (err) => { ws.destroy(); reject(err); });
+        }
+      });
+
+      return { ok: true, filePath: dest, filename };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('update:install', async (_e, filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) return { ok: false, error: 'Datoteka ne postoji' };
+      const ext = path.extname(filePath).toLowerCase();
+
+      if (process.platform === 'darwin') {
+        await shell.openPath(filePath);
+        setTimeout(() => app.quit(), 1500);
+      } else if (process.platform === 'linux') {
+        if (ext === '.appimage') {
+          fs.chmodSync(filePath, 0o755);
+          const { spawn } = require('child_process');
+          spawn(filePath, [], { detached: true, stdio: 'ignore' }).unref();
+          setTimeout(() => app.quit(), 1000);
+        } else if (ext === '.deb') {
+          shell.showItemInFolder(filePath);
+          dialog.showMessageBox(mainWindow, {
+            type: 'info', title: 'EtherX Update',
+            message: 'DEB paket je preuzet.',
+            detail: `Instaliraj s:\nsudo dpkg -i "${path.basename(filePath)}"`,
+            buttons: ['OK'],
+          });
+        } else {
+          await shell.openPath(filePath);
+        }
+      } else {
+        await shell.openPath(filePath);
+        setTimeout(() => app.quit(), 1500);
+      }
+
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // ── Open settings page ────────────────────────────────────────────────────
   ipcMain.on('app:openSettings', () => {
     const settingsPath = path.join(__dirname, 'src', 'settings.html');

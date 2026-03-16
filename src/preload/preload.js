@@ -158,6 +158,9 @@ contextBridge.exposeInMainWorld('etherx', {
     saveToken: (token) => ipcRenderer.invoke('update:saveToken', token),
     hasToken: () => ipcRenderer.invoke('update:hasToken'),
     check: () => ipcRenderer.invoke('update:check'),
+    download: (url, filename) => ipcRenderer.invoke('update:download', url, filename),
+    install: (filePath) => ipcRenderer.invoke('update:install', filePath),
+    onProgress: (callback) => ipcRenderer.on('update:progress', (_e, data) => callback(data)),
   },
 
   // ── Shell ─────────────────────────────────────────────────────────────────────

@@ -183,6 +183,16 @@ contextBridge.exposeInMainWorld('etherx', {
     openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
   },
 
+  // ── Update ────────────────────────────────────────────────────────────────────
+  update: {
+    saveToken: (token) => ipcRenderer.invoke('update:saveToken', token),
+    hasToken: () => ipcRenderer.invoke('update:hasToken'),
+    check: () => ipcRenderer.invoke('update:check'),
+    download: (url, filename) => ipcRenderer.invoke('update:download', url, filename),
+    install: (filePath) => ipcRenderer.invoke('update:install', filePath),
+    onProgress: (callback) => ipcRenderer.on('update:progress', (_e, data) => callback(data)),
+  },
+
   extensions: {
     chooseFolder: () => ipcRenderer.invoke('extensions:chooseFolder'),
     loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),
@@ -216,7 +226,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab', 'update:progress'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),
