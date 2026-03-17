@@ -1070,7 +1070,9 @@
       padding: 0 8px;
       gap: 4px;
       border-bottom: 1px solid var(--border);
-      flex-shrink: 0
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1000;
     }
 
     .nav-btn {
@@ -7944,7 +7946,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.75</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.76</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8245,7 +8247,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.75</span></div>
+                id="helpVersionNum2">2.4.76</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8269,7 +8271,8 @@
               <div class="s-row-label">Provjeri dostupne nadogradnje</div>
               <div class="s-row-desc">Provjeri github.com/ktrucek/etherx-standalone za novu verziju.</div>
             </div>
-            <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow" style="min-width:110px">🔍 Provjeri sada</button>
+            <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow"
+              style="min-width:110px">🔍 Provjeri sada</button>
           </div>
         </div>
 
@@ -8278,7 +8281,8 @@
           style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
             <div>
-              <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel" data-i18n="newVersionAvail">Nova verzija dostupna!
+              <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel"
+                data-i18n="newVersionAvail">Nova verzija dostupna!
               </div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
             </div>
@@ -9348,7 +9352,7 @@
       const _wvEl = document.getElementById('browseFrameElectron') || document.getElementById('browseFrame');
       if (_wvEl) _wvEl.id = 'browseFrame';
 
-      window.setupWebview = function(wv) {
+      window.setupWebview = function (wv) {
         if (!wv || wv.tagName !== 'WEBVIEW') return;
         wv.addEventListener('did-start-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(30); });
         wv.addEventListener('did-stop-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) { setLoading(100); updateAutofillBtnState(); document.getElementById('sbUrl').textContent = ''; } });
@@ -9366,10 +9370,10 @@
           }
           // Show inline error page
           try {
-            const errorHtml = 
+            const errorHtml =
               `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;color:#bbb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}h1{font-size:48px;margin:0 0 8px}p{font-size:14px;color:#888;max-width:440px;line-height:1.5}code{background:#1a1a2e;padding:2px 8px;border-radius:4px;font-size:12px;color:#e06c75}a{color:#667eea;text-decoration:none;margin-top:16px;display:inline-block;font-size:13px}</style></head><body><div><h1>⚠️</h1><p>Could not connect to <b>${failedUrl ? failedUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;') : 'the page'}</b></p><p style="margin-top:4px">${errMsg} <code>ERR ${e.errorCode}</code></p><p style="font-size:12px;margin-top:12px;color:#666">Check your internet connection, or the site may be temporarily down.</p><a href="javascript:location.reload()">↺ Try Again</a></div></body></html>`;
             const promise = wv.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorHtml));
-            if (promise && promise.catch) promise.catch(() => {});
+            if (promise && promise.catch) promise.catch(() => { });
           } catch (_) { /* fallback: already logged */ }
         });
         wv.addEventListener('page-title-updated', (e) => {
@@ -9403,11 +9407,11 @@
         });
         wv.addEventListener('did-navigate-in-page', (e) => {
           const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
-          if (tab && e.url) { 
-            tab.url = e.url; 
+          if (tab && e.url) {
+            tab.url = e.url;
             if (Number(wv.dataset.tabId) === STATE.activeTabId) {
-              document.getElementById('urlInput').value = e.url; 
-              updateAutofillBtnState(); 
+              document.getElementById('urlInput').value = e.url;
+              updateAutofillBtnState();
             }
           }
         });
@@ -9786,54 +9790,54 @@
     let _webviewOwnerTabId = null;
 
     function switchTab(id) {
-        const tab = STATE.tabs.find(t => t.id === id); if (!tab) return;
-        STATE.activeTabId = id;
-        tab.lastActive = Date.now();
+      const tab = STATE.tabs.find(t => t.id === id); if (!tab) return;
+      STATE.activeTabId = id;
+      tab.lastActive = Date.now();
 
-        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-        const el = getTabEl(id); if (el) { el.classList.add('active'); el.style.opacity = '1'; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
-        document.getElementById('urlInput').value = tab.url || '';
-        updateUrlIcon(tab.url); updateNavBtns(tab);
-        if (!tab.url) {
-          _webviewOwnerTabId = null;
-          showNTP();
-        } else {
-          if (window.electronWebview) {
-            if (tab.discarded) {
-              tab.discarded = false;
-              consoleLog('info', `🌅 Budi se tab iz sleep moda: ${tab.title}`);
-              const parent = origGetElementById.call(document, 'browseFrameWeb')?.parentNode || document.body;
-              const wv = document.createElement('webview');
-              wv.id = 'browseFrame_' + id;
-              wv.className = 'browse-frame tab-webview';
-              wv.dataset.tabId = id;
-              wv.setAttribute('allowpopups', '');
-              wv.setAttribute('allowfullscreen', '');
-              wv.setAttribute('partition', 'persist:etherx');
-              wv.setAttribute('useragent', navigator.userAgent.replace(/EtherX.*?\s/, ''));
-              parent.appendChild(wv);
-              if (window.setupWebview) window.setupWebview(wv);
-            }
-            
-            document.querySelectorAll('webview.browse-frame').forEach(wv => {
-              if (Number(wv.dataset.tabId) === id) {
-                wv.classList.add('active');
-              } else {
-                wv.classList.remove('active');
-              }
-            });
-            _webviewOwnerTabId = id;
-            if (!frame.src || frame.src === 'about:blank') {
-              frame.src = tab.url;
-            }
-          } else {
-            if (frame.src !== tab.url) frame.src = tab.url;
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      const el = getTabEl(id); if (el) { el.classList.add('active'); el.style.opacity = '1'; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+      document.getElementById('urlInput').value = tab.url || '';
+      updateUrlIcon(tab.url); updateNavBtns(tab);
+      if (!tab.url) {
+        _webviewOwnerTabId = null;
+        showNTP();
+      } else {
+        if (window.electronWebview) {
+          if (tab.discarded) {
+            tab.discarded = false;
+            consoleLog('info', `🌅 Budi se tab iz sleep moda: ${tab.title}`);
+            const parent = origGetElementById.call(document, 'browseFrameWeb')?.parentNode || document.body;
+            const wv = document.createElement('webview');
+            wv.id = 'browseFrame_' + id;
+            wv.className = 'browse-frame tab-webview';
+            wv.dataset.tabId = id;
+            wv.setAttribute('allowpopups', '');
+            wv.setAttribute('allowfullscreen', '');
+            wv.setAttribute('partition', 'persist:etherx');
+            wv.setAttribute('useragent', navigator.userAgent.replace(/EtherX.*?\s/, ''));
+            parent.appendChild(wv);
+            if (window.setupWebview) window.setupWebview(wv);
           }
-          showFrame(tab);
+
+          document.querySelectorAll('webview.browse-frame').forEach(wv => {
+            if (Number(wv.dataset.tabId) === id) {
+              wv.classList.add('active');
+            } else {
+              wv.classList.remove('active');
+            }
+          });
+          _webviewOwnerTabId = id;
+          if (!frame.src || frame.src === 'about:blank') {
+            frame.src = tab.url;
+          }
+        } else {
+          if (frame.src !== tab.url) frame.src = tab.url;
         }
-        saveSessionTabs();
+        showFrame(tab);
       }
-      let _saveSessionTimeout = null;
+      saveSessionTabs();
+    }
+    let _saveSessionTimeout = null;
     function saveSessionTabs(force = false) {
       if (_saveSessionTimeout) clearTimeout(_saveSessionTimeout);
       const doSave = () => {
@@ -9858,7 +9862,7 @@
       if (force) doSave();
       else _saveSessionTimeout = setTimeout(doSave, 500);
     }
-    
+
     // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────
     setInterval(() => {
       if (!window.electronWebview) return; // Only applicable for Electron
@@ -9878,7 +9882,7 @@
                 const el = getTabEl(tab.id);
                 if (el) el.style.opacity = '0.6'; // Visual cue
               }
-            } catch(e) {}
+            } catch (e) { }
           }
         }
       });
@@ -10009,7 +10013,7 @@
         ntp.style.display = 'none'; frame.classList.add('active');
         document.getElementById('blockedOverlay').classList.remove('show');
         document.getElementById('readerMode').classList.remove('show');
-        setLoading(30); _webviewOwnerTabId = tab.id; 
+        setLoading(30); _webviewOwnerTabId = tab.id;
         if (!window.electronWebview) frame.src = url;
         document.getElementById('sbUrl').textContent = url;
       }
@@ -10143,10 +10147,16 @@
           urlInput.select();
           return;
         }
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          if (e.key === 'Tab' && _acItems.length === 0) return; // Allow normal tab out if no dropdown
           e.preventDefault();
           if (_acSelIdx >= 0 && _acItems[_acSelIdx]) {
             urlInput.value = _acItems[_acSelIdx].url;
+            closeAcDropdown();
+            navigateTo(urlInput.value);
+          } else if (e.key === 'Tab' && _acItems.length > 0) {
+            // On tab with no selection, choose first item
+            urlInput.value = _acItems[0].url;
             closeAcDropdown();
             navigateTo(urlInput.value);
           } else {
@@ -17299,33 +17309,33 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       // Stored data for one-click update
       window.window._pendingUpdateAsset = null;
 
-      
-    // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────
-    setInterval(() => {
-      if (!window.electronWebview) return; // Only applicable for Electron
-      const DISCARD_TIME = 15 * 60 * 1000; // 15 minutes
-      const now = Date.now();
-      STATE.tabs.forEach(tab => {
-        if (tab.id === STATE.activeTabId || tab.discarded || !tab.url) return;
-        if (now - (tab.lastActive || now) > DISCARD_TIME) {
-          const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || (tab.id === 1 ? origGetElementById.call(document, 'browseFrame') : null);
-          if (wv && typeof wv.isCurrentlyAudible === 'function') {
-            try {
-              if (!wv.isCurrentlyAudible()) {
-                consoleLog('info', `💤 Uspavljujem tab u pozadini radi štednje RAM-a: ${tab.title}`);
-                wv.src = 'about:blank';
-                wv.remove();
-                tab.discarded = true;
-                const el = getTabEl(tab.id);
-                if (el) el.style.opacity = '0.6'; // Visual cue
-              }
-            } catch(e) {}
-          }
-        }
-      });
-    }, 60000); // Check every minute
 
-function _applyUpdateResult(data, currentTag) {
+      // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────
+      setInterval(() => {
+        if (!window.electronWebview) return; // Only applicable for Electron
+        const DISCARD_TIME = 15 * 60 * 1000; // 15 minutes
+        const now = Date.now();
+        STATE.tabs.forEach(tab => {
+          if (tab.id === STATE.activeTabId || tab.discarded || !tab.url) return;
+          if (now - (tab.lastActive || now) > DISCARD_TIME) {
+            const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || (tab.id === 1 ? origGetElementById.call(document, 'browseFrame') : null);
+            if (wv && typeof wv.isCurrentlyAudible === 'function') {
+              try {
+                if (!wv.isCurrentlyAudible()) {
+                  consoleLog('info', `💤 Uspavljujem tab u pozadini radi štednje RAM-a: ${tab.title}`);
+                  wv.src = 'about:blank';
+                  wv.remove();
+                  tab.discarded = true;
+                  const el = getTabEl(tab.id);
+                  if (el) el.style.opacity = '0.6'; // Visual cue
+                }
+              } catch (e) { }
+            }
+          }
+        });
+      }, 60000); // Check every minute
+
+      function _applyUpdateResult(data, currentTag) {
         const badge = document.getElementById('updStatusBadge');
         const resultBox = document.getElementById('updResultBox');
         const lastCheckedEl = document.getElementById('updLastChecked');

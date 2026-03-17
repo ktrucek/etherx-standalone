@@ -506,10 +506,16 @@ function queryAcDropdown(q) {
 
 if (urlInput) {
   urlInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      if (e.key === 'Tab' && _acItems.length === 0) return; // Allow normal tab out if no dropdown
       e.preventDefault();
       if (_acSelIdx >= 0 && _acItems[_acSelIdx]) {
         urlInput.value = _acItems[_acSelIdx].url;
+        closeAcDropdown();
+        navigateTo(urlInput.value);
+      } else if (e.key === 'Tab' && _acItems.length > 0) {
+        // On tab with no selection, choose first item
+        urlInput.value = _acItems[0].url;
         closeAcDropdown();
         navigateTo(urlInput.value);
       } else {
