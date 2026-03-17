@@ -7944,7 +7944,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.74</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.75</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8245,7 +8245,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.74</span></div>
+                id="helpVersionNum2">2.4.75</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8269,7 +8269,7 @@
               <div class="s-row-label">Provjeri dostupne nadogradnje</div>
               <div class="s-row-desc">Provjeri github.com/ktrucek/etherx-standalone za novu verziju.</div>
             </div>
-            <button class="s-btn s-btn-primary" id="btnCheckUpdates" style="min-width:110px">🔍 Provjeri sada</button>
+            <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow" style="min-width:110px">🔍 Provjeri sada</button>
           </div>
         </div>
 
@@ -8278,12 +8278,12 @@
           style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
             <div>
-              <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel">Nova verzija dostupna!
+              <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel" data-i18n="newVersionAvail">Nova verzija dostupna!
               </div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
-              <button id="updOneClickBtn"
+              <button id="updOneClickBtn" data-i18n="updateNow"
                 style="display:none;padding:8px 18px;background:linear-gradient(135deg,#27c93f,#1fa833);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .2s"
                 title="Preuzmi i instaliraj najnoviju verziju jednim klikom">⬆️ Ažuriraj sada</button>
               <a id="updDownloadLink" href="#" target="_blank"
@@ -9366,9 +9366,10 @@
           }
           // Show inline error page
           try {
-            wv.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
-              `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;color:#bbb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}h1{font-size:48px;margin:0 0 8px}p{font-size:14px;color:#888;max-width:440px;line-height:1.5}code{background:#1a1a2e;padding:2px 8px;border-radius:4px;font-size:12px;color:#e06c75}a{color:#667eea;text-decoration:none;margin-top:16px;display:inline-block;font-size:13px}</style></head><body><div><h1>⚠️</h1><p>Could not connect to <b>${failedUrl ? failedUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;') : 'the page'}</b></p><p style="margin-top:4px">${errMsg} <code>ERR ${e.errorCode}</code></p><p style="font-size:12px;margin-top:12px;color:#666">Check your internet connection, or the site may be temporarily down.</p><a href="javascript:location.reload()">↺ Try Again</a></div></body></html>`
-            ));
+            const errorHtml = 
+              `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d1a;color:#bbb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}h1{font-size:48px;margin:0 0 8px}p{font-size:14px;color:#888;max-width:440px;line-height:1.5}code{background:#1a1a2e;padding:2px 8px;border-radius:4px;font-size:12px;color:#e06c75}a{color:#667eea;text-decoration:none;margin-top:16px;display:inline-block;font-size:13px}</style></head><body><div><h1>⚠️</h1><p>Could not connect to <b>${failedUrl ? failedUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;') : 'the page'}</b></p><p style="margin-top:4px">${errMsg} <code>ERR ${e.errorCode}</code></p><p style="font-size:12px;margin-top:12px;color:#666">Check your internet connection, or the site may be temporarily down.</p><a href="javascript:location.reload()">↺ Try Again</a></div></body></html>`;
+            const promise = wv.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorHtml));
+            if (promise && promise.catch) promise.catch(() => {});
           } catch (_) { /* fallback: already logged */ }
         });
         wv.addEventListener('page-title-updated', (e) => {
@@ -9650,15 +9651,15 @@
     let tabIdCounter = 0;
     function createTab(url = '', title = 'New Tab', active = true) {
       const id = ++tabIdCounter;
-      const tab = { id, url, title, favicon: '🌐', history: [], histIdx: -1, pinned: false, muted: false };
+      const tab = { id, url, title, favicon: '🌐', history: [], histIdx: -1, pinned: false, muted: false, lastActive: Date.now(), discarded: false };
       STATE.tabs.push(tab); renderTab(tab);
 
       if (window.electronWebview) {
         if (id === 1) {
           const origWv = origGetElementById.call(document, 'browseFrame');
           if (origWv) {
-             origWv.id = 'browseFrame_1';
-             origWv.dataset.tabId = "1";
+            origWv.id = 'browseFrame_1';
+            origWv.dataset.tabId = "1";
           }
         } else {
           const parent = origGetElementById.call(document, 'browseFrame_1')?.parentNode || origGetElementById.call(document, 'browseFrameWeb')?.parentNode || document.body;
@@ -9682,7 +9683,6 @@
         const cfg = DB.getSettings();
         if (cfg.newTabWith === 'Homepage' && cfg.homepage) { navigateTo(cfg.homepage, id); }
         else if (active) {
-          // Focus the URL bar so the user can start typing immediately
           setTimeout(() => { const inp = document.getElementById('urlInput'); if (inp) { inp.focus(); inp.select(); } }, 80);
         }
       }
@@ -9694,7 +9694,7 @@
       el.className = 'tab' + (tab.pinned ? ' pinned' : '') + (tab.muted ? ' muted' : '');
       el.dataset.tabId = tab.id;
       el.draggable = true;
-      const favHtml = tab.faviconUrl ? `<img src="${tab.faviconUrl}" onerror="this.parentNode.innerHTML='<span>🌐</span>'">` : `<span>${tab.favicon || '🌐'}</span>`;
+      const favHtml = tab.faviconUrl ? `<img src="${tab.faviconUrl}" onerror="this.outerHTML='<span>🌐</span>'">` : `<span>${tab.favicon || '🌐'}</span>`;
       el.innerHTML = `<div class="tab-favicon">${favHtml}</div><div class="tab-title">${tab.title}</div><div class="tab-close">×</div>`;
 
       // Click handler
@@ -9786,38 +9786,105 @@
     let _webviewOwnerTabId = null;
 
     function switchTab(id) {
-      const tab = STATE.tabs.find(t => t.id === id); if (!tab) return;
-      STATE.activeTabId = id;
-      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-      const el = getTabEl(id); if (el) { el.classList.add('active'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
-      document.getElementById('urlInput').value = tab.url || '';
-      updateUrlIcon(tab.url); updateNavBtns(tab);
-      if (!tab.url) {
-        _webviewOwnerTabId = null;
-        showNTP();
-      } else {
-        if (window.electronWebview) {
-          // Only navigate if the webview is NOT already showing this tab's content
-          // This preserves media playback (YouTube, Twitch, etc.) when switching tabs
-          const currentSrc = frame.src || '';
-          const tabUrl = tab.url || '';
-          const isAlreadyLoaded = _webviewOwnerTabId === id ||
-            currentSrc === tabUrl ||
-            currentSrc === tabUrl + '/' ||
-            currentSrc.replace(/\/$/, '') === tabUrl.replace(/\/$/, '');
-          if (!isAlreadyLoaded) {
-            frame.src = tabUrl;
-          }
-          _webviewOwnerTabId = id;
+        const tab = STATE.tabs.find(t => t.id === id); if (!tab) return;
+        STATE.activeTabId = id;
+        tab.lastActive = Date.now();
+
+        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+        const el = getTabEl(id); if (el) { el.classList.add('active'); el.style.opacity = '1'; el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+        document.getElementById('urlInput').value = tab.url || '';
+        updateUrlIcon(tab.url); updateNavBtns(tab);
+        if (!tab.url) {
+          _webviewOwnerTabId = null;
+          showNTP();
         } else {
-          if (frame.src !== tab.url) frame.src = tab.url;
+          if (window.electronWebview) {
+            if (tab.discarded) {
+              tab.discarded = false;
+              consoleLog('info', `🌅 Budi se tab iz sleep moda: ${tab.title}`);
+              const parent = origGetElementById.call(document, 'browseFrameWeb')?.parentNode || document.body;
+              const wv = document.createElement('webview');
+              wv.id = 'browseFrame_' + id;
+              wv.className = 'browse-frame tab-webview';
+              wv.dataset.tabId = id;
+              wv.setAttribute('allowpopups', '');
+              wv.setAttribute('allowfullscreen', '');
+              wv.setAttribute('partition', 'persist:etherx');
+              wv.setAttribute('useragent', navigator.userAgent.replace(/EtherX.*?\s/, ''));
+              parent.appendChild(wv);
+              if (window.setupWebview) window.setupWebview(wv);
+            }
+            
+            document.querySelectorAll('webview.browse-frame').forEach(wv => {
+              if (Number(wv.dataset.tabId) === id) {
+                wv.classList.add('active');
+              } else {
+                wv.classList.remove('active');
+              }
+            });
+            _webviewOwnerTabId = id;
+            if (!frame.src || frame.src === 'about:blank') {
+              frame.src = tab.url;
+            }
+          } else {
+            if (frame.src !== tab.url) frame.src = tab.url;
+          }
+          showFrame(tab);
         }
-        showFrame(tab);
+        saveSessionTabs();
       }
-      saveSessionTabs();
-    }
-    let _saveSessionTimeout = null;
+      let _saveSessionTimeout = null;
     function saveSessionTabs(force = false) {
+      if (_saveSessionTimeout) clearTimeout(_saveSessionTimeout);
+      const doSave = () => {
+        // Use window-specific keys to avoid overwriting state between windows
+        let windowId = 'main';
+        try {
+          if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+            windowId = window.electronAPI.windowId() || 'main';
+          }
+        } catch (e) { }
+
+        const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
+        localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
+        localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
+        // Also persist to SQLite when running inside Electron
+        if (window.electronAPI) {
+          try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
+        }
+        _saveSessionTimeout = null;
+      };
+
+      if (force) doSave();
+      else _saveSessionTimeout = setTimeout(doSave, 500);
+    }
+    
+    // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────
+    setInterval(() => {
+      if (!window.electronWebview) return; // Only applicable for Electron
+      const DISCARD_TIME = 15 * 60 * 1000; // 15 minutes
+      const now = Date.now();
+      STATE.tabs.forEach(tab => {
+        if (tab.id === STATE.activeTabId || tab.discarded || !tab.url) return;
+        if (now - (tab.lastActive || now) > DISCARD_TIME) {
+          const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || (tab.id === 1 ? origGetElementById.call(document, 'browseFrame') : null);
+          if (wv && typeof wv.isCurrentlyAudible === 'function') {
+            try {
+              if (!wv.isCurrentlyAudible()) {
+                consoleLog('info', `💤 Uspavljujem tab u pozadini radi štednje RAM-a: ${tab.title}`);
+                wv.src = 'about:blank';
+                wv.remove();
+                tab.discarded = true;
+                const el = getTabEl(tab.id);
+                if (el) el.style.opacity = '0.6'; // Visual cue
+              }
+            } catch(e) {}
+          }
+        }
+      });
+    }, 60000); // Check every minute
+
+    function _oldSaveSessionTabs(force = false) {
       if (_saveSessionTimeout) clearTimeout(_saveSessionTimeout);
       const doSave = () => {
         // Use window-specific keys to avoid overwriting state between windows
@@ -9865,7 +9932,7 @@
       el.querySelector('.tab-title').textContent = tab.title;
       const fav = el.querySelector('.tab-favicon');
       if (!fav) return;
-      if (tab.faviconUrl) { fav.innerHTML = `<img src="${tab.faviconUrl}" onerror="this.parentNode.innerHTML='<span>🌐</span>'">`; }
+      if (tab.faviconUrl) { fav.innerHTML = `<img src="${tab.faviconUrl}" onerror="this.outerHTML='<span>🌐</span>'">`; }
       else { fav.innerHTML = `<span>${tab.favicon || '🌐'}</span>`; }
     }
     const getFrame = () => document.getElementById('browseFrame');
@@ -9921,21 +9988,29 @@
       const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
       closeAllPanels();
       tab.url = url;
+      tab.lastActive = Date.now();
+      tab.discarded = false;
       try {
         const h = new URL(url).hostname;
         tab.title = h;
         tab.favicon = '🌐';
-        // faviconUrl set after load, not here — prevents gstatic URL appearing in address bar
         tab.faviconUrl = null;
       } catch (e) { tab.title = url.slice(0, 30); tab.favicon = '🌐'; tab.faviconUrl = null; }
       tab.history = tab.history.slice(0, tab.histIdx + 1);
       tab.history.push(url); tab.histIdx = tab.history.length - 1;
+
+      if (window.electronWebview) {
+        const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
+        if (wv && wv.tagName === 'WEBVIEW') wv.src = url;
+      }
+
       if (tab.id === STATE.activeTabId) {
         document.getElementById('urlInput').value = url; updateUrlIcon(url); updateNavBtns(tab);
         ntp.style.display = 'none'; frame.classList.add('active');
         document.getElementById('blockedOverlay').classList.remove('show');
         document.getElementById('readerMode').classList.remove('show');
-        setLoading(30); _webviewOwnerTabId = tab.id; frame.src = url;
+        setLoading(30); _webviewOwnerTabId = tab.id; 
+        if (!window.electronWebview) frame.src = url;
         document.getElementById('sbUrl').textContent = url;
       }
       updateTabEl(tab); DB.addHistory({ url, title: tab.title }); saveSessionTabs();
@@ -17209,7 +17284,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (tokenStatus) { tokenStatus.style.color = '#27c93f'; tokenStatus.textContent = '✅ Token pohranjen. Možeš sada provjeri ažuriranja.'; }
             showToast('✅ GitHub token pohranjen');
           } else {
-            if (tokenStatus) { tokenStatus.style.color = '#e74c3c'; tokenStatus.textContent = '❌ Greška: ' + (r.error || 'nepoznata'); }
+            if (tokenStatus) { tokenStatus.style.color = '#e74c3c'; tokenStatus.textContent = (window.i18n ? window.i18n.t('githubTokenErr') : '❌ Greška: ') + (r.error || 'unknown'); }
           }
         });
       })();
@@ -17222,14 +17297,40 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       }
 
       // Stored data for one-click update
-      let _pendingUpdateAsset = null;
+      window.window._pendingUpdateAsset = null;
 
-      function _applyUpdateResult(data, currentTag) {
+      
+    // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────
+    setInterval(() => {
+      if (!window.electronWebview) return; // Only applicable for Electron
+      const DISCARD_TIME = 15 * 60 * 1000; // 15 minutes
+      const now = Date.now();
+      STATE.tabs.forEach(tab => {
+        if (tab.id === STATE.activeTabId || tab.discarded || !tab.url) return;
+        if (now - (tab.lastActive || now) > DISCARD_TIME) {
+          const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || (tab.id === 1 ? origGetElementById.call(document, 'browseFrame') : null);
+          if (wv && typeof wv.isCurrentlyAudible === 'function') {
+            try {
+              if (!wv.isCurrentlyAudible()) {
+                consoleLog('info', `💤 Uspavljujem tab u pozadini radi štednje RAM-a: ${tab.title}`);
+                wv.src = 'about:blank';
+                wv.remove();
+                tab.discarded = true;
+                const el = getTabEl(tab.id);
+                if (el) el.style.opacity = '0.6'; // Visual cue
+              }
+            } catch(e) {}
+          }
+        }
+      });
+    }, 60000); // Check every minute
+
+function _applyUpdateResult(data, currentTag) {
         const badge = document.getElementById('updStatusBadge');
         const resultBox = document.getElementById('updResultBox');
         const lastCheckedEl = document.getElementById('updLastChecked');
         const now = new Date().toLocaleString('hr-HR');
-        if (lastCheckedEl) lastCheckedEl.textContent = 'Zadnja provjera: ' + now;
+        if (lastCheckedEl) lastCheckedEl.textContent = (window.i18n ? window.i18n.t('lastCheck') : 'Zadnja provjera: ') + now;
         const latestTag = data.latest || data.tag_name?.replace(/^v/, '') || '';
         const isNew = data.isNew ?? semverNewer(latestTag, currentTag);
         if (isNew) {
@@ -17245,19 +17346,19 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
           const oneClickBtn = document.getElementById('updOneClickBtn');
           const notes = document.getElementById('updReleaseNotes');
           if (isNew) {
-            if (newLabel) { newLabel.style.color = 'var(--accent)'; newLabel.textContent = '🎉 Nova verzija dostupna!'; }
+            if (newLabel) { newLabel.style.color = 'var(--accent)'; newLabel.textContent = window.i18n ? window.i18n.t('newVersionAvail') : '🎉 Nova verzija dostupna!'; }
             if (newNum) newNum.textContent = 'v' + latestTag + ' (tvoja: v' + currentTag + ')';
 
             // Find best matching asset for this platform (Electron one-click)
-            _pendingUpdateAsset = null;
+            window._pendingUpdateAsset = null;
             if (window.etherx?.update?.download && data.assets?.length) {
               const platform = detectPlatform();
               const matches = matchAssetToPlatform(data.assets, platform);
               if (matches.length > 0) {
-                _pendingUpdateAsset = matches[0].asset;
+                window._pendingUpdateAsset = matches[0].asset;
                 if (oneClickBtn) {
                   oneClickBtn.style.display = 'inline-block';
-                  oneClickBtn.textContent = '⬆️ Ažuriraj sada';
+                  oneClickBtn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
                   oneClickBtn.disabled = false;
                 }
               }
@@ -17325,7 +17426,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       // ── One-click auto-update (Electron only) ──────────────────────────────
       document.getElementById('updOneClickBtn')?.addEventListener('click', async function () {
-        if (!_pendingUpdateAsset || !window.etherx?.update?.download) return;
+        if (!window._pendingUpdateAsset || !window.etherx?.update?.download) return;
         const btn = this;
         const progressWrap = document.getElementById('updProgressWrap');
         const progressBar = document.getElementById('updProgressBar');
@@ -17345,11 +17446,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
               if (progressPct) progressPct.textContent = data.percent >= 0 ? data.percent + '%' : '';
               const mb = (data.received / 1048576).toFixed(1);
               const totalMb = data.total > 0 ? (data.total / 1048576).toFixed(1) : '?';
-              if (progressLabel) progressLabel.textContent = `Preuzimanje... ${mb} / ${totalMb} MB`;
+              if (progressLabel) progressLabel.textContent = `${window.i18n ? window.i18n.t('downloading') : 'Preuzimanje...'} ${mb} / ${totalMb} MB`;
             });
           }
 
-          const result = await window.etherx.update.download(_pendingUpdateAsset.url, _pendingUpdateAsset.name);
+          const result = await window.etherx.update.download(window._pendingUpdateAsset.url, window._pendingUpdateAsset.name);
           if (!result.ok) throw new Error(result.error || 'Download error');
 
           // Download complete
@@ -17371,7 +17472,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
           btn.textContent = '✅ Gotovo — restartam...';
         } catch (err) {
           btn.disabled = false;
-          btn.textContent = '⬆️ Ažuriraj sada';
+          btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
           if (progressLabel) { progressLabel.textContent = '❌ Greška: ' + err.message; progressLabel.style.color = '#e74c3c'; }
           showToast('❌ Greška pri ažuriranju: ' + err.message);
         }

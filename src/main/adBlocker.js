@@ -17,14 +17,14 @@ try {
 }
 
 const path = require('path');
-const fs   = require('fs');
+const fs = require('fs');
 
 class AdBlocker {
   constructor(sess) {
     this.session = sess;
-    this.blocker  = null;
-    this.enabled  = true;
-    this.stats    = { blocked: 0, allowed: 0 };
+    this.blocker = null;
+    this.enabled = true;
+    this.stats = { blocked: 0, allowed: 0 };
   }
 
   async init() {
@@ -48,54 +48,59 @@ class AdBlocker {
   }
 
   async _loadFallbackFilters() {
+    let patterns = [];
+
     // Use the bundled filter list in assets/filters/
     const filterPath = path.join(__dirname, '../../assets/filters/filters.txt');
     if (fs.existsSync(filterPath)) {
       const raw = fs.readFileSync(filterPath, 'utf8');
-      console.log(`[AdBlocker] Loaded ${raw.split('\n').length} filter rules from disk`);
+      const lines = raw.split('\n');
+      for (const line of lines) {
+        const t = line.trim();
+        if (t.startsWith('||') && t.endsWith('^')) {
+          const domain = t.slice(2, -1);
+          patterns.push(`*://${domain}/*`);
+          patterns.push(`*://*.${domain}/*`);
+        }
+      }
+      console.log(`[AdBlocker] Loaded ${patterns.length / 2} filter rules from disk`);
     }
 
-    // Install a simple request blocker
+    if (patterns.length === 0) {
+      const AD_DOMAINS = [
+        'doubleclick.net', 'googlesyndication.com', 'adnxs.com',
+        'ads.yahoo.com', 'adsafeprotected.com', 'scorecardresearch.com',
+        'pixel.quantserve.com', 'outbrain.com', 'taboola.com',
+        'pubmatic.com', 'rubiconproject.com', 'openx.net',
+        'advertising.com', 'media.net', 'adroll.com',
+        'criteo.com', 'moatads.com', 'amazon-adsystem.com',
+        'googletagservices.com', 'googletagmanager.com',
+        'analytics.google.com', 'google-analytics.com',
+        'connect.facebook.net',
+        'hotjar.com', 'fullstory.com', 'mixpanel.com',
+        'segment.io', 'segment.com', 'heap.io',
+      ];
+      patterns = AD_DOMAINS.flatMap(d => [`*://${d}/*`, `*://*.${d}/*`]);
+    }
+
+    // Dodajemo i facebook.com/tr jer je bio specifican url
+    patterns.push('*://*.facebook.com/tr*');
+    patterns.push('*://facebook.com/tr*');
+
+    // Install a high-performance native request blocker
     this.session.webRequest.onBeforeRequest(
-      { urls: ['*://*/*'] },
+      { urls: patterns },
       (details, callback) => {
         if (!this.enabled) { callback({}); return; }
-
-        const url = details.url;
-        const blocked = this._isBlocked(url);
-
-        if (blocked) {
-          this.stats.blocked++;
-          callback({ cancel: true });
-        } else {
-          this.stats.allowed++;
-          callback({});
-        }
+        this.stats.blocked++;
+        callback({ cancel: true });
       }
     );
   }
 
-  // Minimal built-in block list (well-known ad domains)
+  // Obsolete but kept for signature compatibility
   _isBlocked(url) {
-    const AD_DOMAINS = [
-      'doubleclick.net', 'googlesyndication.com', 'adnxs.com',
-      'ads.yahoo.com', 'adsafeprotected.com', 'scorecardresearch.com',
-      'pixel.quantserve.com', 'outbrain.com', 'taboola.com',
-      'pubmatic.com', 'rubiconproject.com', 'openx.net',
-      'advertising.com', 'media.net', 'adroll.com',
-      'criteo.com', 'moatads.com', 'amazon-adsystem.com',
-      'googletagservices.com', 'googletagmanager.com',
-      'analytics.google.com', 'google-analytics.com',
-      'facebook.com/tr', 'connect.facebook.net',
-      'hotjar.com', 'fullstory.com', 'mixpanel.com',
-      'segment.io', 'segment.com', 'heap.io',
-    ];
-    try {
-      const parsed = new URL(url);
-      return AD_DOMAINS.some(d => parsed.hostname.endsWith(d));
-    } catch {
-      return false;
-    }
+    return false;
   }
 
   isEnabled() { return this.enabled; }

@@ -295,6 +295,18 @@ const EXTENDED_STRINGS = {
     settingsAutoUpdateDesc: 'Automatski preuzmi i instaliraj ažuriranja',
     settingsCheckUpdates: 'Provjeri dostupna ažuriranja',
     settingsCurrentVersion: 'Trenutna verzija',
+    
+    // Updates
+    updateNow: "⬆️ Ažuriraj sada",
+    newVersionAvail: "🎉 Nova verzija dostupna!",
+    lastCheck: "Zadnja provjera: ",
+    downloading: "Preuzimanje...",
+    downloadComplete: "Preuzimanje dovršeno!",
+    restarting: "Ponovno pokretanje...",
+    updateErr: "Greška pri ažuriranju: ",
+    checkUpdatesNow: "🔍 Provjeri sada",
+    githubTokenSaved: "✅ Token je pohranjen.",
+    githubTokenErr: "❌ Greška: ",
   },
 
   en: {
@@ -563,6 +575,18 @@ const EXTENDED_STRINGS = {
     settingsAutoUpdateDesc: 'Automatically download and install updates',
     settingsCheckUpdates: 'Check for available updates',
     settingsCurrentVersion: 'Current version',
+    
+    // Updates
+    updateNow: "⬆️ Update now",
+    newVersionAvail: "🎉 New version available!",
+    lastCheck: "Last check: ",
+    downloading: "Downloading...",
+    downloadComplete: "Download complete!",
+    restarting: "Restarting...",
+    updateErr: "Update error: ",
+    checkUpdatesNow: "🔍 Check now",
+    githubTokenSaved: "✅ Token saved.",
+    githubTokenErr: "❌ Error: ",
   },
 
   de: {
