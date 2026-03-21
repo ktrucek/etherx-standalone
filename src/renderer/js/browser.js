@@ -1800,6 +1800,21 @@ document.getElementById('mi-network').addEventListener('click', () => document.q
 
   // Camera scan (basic — opens device camera)
   let _qrScanInterval;
+  let _activeCameraId = localStorage.getItem('etherx_preferred_camera') || null;
+
+  // Function to get available cameras and store preferred one
+  async function getAvailableCameras() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(d => d.kind === 'videoinput');
+      console.log('[EtherX] Available cameras:', cameras);
+      return cameras;
+    } catch (err) {
+      console.error('[EtherX] Error enumerating cameras:', err);
+      return [];
+    }
+  }
+
   document.getElementById('qrsCameraBtn').addEventListener('click', async () => {
     const preview = document.getElementById('qrsCameraPreview');
     try {
@@ -1814,7 +1829,38 @@ document.getElementById('mi-network').addEventListener('click', () => document.q
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      // Get available cameras
+      const cameras = await getAvailableCameras();
+
+      // Build constraints with preferred camera
+      let constraints = { video: { facingMode: 'environment' } };
+
+      if (_activeCameraId) {
+        // Use stored camera ID if available
+        constraints = { video: { deviceId: { exact: _activeCameraId } } };
+      } else if (cameras.length > 0) {
+        // Try to find rear camera
+        const rearCamera = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear'));
+        if (rearCamera) {
+          constraints = { video: { deviceId: { exact: rearCamera.deviceId } } };
+          _activeCameraId = rearCamera.deviceId;
+          localStorage.setItem('etherx_preferred_camera', _activeCameraId);
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Store the camera ID that was actually used
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const settings = track.getSettings();
+        if (settings.deviceId) {
+          _activeCameraId = settings.deviceId;
+          localStorage.setItem('etherx_preferred_camera', _activeCameraId);
+          console.log('[EtherX] Using camera:', track.label, 'ID:', _activeCameraId);
+        }
+      }
+
       preview.srcObject = stream;
       preview.setAttribute('playsinline', true); // required to tell iOS safari we don't want fullscreen
       preview.style.display = 'block';
@@ -1854,8 +1900,33 @@ document.getElementById('mi-network').addEventListener('click', () => document.q
       }
     } catch (err) {
       showToast('❌ Camera: ' + err.message);
+      console.error('[EtherX] Camera error:', err);
+      // If exact deviceId failed, try with facingMode fallback
+      if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+        console.log('[EtherX] Retrying with facingMode fallback...');
+        _activeCameraId = null;
+        localStorage.removeItem('etherx_preferred_camera');
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          preview.srcObject = stream;
+          preview.setAttribute('playsinline', true);
+          preview.style.display = 'block';
+          preview.play();
+          showToast('📷 Camera started (default)');
+        } catch (fallbackErr) {
+          showToast('❌ Cannot access camera: ' + fallbackErr.message);
+        }
+      }
     }
   });
+
+  // Expose camera functions for settings/debugging
+  window._getAvailableCameras = getAvailableCameras;
+  window._switchCamera = async function (deviceId) {
+    _activeCameraId = deviceId;
+    localStorage.setItem('etherx_preferred_camera', deviceId);
+    showToast('📷 Camera switched');
+  };
 })();
 document.getElementById('mi-inspect-devices').addEventListener('click', () => showToast('📱 No physical devices connected'));
 document.getElementById('mi-service-workers').addEventListener('click', () => { toggleDevtools(); consoleLog('info', '⚙️ Service Workers: none registered on proxied pages'); });
@@ -5333,21 +5404,57 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
   // ════════════════════════════════════════════════════════════════════════════
   // FEATURE: Bot/UA Detection — warn if current browser UA looks bot-like
   // Runs once on startup; shows a subtle toast if UA appears suspicious.
+  // Reset bot detection state on each navigation to allow rescanning
   // ════════════════════════════════════════════════════════════════════════════
   {
-    (async () => {
+    let _botDetectionShown = false;
+    let _lastCheckedUrl = '';
+
+    async function performBotDetection() {
       try {
         const ua = navigator.userAgent;
         const result = await etherx.ai.detectBotUA(ua);
-        if (result?.isBot && result.reasons?.length) {
+
+        if (result?.isBot && result.reasons?.length && !_botDetectionShown) {
           console.warn('[EtherX] Bot-like UA tokens detected:', result.reasons);
           showToast('⚠️ UA upozorenje: ' + result.reasons[0]);
+          _botDetectionShown = true;
         }
-        if (result?.isIAB) {
+        if (result?.isIAB && !_botDetectionShown) {
           showToast('⚠️ In-app preglednik detektiran — neke funkcije možda neće raditi ispravno.');
+          _botDetectionShown = true;
         }
-      } catch (e) { /* silent */ }
-    })();
+
+        // Store result for debugging
+        sessionStorage.setItem('etherx_bot_detection', JSON.stringify(result));
+      } catch (e) {
+        console.error('[EtherX] Bot detection error:', e);
+      }
+    }
+
+    // Run on startup
+    performBotDetection();
+
+    // Reset bot detection state when navigating to a new page
+    // Allow bot detection to run again on new pages
+    const _origNavigateTo = window.navigateTo;
+    if (_origNavigateTo) {
+      window.navigateTo = function (url, tabId) {
+        const currentUrl = getActiveTab()?.url || '';
+        if (url !== _lastCheckedUrl) {
+          _lastCheckedUrl = url;
+          // Reset bot detection flag for new pages
+          _botDetectionShown = false;
+        }
+        return _origNavigateTo.apply(this, arguments);
+      };
+    }
+
+    // Expose for manual re-check
+    window._recheckBotDetection = function () {
+      _botDetectionShown = false;
+      performBotDetection();
+    };
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -5715,10 +5822,12 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
   {
     const LOC_OVERLAY = document.getElementById('locationConsentOverlay');
     let _locConsentResolve = null;
+    let _currentRequestHostname = null;
 
     function showLocationConsentFor(hostname) {
       return new Promise((resolve) => {
         _locConsentResolve = resolve;
+        _currentRequestHostname = hostname;
         const siteEl = document.getElementById('locConsentSite');
         if (siteEl) siteEl.textContent = hostname || 'ova stranica';
         if (LOC_OVERLAY) LOC_OVERLAY.style.display = 'flex';
@@ -5728,10 +5837,14 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
     function hideLocationConsent() {
       if (LOC_OVERLAY) LOC_OVERLAY.style.display = 'none';
       _locConsentResolve = null;
+      _currentRequestHostname = null;
     }
 
     document.getElementById('locConsentDeny')?.addEventListener('click', () => {
       if (_locConsentResolve) _locConsentResolve('deny');
+      if (_currentRequestHostname) {
+        setSitePerm(_currentRequestHostname, 'location', 'Block');
+      }
       hideLocationConsent();
       showToast('📍 Lokacija odbijena');
     });
@@ -5740,17 +5853,64 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
       if (_locConsentResolve) _locConsentResolve('allow-once');
       hideLocationConsent();
       showToast('📍 Lokacija dozvoljena (jednom)');
+      // Actually request geolocation
+      requestUserLocation();
     });
 
     document.getElementById('locConsentAlwaysAllow')?.addEventListener('click', () => {
       if (_locConsentResolve) _locConsentResolve('allow-always');
-      hideLocationConsent();
       // Save "Allow" for this domain in per-site perms
-      if (typeof _sipCurrentDomain !== 'undefined' && _sipCurrentDomain && _sipCurrentDomain !== '—') {
+      if (_currentRequestHostname) {
+        setSitePerm(_currentRequestHostname, 'location', 'Allow');
+        showToast('📍 Lokacija uvijek dozvoljena za ' + _currentRequestHostname);
+      } else if (typeof _sipCurrentDomain !== 'undefined' && _sipCurrentDomain && _sipCurrentDomain !== '—') {
         setSitePerm(_sipCurrentDomain, 'location', 'Allow');
         showToast('📍 Lokacija uvijek dozvoljena za ' + _sipCurrentDomain);
       }
+      hideLocationConsent();
+      // Actually request geolocation
+      requestUserLocation();
     });
+
+    // Actual geolocation request
+    function requestUserLocation() {
+      if (!navigator.geolocation) {
+        showToast('❌ Geolokacija nije podržana u ovom pregledniku');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          // Store location in session
+          sessionStorage.setItem('etherx_last_location', JSON.stringify({
+            lat: latitude,
+            lng: longitude,
+            accuracy,
+            timestamp: Date.now()
+          }));
+          showToast(`📍 Lokacija dobivena: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (±${Math.round(accuracy)}m)`);
+          console.log('[EtherX] Location:', { latitude, longitude, accuracy });
+        },
+        (error) => {
+          let msg = '❌ Greška pri dobivanju lokacije';
+          if (error.code === error.PERMISSION_DENIED) {
+            msg = '❌ Pristup lokaciji odbijen u sustavu';
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            msg = '❌ Lokacija nije dostupna';
+          } else if (error.code === error.TIMEOUT) {
+            msg = '❌ Timeout pri dobivanju lokacije';
+          }
+          showToast(msg);
+          console.error('[EtherX] Geolocation error:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
 
     // Hook: when the location select in siteInfoPopup changes to "Allow", show consent first
     document.getElementById('sipLocation')?.addEventListener('change', function (evt) {
@@ -5777,8 +5937,56 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
       });
     }, true); // capture: true — fire before the auto-save bubbling listener
 
+    // Auto-show location consent when page loads (if not already set)
+    // Check on navigation
+    function checkLocationPermissionOnNavigation() {
+      const t = getActiveTab && getActiveTab();
+      if (!t?.url) return;
+
+      let hostname = '';
+      try { hostname = new URL(t.url).hostname; } catch (e) { return; }
+
+      const perms = getSitePerms();
+      const sitePerm = perms[hostname];
+
+      // If location is set to Allow, request it automatically
+      if (sitePerm && sitePerm.location === 'Allow') {
+        // Small delay to ensure page is loaded
+        setTimeout(() => {
+          requestUserLocation();
+        }, 1500);
+      }
+    }
+
+    // Listen for navigation events
+    if (window.addEventListener) {
+      // Check on tab switch
+      document.addEventListener('tabSwitch', checkLocationPermissionOnNavigation);
+    }
+
     // Expose for other modules
     window._showLocationConsent = showLocationConsentFor;
+    window._requestUserLocation = requestUserLocation;
+
+    // ── Auto-trigger location consent on first load (optional) ──────────────
+    // Check if location permission was never set and show consent automatically
+    // This ensures users see the permission dialog like in the screenshot
+    (function checkLocationOnStartup() {
+      const hasShownLocationPrompt = sessionStorage.getItem('etherx_location_prompt_shown');
+      const globalLocationSetting = DB.getSettings().geolocation_policy;
+
+      // If no global policy is set and we haven't shown the prompt this session
+      if (!hasShownLocationPrompt && !globalLocationSetting) {
+        // Show location consent after a short delay
+        setTimeout(() => {
+          const currentHost = window.location.hostname || 'aplikacija';
+          showLocationConsentFor(currentHost).then((decision) => {
+            sessionStorage.setItem('etherx_location_prompt_shown', 'true');
+            console.log('[EtherX] Location consent decision:', decision);
+          });
+        }, 1000); // 1 second delay after page load
+      }
+    })();
   }
 
 })();
