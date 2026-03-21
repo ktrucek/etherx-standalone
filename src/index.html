@@ -5654,6 +5654,7 @@
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
+    <button class="nav-btn icon-btn" id="btnBotDetection" title="🤖 Bot Detection">🔍</button>
   </div>
   <!-- Bookmark Folder Bar -->
   <div id="bmFolderBar">
@@ -7280,6 +7281,14 @@
                 </div>
                 <div class="toggle on" data-setting="showBtnDevtools" data-icon="btnDevtools"></div>
               </div>
+              <div class="s-row" draggable="true" data-icon-key="showBtnBotDetection">
+                <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
+                  <button class="s-icon-edit-btn" data-icon-target="btnBotDetection" title="Promijeni ikonu">🔍</button>
+                  <div class="s-row-label">Bot Detection</div>
+                </div>
+                <div class="toggle on" data-setting="showBtnBotDetection" data-icon="btnBotDetection"></div>
+              </div>
             </div>
             <div class="s-group" style="margin-top:16px">
               <div class="s-row">
@@ -7954,7 +7963,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.83</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.84</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8255,7 +8264,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.83</span></div>
+                id="helpVersionNum2">2.4.84</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8421,6 +8430,38 @@
           allow="clipboard-read; clipboard-write; web-share; camera; microphone"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
           title="BobiAI Studio" onload="document.getElementById('bobiaiLoading').style.display='none'"></iframe>
+      </div>
+    </div>
+    <!-- Bot Detection Panel -->
+    <div class="panel" id="botDetectionPanel" style="width:480px;max-height:600px">
+      <div class="panel-header" style="padding:8px 12px;background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%)">
+        <span class="panel-title">🔍 Bot Detection</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button id="botDetectRunAll" title="Run All Tests"
+            style="background:rgba(255,255,255,.2);border:none;color:#fff;cursor:pointer;font-size:12px;padding:4px 10px;border-radius:4px;font-weight:500">▶
+            Run</button>
+          <button class="panel-close" id="closeBotDetectionPanel">×</button>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:12px">
+        <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">🎯 Detection Score</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div id="botDetectScore" style="font-size:48px;font-weight:700;color:#4ade80;line-height:1">0</div>
+            <div style="flex:1">
+              <div style="height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden">
+                <div id="botDetectScoreBar"
+                  style="height:100%;width:0%;background:linear-gradient(90deg,#4ade80,#22c55e);transition:width .3s ease,background .3s ease">
+                </div>
+              </div>
+              <div id="botDetectVerdict" style="font-size:12px;color:var(--text2);margin-top:4px">Click "Run" to test
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="botDetectResults" style="display:flex;flex-direction:column;gap:8px">
+          <!-- Test results will be inserted here -->
+        </div>
       </div>
     </div>
     <!-- AI Agent Panel -->
@@ -10458,14 +10499,14 @@
       showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
     });
     function closeAllPanels() {
-      ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open'));
+      ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel'].forEach(id => document.getElementById(id)?.classList.remove('open'));
       document.getElementById('settingsBackdrop')?.classList.remove('open');
       const side = document.getElementById('elemSidebar'); if (side) side.style.display = 'none';
     }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     // Close panels when clicking outside (on the content/browser area)
     document.addEventListener('mousedown', e => {
-      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel']
+      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
       if (!anyOpen) return;
       // If the click is inside any open panel or on a toolbar button, do not close
@@ -10681,7 +10722,7 @@
         }
       }, 15000);
     });
-    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closeBotDetectionPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
     function renderBookmarksPanel() {
       const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
       if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -10976,8 +11017,192 @@
       });
     }
 
+    // ── Bot Detection System ──────────────────────────────────────────────────────
+    function runBotDetectionTests() {
+      const resultsContainer = document.getElementById('botDetectResults');
+      const scoreEl = document.getElementById('botDetectScore');
+      const scoreBarEl = document.getElementById('botDetectScoreBar');
+      const verdictEl = document.getElementById('botDetectVerdict');
+
+      resultsContainer.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px">Running tests...</div>';
+
+      setTimeout(() => {
+        const tests = [
+          { name: 'WebDriver Detection', test: testWebDriver, weight: 20 },
+          { name: 'Automation Tools', test: testAutomation, weight: 20 },
+          { name: 'Headless Detection', test: testHeadless, weight: 15 },
+          { name: 'Plugins Check', test: testPlugins, weight: 10 },
+          { name: 'Canvas Fingerprint', test: testCanvas, weight: 10 },
+          { name: 'Screen Consistency', test: testScreen, weight: 10 },
+          { name: 'Languages Check', test: testLanguages, weight: 5 },
+          { name: 'Hardware Info', test: testHardware, weight: 5 },
+          { name: 'Chrome Properties', test: testChrome, weight: 5 }
+        ];
+
+        let totalScore = 0;
+        let maxScore = 0;
+        const results = [];
+
+        tests.forEach(({ name, test, weight }) => {
+          const result = test();
+          results.push({ name, ...result, weight });
+          if (result.passed) totalScore += weight;
+          maxScore += weight;
+        });
+
+        const percentage = Math.round((totalScore / maxScore) * 100);
+
+        // Update score display
+        scoreEl.textContent = percentage;
+        scoreBarEl.style.width = percentage + '%';
+
+        // Color code based on score
+        let color, verdict;
+        if (percentage >= 80) {
+          color = '#4ade80';
+          scoreBarEl.style.background = 'linear-gradient(90deg,#4ade80,#22c55e)';
+          verdict = '✅ Human-like behavior detected';
+        } else if (percentage >= 50) {
+          color = '#facc15';
+          scoreBarEl.style.background = 'linear-gradient(90deg,#facc15,#eab308)';
+          verdict = '⚠️ Suspicious patterns detected';
+        } else {
+          color = '#f87171';
+          scoreBarEl.style.background = 'linear-gradient(90deg,#f87171,#ef4444)';
+          verdict = '🚫 Bot-like behavior detected';
+        }
+
+        scoreEl.style.color = color;
+        verdictEl.textContent = verdict;
+
+        // Render results
+        resultsContainer.innerHTML = results.map(r => `
+          <div style="background:rgba(255,255,255,.05);border-radius:6px;padding:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600;color:var(--text)">${r.name}</span>
+              <span style="font-size:12px;padding:2px 8px;border-radius:12px;background:${r.passed ? 'rgba(74,222,128,.2)' : 'rgba(248,113,113,.2)'};color:${r.passed ? '#4ade80' : '#f87171'}">${r.passed ? '✓ Pass' : '✗ Fail'}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.4">${r.detail}</div>
+          </div>
+        `).join('');
+      }, 100);
+    }
+
+    // Bot detection test functions
+    function testWebDriver() {
+      const detected = navigator.webdriver === true;
+      return {
+        passed: !detected,
+        detail: detected ? 'navigator.webdriver is true (automation detected)' : 'No webdriver property detected'
+      };
+    }
+
+    function testAutomation() {
+      const checks = {
+        phantom: window.callPhantom || window._phantom,
+        puppeteer: window.document.__playwright || window.document.__puppeteer,
+        domAutomation: window.domAutomation || window.domAutomationController,
+        nightmare: window.__nightmare
+      };
+
+      const detected = Object.keys(checks).filter(k => checks[k]);
+      return {
+        passed: detected.length === 0,
+        detail: detected.length > 0 ? `Detected: ${detected.join(', ')}` : 'No automation tools detected'
+      };
+    }
+
+    function testHeadless() {
+      const ua = navigator.userAgent;
+      const headlessUA = /HeadlessChrome|PhantomJS/i.test(ua);
+      const noVendor = !navigator.vendor || navigator.vendor === '';
+      const isHeadless = headlessUA || noVendor;
+
+      return {
+        passed: !isHeadless,
+        detail: isHeadless ? (headlessUA ? 'Headless browser detected in User-Agent' : 'Missing browser vendor') : 'Normal browser detected'
+      };
+    }
+
+    function testPlugins() {
+      const pluginCount = navigator.plugins?.length || 0;
+      const passed = pluginCount > 0;
+
+      return {
+        passed,
+        detail: passed ? `${pluginCount} plugins detected (normal)` : 'No plugins detected (suspicious for bot)'
+      };
+    }
+
+    function testCanvas() {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.font = '14px Arial';
+        ctx.fillText('EtherX Test 🤖', 2, 2);
+        const hash = canvas.toDataURL();
+        const passed = hash && hash.length > 100;
+
+        return {
+          passed,
+          detail: passed ? 'Canvas fingerprint generated successfully' : 'Canvas fingerprinting blocked or failed'
+        };
+      } catch (e) {
+        return { passed: false, detail: 'Canvas test error: ' + e.message };
+      }
+    }
+
+    function testScreen() {
+      const screenW = screen.width;
+      const screenH = screen.height;
+      const windowW = window.innerWidth;
+      const windowH = window.innerHeight;
+      const avail = screen.availWidth;
+
+      const mismatch = screenW < windowW || screenH < windowH || avail === 0;
+
+      return {
+        passed: !mismatch,
+        detail: mismatch ? `Screen/window size mismatch (${screenW}x${screenH} vs ${windowW}x${windowH})` : `Screen: ${screenW}x${screenH}, Window: ${windowW}x${windowH}`
+      };
+    }
+
+    function testLanguages() {
+      const langs = navigator.languages || [];
+      const langCount = langs.length;
+      const passed = langCount > 0;
+
+      return {
+        passed,
+        detail: passed ? `${langCount} language(s): ${langs.slice(0, 3).join(', ')}` : 'No languages detected'
+      };
+    }
+
+    function testHardware() {
+      const cores = navigator.hardwareConcurrency || 0;
+      const passed = cores > 0 && cores <= 64;
+
+      return {
+        passed,
+        detail: passed ? `${cores} CPU cores detected` : cores === 0 ? 'No CPU cores reported' : 'Unusual CPU core count'
+      };
+    }
+
+    function testChrome() {
+      const hasChrome = !!window.chrome;
+      const hasRuntime = hasChrome && typeof window.chrome.runtime !== 'undefined';
+
+      return {
+        passed: hasChrome,
+        detail: hasChrome ? (hasRuntime ? 'Chrome/Chromium detected with runtime' : 'Chrome detected') : 'No Chrome object detected'
+      };
+    }
+
     /* toggle handlers moved to initSettingsPanel() — removed duplicate */
     document.getElementById('btnDevtools').addEventListener('click', toggleDevtools);
+    document.getElementById('btnBotDetection').addEventListener('click', () => togglePanel('botDetectionPanel'));
+    document.getElementById('botDetectRunAll').addEventListener('click', runBotDetectionTests);
     document.getElementById('btnTabOverview')?.addEventListener('click', toggleTabOverview);
     document.getElementById('closeDevtools').addEventListener('click', () => { document.getElementById('devtools').classList.remove('open'); STATE.devtoolsOpen = false; });
     function toggleDevtools() {
@@ -15340,6 +15565,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       { id: 'btnDownloads', key: 'showBtnDownloads', icon: '⬇️', name: 'Downloads' },
       { id: 'btnSettings', key: 'showBtnSettings', icon: '⚙️', name: 'Settings' },
       { id: 'btnDevtools', key: 'showBtnDevtools', icon: '🛠️', name: 'DevTools' },
+      { id: 'btnBotDetection', key: 'showBtnBotDetection', icon: '🔍', name: 'Bot Detection' },
     ];
 
     function openCustomToolbar() {
