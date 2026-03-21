@@ -2911,7 +2911,13 @@ document.querySelectorAll('.menu-item').forEach(item => {
 document.addEventListener('click', () => document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')));
 document.getElementById('newTabBtn').addEventListener('click', () => createTab());
 let toastTimer;
-function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
+function showToast(msg, duration = 2000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
+}
 function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const savedCfg = DB.getSettings(); if (savedCfg.clockColor) clockEl.style.color = savedCfg.clockColor; if (savedCfg.clockSize) clockEl.style.fontSize = savedCfg.clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
 updateClock(); setInterval(updateClock, 30000);
 function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
@@ -5403,57 +5409,75 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
 
   // ════════════════════════════════════════════════════════════════════════════
   // FEATURE: Bot/UA Detection — warn if current browser UA looks bot-like
-  // Runs once on startup; shows a subtle toast if UA appears suspicious.
-  // Reset bot detection state on each navigation to allow rescanning
+  // Runs once per SESSION; shows a subtle toast only once if UA appears suspicious.
+  // User can permanently dismiss the warning via localStorage.
   // ════════════════════════════════════════════════════════════════════════════
   {
-    let _botDetectionShown = false;
-    let _lastCheckedUrl = '';
+    const BOT_DISMISS_KEY = 'etherx_bot_warning_dismissed';
+    const BOT_SESSION_KEY = 'etherx_bot_shown_this_session';
 
-    async function performBotDetection() {
+    async function performBotDetection(force = false) {
       try {
+        // Check if user permanently dismissed the warning
+        const dismissed = localStorage.getItem(BOT_DISMISS_KEY) === 'true';
+        if (dismissed && !force) {
+          console.log('[EtherX] Bot detection warning permanently dismissed by user');
+          return;
+        }
+
+        // Check if already shown this session (unless forced)
+        const shownThisSession = sessionStorage.getItem(BOT_SESSION_KEY) === 'true';
+        if (shownThisSession && !force) {
+          console.log('[EtherX] Bot detection already shown this session');
+          return;
+        }
+
         const ua = navigator.userAgent;
         const result = await etherx.ai.detectBotUA(ua);
 
-        if (result?.isBot && result.reasons?.length && !_botDetectionShown) {
-          console.warn('[EtherX] Bot-like UA tokens detected:', result.reasons);
-          showToast('⚠️ UA upozorenje: ' + result.reasons[0]);
-          _botDetectionShown = true;
-        }
-        if (result?.isIAB && !_botDetectionShown) {
-          showToast('⚠️ In-app preglednik detektiran — neke funkcije možda neće raditi ispravno.');
-          _botDetectionShown = true;
-        }
-
-        // Store result for debugging
+        // Store result for debugging (always)
         sessionStorage.setItem('etherx_bot_detection', JSON.stringify(result));
+
+        // Only show warning if detected as bot/IAB and not dismissed
+        if (result?.isBot && result.reasons?.length) {
+          console.warn('[EtherX] Bot-like UA tokens detected:', result.reasons);
+          showToast('⚠️ UA upozorenje: ' + result.reasons[0], 5000);
+          sessionStorage.setItem(BOT_SESSION_KEY, 'true');
+        } else if (result?.isIAB) {
+          showToast('⚠️ In-app preglednik detektiran — neke funkcije možda neće raditi ispravno.', 5000);
+          sessionStorage.setItem(BOT_SESSION_KEY, 'true');
+        } else {
+          console.log('[EtherX] Bot detection: no suspicious UA detected');
+        }
       } catch (e) {
         console.error('[EtherX] Bot detection error:', e);
       }
     }
 
-    // Run on startup
+    // Run on startup (only once per session)
     performBotDetection();
 
-    // Reset bot detection state when navigating to a new page
-    // Allow bot detection to run again on new pages
-    const _origNavigateTo = window.navigateTo;
-    if (_origNavigateTo) {
-      window.navigateTo = function (url, tabId) {
-        const currentUrl = getActiveTab()?.url || '';
-        if (url !== _lastCheckedUrl) {
-          _lastCheckedUrl = url;
-          // Reset bot detection flag for new pages
-          _botDetectionShown = false;
-        }
-        return _origNavigateTo.apply(this, arguments);
-      };
-    }
+    // Expose for manual re-check (with force flag)
+    window._recheckBotDetection = function (force = true) {
+      // Clear session flag to allow re-show
+      if (force) sessionStorage.removeItem(BOT_SESSION_KEY);
+      performBotDetection(force);
+    };
 
-    // Expose for manual re-check
-    window._recheckBotDetection = function () {
-      _botDetectionShown = false;
-      performBotDetection();
+    // Expose function to permanently dismiss bot warning
+    window._dismissBotWarning = function () {
+      localStorage.setItem(BOT_DISMISS_KEY, 'true');
+      sessionStorage.setItem(BOT_SESSION_KEY, 'true');
+      showToast('✓ Bot upozorenja trajno onemogućena');
+      console.log('[EtherX] Bot detection warnings permanently dismissed');
+    };
+
+    // Expose function to re-enable bot warnings
+    window._enableBotWarning = function () {
+      localStorage.removeItem(BOT_DISMISS_KEY);
+      sessionStorage.removeItem(BOT_SESSION_KEY);
+      showToast('✓ Bot upozorenja ponovo omogućena');
+      console.log('[EtherX] Bot detection warnings re-enabled');
     };
   }
 
