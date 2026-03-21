@@ -5283,4 +5283,502 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
     } catch (e) { /* silent */ }
   }, 10000);
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: IP Geolocation in Site Info Popup
+  // When the padlock/urlIcon popup opens, look up the server's geo info async.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    let _lastGeoHostname = '';
+    const _origUrlIconClick = document.getElementById('urlIcon').onclick;
+
+    // Patch urlIcon click to also trigger IP geo lookup
+    document.getElementById('urlIcon').addEventListener('click', async () => {
+      const t = getActiveTab && getActiveTab();
+      const url = t?.url || '';
+      let hostname = '';
+      try { hostname = new URL(url).hostname; } catch (e) { return; }
+
+      if (!hostname || hostname === _lastGeoHostname) return;
+      _lastGeoHostname = hostname;
+
+      // Reset display while loading
+      const geoSection = document.getElementById('sipGeoSection');
+      const geoIp = document.getElementById('sipGeoIp');
+      const geoLoc = document.getElementById('sipGeoLocation');
+      const geoOrg = document.getElementById('sipGeoOrg');
+      if (!geoSection) return;
+
+      geoIp.textContent = '⏳ načitavanje…';
+      geoLoc.textContent = '—';
+      geoOrg.textContent = '—';
+      geoSection.style.display = 'block';
+
+      try {
+        const geo = await etherx.ai.lookupIpGeo(hostname);
+        if (geo?.ok) {
+          geoIp.textContent = geo.ip || hostname;
+          const locParts = [geo.city, geo.region, geo.country].filter(Boolean);
+          geoLoc.textContent = locParts.length ? locParts.join(', ') : '—';
+          geoOrg.textContent = geo.org || '—';
+        } else {
+          geoIp.textContent = 'Nije dostupno';
+          geoSection.style.display = 'none';
+        }
+      } catch (e) {
+        geoSection.style.display = 'none';
+      }
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: Bot/UA Detection — warn if current browser UA looks bot-like
+  // Runs once on startup; shows a subtle toast if UA appears suspicious.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    (async () => {
+      try {
+        const ua = navigator.userAgent;
+        const result = await etherx.ai.detectBotUA(ua);
+        if (result?.isBot && result.reasons?.length) {
+          console.warn('[EtherX] Bot-like UA tokens detected:', result.reasons);
+          showToast('⚠️ UA upozorenje: ' + result.reasons[0]);
+        }
+        if (result?.isIAB) {
+          showToast('⚠️ In-app preglednik detektiran — neke funkcije možda neće raditi ispravno.');
+        }
+      } catch (e) { /* silent */ }
+    })();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: Biometric Browser Lock (WebAuthn — Face ID / Touch ID)
+  // Ported from Backend_quick security gate biometric logic.
+  // ════════════════════════════════════════════════════════════════════════════
+  const BIO_LOCK = (() => {
+    const CRED_KEY = 'etherx_bio_cid';      // stored WebAuthn credential ID (base64url)
+    const AUTH_TS_KEY = 'etherx_bio_ts';    // last successful auth timestamp
+    const PASS_KEY = 'etherx_bio_pass';     // optional passphrase hash (SHA-256 hex)
+    const SESSION_MS = 8 * 60 * 60 * 1000; // 8-hour session window
+    const LOCK_SCREEN = document.getElementById('biometricLockScreen');
+
+    // ── WebAuthn helpers (from Backend_quick) ──────────────────────────────
+    function b64uToArray(b) {
+      b = b.replace(/-/g, '+').replace(/_/g, '/');
+      while (b.length % 4) b += '=';
+      const bin = atob(b);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return arr;
+    }
+    function arrayToB64u(buf) {
+      const arr = new Uint8Array(buf);
+      let s = '';
+      for (let i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function rnd(n) { return crypto.getRandomValues(new Uint8Array(n)); }
+
+    async function bioAvailable() {
+      if (!window.PublicKeyCredential) return false;
+      try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
+      catch (e) { return false; }
+    }
+
+    async function registerBio() {
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: rnd(32),
+          rp: { name: 'EtherX Browser', id: location.hostname || 'localhost' },
+          user: { id: rnd(16), name: 'etherx-user', displayName: 'EtherX User' },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', requireResidentKey: false },
+          timeout: 60000,
+        }
+      });
+      localStorage.setItem(CRED_KEY, arrayToB64u(cred.rawId));
+      return true;
+    }
+
+    async function verifyBio(credId) {
+      await navigator.credentials.get({
+        publicKey: {
+          challenge: rnd(32),
+          allowCredentials: credId ? [{ id: b64uToArray(credId), type: 'public-key', transports: ['internal'] }] : [],
+          userVerification: 'required',
+          timeout: 60000,
+        }
+      });
+    }
+
+    // ── Passphrase helpers ─────────────────────────────────────────────────
+    async function hashPass(pass) {
+      const enc = new TextEncoder();
+      const buf = await crypto.subtle.digest('SHA-256', enc.encode(pass));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // ── Auth state ─────────────────────────────────────────────────────────
+    function isAuthValid() {
+      const ts = parseInt(localStorage.getItem(AUTH_TS_KEY) || '0', 10);
+      return (Date.now() - ts) < SESSION_MS;
+    }
+    function markAuth() { localStorage.setItem(AUTH_TS_KEY, String(Date.now())); }
+    function showLock() {
+      if (!LOCK_SCREEN) return;
+      LOCK_SCREEN.style.display = 'flex';
+      document.getElementById('bioLockErr').style.display = 'none';
+    }
+    function hideLock() {
+      if (!LOCK_SCREEN) return;
+      LOCK_SCREEN.style.display = 'none';
+      markAuth();
+      // Refresh inactivity timer
+      _resetInactivityTimer();
+    }
+
+    // ── Inactivity auto-lock ───────────────────────────────────────────────
+    let _inactivityTimer = null;
+    const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+
+    function _resetInactivityTimer() {
+      if (!localStorage.getItem(CRED_KEY) && !localStorage.getItem(PASS_KEY)) return; // not set up
+      clearTimeout(_inactivityTimer);
+      _inactivityTimer = setTimeout(() => {
+        if (!isAuthValid()) return; // already expired, lock screen handles it
+        markAuth(); // reset (shouldn't lock if user was active)
+      }, INACTIVITY_MS);
+    }
+
+    ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => {
+      document.addEventListener(ev, () => {
+        if (localStorage.getItem(AUTH_TS_KEY)) {
+          const ts = parseInt(localStorage.getItem(AUTH_TS_KEY) || '0', 10);
+          if (ts > 0 && (Date.now() - ts) < SESSION_MS) {
+            localStorage.setItem(AUTH_TS_KEY, String(Date.now()));
+          }
+        }
+      }, { passive: true, capture: true });
+    });
+
+    // ── Unlock flow ────────────────────────────────────────────────────────
+    async function unlock() {
+      const errEl = document.getElementById('bioLockErr');
+      const hasBio = await bioAvailable();
+      const storedCid = localStorage.getItem(CRED_KEY);
+
+      if (!storedCid && !localStorage.getItem(PASS_KEY)) {
+        // Nothing configured — register & unlock
+        try {
+          if (hasBio) {
+            document.getElementById('bioLockTitle').textContent = 'Postavi zaključavanje';
+            document.getElementById('bioLockSub').textContent = 'Registrirajte Face ID / Touch ID za zaštitu preglednika.';
+            document.getElementById('bioUnlockBtn').textContent = '🔓 Postavi Face ID / Touch ID';
+            // Registration happens on button click (already attached below)
+          } else {
+            hideLock();
+          }
+          return;
+        } catch (e) { hideLock(); return; }
+      }
+
+      try {
+        if (storedCid && hasBio) {
+          await verifyBio(storedCid);
+        } else if (storedCid && !hasBio) {
+          // Biometric registered but not available now — prompt passphrase only
+        } else {
+          hideLock();
+          return;
+        }
+        hideLock();
+      } catch (e) {
+        if (errEl) {
+          errEl.textContent = 'Provjera nije uspjela. Pokušajte ponovo.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 3000);
+        }
+        // Reset invalid credential
+        if (e.name === 'InvalidStateError' || e.name === 'NotFoundError') {
+          localStorage.removeItem(CRED_KEY);
+        }
+      }
+    }
+
+    // ── Unlock button ──────────────────────────────────────────────────────
+    document.getElementById('bioUnlockBtn')?.addEventListener('click', async () => {
+      const hasBio = await bioAvailable();
+      const storedCid = localStorage.getItem(CRED_KEY);
+      const errEl = document.getElementById('bioLockErr');
+
+      try {
+        if (!storedCid) {
+          if (hasBio) {
+            await registerBio();
+          }
+          hideLock();
+        } else {
+          await verifyBio(storedCid);
+          hideLock();
+        }
+      } catch (e) {
+        if (errEl) {
+          errEl.textContent = 'Biometrija nije uspjela. Pokušajte lozinku.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 3000);
+        }
+        if (e.name === 'InvalidStateError' || e.name === 'NotFoundError') {
+          localStorage.removeItem(CRED_KEY);
+        }
+      }
+    });
+
+    // ── Passphrase btn ─────────────────────────────────────────────────────
+    async function tryPassphrase() {
+      const input = document.getElementById('bioPassphraseInput');
+      const errEl = document.getElementById('bioLockErr');
+      const pass = input?.value?.trim();
+      if (!pass) return;
+
+      const storedHash = localStorage.getItem(PASS_KEY);
+      if (!storedHash) {
+        // First time — save this passphrase as the lock passphrase
+        const h = await hashPass(pass);
+        localStorage.setItem(PASS_KEY, h);
+        hideLock();
+        showToast('🔑 Lozinka za zaključavanje postavljena');
+        return;
+      }
+
+      const h = await hashPass(pass);
+      if (h === storedHash) {
+        hideLock();
+      } else {
+        if (errEl) {
+          errEl.textContent = 'Pogrešna lozinka.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 2800);
+        }
+        if (input) { input.value = ''; input.focus(); }
+      }
+    }
+
+    document.getElementById('bioPassphraseBtn')?.addEventListener('click', tryPassphrase);
+    document.getElementById('bioPassphraseInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') tryPassphrase();
+    });
+
+    // ── Camera liveness check (ported from Backend_quick stepCamera) ────────
+    let _camStream = null;
+
+    function _stopCam() {
+      if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+    }
+
+    function _setCamStatus(s) {
+      const el = document.getElementById('bioCamStatus');
+      if (el) el.textContent = s;
+    }
+
+    function _setCamBlinkBar(done, total) {
+      const el = document.getElementById('bioCamBlinkBar');
+      if (!el) return;
+      el.innerHTML = Array.from({ length: total }, (_, i) =>
+        `<div style="width:18px;height:18px;border-radius:50%;background:${i < done ? '#a78bfa' : 'rgba(139,92,246,0.2)'};border:1.5px solid rgba(139,92,246,0.5);transition:background 0.3s"></div>`
+      ).join('');
+    }
+
+    async function stepCameraLiveness() {
+      const panel = document.getElementById('bioCameraPanel');
+      const camErrEl = document.getElementById('bioCamErr');
+      const vid = document.getElementById('bioFaceVideo');
+      if (!panel || !vid) return false;
+
+      panel.style.display = 'block';
+      _setCamStatus('Pokretanje kamere…');
+      _setCamBlinkBar(0, 3);
+      if (camErrEl) camErrEl.style.display = 'none';
+
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+
+      try {
+        _camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+          audio: false
+        });
+        vid.srcObject = _camStream;
+        await new Promise(r => { vid.onloadedmetadata = r; setTimeout(r, 3000); });
+
+        const cw = vid.videoWidth || 320;
+        const ch = vid.videoHeight || 240;
+        const canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+
+        // Eye region: centre-horizontal 30–70%, upper-vertical 22–42%
+        const eX = Math.floor(cw * 0.30), eY = Math.floor(ch * 0.22);
+        const eW = Math.floor(cw * 0.40), eH = Math.floor(ch * 0.20);
+
+        function sampleEyes() {
+          ctx.drawImage(vid, 0, 0, cw, ch);
+          const d = ctx.getImageData(eX, eY, eW, eH).data;
+          let sum = 0;
+          for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+          return sum / (d.length / 4);
+        }
+
+        _setCamStatus('👀 Pozicionirajte lice u okvir…');
+        await wait(1800);
+
+        const samples = [sampleEyes()];
+
+        // 3-blink challenge
+        for (let b = 1; b <= 3; b++) {
+          _setCamStatus(`👁️ Treptite! (${4 - b})`);
+          await wait(200);
+          samples.push(sampleEyes()); // closing phase
+          await wait(700);
+          samples.push(sampleEyes()); // open again
+          _setCamBlinkBar(b, 3);
+          await wait(350);
+        }
+
+        // Liveness: variance in eye-region brightness over samples
+        const mean = samples.reduce((a, v) => a + v, 0) / samples.length;
+        const variance = samples.reduce((s, v) => s + (v - mean) ** 2, 0) / samples.length;
+        const livenessOk = variance > 10; // slightly lower threshold than Backend_quick's 12
+
+        _stopCam();
+
+        if (livenessOk) {
+          _setCamStatus('✅ Lice prepoznato!');
+          _setCamBlinkBar(3, 3);
+          await wait(700);
+          panel.style.display = 'none';
+          return true;
+        } else {
+          _setCamStatus('⚠️ Treptanje nije detektirano. Pokušajte ponovo.');
+          if (camErrEl) { camErrEl.textContent = 'Pomjerite glavu ili povećajte svjetlost i pokušajte opet.'; camErrEl.style.display = 'block'; }
+          await wait(2500);
+          panel.style.display = 'none';
+          return false;
+        }
+      } catch (e) {
+        _stopCam();
+        _setCamStatus('📷 Kamera nedostupna');
+        if (camErrEl) { camErrEl.textContent = 'Dozvolite pristup kameri i pokušajte ponovo.'; camErrEl.style.display = 'block'; }
+        await wait(2000);
+        panel.style.display = 'none';
+        return false;
+      }
+    }
+
+    document.getElementById('bioCameraBtn')?.addEventListener('click', async () => {
+      const errEl = document.getElementById('bioLockErr');
+      // Stop any ongoing camera first
+      _stopCam();
+      const ok = await stepCameraLiveness();
+      if (ok) {
+        hideLock();
+        showToast('📷 Lice prepoznato — preglednik otključan');
+      } else {
+        if (errEl) {
+          errEl.textContent = 'Provjera licem nije uspjela. Koristite drugu metodu.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 3500);
+        }
+      }
+    });
+
+    // Stop camera if lock screen is hidden by other means
+    const _origHideLock = hideLock;
+
+    // ── Lock button in toolbar ─────────────────────────────────────────────
+    document.getElementById('btnBiometricLock')?.addEventListener('click', () => {
+      _stopCam();
+      const hasCreds = localStorage.getItem(CRED_KEY) || localStorage.getItem(PASS_KEY);
+      if (!hasCreds) {
+        showToast('🔐 Klikni ponovo u lock screenu da postaviš biometrijsko zaključavanje.');
+      }
+      showLock();
+    });
+
+    // ── Public API ─────────────────────────────────────────────────────────
+    return { showLock, hideLock, isAuthValid, unlock, stepCameraLiveness };
+  })();
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: Location Consent Overlay
+  // Intercepts location-related siteInfoPopup interaction + shows a consent
+  // confirmation modal before the native geolocation prompt can fire.
+  // Also provides an enhanced UI when the location permission select changes.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    const LOC_OVERLAY = document.getElementById('locationConsentOverlay');
+    let _locConsentResolve = null;
+
+    function showLocationConsentFor(hostname) {
+      return new Promise((resolve) => {
+        _locConsentResolve = resolve;
+        const siteEl = document.getElementById('locConsentSite');
+        if (siteEl) siteEl.textContent = hostname || 'ova stranica';
+        if (LOC_OVERLAY) LOC_OVERLAY.style.display = 'flex';
+      });
+    }
+
+    function hideLocationConsent() {
+      if (LOC_OVERLAY) LOC_OVERLAY.style.display = 'none';
+      _locConsentResolve = null;
+    }
+
+    document.getElementById('locConsentDeny')?.addEventListener('click', () => {
+      if (_locConsentResolve) _locConsentResolve('deny');
+      hideLocationConsent();
+      showToast('📍 Lokacija odbijena');
+    });
+
+    document.getElementById('locConsentAllow')?.addEventListener('click', () => {
+      if (_locConsentResolve) _locConsentResolve('allow-once');
+      hideLocationConsent();
+      showToast('📍 Lokacija dozvoljena (jednom)');
+    });
+
+    document.getElementById('locConsentAlwaysAllow')?.addEventListener('click', () => {
+      if (_locConsentResolve) _locConsentResolve('allow-always');
+      hideLocationConsent();
+      // Save "Allow" for this domain in per-site perms
+      if (typeof _sipCurrentDomain !== 'undefined' && _sipCurrentDomain && _sipCurrentDomain !== '—') {
+        setSitePerm(_sipCurrentDomain, 'location', 'Allow');
+        showToast('📍 Lokacija uvijek dozvoljena za ' + _sipCurrentDomain);
+      }
+    });
+
+    // Hook: when the location select in siteInfoPopup changes to "Allow", show consent first
+    document.getElementById('sipLocation')?.addEventListener('change', function (evt) {
+      if (this.value !== 'Allow') return;
+      // Stop the auto-save listener from firing immediately
+      evt.stopImmediatePropagation();
+
+      const selectEl = this;
+      const t = getActiveTab && getActiveTab();
+      let hostname = '';
+      try { hostname = new URL(t?.url || '').hostname; } catch (e) { }
+
+      showLocationConsentFor(hostname).then((decision) => {
+        if (decision === 'deny') {
+          selectEl.value = 'Ask';
+          if (hostname) setSitePerm(hostname, 'location', 'Ask');
+          showToast('✓ Saved for ' + (hostname || _sipCurrentDomain));
+        } else {
+          // allow-once or allow-always: save as Allow
+          if (hostname) setSitePerm(hostname, 'location', 'Allow');
+          selectEl.value = 'Allow';
+          showToast('✓ Saved for ' + (hostname || _sipCurrentDomain));
+        }
+      });
+    }, true); // capture: true — fire before the auto-save bubbling listener
+
+    // Expose for other modules
+    window._showLocationConsent = showLocationConsentFor;
+  }
+
 })();

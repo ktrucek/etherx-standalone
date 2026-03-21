@@ -384,6 +384,93 @@ class AIManager {
     });
   }
 
+  // ─── Bot / User-Agent Detection ─────────────────────────────────────────────
+
+  /**
+   * Check if a given User-Agent string looks like a bot, scraper, or headless browser.
+   * Ported from Backend_quick security gate isBot() + knownIAB patterns.
+   * @param {string} ua  Navigator userAgent string from the renderer or a webview
+   * @returns {{ isBot:boolean, isIAB:boolean, reasons:string[] }}
+   */
+  detectBotUA(ua = '') {
+    const reasons = [];
+    const lower = (ua || '').toLowerCase();
+
+    const BOT_TOKENS = [
+      'headlesschrome', 'headless', 'phantomjs', 'selenium', 'htmlunit',
+      'bot/', 'spider', 'crawler', 'slurp', 'baiduspider', 'yandex', 'sogou',
+      'exabot', 'facebot', 'ia_archiver', 'python-requests', 'python-urllib',
+      'curl/', 'wget/', 'go-http-client', 'java/', 'scrapy', 'httpx',
+      'aiohttp', 'node-fetch', 'axios',
+    ];
+
+    for (const token of BOT_TOKENS) {
+      if (lower.includes(token)) {
+        reasons.push(`Bot token detected: "${token}"`);
+      }
+    }
+
+    // Detect known in-app browsers (social media embedded WebViews)
+    const IAB_RE = /FBAN|FB_IAB|FBAV|Instagram|Twitter|LinkedInApp|Snapchat|Pinterest|TikTok|Line\/|Musical\.ly|GSA\/|NAVER|kakaotalk|baiduboxapp/i;
+    const isIAB = IAB_RE.test(ua);
+    if (isIAB) {
+      reasons.push('In-app browser (social media embedded WebView)');
+    }
+
+    return { isBot: reasons.length > 0, isIAB, reasons };
+  }
+
+  // ─── IP Geolocation ─────────────────────────────────────────────────────────
+
+  /**
+   * Look up geolocation info for a hostname or IP address.
+   * Uses the free ipapi.co JSON API (no key required for low-volume use).
+   * @param {string} hostname  Domain name or IP address of the site being visited
+   * @returns {Promise<{ok:boolean, ip?:string, city?:string, region?:string,
+   *                    country?:string, countryCode?:string, org?:string, timezone?:string}>}
+   */
+  lookupIpGeo(hostname) {
+    if (!hostname) return Promise.resolve({ ok: false, error: 'No hostname' });
+    // Skip local/private addresses
+    if (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
+      return Promise.resolve({ ok: false, error: 'Local address' });
+    }
+
+    return new Promise((resolve) => {
+      try {
+        const url = `https://ipapi.co/${encodeURIComponent(hostname)}/json/`;
+        const req = net.request({ method: 'GET', url });
+        req.setHeader('User-Agent', 'EtherXBrowser/2.0');
+        let data = '';
+        req.on('response', (res) => {
+          res.on('data', (chunk) => { data += chunk.toString(); });
+          res.on('end', () => {
+            try {
+              const info = JSON.parse(data);
+              if (info.error) return resolve({ ok: false, error: info.reason || 'Not found' });
+              resolve({
+                ok: true,
+                ip: info.ip || hostname,
+                city: info.city || '',
+                region: info.region || '',
+                country: info.country_name || '',
+                countryCode: info.country_code || '',
+                org: info.org || '',
+                timezone: info.timezone || '',
+              });
+            } catch (e) {
+              resolve({ ok: false, error: 'Parse error' });
+            }
+          });
+        });
+        req.on('error', () => resolve({ ok: false, error: 'Network error' }));
+        req.end();
+      } catch (e) {
+        resolve({ ok: false, error: e.message });
+      }
+    });
+  }
+
   // ─── Translation (fallback, WebLLM handles full AI translation) ─────────────
 
   async translate(text, targetLang) {

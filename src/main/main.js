@@ -596,6 +596,12 @@ function setupIPC() {
   ipcMain.handle('ai:getCachedSummaries', (_e, limit = 100) => db ? db.getAiCache(limit) : []);
   ipcMain.handle('ai:clearAiCache', () => db ? db.clearAiCache() : { ok: true });
 
+  // ── AI: Bot/UA detection ───────────────────────────────────────────────────
+  ipcMain.handle('ai:detectBotUA', (_e, ua) => ai ? ai.detectBotUA(ua) : { isBot: false, isIAB: false, reasons: [] });
+
+  // ── AI: IP Geolocation lookup ──────────────────────────────────────────────
+  ipcMain.handle('ai:lookupIpGeo', (_e, hostname) => ai ? ai.lookupIpGeo(hostname) : { ok: false, error: 'AI not available' });
+
   // ── Ad Blocker ─────────────────────────────────────────────────────────────
   ipcMain.handle('adblock:isEnabled', () => adBlocker ? adBlocker.isEnabled() : false);
   ipcMain.handle('adblock:toggle', (_e, enabled) => adBlocker ? adBlocker.toggle(enabled) : noDb());

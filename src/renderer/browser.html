@@ -4144,6 +4144,8 @@
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
+    <button class="nav-btn icon-btn" id="btnBiometricLock" title="Zaključaj preglednik (biometrija)"
+      style="opacity:0.55">🔐</button>
   </div>
   <div class="find-bar" id="findBar">
     <input type="text" class="find-input" id="findInput" placeholder="Find in page…">
@@ -5677,6 +5679,21 @@
             <option>Deny</option>
             <option>Allow</option>
           </select>
+        </div>
+      </div>
+      <!-- ── IP Geolocation info (loaded async when popup opens) ── -->
+      <div class="sip-section" id="sipGeoSection" style="display:none">
+        <div class="sip-row" style="align-items:flex-start">
+          <span class="sip-row-label" style="padding-top:2px">🌍 Server IP</span>
+          <span class="sip-row-val" id="sipGeoIp" style="text-align:right;word-break:break-all">—</span>
+        </div>
+        <div class="sip-row">
+          <span class="sip-row-label">📍 Location</span>
+          <span class="sip-row-val" id="sipGeoLocation">—</span>
+        </div>
+        <div class="sip-row" style="align-items:flex-start">
+          <span class="sip-row-label" style="padding-top:2px">🏢 ISP / Org</span>
+          <span class="sip-row-val" id="sipGeoOrg" style="text-align:right;font-size:10px;line-height:1.4">—</span>
         </div>
       </div>
     </div>
@@ -7716,6 +7733,96 @@
       window._wltRenderSetup = _wltRenderSetup; window._wltShowCreate = _wltShowCreate; window._wltShowImport = _wltShowImport; window._wltDoCreate = _wltDoCreate; window._wltDoImport = _wltDoImport; window._wltDoUnlock = _wltDoUnlock; window._wltRenderMain = _wltRenderMain; window._wltShowSend = _wltShowSend; window._wltShowReceive = _wltShowReceive; window._wltShowBackup = _wltShowBackup; window._wltDoSend = _wltDoSend; window._wltDoBackup = _wltDoBackup; window._wltLock = _wltLock; window._wltSwitchNet = _wltSwitchNet;
     })();
   </script>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       BIOMETRIC BROWSER LOCK  (WebAuthn — Face ID / Touch ID)
+       ══════════════════════════════════════════════════════════════ -->
+  <div id="biometricLockScreen"
+    style="display:none;position:fixed;inset:0;background:rgba(8,9,18,0.97);z-index:2147483640;flex-direction:column;align-items:center;justify-content:center;padding:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backdrop-filter:blur(12px);">
+    <div style="max-width:340px;width:100%;text-align:center">
+      <div id="bioLockIcon" style="font-size:3.5rem;margin-bottom:16px">🔐</div>
+      <h2 id="bioLockTitle" style="color:#f3f4f6;font-size:1.4rem;margin:0 0 8px;font-weight:700">Preglednik zaključan
+      </h2>
+      <p id="bioLockSub" style="color:#9ca3af;font-size:0.9rem;margin:0 0 24px;line-height:1.6">Koristite Face ID, Touch
+        ID ili PIN za otključavanje.</p>
+      <!-- Primary: WebAuthn or passphrase -->
+      <button id="bioUnlockBtn"
+        style="width:100%;background:rgba(139,92,246,0.2);color:#c4b5fd;border:1.5px solid rgba(139,92,246,0.5);border-radius:12px;padding:14px 24px;font-size:1rem;font-weight:600;cursor:pointer;margin-bottom:10px;transition:background 0.2s">🔐
+        Otključaj</button>
+      <!-- Camera face-recognition / liveness alternative -->
+      <button id="bioCameraBtn"
+        style="width:100%;background:rgba(99,102,241,0.12);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:11px 24px;font-size:0.9rem;font-weight:600;cursor:pointer;margin-bottom:16px;transition:background 0.2s">📷
+        Provjeri lice kamerom</button>
+      <!-- Camera panel (hidden until bioCameraBtn clicked) -->
+      <div id="bioCameraPanel" style="display:none;margin-bottom:16px">
+        <div
+          style="position:relative;width:220px;height:165px;margin:0 auto 10px;border-radius:12px;overflow:hidden;background:#0a0b14;border:2px solid rgba(139,92,246,0.45);box-shadow:0 0 20px rgba(139,92,246,0.2)">
+          <video id="bioFaceVideo" autoplay playsinline muted
+            style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video>
+          <!-- Face oval guide -->
+          <div
+            style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+            <div style="width:100px;height:130px;border:2px dashed rgba(139,92,246,0.5);border-radius:50%;opacity:0.7">
+            </div>
+          </div>
+        </div>
+        <div id="bioCamStatus"
+          style="color:#e9d5ff;font-size:0.95rem;min-height:28px;font-weight:700;text-align:center">Pokretanje
+          kamere…</div>
+        <div id="bioCamBlinkBar" style="display:flex;gap:6px;justify-content:center;margin-top:8px;min-height:18px">
+        </div>
+        <p id="bioCamErr" style="color:#fca5a5;font-size:0.8rem;margin:6px 0 0;display:none"></p>
+      </div>
+      <!-- Passphrase fallback -->
+      <div style="border-top:1px solid rgba(255,255,255,0.07);padding-top:16px;margin-top:4px">
+        <p style="color:#6b7280;font-size:0.78rem;margin:0 0 10px">ili unesi tajnu lozinku</p>
+        <div style="display:flex;gap:8px">
+          <input id="bioPassphraseInput" type="password" placeholder="Lozinka…" autocomplete="current-password"
+            style="flex:1;background:rgba(31,41,55,0.8);color:#f3f4f6;border:1px solid rgba(139,92,246,0.3);border-radius:8px;padding:10px 12px;font-size:0.9rem;outline:none;">
+          <button id="bioPassphraseBtn"
+            style="background:rgba(139,92,246,0.2);color:#c4b5fd;border:1px solid rgba(139,92,246,0.3);border-radius:8px;padding:10px 16px;cursor:pointer;font-size:1rem">→</button>
+        </div>
+        <p id="bioLockErr" style="color:#fca5a5;font-size:0.8rem;margin:8px 0 0;display:none"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       LOCATION CONSENT OVERLAY
+       Shown when a visited site requests navigator.geolocation
+       ══════════════════════════════════════════════════════════════ -->
+  <div id="locationConsentOverlay"
+    style="display:none;position:fixed;inset:0;background:rgba(8,9,18,0.7);z-index:2147483630;align-items:flex-end;justify-content:center;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+    <div
+      style="background:rgba(18,20,35,0.98);border:1px solid rgba(139,92,246,0.35);border-radius:16px;padding:24px 22px;max-width:400px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,0.6);backdrop-filter:blur(16px)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <span style="font-size:2rem">📍</span>
+        <div>
+          <div style="font-size:1rem;font-weight:700;color:#f3f4f6">Zahtjev za lokaciju</div>
+          <div style="font-size:0.82rem;color:#9ca3af;margin-top:2px"><b id="locConsentSite" style="color:#c4b5fd">ova
+              stranica</b> želi dohvatiti vašu lokaciju</div>
+        </div>
+      </div>
+      <div
+        style="background:rgba(31,41,55,0.6);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:0.8rem;color:#d1d5db;line-height:1.6">
+        📌 Bit će podijeljeno: vaša <b>GPS koordinate</b> (latitude, longitude)<br>
+        ⏰ Preciznost: ~10–100 metara<br>
+        🔒 Podaci se ne pohranjuju u pregledavač
+      </div>
+      <div style="display:flex;gap:10px">
+        <button id="locConsentDeny"
+          style="flex:1;background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:11px;font-size:0.9rem;cursor:pointer;font-weight:600">✕
+          Odbij</button>
+        <button id="locConsentAllow"
+          style="flex:2;background:rgba(139,92,246,0.2);color:#c4b5fd;border:1.5px solid rgba(139,92,246,0.45);border-radius:10px;padding:11px;font-size:0.9rem;cursor:pointer;font-weight:600">📍
+          Dozvoli jednom</button>
+        <button id="locConsentAlwaysAllow"
+          style="flex:2;background:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.3);border-radius:10px;padding:11px;font-size:0.9rem;cursor:pointer;font-weight:600">✓
+          Uvijek dozvoli</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 
 </html>

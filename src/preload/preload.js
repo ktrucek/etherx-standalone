@@ -88,6 +88,8 @@ contextBridge.exposeInMainWorld('etherx', {
     summarizePage: (url, html) => ipcRenderer.invoke('ai:summarizePage', url, html),
     getCachedSummaries: (limit) => ipcRenderer.invoke('ai:getCachedSummaries', limit),
     clearAiCache: () => ipcRenderer.invoke('ai:clearAiCache'),
+    detectBotUA: (ua) => ipcRenderer.invoke('ai:detectBotUA', ua),
+    lookupIpGeo: (hostname) => ipcRenderer.invoke('ai:lookupIpGeo', hostname),
   },
 
   // ── Ad Blocker ────────────────────────────────────────────────────────────────
