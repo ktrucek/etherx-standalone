@@ -169,8 +169,8 @@ jobs:
         env:
           CXXFLAGS: -std=c++20
 
-      - name: 🔨 Build macOS x64 DMG (cross-compile)
-        run: npx electron-builder --mac dmg zip --x64 --publish never
+      - name: 🔨 Build macOS x64 ZIP (cross-compile, no DMG — hdiutil can't mount x64 DMG on ARM64 runner)
+        run: npx electron-builder --mac zip --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -181,7 +181,6 @@ jobs:
           name: macos-x64-builds
           retention-days: 7
           path: |
-            dist/*.dmg
             dist/*.zip
 
   build-macos-arm64:

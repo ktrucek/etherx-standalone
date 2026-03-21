@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.82",
+  "version": "2.4.83",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -45,6 +45,11 @@
       "package.json",
       "node_modules/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**",
+      "node_modules/bcrypt/**",
+      "**/*.node"
+    ],
     "linux": {
       "target": [
         "AppImage",
@@ -87,5 +92,5 @@
     "uuid": "^9.0.0",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-03-21T08:49:47Z"
+  "buildTime": "2026-03-21T09:26:00Z"
 }
