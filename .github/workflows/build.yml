@@ -20,6 +20,11 @@ on:
 permissions:
   contents: write
 
+# Force all JavaScript actions to use Node.js 24 (fixes Node.js 20 deprecation
+# warnings and git exit code 128 failures caused by the Node.js 20 action runtime)
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ─── Linux Build ──────────────────────────────────────────────────────────────
   build-linux:
