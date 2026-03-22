@@ -422,6 +422,54 @@ function createWindow() {
     }
   );
 
+  // ── Apply same UA cleaning and header fixes to webview (persist:etherx) session ──
+  // Webviews use a separate Electron session (persist:etherx) that doesn't inherit
+  // the interceptors above. Without this, webviews send the raw Electron UA which
+  // causes some sites (e.g. WordPress with security plugins) to serve blank pages.
+  const etherxSession = session.fromPartition('persist:etherx');
+
+  etherxSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      const key = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent');
+      if (key) {
+        let ua = headers[key]
+          .replace(/\s*Electron\/[\d.]+/gi, '')
+          .replace(/\s*EtherX\/[\d.]+/gi, '')
+          .trim();
+        const url = details.url || '';
+        if (/google\.com|googleapis\.com|accounts\.google/i.test(url)) {
+          ua = GOOGLE_UA;
+          delete headers['X-Requested-With'];
+        }
+        headers[key] = ua || CLEAN_UA;
+      }
+      delete headers['Origin'];
+      delete headers['Referer'];
+      callback({ requestHeaders: headers });
+    }
+  );
+
+  etherxSession.webRequest.onHeadersReceived(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      const headers = { ...details.responseHeaders };
+      delete headers['access-control-allow-origin'];
+      delete headers['Access-Control-Allow-Origin'];
+      headers['Access-Control-Allow-Origin'] = ['*'];
+      headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+      headers['Access-Control-Allow-Headers'] = ['*'];
+      headers['Access-Control-Allow-Credentials'] = ['true'];
+      delete headers['x-frame-options'];
+      delete headers['X-Frame-Options'];
+      delete headers['content-security-policy'];
+      delete headers['Content-Security-Policy'];
+      delete headers['content-security-policy-report-only'];
+      callback({ responseHeaders: headers });
+    }
+  );
+
   // Show immediately — don't wait for ready-to-show which may never fire on macOS
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
