@@ -147,6 +147,8 @@ function createTabFrame(tabId, partition) {
   wv.addEventListener('did-navigate', (e) => {
     const t = STATE.tabs.find(x => x.id === tabId);
     if (t) { t.url = e.url; t.history.push(e.url); t.histIdx = t.history.length - 1; if (STATE.activeTabId === tabId) { document.getElementById('urlInput').value = e.url; updateUrlIcon(e.url); updateNavBtns(t); } updateTabEl(t); }
+    // Clear phishing banner on every navigation
+    if (STATE.activeTabId === tabId) { const pb = document.getElementById('phishingBanner'); if (pb) pb.style.display = 'none'; }
   });
   wv.addEventListener('did-navigate-in-page', (e) => {
     if (!e.isMainFrame) return;
@@ -157,7 +159,8 @@ function createTabFrame(tabId, partition) {
   wv.addEventListener('context-menu', (e) => {
     e.preventDefault();
     const link = e.params?.linkURL || null;
-    showCtxMenu(e.params?.x || 0, e.params?.y || 0, link || null);
+    const img = (e.params?.mediaType === 'image' && e.params?.srcURL) ? e.params.srcURL : null;
+    showCtxMenu(e.params?.x || 0, e.params?.y || 0, link || null, img);
   });
 
   // Inject contextmenu listener into loaded page so right-click events bubble
@@ -339,7 +342,12 @@ function normalizeUrl(raw) {
   return 'https://www.google.com/search?q=' + encodeURIComponent(raw);
 }
 function showNTP() {
-  ntp.style.display = 'flex'; frame.classList.remove('active');
+  ntp.style.display = 'flex';
+  frame.classList.remove('active');
+  // Also hide all per-tab webviews so they don't cover the NTP
+  if (window.electronWebview) {
+    tabFrames.forEach(wv => { wv.style.display = 'none'; wv.classList.remove('active'); });
+  }
   document.getElementById('blockedOverlay').classList.remove('show');
   document.getElementById('readerMode').classList.remove('show');
   document.getElementById('btnReader').style.display = 'none';
@@ -694,10 +702,39 @@ function toggleReader() {
   if (STATE.readerMode) {
     rm.classList.add('show'); const tab = getActiveTab();
     document.getElementById('readerTitle').textContent = tab?.title || '';
-    try {
-      const doc = frame.contentDocument; const body = doc?.body?.innerText || 'Could not extract content.'; const title = doc?.title || '';
-      document.getElementById('readerContent').innerHTML = '<h1>' + title + '</h1><p>' + body.slice(0, 4000).replace(/\n\n+/g, '</p><p>') + '</p>';
-    } catch (e) { document.getElementById('readerContent').innerHTML = '<h1>Reader Mode</h1><p>Could not extract content from proxied page.</p>'; }
+    document.getElementById('readerContent').innerHTML = '<p style="color:#888;font-style:italic">📖 Extracting readable content…</p>';
+
+    // Use webview executeJavaScript to get full HTML, then AI reading mode extraction
+    const wv = document.getElementById('browseFrame');
+    if (wv && typeof wv.executeJavaScript === 'function') {
+      wv.executeJavaScript('document.documentElement.outerHTML')
+        .then(html => {
+          if (window.etherx?.ai?.readingMode) {
+            return window.etherx.ai.readingMode(html);
+          }
+          // Fallback: basic strip
+          const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 6000);
+          return { ok: true, title: tab?.title || '', text };
+        })
+        .then(result => {
+          if (result?.ok && result.text) {
+            const title = result.title || tab?.title || '';
+            const body = result.text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+            document.getElementById('readerContent').innerHTML =
+              (title ? '<h1>' + title + '</h1>' : '') + '<p>' + body + '</p>';
+          } else {
+            document.getElementById('readerContent').innerHTML =
+              '<h1>' + (tab?.title || 'Reader Mode') + '</h1><p style="color:#888">Could not extract readable content from this page.</p>';
+          }
+        })
+        .catch(() => {
+          document.getElementById('readerContent').innerHTML =
+            '<h1>Reader Mode</h1><p style="color:#888">Could not access page content (cross-origin restriction).</p>';
+        });
+    } else {
+      document.getElementById('readerContent').innerHTML =
+        '<h1>Reader Mode</h1><p style="color:#888">No active page.</p>';
+    }
   } else { rm.classList.remove('show'); }
 }
 document.getElementById('mi-responsive').addEventListener('click', toggleRespMode);
@@ -2833,8 +2870,10 @@ document.getElementById('boRetry').addEventListener('click', () => { const t = g
 const ctxMenu = document.getElementById('ctxMenu');
 let _ctxTargetUrl = null; // URL of right-clicked link (if any)
 let _ctxTabId = null;      // ID of right-clicked tab (if any)
-function showCtxMenu(x, y, targetUrl) {
+let _ctxImageUrl = null;   // URL of right-clicked image (if any)
+function showCtxMenu(x, y, targetUrl, imageUrl) {
   _ctxTargetUrl = targetUrl || null;
+  _ctxImageUrl = imageUrl || null;
   // Show/hide link-specific items
   const hasLink = !!targetUrl;
   ['ctx-open-new-tab', 'ctx-open-new-window', 'ctx-open-tab-group', 'ctx-download-link', 'ctx-download-link-as', 'ctx-reading-list'].forEach(id => {
@@ -2843,6 +2882,10 @@ function showCtxMenu(x, y, targetUrl) {
   document.querySelectorAll('.ctx-sep:not(.ctx-no-link), #ctx-copy-url').forEach(el => {
     el.style.display = '';
   });
+  // Show/hide image-specific items
+  const hasImage = !!imageUrl;
+  document.querySelectorAll('.ctx-img-item').forEach(el => { el.style.display = hasImage ? '' : 'none'; });
+  document.querySelectorAll('.ctx-img-sep').forEach(el => { el.style.display = hasImage ? '' : 'none'; });
   // Position
   const menuW = 240, menuH = ctxMenu.offsetHeight || 320;
   ctxMenu.style.left = Math.min(x, window.innerWidth - menuW - 8) + 'px';
@@ -2895,6 +2938,25 @@ document.getElementById('ctx-reading-list').addEventListener('click', () => {
 document.getElementById('ctx-copy-url').addEventListener('click', () => {
   const url = _ctxTargetUrl || getActiveTab()?.url;
   if (url) navigator.clipboard.writeText(url).then(() => showToast('📋 URL copied'));
+});
+// Reverse image search handlers (RevEye integration)
+const _revEyeEngines = {
+  google: 'https://lens.google.com/uploadbyurl?url=%s',
+  bing: 'https://www.bing.com/images/searchbyimage?cbir=ssbi&imgurl=%s',
+  yandex: 'https://yandex.com/images/search?rpt=imageview&url=%s',
+  tineye: 'https://www.tineye.com/search/?url=%s',
+};
+function _revEyeSearch(engineId) {
+  if (!_ctxImageUrl) return;
+  const url = _revEyeEngines[engineId].replace('%s', encodeURIComponent(_ctxImageUrl));
+  createTab(url);
+}
+document.getElementById('ctx-img-search-google').addEventListener('click', () => _revEyeSearch('google'));
+document.getElementById('ctx-img-search-bing').addEventListener('click', () => _revEyeSearch('bing'));
+document.getElementById('ctx-img-search-yandex').addEventListener('click', () => _revEyeSearch('yandex'));
+document.getElementById('ctx-img-search-tineye').addEventListener('click', () => _revEyeSearch('tineye'));
+document.getElementById('ctx-img-copy-url').addEventListener('click', () => {
+  if (_ctxImageUrl) navigator.clipboard.writeText(_ctxImageUrl).then(() => showToast('📋 Image URL copied'));
 });
 document.getElementById('ctx-share').addEventListener('click', () => {
   const url = _ctxTargetUrl || getActiveTab()?.url;
@@ -5215,6 +5277,43 @@ document.getElementById('mi-next-tab-group')?.addEventListener('click', () => {
   if (tid) switchTab(tid);
 });
 
+// ── AI Tab Auto-Grouping ─────────────────────────────────────────────────────
+async function aiAutoGroupTabs() {
+  if (!STATE.tabs.length) { showToast('No tabs to group'); return; }
+  if (!window.etherx?.ai?.groupTabs) { showToast('AI not available'); return; }
+  showToast('🗂️ AI grouping tabs…');
+  try {
+    const tabData = STATE.tabs.map(t => ({ id: t.id, url: t.url || '', title: t.title || '' }));
+    const result = await window.etherx.ai.groupTabs(tabData);
+    if (!result?.ok || !result.tabs) { showToast('AI grouping failed'); return; }
+
+    // Map groupName → tabIds
+    const groupMap = {};
+    for (const t of result.tabs) {
+      if (!groupMap[t.groupName]) groupMap[t.groupName] = [];
+      groupMap[t.groupName].push(t.id);
+    }
+
+    // Remove existing AI-generated groups to avoid duplicates
+    STATE.groups = STATE.groups.filter(g => !g._aiGenerated);
+    document.querySelectorAll('.tab-group-label[data-ai]').forEach(el => el.remove());
+
+    let created = 0;
+    for (const [name, tabIds] of Object.entries(groupMap)) {
+      if (name === 'Other' && tabIds.length === STATE.tabs.length) continue; // all uncategorised — skip
+      const g = createTabGroup(name, null, tabIds);
+      g._aiGenerated = true;
+      const lbl = document.getElementById('tgl-' + g.id);
+      if (lbl) lbl.setAttribute('data-ai', '1');
+      created++;
+    }
+    showToast(created ? `🗂️ Created ${created} AI tab group${created > 1 ? 's' : ''}` : '🗂️ All tabs in "Other" — no groups created');
+  } catch (e) {
+    showToast('AI grouping error: ' + e.message);
+  }
+}
+document.getElementById('btnAiAutoGroup')?.addEventListener('click', aiAutoGroupTabs);
+
 // ── Sources tree: srcBrowserHtml click ──────────────────────────────────
 document.getElementById('srcBrowserHtml')?.addEventListener('click', () => {
   document.querySelectorAll('.src-item').forEach(x => x.classList.remove('active'));
@@ -5317,17 +5416,35 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
   const _origNavigateTo = navigateTo;
   window.navigateTo = navigateTo; // ensure global override works
   const origNav = window.navigateTo;
+
+  // Show/hide the phishing banner
+  function showPhishingBanner(msg) {
+    const banner = document.getElementById('phishingBanner');
+    if (!banner) return;
+    document.getElementById('phishingMsg').textContent = '⚠️ ' + msg;
+    banner.style.display = 'flex';
+  }
+  function hidePhishingBanner() {
+    const banner = document.getElementById('phishingBanner');
+    if (banner) banner.style.display = 'none';
+  }
+  document.getElementById('phishingClose')?.addEventListener('click', hidePhishingBanner);
+  document.getElementById('phishingBack')?.addEventListener('click', () => {
+    hidePhishingBanner();
+    const wv = document.getElementById('browseFrame');
+    if (wv && wv.canGoBack()) wv.goBack(); else window.history.back();
+  });
+  document.getElementById('phishingProceed')?.addEventListener('click', hidePhishingBanner);
+
   // Wrap: after navigation, check phishing in background
   function afterNavPhishingCheck(url) {
     if (!url || !url.startsWith('http')) return;
+    hidePhishingBanner();
     etherx.ai.checkPhishing(url, '').then(result => {
-      if (result && result.isPhishing) {
-        const blockedDiv = document.getElementById('blockedOverlay');
-        if (blockedDiv) {
-          blockedDiv.classList.add('show');
-          document.getElementById('boUrl').textContent = '⚠️ ' + (result.reason || 'Phishing detected: ' + url);
-        }
-        showToast('⚠️ Phishing warning: ' + (result.reason || url));
+      if (result && !result.isSafe) {
+        const reasons = (result.reasons || []).slice(0, 2).join('; ') || url;
+        showPhishingBanner('Suspected phishing: ' + reasons);
+        showToast('⚠️ Phishing warning: ' + reasons);
       }
     }).catch(() => { });
   }

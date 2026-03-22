@@ -14,7 +14,7 @@ const EXTENDED_STRINGS = {
     // ═══════════════════════════════════════════════════════════════
     // MENU BAR — Hrvatski
     // ═══════════════════════════════════════════════════════════════
-   
+
     // File Menu
     menuFile: 'Datoteka',
     menuFileNewTab: 'Nova kartica',
@@ -22,7 +22,7 @@ const EXTENDED_STRINGS = {
     menuFileOpenLocation: 'Otvori lokaciju…',
     menuFileCloseTab: 'Zatvori karticu',
     menuFilePrint: 'Ispis…',
-    
+
     // Edit Menu
     menuEdit: 'Uredi',
     menuEditUndo: 'Poništi tipkanje',
@@ -43,7 +43,7 @@ const EXTENDED_STRINGS = {
     menuEditSpeech: 'Govor',
     menuEditDictation: 'Započni diktat',
     menuEditEmoji: 'Emoji i simboli',
-    
+
     // View Menu
     menuView: 'Prikaz',
     menuViewAlwaysToolbar: 'Uvijek prikaži alatnu traku u cijelom zaslonu',
@@ -68,14 +68,14 @@ const EXTENDED_STRINGS = {
     menuViewTextEncoding: 'Kodiranje teksta',
     menuViewFullScreen: 'Uđi u cijeli zaslon',
     menuViewResponsive: 'Način responzivnog dizajna',
-    
+
     // History Menu
     menuHistory: 'Povijest',
     menuHistoryShow: 'Prikaži povijest',
     menuHistoryBack: 'Natrag',
     menuHistoryForward: 'Naprijed',
     menuHistoryClear: 'Obriši povijest…',
-    
+
     // Bookmarks Menu
     menuBookmarks: 'Oznake',
     menuBMStartPage: 'Prikaži početnu stranicu',
@@ -88,7 +88,7 @@ const EXTENDED_STRINGS = {
     menuBMReadingListAll: 'Dodaj sve otvorene kartice na popis za čitanje',
     menuBMReadingListPrev: 'Odaberi prethodnu stavku u popisu za čitanje',
     menuBMReadingListNext: 'Odaberi sljedeću stavku u popisu za čitanje',
-    
+
     // Develop Menu
     menuDevelop: 'Razvoj',
     menuDevInspectDevices: 'Pregledaj aplikacije i uređaje',
@@ -104,7 +104,7 @@ const EXTENDED_STRINGS = {
     menuDevClearCaches: 'Isprazni predmemorije za sve profile',
     menuDevTools: 'Alati za programere',
     menuDevNetwork: 'Mrežni inspektor',
-    
+
     // Window Menu
     menuWindow: 'Prozor',
     menuWinMinimise: 'Minimiziraj',
@@ -126,20 +126,20 @@ const EXTENDED_STRINGS = {
     menuWinMuteOthers: 'Utišaj druge kartice',
     menuWinBringFront: 'Prebaci sve naprijed',
     menuWinDownloads: 'Preuzimanja',
-    
+
     // Help Menu
     menuHelp: 'Pomoć',
     menuHelpAbout: 'O EtherX pregledniku',
     menuHelpShortcuts: 'Tipkovnički prečaci',
-    
+
     // ═══════════════════════════════════════════════════════════════
     // SETTINGS PAGE — Hrvatski
     // ═══════════════════════════════════════════════════════════════
-    
+
     // Sidebar Navigation
     settingsTitle: 'Postavke',
     settingsDesc: 'Konfiguriraj svoj preglednik',
-    
+
     // Settings Sections
     settingsGeneral: 'Općenito',
     settingsTabs: 'Kartice',
@@ -158,7 +158,7 @@ const EXTENDED_STRINGS = {
     settingsLanguage: 'Jezik',
     settingsStorage: 'Pohrana',
     settingsUpdates: 'Ažuriranja',
-    
+
     // General Settings
     settingsGeneralDesc: 'Osnovne postavke preglednika',
     settingsHomePage: 'Početna stranica',
@@ -169,7 +169,7 @@ const EXTENDED_STRINGS = {
     settingsDefaultBrowserDesc: 'EtherX će biti zadani preglednik sustava',
     settingsDownloadLocation: 'Lokacija preuzimanja',
     settingsDownloadLocationDesc: 'Gdje spremiti preuzete datoteke',
-    
+
     // Tabs Settings
     settingsTabsDesc: 'Upravljanje karticama',
     settingsTabPreview: 'Pretpregled kartica',
@@ -178,14 +178,14 @@ const EXTENDED_STRINGS = {
     settingsTabGroupsDesc: 'Automatski grupiraj povezane kartice',
     settingsCloseTabWarning: 'Upozorenje pri zatvaranju više kartica',
     settingsCloseTabWarningDesc: 'Pitaj prije zatvaranja prozora s više kartica',
-    
+
     // AutoFill Settings
     settingsAutoFillDesc: 'Automatsko ispunjavanje obrazaca',
     settingsAutoFillAddresses: 'Adrese',
     settingsAutoFillAddressesDesc: 'Spremi i automatski ispuni adrese',
     settingsAutoFillPayment: 'Načini plaćanja',
     settingsAutoFillPaymentDesc: 'Spremi i automatski ispuni podatke o plaćanju',
-    
+
     // Password Settings
     settingsPasswordsDesc: 'Upravljanje spremljenim lozinkama',
     settingsSavePasswords: 'Spremi lozinke',
@@ -194,14 +194,14 @@ const EXTENDED_STRINGS = {
     settingsAutoSignInDesc: 'Automatski se prijavi kada je moguće',
     settingsPasswordManager: 'Upravitelj lozinki',
     settingsPasswordManagerDesc: 'Otvori postavke lozinki',
-    
+
     // Search Settings
     settingsSearchDesc: 'Tražilica i adresna traka',
     settingsSearchEngine: 'Zadana tražilica',
     settingsSearchEngineDesc: 'Odaberi tražilicu za upit iz adresne trake',
     settingsSearchSuggestions: 'Prijedlozi pretrage',
     settingsSearchSuggestionsDesc: 'Prikaži prijedloge dok tipkaš',
-    
+
     // Security Settings
     settingsSecurityDesc: 'Sigurnost i zaštita',
     settingsSafeBrowsing: 'Sigurno pregledavanje',
@@ -210,7 +210,7 @@ const EXTENDED_STRINGS = {
     settingsPhishingProtectionDesc: 'Upozori na sumnjive stranice',
     settingsHTTPSOnly: 'Samo HTTPS način',
     settingsHTTPSOnlyDesc: 'Uvijek pokušaj sigurnu vezu',
-    
+
     // Privacy Settings
     settingsPrivacyDesc: 'Privatnost i podaci',
     settingsDoNotTrack: 'Ne prati (Do Not Track)',
@@ -221,7 +221,7 @@ const EXTENDED_STRINGS = {
     settingsCookiesDesc: 'Upravljaj postavkama kolačića',
     settingsTrackingProtection: 'Zaštita od praćenja',
     settingsTrackingProtectionDesc: 'Blokiraj programe za praćenje',
-    
+
     // Website Settings
     settingsWebsitesDesc: 'Dozvole i ponašanje stranica',
     settingsNotifications: 'Obavijesti',
@@ -234,19 +234,19 @@ const EXTENDED_STRINGS = {
     settingsMicrophoneDesc: 'Dopusti pristup mikrofonu',
     settingsPopups: 'Skočni prozori',
     settingsPopupsDesc: 'Blokiraj skočne prozore',
-    
+
     // Profiles Settings
     settingsProfilesDesc: 'Korisničke profile i sinkronizacija',
     settingsCurrentProfile: 'Trenutni profil',
     settingsAddProfile: 'Dodaj novi profil',
     settingsSwitchProfile: 'Prebaci profil',
     settingsSyncProfile: 'Sinkroniziraj profil',
-    
+
     // Extensions Settings
     settingsExtensionsDesc: 'Proširenja i dodaci',
     settingsManageExtensions: 'Upravljanje proširenjima',
     settingsExtensionStore: 'Trgovina proširenja',
-    
+
     // Advanced Settings
     settingsAdvancedDesc: 'Napredne opcije',
     settingsHardwareAccel: 'Hardversko ubrzanje',
@@ -255,18 +255,18 @@ const EXTENDED_STRINGS = {
     settingsExperimentalFeaturesDesc: 'Omogući značajke u razvoju',
     settingsResetSettings: 'Resetiraj postavke',
     settingsResetSettingsDesc: 'Vrati  sve postavke na zadane',
-    
+
     // Developer Settings
     settingsDeveloperDesc: 'Alati za programere',
     settingsDevTools: 'Razvojni alati',
     settingsDevToolsDesc: 'Omogući razvojne alate',
     settingsRemoteDebugging: 'Daljinsko otklanjanje pogrešaka',
     settingsRemoteDebuggingDesc: 'Omogući daljinski pristup za otklanjanje pogrešaka',
-    
+
     // Flags Settings
     settingsFlagsDesc: 'Eksperimentalne značajke i zastavice',
     settingsFlagsWarning: '⚠️ Upozorenje: Ove značajke su nestabilne',
-    
+
     // Appearance Settings
     settingsAppearanceDesc: 'Tema i izgled',
     settingsTheme: 'Tema',
@@ -275,27 +275,27 @@ const EXTENDED_STRINGS = {
     settingsThemeAuto: 'Automatski',
     settingsFontSize: 'Veličina fonta',
     settingsPageZoom: 'Zadano zumiranje stranice',
-    
+
     // Language Settings
     settingsLanguageDesc: 'Preferiran jezik',
     settingsLanguagePreferred: 'Preferirani jezici',
     settingsLanguageAdd: 'Dodaj jezik',
     settingsLanguageTranslate: 'Ponudi prijevod stranica',
-    
+
     // Storage Settings
     settingsStorageDesc: 'Upravljanje prostorom za pohranu',
     settingsStorageUsed: 'Iskorišteni prostor',
     settingsStorageClear: 'Obriši podatke',
     settingsStorageClearCache: 'Obriši predmemoriju',
     settingsStorageClearCookies: 'Obriši kolačiće',
-    
+
     // Updates Settings
     settingsUpdatesDesc: 'Ažuriranja preglednika',
     settingsAutoUpdate: 'Automatska ažuriranja',
     settingsAutoUpdateDesc: 'Automatski preuzmi i instaliraj ažuriranja',
     settingsCheckUpdates: 'Provjeri dostupna ažuriranja',
     settingsCurrentVersion: 'Trenutna verzija',
-    
+
     // Updates
     updateNow: "⬆️ Ažuriraj sada",
     newVersionAvail: "🎉 Nova verzija dostupna!",
@@ -313,7 +313,7 @@ const EXTENDED_STRINGS = {
     // ═══════════════════════════════════════════════════════════════
     // MENU BAR — English
     // ═══════════════════════════════════════════════════════════════
-    
+
     // File Menu
     menuFile: 'File',
     menuFileNewTab: 'New Tab',
@@ -321,7 +321,7 @@ const EXTENDED_STRINGS = {
     menuFileOpenLocation: 'Open Location…',
     menuFileCloseTab: 'Close Tab',
     menuFilePrint: 'Print…',
-    
+
     // Edit Menu
     menuEdit: 'Edit',
     menuEditUndo: 'Undo Typing',
@@ -342,7 +342,7 @@ const EXTENDED_STRINGS = {
     menuEditSpeech: 'Speech',
     menuEditDictation: 'Start Dictation',
     menuEditEmoji: 'Emoji & Symbols',
-    
+
     // View Menu
     menuView: 'View',
     menuViewAlwaysToolbar: 'Always Show Toolbar in Full Screen',
@@ -367,14 +367,14 @@ const EXTENDED_STRINGS = {
     menuViewTextEncoding: 'Text Encoding',
     menuViewFullScreen: 'Enter Full Screen',
     menuViewResponsive: 'Responsive Design Mode',
-    
+
     // History Menu
     menuHistory: 'History',
     menuHistoryShow: 'Show History',
     menuHistoryBack: 'Back',
     menuHistoryForward: 'Forward',
     menuHistoryClear: 'Clear History…',
-    
+
     // Bookmarks Menu
     menuBookmarks: 'Bookmarks',
     menuBMStartPage: 'Show Start Page',
@@ -387,7 +387,7 @@ const EXTENDED_STRINGS = {
     menuBMReadingListAll: 'Add All Open Tabs to Reading List',
     menuBMReadingListPrev: 'Select Previous Item in Reading List',
     menuBMReadingListNext: 'Select Next Item in Reading List',
-    
+
     // Develop Menu
     menuDevelop: 'Develop',
     menuDevInspectDevices: 'Inspect Apps and Devices',
@@ -403,7 +403,7 @@ const EXTENDED_STRINGS = {
     menuDevClearCaches: 'Empty Caches for All Profiles',
     menuDevTools: 'Developer Tools',
     menuDevNetwork: 'Network Inspector',
-    
+
     // Window Menu
     menuWindow: 'Window',
     menuWinMinimise: 'Minimise',
@@ -425,19 +425,19 @@ const EXTENDED_STRINGS = {
     menuWinMuteOthers: 'Mute Other Tabs',
     menuWinBringFront: 'Bring All to Front',
     menuWinDownloads: 'Downloads',
-    
+
     // Help Menu
     menuHelp: 'Help',
     menuHelpAbout: 'About EtherX Browser',
     menuHelpShortcuts: 'Keyboard Shortcuts',
-    
+
     // ═══════════════════════════════════════════════════════════════
     // SETTINGS PAGE — English
     // ═══════════════════════════════════════════════════════════════
-    
+
     settingsTitle: 'Settings',
     settingsDesc: 'Configure your browser',
-    
+
     settingsGeneral: 'General',
     settingsTabs: 'Tabs',
     settingsAutoFill: 'AutoFill',
@@ -455,7 +455,7 @@ const EXTENDED_STRINGS = {
     settingsLanguage: 'Language',
     settingsStorage: 'Storage',
     settingsUpdates: 'Updates',
-    
+
     settingsGeneralDesc: 'Basic browser settings',
     settingsHomePage: 'Home page',
     settingsHomePageDesc: 'Page shown when starting',
@@ -465,7 +465,7 @@ const EXTENDED_STRINGS = {
     settingsDefaultBrowserDesc: 'EtherX will be the system default browser',
     settingsDownloadLocation: 'Download location',
     settingsDownloadLocationDesc: 'Where to save downloaded files',
-    
+
     settingsTabsDesc: 'Tab management',
     settingsTabPreview: 'Tab preview',
     settingsTabPreviewDesc: 'Show preview on hover',
@@ -473,13 +473,13 @@ const EXTENDED_STRINGS = {
     settingsTabGroupsDesc: 'Automatically group related tabs',
     settingsCloseTabWarning: 'Warning when closing multiple tabs',
     settingsCloseTabWarningDesc: 'Ask before closing window with multiple tabs',
-    
+
     settingsAutoFillDesc: 'Automatic form filling',
     settingsAutoFillAddresses: 'Addresses',
     settingsAutoFillAddressesDesc: 'Save and automatically fill addresses',
     settingsAutoFillPayment: 'Payment methods',
     settingsAutoFillPaymentDesc: 'Save and automatically fill payment data',
-    
+
     settingsPasswordsDesc: 'Manage saved passwords',
     settingsSavePasswords: 'Save passwords',
     settingsSavePasswordsDesc: 'Offer to save passwords for websites',
@@ -487,13 +487,13 @@ const EXTENDED_STRINGS = {
     settingsAutoSignInDesc: 'Sign in automatically when possible',
     settingsPasswordManager: 'Password manager',
     settingsPasswordManagerDesc: 'Open password settings',
-    
+
     settingsSearchDesc: 'Search engine and address bar',
     settingsSearchEngine: 'Default search engine',
     settingsSearchEngineDesc: 'Choose search engine for address bar queries',
     settingsSearchSuggestions: 'Search suggestions',
     settingsSearchSuggestionsDesc: 'Show suggestions while typing',
-    
+
     settingsSecurityDesc: 'Security and protection',
     settingsSafeBrowsing: 'Safe browsing',
     settingsSafeBrowsingDesc: 'Protection from dangerous sites',
@@ -501,7 +501,7 @@ const EXTENDED_STRINGS = {
     settingsPhishingProtectionDesc: 'Warn about suspicious sites',
     settingsHTTPSOnly: 'HTTPS-Only mode',
     settingsHTTPSOnlyDesc: 'Always try secure connection',
-    
+
     settingsPrivacyDesc: 'Privacy and data',
     settingsDoNotTrack: 'Do Not Track',
     settingsDoNotTrackDesc: 'Send Do Not Track request',
@@ -511,7 +511,7 @@ const EXTENDED_STRINGS = {
     settingsCookiesDesc: 'Manage cookie settings',
     settingsTrackingProtection: 'Tracking protection',
     settingsTrackingProtectionDesc: 'Block trackers',
-    
+
     settingsWebsitesDesc: 'Permissions and site behavior',
     settingsNotifications: 'Notifications',
     settingsNotificationsDesc: 'Allow sites to show notifications',
@@ -523,17 +523,17 @@ const EXTENDED_STRINGS = {
     settingsMicrophoneDesc: 'Allow microphone access',
     settingsPopups: 'Pop-ups',
     settingsPopupsDesc: 'Block pop-ups',
-    
+
     settingsProfilesDesc: 'User profiles and sync',
     settingsCurrentProfile: 'Current profile',
     settingsAddProfile: 'Add new profile',
     settingsSwitchProfile: 'Switch profile',
     settingsSyncProfile: 'Sync profile',
-    
+
     settingsExtensionsDesc: 'Extensions and add-ons',
     settingsManageExtensions: 'Manage extensions',
     settingsExtensionStore: 'Extension store',
-    
+
     settingsAdvancedDesc: 'Advanced options',
     settingsHardwareAccel: 'Hardware acceleration',
     settingsHardwareAccelDesc: 'Use hardware acceleration when available',
@@ -541,16 +541,16 @@ const EXTENDED_STRINGS = {
     settingsExperimentalFeaturesDesc: 'Enable features in development',
     settingsResetSettings: 'Reset settings',
     settingsResetSettingsDesc: 'Restore all settings to default',
-    
+
     settingsDeveloperDesc: 'Developer tools',
     settingsDevTools: 'Developer tools',
     settingsDevToolsDesc: 'Enable developer tools',
     settingsRemoteDebugging: 'Remote debugging',
     settingsRemoteDebuggingDesc: 'Enable remote debugging access',
-    
+
     settingsFlagsDesc: 'Experimental features and flags',
     settingsFlagsWarning: '⚠️ Warning: These features are unstable',
-    
+
     settingsAppearanceDesc: 'Theme and appearance',
     settingsTheme: 'Theme',
     settingsThemeLight: 'Light',
@@ -558,24 +558,24 @@ const EXTENDED_STRINGS = {
     settingsThemeAuto: 'Auto',
     settingsFontSize: 'Font size',
     settingsPageZoom: 'Default page zoom',
-    
+
     settingsLanguageDesc: 'Preferred language',
     settingsLanguagePreferred: 'Preferred languages',
     settingsLanguageAdd: 'Add language',
     settingsLanguageTranslate: 'Offer to translate pages',
-    
+
     settingsStorageDesc: 'Storage management',
     settingsStorageUsed: 'Storage used',
     settingsStorageClear: 'Clear data',
     settingsStorageClearCache: 'Clear cache',
     settingsStorageClearCookies: 'Clear cookies',
-    
+
     settingsUpdatesDesc: 'Browser updates',
     settingsAutoUpdate: 'Automatic updates',
     settingsAutoUpdateDesc: 'Automatically download and install updates',
     settingsCheckUpdates: 'Check for available updates',
     settingsCurrentVersion: 'Current version',
-    
+
     // Updates
     updateNow: "⬆️ Update now",
     newVersionAvail: "🎉 New version available!",
@@ -593,14 +593,14 @@ const EXTENDED_STRINGS = {
     // ═══════════════════════════════════════════════════════════════
     // MENU BAR — Deutsch
     // ═══════════════════════════════════════════════════════════════
-    
+
     menuFile: 'Datei',
     menuFileNewTab: 'Neuer Tab',
     menuFileNewPrivate: 'Neues privates Fenster',
     menuFileOpenLocation: 'Adresse öffnen…',
     menuFileCloseTab: 'Tab schließen',
     menuFilePrint: 'Drucken…',
-    
+
     menuEdit: 'Bearbeiten',
     menuEditUndo: 'Eingabe rückgängig',
     menuEditRedo: 'Wiederholen',
@@ -620,7 +620,7 @@ const EXTENDED_STRINGS = {
     menuEditSpeech: 'Sprache',
     menuEditDictation: 'Diktat starten',
     menuEditEmoji: 'Emoji & Symbole',
-    
+
     menuView: 'Ansicht',
     menuViewAlwaysToolbar: 'Symbolleiste im Vollbild immer anzeigen',
     menuViewCustomiseToolbar: 'Symbolleiste anpassen…',
@@ -644,13 +644,13 @@ const EXTENDED_STRINGS = {
     menuViewTextEncoding: 'Textkodierung',
     menuViewFullScreen: 'Vollbild aktivieren',
     menuViewResponsive: 'Responsive Design-Modus',
-    
+
     menuHistory: 'Verlauf',
     menuHistoryShow: 'Verlauf anzeigen',
     menuHistoryBack: 'Zurück',
     menuHistoryForward: 'Vor',
     menuHistoryClear: 'Verlauf löschen…',
-    
+
     menuBookmarks: 'Lesezeichen',
     menuBMStartPage: 'Startseite anzeigen',
     menuBMShow: 'Lesezeichen anzeigen',
@@ -662,7 +662,7 @@ const EXTENDED_STRINGS = {
     menuBMReadingListAll: 'Alle offenen Tabs zur Leseliste hinzufügen',
     menuBMReadingListPrev: 'Vorheriges Element in der Leseliste auswählen',
     menuBMReadingListNext: 'Nächstes Element in der Leseliste auswählen',
-    
+
     menuDevelop: 'Entwicklung',
     menuDevInspectDevices: 'Apps und Geräte inspizieren',
     menuDevServiceWorkers: 'Service Workers',
@@ -677,7 +677,7 @@ const EXTENDED_STRINGS = {
     menuDevClearCaches: 'Caches für alle Profile leeren',
     menuDevTools: 'Entwicklertools',
     menuDevNetwork: 'Netzwerk-Inspektor',
-    
+
     menuWindow: 'Fenster',
     menuWinMinimise: 'Minimieren',
     menuWinZoom: 'Zoomen',
@@ -698,18 +698,18 @@ const EXTENDED_STRINGS = {
     menuWinMuteOthers: 'Andere Tabs stummschalten',
     menuWinBringFront: 'Alle nach vorne bringen',
     menuWinDownloads: 'Downloads',
-    
+
     menuHelp: 'Hilfe',
     menuHelpAbout: 'Über EtherX Browser',
     menuHelpShortcuts: 'Tastenkombinationen',
-    
+
     // ═══════════════════════════════════════════════════════════════
     // SETTINGS PAGE — Deutsch
     // ═══════════════════════════════════════════════════════════════
-    
+
     settingsTitle: 'Einstellungen',
     settingsDesc: 'Konfigurieren Sie Ihren Browser',
-    
+
     settingsGeneral: 'Allgemein',
     settingsTabs: 'Tabs',
     settingsAutoFill: 'AutoFill',
@@ -727,7 +727,7 @@ const EXTENDED_STRINGS = {
     settingsLanguage: 'Sprache',
     settingsStorage: 'Speicher',
     settingsUpdates: 'Aktualisierungen',
-    
+
     settingsGeneralDesc: 'Grundlegende Browser-Einstellungen',
     settingsHomePage: 'Startseite',
     settingsHomePageDesc: 'Beim Start angezeigte Seite',
@@ -737,7 +737,7 @@ const EXTENDED_STRINGS = {
     settingsDefaultBrowserDesc: 'EtherX wird der  System-Standardbrowser',
     settingsDownloadLocation: 'Download-Speicherort',
     settingsDownloadLocationDesc: 'Wo heruntergeladene Dateien gespeichert werden',
-    
+
     settingsTabsDesc: 'Tab-Verwaltung',
     settingsTabPreview: 'Tab-Vorschau',
     settingsTabPreviewDesc: 'Vorschau beim Hovern anzeigen',
@@ -745,13 +745,13 @@ const EXTENDED_STRINGS = {
     settingsTabGroupsDesc: 'Verwandte Tabs automatisch gruppieren',
     settingsCloseTabWarning: 'Warnung beim Schließen mehrerer Tabs',
     settingsCloseTabWarningDesc: 'Vor dem Schließen eines Fensters mit mehreren Tabs fragen',
-    
+
     settingsAutoFillDesc: 'Automatisches Ausfüllen von Formularen',
     settingsAutoFillAddresses: 'Adressen',
     settingsAutoFillAddressesDesc: 'Adressen speichern und automatisch ausfüllen',
     settingsAutoFillPayment: 'Zahlungsmethoden',
     settingsAutoFillPaymentDesc: 'Zahlungsdaten speichern und automatisch ausfüllen',
-    
+
     settingsPasswordsDesc: 'Gespeicherte Passwörter verwalten',
     settingsSavePasswords: 'Passwörter speichern',
     settingsSavePasswordsDesc: 'Anbieten, Passwörter für Webseiten zu speichern',
@@ -759,13 +759,13 @@ const EXTENDED_STRINGS = {
     settingsAutoSignInDesc: 'Wenn möglich automatisch anmelden',
     settingsPasswordManager: 'Passwort-Manager',
     settingsPasswordManagerDesc: 'Passwort-Einstellungen öffnen',
-    
+
     settingsSearchDesc: 'Suchmaschine und Adressleiste',
     settingsSearchEngine: 'Standard-Suchmaschine',
     settingsSearchEngineDesc: 'Suchmaschine für Adressleisten-Abfragen wählen',
     settingsSearchSuggestions: 'Suchvorschläge',
     settingsSearchSuggestionsDesc: 'Vorschläge beim Tippen anzeigen',
-    
+
     settingsSecurityDesc: 'Sicherheit und Schutz',
     settingsSafeBrowsing: 'Sicheres Surfen',
     settingsSafeBrowsingDesc: 'Schutz vor gefährlichen Seiten',
@@ -773,7 +773,7 @@ const EXTENDED_STRINGS = {
     settingsPhishingProtectionDesc: 'Vor verdächtigen Seiten warnen',
     settingsHTTPSOnly: 'Nur-HTTPS-Modus',
     settingsHTTPSOnlyDesc: 'Immer sichere Verbindung versuchen',
-    
+
     settingsPrivacyDesc: 'Datenschutz und Daten',
     settingsDoNotTrack: 'Do Not Track',
     settingsDoNotTrackDesc: 'Do Not Track-Anfrage senden',
@@ -783,7 +783,7 @@ const EXTENDED_STRINGS = {
     settingsCookiesDesc: 'Cookie-Einstellungen verwalten',
     settingsTrackingProtection: 'Tracking-Schutz',
     settingsTrackingProtectionDesc: 'Tracker blockieren',
-    
+
     settingsWebsitesDesc: 'Berechtigungen und Seitenverhalten',
     settingsNotifications: 'Benachrichtigungen',
     settingsNotificationsDesc: 'Webseiten erlauben, Benachrichtigungen anzuzeigen',
@@ -795,17 +795,17 @@ const EXTENDED_STRINGS = {
     settingsMicrophoneDesc: 'Mikrofonzugriff erlauben',
     settingsPopups: 'Pop-ups',
     settingsPopupsDesc: 'Pop-ups blockieren',
-    
+
     settingsProfilesDesc: 'Benutzerprofile und Sync',
     settingsCurrentProfile: 'Aktuelles Profil',
     settingsAddProfile: 'Neues Profil hinzufügen',
     settingsSwitchProfile: 'Profil wechseln',
     settingsSyncProfile: 'Profil synchronisieren',
-    
+
     settingsExtensionsDesc: 'Erweiterungen und Add-ons',
     settingsManageExtensions: 'Erweiterungen verwalten',
     settingsExtensionStore: 'Erweiterungsstore',
-    
+
     settingsAdvancedDesc: 'Erweiterte Optionen',
     settingsHardwareAccel: 'Hardware-Beschleunigung',
     settingsHardwareAccelDesc: 'Hardware-Beschleunigung verwenden, wenn verfügbar',
@@ -813,16 +813,16 @@ const EXTENDED_STRINGS = {
     settingsExperimentalFeaturesDesc: 'Funktionen in Entwicklung aktivieren',
     settingsResetSettings: 'Einstellungen zurücksetzen',
     settingsResetSettingsDesc: 'Alle Einstellungen auf Standard zurücksetzen',
-    
+
     settingsDeveloperDesc: 'Entwickler-Tools',
     settingsDevTools: 'Entwickler-Tools',
     settingsDevToolsDesc: 'Entwickler-Tools aktivieren',
     settingsRemoteDebugging: 'Remote-Debugging',
     settingsRemoteDebuggingDesc: 'Remote-Debugging-Zugriff aktivieren',
-    
+
     settingsFlagsDesc: 'Experimentelle Funktionen und Flags',
     settingsFlagsWarning: '⚠️ Warnung: Diese Funktionen sind instabil',
-    
+
     settingsAppearanceDesc: 'Theme und Aussehen',
     settingsTheme: 'Theme',
     settingsThemeLight: 'Hell',
@@ -830,18 +830,18 @@ const EXTENDED_STRINGS = {
     settingsThemeAuto: 'Automatisch',
     settingsFontSize: 'Schriftgröße',
     settingsPageZoom: 'Standard-Seitenzoom',
-    
+
     settingsLanguageDesc: 'Bevorzugte Sprache',
     settingsLanguagePreferred: 'Bevorzugte Sprachen',
     settingsLanguageAdd: 'Sprache hinzufügen',
     settingsLanguageTranslate: 'Übersetzung von Seiten anbieten',
-    
+
     settingsStorageDesc: 'Speicherverwaltung',
     settingsStorageUsed: 'Verwendeter Speicher',
     settingsStorageClear: 'Daten löschen',
     settingsStorageClearCache: 'Cache löschen',
     settingsStorageClearCookies: 'Cookies löschen',
-    
+
     settingsUpdatesDesc: 'Browser-Aktualisierungen',
     settingsAutoUpdate: 'Automatische Aktualisierungen',
     settingsAutoUpdateDesc: 'Aktualisierungen automatisch herunterladen und installieren',
@@ -853,14 +853,14 @@ const EXTENDED_STRINGS = {
     // ═══════════════════════════════════════════════════════════════
     // MENU BAR — Italiano
     // ═══════════════════════════════════════════════════════════════
-    
+
     menuFile: 'File',
     menuFileNewTab: 'Nuova scheda',
     menuFileNewPrivate: 'Nuova finestra privata',
     menuFileOpenLocation: 'Apri posizione…',
     menuFileCloseTab: 'Chiudi scheda',
     menuFilePrint: 'Stampa…',
-    
+
     menuEdit: 'Modifica',
     menuEditUndo: 'Annulla digitazione',
     menuEditRedo: 'Ripeti',
@@ -880,7 +880,7 @@ const EXTENDED_STRINGS = {
     menuEditSpeech: 'Voce',
     menuEditDictation: 'Avvia dettatura',
     menuEditEmoji: 'Emoji e simboli',
-    
+
     menuView: 'Visualizza',
     menuViewAlwaysToolbar: 'Mostra sempre barra strumenti a schermo intero',
     menuViewCustomiseToolbar: 'Personalizza barra strumenti…',
@@ -904,13 +904,13 @@ const EXTENDED_STRINGS = {
     menuViewTextEncoding: 'Codifica testo',
     menuViewFullScreen: 'Entra in schermo intero',
     menuViewResponsive: 'Modalità design responsive',
-    
+
     menuHistory: 'Cronologia',
     menuHistoryShow: 'Mostra cronologia',
     menuHistoryBack: 'Indietro',
     menuHistoryForward: 'Avanti',
     menuHistoryClear: 'Cancella cronologia…',
-    
+
     menuBookmarks: 'Segnalibri',
     menuBMStartPage: 'Mostra pagina iniziale',
     menuBMShow: 'Mostra segnalibri',
@@ -922,7 +922,7 @@ const EXTENDED_STRINGS = {
     menuBMReadingListAll: 'Aggiungi tutte le schede aperte a elenco lettura',
     menuBMReadingListPrev: 'Seleziona elemento precedente in elenco lettura',
     menuBMReadingListNext: 'Seleziona elemento successivo in elenco lettura',
-    
+
     menuDevelop: 'Sviluppo',
     menuDevInspectDevices: 'Ispeziona app e dispositivi',
     menuDevServiceWorkers: 'Service Workers',
@@ -937,7 +937,7 @@ const EXTENDED_STRINGS = {
     menuDevClearCaches: 'Svuota cache per tutti i profili',
     menuDevTools: 'Strumenti sviluppatore',
     menuDevNetwork: 'Ispettore rete',
-    
+
     menuWindow: 'Finestra',
     menuWinMinimise: 'Minimizza',
     menuWinZoom: 'Zoom',
@@ -958,18 +958,18 @@ const EXTENDED_STRINGS = {
     menuWinMuteOthers: 'Silenzia altre schede',
     menuWinBringFront: 'Porta tutto in primo piano',
     menuWinDownloads: 'Download',
-    
+
     menuHelp: 'Aiuto',
     menuHelpAbout: 'Informazioni su EtherX Browser',
     menuHelpShortcuts: 'Scorciatoie tastiera',
-    
+
     // ═══════════════════════════════════════════════════════════════
     // SETTINGS PAGE — Italiano
     // ═══════════════════════════════════════════════════════════════
-    
+
     settingsTitle: 'Impostazioni',
     settingsDesc: 'Configura il tuo browser',
-    
+
     settingsGeneral: 'Generale',
     settingsTabs: 'Schede',
     settingsAutoFill: 'Compilazione automatica',
@@ -987,7 +987,7 @@ const EXTENDED_STRINGS = {
     settingsLanguage: 'Lingua',
     settingsStorage: 'Archiviazione',
     settingsUpdates: 'Aggiornamenti',
-    
+
     settingsGeneralDesc: 'Impostazioni base del browser',
     settingsHomePage: 'Pagina iniziale',
     settingsHomePageDesc: 'Pagina mostrata all\'avvio',
@@ -997,7 +997,7 @@ const EXTENDED_STRINGS = {
     settingsDefaultBrowserDesc: 'EtherX sarà il browser predefinito del sistema',
     settingsDownloadLocation: 'Posizione download',
     settingsDownloadLocationDesc: 'Dove salvare i file scaricati',
-    
+
     settingsTabsDesc: 'Gestione schede',
     settingsTabPreview: 'Anteprima schede',
     settingsTabPreviewDesc: 'Mostra anteprima al passaggio del mouse',
@@ -1005,13 +1005,13 @@ const EXTENDED_STRINGS = {
     settingsTabGroupsDesc: 'Raggruppa automaticamente schede correlate',
     settingsCloseTabWarning: 'Avviso chiusura multiple schede',
     settingsCloseTabWarningDesc: 'Chiedi prima di chiudere finestra con più schede',
-    
+
     settingsAutoFillDesc: 'Compilazione automatica moduli',
     settingsAutoFillAddresses: 'Indirizzi',
     settingsAutoFillAddressesDesc: 'Salva e compila automaticamente indirizzi',
     settingsAutoFillPayment: 'Metodi di pagamento',
     settingsAutoFillPaymentDesc: 'Salva e compila automaticamente dati pagamento',
-    
+
     settingsPasswordsDesc: 'Gestisci password salvate',
     settingsSavePasswords: 'Salva password',
     settingsSavePasswordsDesc: 'Offri di salvare password per i siti web',
@@ -1019,13 +1019,13 @@ const EXTENDED_STRINGS = {
     settingsAutoSignInDesc: 'Accedi automaticamente quando possibile',
     settingsPasswordManager: 'Gestore password',
     settingsPasswordManagerDesc: 'Apri impostazioni password',
-    
+
     settingsSearchDesc: 'Motore di ricerca e barra indirizzi',
     settingsSearchEngine: 'Motore di ricerca predefinito',
     settingsSearchEngineDesc: 'Scegli motore per query da barra indirizzi',
     settingsSearchSuggestions: 'Suggerimenti ricerca',
     settingsSearchSuggestionsDesc: 'Mostra suggerimenti durante digitazione',
-    
+
     settingsSecurityDesc: 'Sicurezza e protezione',
     settingsSafeBrowsing: 'Navigazione sicura',
     settingsSafeBrowsingDesc: 'Protezione da siti pericolosi',
@@ -1033,7 +1033,7 @@ const EXTENDED_STRINGS = {
     settingsPhishingProtectionDesc: 'Avvisa su siti sospetti',
     settingsHTTPSOnly: 'Modalità solo HTTPS',
     settingsHTTPSOnlyDesc: 'Prova sempre connessione sicura',
-    
+
     settingsPrivacyDesc: 'Privacy e dati',
     settingsDoNotTrack: 'Do Not Track',
     settingsDoNotTrackDesc: 'Invia richiesta Do Not Track',
@@ -1043,7 +1043,7 @@ const EXTENDED_STRINGS = {
     settingsCookiesDesc: 'Gestisci impostazioni cookie',
     settingsTrackingProtection: 'Protezione tracciamento',
     settingsTrackingProtectionDesc: 'Blocca tracker',
-    
+
     settingsWebsitesDesc: 'Permessi e comportamento siti',
     settingsNotifications: 'Notifiche',
     settingsNotificationsDesc: 'Consenti ai siti di mostrare notifiche',
@@ -1055,17 +1055,17 @@ const EXTENDED_STRINGS = {
     settingsMicrophoneDesc: 'Consenti accesso microfono',
     settingsPopups: 'Pop-up',
     settingsPopupsDesc: 'Blocca pop-up',
-    
+
     settingsProfilesDesc: 'Profili utente e sincronizzazione',
     settingsCurrentProfile: 'Profilo corrente',
     settingsAddProfile: 'Aggiungi nuovo profilo',
     settingsSwitchProfile: 'Cambia profilo',
     settingsSyncProfile: 'Sincronizza profilo',
-    
+
     settingsExtensionsDesc: 'Estensioni e componenti aggiuntivi',
     settingsManageExtensions: 'Gestisci estensioni',
     settingsExtensionStore: 'Store estensioni',
-    
+
     settingsAdvancedDesc: 'Opzioni avanzate',
     settingsHardwareAccel: 'Accelerazione hardware',
     settingsHardwareAccelDesc: 'Usa accelerazione hardware quando disponibile',
@@ -1073,16 +1073,16 @@ const EXTENDED_STRINGS = {
     settingsExperimentalFeaturesDesc: 'Abilita funzionalità in sviluppo',
     settingsResetSettings: 'Ripristina impostazioni',
     settingsResetSettingsDesc: 'Ripristina tutte le impostazioni predefinite',
-    
+
     settingsDeveloperDesc: 'Strumenti sviluppatore',
     settingsDevTools: 'Strumenti sviluppatore',
     settingsDevToolsDesc: 'Abilita strumenti sviluppatore',
     settingsRemoteDebugging: 'Debug remoto',
     settingsRemoteDebuggingDesc: 'Abilita accesso debug remoto',
-    
+
     settingsFlagsDesc: 'Funzionalità sperimentali e flag',
     settingsFlagsWarning: '⚠️ Avviso: Queste funzionalità sono instabili',
-    
+
     settingsAppearanceDesc: 'Tema e aspetto',
     settingsTheme: 'Tema',
     settingsThemeLight: 'Chiaro',
@@ -1090,18 +1090,18 @@ const EXTENDED_STRINGS = {
     settingsThemeAuto: 'Automatico',
     settingsFontSize: 'Dimensione carattere',
     settingsPageZoom: 'Zoom pagina predefinito',
-    
+
     settingsLanguageDesc: 'Lingua preferita',
     settingsLanguagePreferred: 'Lingue preferite',
     settingsLanguageAdd: 'Aggiungi lingua',
     settingsLanguageTranslate: 'Offri traduzione pagine',
-    
+
     settingsStorageDesc: 'Gestione archiviazione',
     settingsStorageUsed: 'Archiviazione utilizzata',
     settingsStorageClear: 'Cancella dati',
     settingsStorageClearCache: 'Cancella cache',
     settingsStorageClearCookies: 'Cancella cookie',
-    
+
     settingsUpdatesDesc: 'Aggiornamenti browser',
     settingsAutoUpdate: 'Aggiornamenti automatici',
     settingsAutoUpdateDesc: 'Scarica e installa automaticamente aggiornamenti',
@@ -1113,14 +1113,14 @@ const EXTENDED_STRINGS = {
     // ═══════════════════════════════════════════════════════════════
     // MENU BAR — Français
     // ═══════════════════════════════════════════════════════════════
-    
+
     menuFile: 'Fichier',
     menuFileNewTab: 'Nouvel onglet',
     menuFileNewPrivate: 'Nouvelle fenêtre privée',
     menuFileOpenLocation: 'Ouvrir un emplacement…',
     menuFileCloseTab: 'Fermer l\'onglet',
     menuFilePrint: 'Imprimer…',
-    
+
     menuEdit: 'Édition',
     menuEditUndo: 'Annuler la saisie',
     menuEditRedo: 'Rétablir',
@@ -1140,7 +1140,7 @@ const EXTENDED_STRINGS = {
     menuEditSpeech: 'Parole',
     menuEditDictation: 'Commencer la dictée',
     menuEditEmoji: 'Emoji et symboles',
-    
+
     menuView: 'Affichage',
     menuViewAlwaysToolbar: 'Toujours afficher la barre d\'outils en plein écran',
     menuViewCustomiseToolbar: 'Personnaliser la barre d\'outils…',
@@ -1164,13 +1164,13 @@ const EXTENDED_STRINGS = {
     menuViewTextEncoding: 'Encodage du texte',
     menuViewFullScreen: 'Passer en plein écran',
     menuViewResponsive: 'Mode responsive design',
-    
+
     menuHistory: 'Historique',
     menuHistoryShow: 'Afficher l\'historique',
     menuHistoryBack: 'Retour',
     menuHistoryForward: 'Suivant',
     menuHistoryClear: 'Effacer l\'historique…',
-    
+
     menuBookmarks: 'Favoris',
     menuBMStartPage: 'Afficher la page de démarrage',
     menuBMShow: 'Afficher les favoris',
@@ -1182,7 +1182,7 @@ const EXTENDED_STRINGS = {
     menuBMReadingListAll: 'Ajouter tous les onglets ouverts à la liste de lecture',
     menuBMReadingListPrev: 'Sélectionner l\'élément précédent dans la liste de lecture',
     menuBMReadingListNext: 'Sélectionner l\'élément suivant dans la liste de lecture',
-    
+
     menuDevelop: 'Développement',
     menuDevInspectDevices: 'Inspecter les apps et appareils',
     menuDevServiceWorkers: 'Service Workers',
@@ -1197,7 +1197,7 @@ const EXTENDED_STRINGS = {
     menuDevClearCaches: 'Vider les caches pour tous les profils',
     menuDevTools: 'Outils de développement',
     menuDevNetwork: 'Inspecteur réseau',
-    
+
     menuWindow: 'Fenêtre',
     menuWinMinimise: 'Réduire',
     menuWinZoom: 'Zoom',
@@ -1218,18 +1218,18 @@ const EXTENDED_STRINGS = {
     menuWinMuteOthers: 'Couper le son des autres onglets',
     menuWinBringFront: 'Tout mettre au premier plan',
     menuWinDownloads: 'Téléchargements',
-    
+
     menuHelp: 'Aide',
     menuHelpAbout: 'À propos d\'EtherX Browser',
     menuHelpShortcuts: 'Raccourcis clavier',
-    
+
     // ═══════════════════════════════════════════════════════════════
     // SETTINGS PAGE — Français
     // ═══════════════════════════════════════════════════════════════
-    
+
     settingsTitle: 'Paramètres',
     settingsDesc: 'Configurez votre navigateur',
-    
+
     settingsGeneral: 'Général',
     settingsTabs: 'Onglets',
     settingsAutoFill: 'Remplissage automatique',
@@ -1247,7 +1247,7 @@ const EXTENDED_STRINGS = {
     settingsLanguage: 'Langue',
     settingsStorage: 'Stockage',
     settingsUpdates: 'Mises à jour',
-    
+
     settingsGeneralDesc: 'Paramètres de base du navigateur',
     settingsHomePage: 'Page d\'accueil',
     settingsHomePageDesc: 'Page affichée au démarrage',
@@ -1257,7 +1257,7 @@ const EXTENDED_STRINGS = {
     settingsDefaultBrowserDesc: 'EtherX sera le navigateur par défaut du système',
     settingsDownloadLocation: 'Emplacement des téléchargements',
     settingsDownloadLocationDesc: 'Où enregistrer les fichiers téléchargés',
-    
+
     settingsTabsDesc: 'Gestion des onglets',
     settingsTabPreview: 'Aperçu des onglets',
     settingsTabPreviewDesc: 'Afficher l\'aperçu au survol',
@@ -1265,13 +1265,13 @@ const EXTENDED_STRINGS = {
     settingsTabGroupsDesc: 'Grouper automatiquement les onglets liés',
     settingsCloseTabWarning: 'Avertissement de fermeture de plusieurs onglets',
     settingsCloseTabWarningDesc: 'Demander avant de fermer une fenêtre avec plusieurs onglets',
-    
+
     settingsAutoFillDesc: 'Remplissage automatique des formulaires',
     settingsAutoFillAddresses: 'Adresses',
     settingsAutoFillAddressesDesc: 'Enregistrer et remplir automatiquement les adresses',
     settingsAutoFillPayment: 'Modes de paiement',
     settingsAutoFillPaymentDesc: 'Enregistrer et remplir automatiquement les données de paiement',
-    
+
     settingsPasswordsDesc: 'Gérer les mots de passe enregistrés',
     settingsSavePasswords: 'Enregistrer les mots de passe',
     settingsSavePasswordsDesc: 'Proposer d\'enregistrer les mots de passe pour les sites web',
@@ -1279,13 +1279,13 @@ const EXTENDED_STRINGS = {
     settingsAutoSignInDesc: 'Se connecter automatiquement quand c\'est possible',
     settingsPasswordManager: 'Gestionnaire de mots de passe',
     settingsPasswordManagerDesc: 'Ouvrir les paramètres des mots de passe',
-    
+
     settingsSearchDesc: 'Moteur de recherche et barre d\'adresse',
     settingsSearchEngine: 'Moteur de recherche par défaut',
     settingsSearchEngineDesc: 'Choisir le moteur pour les requêtes de la barre d\'adresse',
     settingsSearchSuggestions: 'Suggestions de recherche',
     settingsSearchSuggestionsDesc: 'Afficher des suggestions pendant la saisie',
-    
+
     settingsSecurityDesc: 'Sécurité et protection',
     settingsSafeBrowsing: 'Navigation sécurisée',
     settingsSafeBrowsingDesc: 'Protection contre les sites dangereux',
@@ -1293,7 +1293,7 @@ const EXTENDED_STRINGS = {
     settingsPhishingProtectionDesc: 'Avertir des sites suspects',
     settingsHTTPSOnly: 'Mode HTTPS uniquement',
     settingsHTTPSOnlyDesc: 'Toujours essayer une connexion sécurisée',
-    
+
     settingsPrivacyDesc: 'Confidentialité et données',
     settingsDoNotTrack: 'Ne pas pister',
     settingsDoNotTrackDesc: 'Envoyer une requête de non-pistage',
@@ -1303,7 +1303,7 @@ const EXTENDED_STRINGS = {
     settingsCookiesDesc: 'Gérer les paramètres des cookies',
     settingsTrackingProtection: 'Protection contre le pistage',
     settingsTrackingProtectionDesc: 'Bloquer les pisteurs',
-    
+
     settingsWebsitesDesc: 'Permissions et comportement des sites',
     settingsNotifications: 'Notifications',
     settingsNotificationsDesc: 'Autoriser les sites à afficher des notifications',
@@ -1315,17 +1315,17 @@ const EXTENDED_STRINGS = {
     settingsMicrophoneDesc: 'Autoriser l\'accès au microphone',
     settingsPopups: 'Pop-ups',
     settingsPopupsDesc: 'Bloquer les pop-ups',
-    
+
     settingsProfilesDesc: 'Profils utilisateur et synchronisation',
     settingsCurrentProfile: 'Profil actuel',
     settingsAddProfile: 'Ajouter un nouveau profil',
     settingsSwitchProfile: 'Changer de profil',
     settingsSyncProfile: 'Synchroniser le profil',
-    
+
     settingsExtensionsDesc: 'Extensions et modules complémentaires',
     settingsManageExtensions: 'Gérer les extensions',
     settingsExtensionStore: 'Boutique d\'extensions',
-    
+
     settingsAdvancedDesc: 'Options avancées',
     settingsHardwareAccel: 'Accélération matérielle',
     settingsHardwareAccelDesc: 'Utiliser l\'accélération matérielle quand disponible',
@@ -1333,16 +1333,16 @@ const EXTENDED_STRINGS = {
     settingsExperimentalFeaturesDesc: 'Activer les fonctionnalités en développement',
     settingsResetSettings: 'Réinitialiser les paramètres',
     settingsResetSettingsDesc: 'Restaurer tous les paramètres par défaut',
-    
+
     settingsDeveloperDesc: 'Outils développeur',
     settingsDevTools: 'Outils développeur',
     settingsDevToolsDesc: 'Activer les outils développeur',
     settingsRemoteDebugging: 'Débogage à distance',
     settingsRemoteDebuggingDesc: 'Activer l\'accès au débogage à distance',
-    
+
     settingsFlagsDesc: 'Fonctionnalités expérimentales et flags',
     settingsFlagsWarning: '⚠️ Avertissement : Ces fonctionnalités sont instables',
-    
+
     settingsAppearanceDesc: 'Thème et apparence',
     settingsTheme: 'Thème',
     settingsThemeLight: 'Clair',
@@ -1350,18 +1350,18 @@ const EXTENDED_STRINGS = {
     settingsThemeAuto: 'Automatique',
     settingsFontSize: 'Taille de police',
     settingsPageZoom: 'Zoom de page par défaut',
-    
+
     settingsLanguageDesc: 'Langue préférée',
     settingsLanguagePreferred: 'Langues préférées',
     settingsLanguageAdd: 'Ajouter une langue',
     settingsLanguageTranslate: 'Proposer de traduire les pages',
-    
+
     settingsStorageDesc: 'Gestion du stockage',
     settingsStorageUsed: 'Stockage utilisé',
     settingsStorageClear: 'Effacer les données',
     settingsStorageClearCache: 'Effacer le cache',
     settingsStorageClearCookies: 'Effacer les cookies',
-    
+
     settingsUpdatesDesc: 'Mises à jour du navigateur',
     settingsAutoUpdate: 'Mises à jour automatiques',
     settingsAutoUpdateDesc: 'Télécharger et installer automatiquement les mises à jour',
@@ -1373,14 +1373,14 @@ const EXTENDED_STRINGS = {
     // ═══════════════════════════════════════════════════════════════
     // MENU BAR — Español
     // ═══════════════════════════════════════════════════════════════
-    
+
     menuFile: 'Archivo',
     menuFileNewTab: 'Nueva pestaña',
     menuFileNewPrivate: 'Nueva ventana privada',
     menuFileOpenLocation: 'Abrir ubicación…',
     menuFileCloseTab: 'Cerrar pestaña',
     menuFilePrint: 'Imprimir…',
-    
+
     menuEdit: 'Editar',
     menuEditUndo: 'Deshacer escritura',
     menuEditRedo: 'Rehacer',
@@ -1400,7 +1400,7 @@ const EXTENDED_STRINGS = {
     menuEditSpeech: 'Voz',
     menuEditDictation: 'Iniciar dictado',
     menuEditEmoji: 'Emoji y símbolos',
-    
+
     menuView: 'Vista',
     menuViewAlwaysToolbar: 'Mostrar siempre barra de herramientas en pantalla completa',
     menuViewCustomiseToolbar: 'Personalizar barra de herramientas…',
@@ -1424,13 +1424,13 @@ const EXTENDED_STRINGS = {
     menuViewTextEncoding: 'Codificación de texto',
     menuViewFullScreen: 'Entrar en pantalla completa',
     menuViewResponsive: 'Modo de diseño responsive',
-    
+
     menuHistory: 'Historial',
     menuHistoryShow: 'Mostrar historial',
     menuHistoryBack: 'Atrás',
     menuHistoryForward: 'Adelante',
     menuHistoryClear: 'Borrar historial…',
-    
+
     menuBookmarks: 'Marcadores',
     menuBMStartPage: 'Mostrar página de inicio',
     menuBMShow: 'Mostrar marcadores',
@@ -1442,7 +1442,7 @@ const EXTENDED_STRINGS = {
     menuBMReadingListAll: 'Agregar todas las pestañas abiertas a lista de lectura',
     menuBMReadingListPrev: 'Seleccionar elemento anterior en lista de lectura',
     menuBMReadingListNext: 'Seleccionar siguiente elemento en lista de lectura',
-    
+
     menuDevelop: 'Desarrollo',
     menuDevInspectDevices: 'Inspeccionar apps y dispositivos',
     menuDevServiceWorkers: 'Service Workers',
@@ -1457,7 +1457,7 @@ const EXTENDED_STRINGS = {
     menuDevClearCaches: 'Vaciar cachés para todos los perfiles',
     menuDevTools: 'Herramientas de desarrollo',
     menuDevNetwork: 'Inspector de red',
-    
+
     menuWindow: 'Ventana',
     menuWinMinimise: 'Minimizar',
     menuWinZoom: 'Zoom',
@@ -1478,18 +1478,18 @@ const EXTENDED_STRINGS = {
     menuWinMuteOthers: 'Silenciar otras pestañas',
     menuWinBringFront: 'Traer todo al frente',
     menuWinDownloads: 'Descargas',
-    
+
     menuHelp: 'Ayuda',
     menuHelpAbout: 'Acerca de EtherX Browser',
     menuHelpShortcuts: 'Atajos de teclado',
-    
+
     // ═══════════════════════════════════════════════════════════════
     // SETTINGS PAGE — Español
     // ═══════════════════════════════════════════════════════════════
-    
+
     settingsTitle: 'Configuración',
     settingsDesc: 'Configura tu navegador',
-    
+
     settingsGeneral: 'General',
     settingsTabs: 'Pestañas',
     settingsAutoFill: 'Autorrellenar',
@@ -1507,7 +1507,7 @@ const EXTENDED_STRINGS = {
     settingsLanguage: 'Idioma',
     settingsStorage: 'Almacenamiento',
     settingsUpdates: 'Actualizaciones',
-    
+
     settingsGeneralDesc: 'Configuración básica del navegador',
     settingsHomePage: 'Página de inicio',
     settingsHomePageDesc: 'Página que se muestra al iniciar',
@@ -1517,7 +1517,7 @@ const EXTENDED_STRINGS = {
     settingsDefaultBrowserDesc: 'EtherX será el navegador predeterminado del sistema',
     settingsDownloadLocation: 'Ubicación de descargas',
     settingsDownloadLocationDesc: 'Dónde guardar los archivos descargados',
-    
+
     settingsTabsDesc: 'Gestión de pestañas',
     settingsTabPreview: 'Vista previa de pestañas',
     settingsTabPreviewDesc: 'Mostrar vista previa al pasar el cursor',
@@ -1525,13 +1525,13 @@ const EXTENDED_STRINGS = {
     settingsTabGroupsDesc: 'Agrupar automáticamente pestañas relacionadas',
     settingsCloseTabWarning: 'Advertencia al cerrar varias pestañas',
     settingsCloseTabWarningDesc: 'Preguntar antes de cerrar ventana con varias pestañas',
-    
+
     settingsAutoFillDesc: 'Autorrellenado automático de formularios',
     settingsAutoFillAddresses: 'Direcciones',
     settingsAutoFillAddressesDesc: 'Guardar y autorrellenar direcciones',
     settingsAutoFillPayment: 'Métodos de pago',
     settingsAutoFillPaymentDesc: 'Guardar y autorrellenar datos de pago',
-    
+
     settingsPasswordsDesc: 'Gestionar contraseñas guardadas',
     settingsSavePasswords: 'Guardar contraseñas',
     settingsSavePasswordsDesc: 'Ofrecer guardar contraseñas para sitios web',
@@ -1539,13 +1539,13 @@ const EXTENDED_STRINGS = {
     settingsAutoSignInDesc: 'Iniciar sesión automáticamente cuando sea posible',
     settingsPasswordManager: 'Gestor de contraseñas',
     settingsPasswordManagerDesc: 'Abrir configuración de contraseñas',
-    
+
     settingsSearchDesc: 'Motor de búsqueda y barra de direcciones',
     settingsSearchEngine: 'Motor de búsqueda predeterminado',
     settingsSearchEngineDesc: 'Elegir motor para consultas desde barra de direcciones',
     settingsSearchSuggestions: 'Sugerencias de búsqueda',
     settingsSearchSuggestionsDesc: 'Mostrar sugerencias mientras escribes',
-    
+
     settingsSecurityDesc: 'Seguridad y protección',
     settingsSafeBrowsing: 'Navegación segura',
     settingsSafeBrowsingDesc: 'Protección contra sitios peligrosos',
@@ -1553,7 +1553,7 @@ const EXTENDED_STRINGS = {
     settingsPhishingProtectionDesc: 'Advertir sobre sitios sospechosos',
     settingsHTTPSOnly: 'Modo solo HTTPS',
     settingsHTTPSOnlyDesc: 'Siempre intentar conexión segura',
-    
+
     settingsPrivacyDesc: 'Privacidad y datos',
     settingsDoNotTrack: 'No rastrear',
     settingsDoNotTrackDesc: 'Enviar solicitud de no rastrear',
@@ -1563,7 +1563,7 @@ const EXTENDED_STRINGS = {
     settingsCookiesDesc: 'Gestionar configuración de cookies',
     settingsTrackingProtection: 'Protección contra rastreo',
     settingsTrackingProtectionDesc: 'Bloquear rastreadores',
-    
+
     settingsWebsitesDesc: 'Permisos y comportamiento de sitios',
     settingsNotifications: 'Notificaciones',
     settingsNotificationsDesc: 'Permitir a los sitios mostrar notificaciones',
@@ -1575,17 +1575,17 @@ const EXTENDED_STRINGS = {
     settingsMicrophoneDesc: 'Permitir acceso a micrófono',
     settingsPopups: 'Pop-ups',
     settingsPopupsDesc: 'Bloquear ventanas emergentes',
-    
+
     settingsProfilesDesc: 'Perfiles de usuario y sincronización',
     settingsCurrentProfile: 'Perfil actual',
     settingsAddProfile: 'Agregar nuevo perfil',
     settingsSwitchProfile: 'Cambiar perfil',
     settingsSyncProfile: 'Sincronizar perfil',
-    
+
     settingsExtensionsDesc: 'Extensiones y complementos',
     settingsManageExtensions: 'Gestionar extensiones',
     settingsExtensionStore: 'Tienda de extensiones',
-    
+
     settingsAdvancedDesc: 'Opciones avanzadas',
     settingsHardwareAccel: 'Aceleración por hardware',
     settingsHardwareAccelDesc: 'Usar aceleración por hardware cuando esté disponible',
@@ -1593,16 +1593,16 @@ const EXTENDED_STRINGS = {
     settingsExperimentalFeaturesDesc: 'Habilitar características en desarrollo',
     settingsResetSettings: 'Restablecer configuración',
     settingsResetSettingsDesc: 'Restaurar toda la configuración predeterminada',
-    
+
     settingsDeveloperDesc: 'Herramientas de desarrollador',
     settingsDevTools: 'Herramientas de desarrollador',
     settingsDevToolsDesc: 'Habilitar herramientas de desarrollador',
     settingsRemoteDebugging: 'Depuración remota',
     settingsRemoteDebuggingDesc: 'Habilitar acceso a depuración remota',
-    
+
     settingsFlagsDesc: 'Características experimentales y flags',
     settingsFlagsWarning: '⚠️ Advertencia: Estas características son inestables',
-    
+
     settingsAppearanceDesc: 'Tema y apariencia',
     settingsTheme: 'Tema',
     settingsThemeLight: 'Claro',
@@ -1610,23 +1610,355 @@ const EXTENDED_STRINGS = {
     settingsThemeAuto: 'Automático',
     settingsFontSize: 'Tamaño de fuente',
     settingsPageZoom: 'Zoom de página predeterminado',
-    
+
     settingsLanguageDesc: 'Idioma preferido',
     settingsLanguagePreferred: 'Idiomas preferidos',
     settingsLanguageAdd: 'Agregar idioma',
     settingsLanguageTranslate: 'Ofrecer traducir páginas',
-    
+
     settingsStorageDesc: 'Gestión de almacenamiento',
     settingsStorageUsed: 'Almacenamiento usado',
     settingsStorageClear: 'Borrar datos',
     settingsStorageClearCache: 'Borrar caché',
     settingsStorageClearCookies: 'Borrar cookies',
-    
+
     settingsUpdatesDesc: 'Actualizaciones del navegador',
     settingsAutoUpdate: 'Actualizaciones automáticas',
     settingsAutoUpdateDesc: 'Descargar e instalar actualizaciones automáticamente',
     settingsCheckUpdates: 'Buscar actualizaciones disponibles',
     settingsCurrentVersion: 'Versión actual',
+  },
+
+  zh: {
+    // ═══════════════════════════════════════════════════════════════
+    // 菜单栏 — 中文
+    // ═══════════════════════════════════════════════════════════════
+    menuFile: '文件',
+    menuFileNewTab: '新建标签页',
+    menuFileNewPrivate: '新建隐私窗口',
+    menuFileOpenLocation: '打开位置…',
+    menuFileCloseTab: '关闭标签页',
+    menuFilePrint: '打印…',
+    menuEdit: '编辑',
+    menuEditUndo: '撤销',
+    menuEditRedo: '重做',
+    menuEditCut: '剪切',
+    menuEditCopy: '复制',
+    menuEditPaste: '粘贴',
+    menuEditSelectAll: '全选',
+    menuEditFind: '查找',
+    menuView: '视图',
+    menuViewFullScreen: '全屏',
+    menuViewZoomIn: '放大',
+    menuViewZoomOut: '缩小',
+    menuViewActualSize: '实际大小',
+    menuViewReload: '刷新',
+    menuViewDevTools: '开发者工具',
+    menuHistory: '历史记录',
+    menuHistoryBack: '返回',
+    menuHistoryForward: '前进',
+    menuHistoryRecentPages: '最近访问的页面',
+    menuHistoryShowAll: '显示全部历史记录',
+    menuBookmarks: '书签',
+    menuBookmarksAdd: '将此页面添加到书签',
+    menuBookmarksShowAll: '显示全部书签',
+    menuWindow: '窗口',
+    menuWindowMinimize: '最小化',
+    menuWindowZoom: '缩放',
+    menuWindowNewWindow: '新建窗口',
+    menuHelp: '帮助',
+    menuHelpAbout: '关于 EtherX',
+    menuHelpUpdate: '检查更新',
+    // 设置
+    settingsTitle: '设置',
+    settingsSearch: '在设置中搜索',
+    settingsNavProfile: '个人资料',
+    settingsNavPrivacy: '隐私与安全',
+    settingsNavAdBlock: '广告拦截',
+    settingsNavPasswords: '密码',
+    settingsNavLanguage: '语言',
+    settingsNavAppearance: '外观',
+    settingsNavSync: '同步',
+    settingsNavAdvanced: '高级',
+    settingsNavUpdates: '更新',
+    settingsNavAI: 'AI代理',
+    settingsHomepageDesc: '打开新标签页时显示的页面',
+    settingsSearchEngineDesc: '默认搜索引擎',
+    settingsPrivacyDesc: '隐私和安全设置',
+    settingsDoNotTrack: '发送"请勿追踪"请求',
+    settingsBlockPopups: '阻止弹出窗口',
+    settingsBlockThirdParty: '阻止第三方Cookie',
+    settingsAdBlockDesc: '广告和追踪器拦截',
+    settingsAdBlockEnabled: '启用广告拦截',
+    settingsAdBlockLists: '过滤列表',
+    settingsPasswordsDesc: '已保存的密码',
+    settingsLanguageDesc: '首选语言',
+    settingsAppearanceDesc: '主题和外观',
+    settingsTheme: '主题',
+    settingsThemeLight: '明亮',
+    settingsThemeDark: '深色',
+    settingsThemeAuto: '自动',
+    settingsFontSize: '字体大小',
+    settingsPageZoom: '默认页面缩放',
+    settingsStorageDesc: '存储管理',
+    settingsStorageUsed: '已用存储',
+    settingsStorageClear: '清除数据',
+    settingsStorageClearCache: '清除缓存',
+    settingsStorageClearCookies: '清除Cookie',
+    settingsUpdatesDesc: '浏览器更新',
+    settingsAutoUpdate: '自动更新',
+    settingsAutoUpdateDesc: '自动下载并安装更新',
+    settingsCheckUpdates: '检查可用更新',
+    settingsCurrentVersion: '当前版本',
+  },
+
+  ja: {
+    // ═══════════════════════════════════════════════════════════════
+    // メニューバー — 日本語
+    // ═══════════════════════════════════════════════════════════════
+    menuFile: 'ファイル',
+    menuFileNewTab: '新しいタブ',
+    menuFileNewPrivate: '新しいプライベートウィンドウ',
+    menuFileOpenLocation: '場所を開く…',
+    menuFileCloseTab: 'タブを閉じる',
+    menuFilePrint: '印刷…',
+    menuEdit: '編集',
+    menuEditUndo: '元に戻す',
+    menuEditRedo: 'やり直す',
+    menuEditCut: '切り取り',
+    menuEditCopy: 'コピー',
+    menuEditPaste: '貼り付け',
+    menuEditSelectAll: 'すべて選択',
+    menuEditFind: '検索',
+    menuView: '表示',
+    menuViewFullScreen: 'フルスクリーン',
+    menuViewZoomIn: '拡大',
+    menuViewZoomOut: '縮小',
+    menuViewActualSize: '実際のサイズ',
+    menuViewReload: '更新',
+    menuViewDevTools: '開発者ツール',
+    menuHistory: '履歴',
+    menuHistoryBack: '戻る',
+    menuHistoryForward: '進む',
+    menuHistoryRecentPages: '最近のページ',
+    menuHistoryShowAll: '全履歴を表示',
+    menuBookmarks: 'ブックマーク',
+    menuBookmarksAdd: 'このページをブックマークに追加',
+    menuBookmarksShowAll: 'すべてのブックマークを表示',
+    menuWindow: 'ウィンドウ',
+    menuWindowMinimize: '最小化',
+    menuWindowZoom: 'ズーム',
+    menuWindowNewWindow: '新しいウィンドウ',
+    menuHelp: 'ヘルプ',
+    menuHelpAbout: 'EtherX について',
+    menuHelpUpdate: 'アップデートを確認',
+    // 設定
+    settingsTitle: '設定',
+    settingsSearch: '設定を検索',
+    settingsNavProfile: 'プロフィール',
+    settingsNavPrivacy: 'プライバシーとセキュリティ',
+    settingsNavAdBlock: '広告ブロック',
+    settingsNavPasswords: 'パスワード',
+    settingsNavLanguage: '言語',
+    settingsNavAppearance: '外観',
+    settingsNavSync: '同期',
+    settingsNavAdvanced: '詳細設定',
+    settingsNavUpdates: 'アップデート',
+    settingsNavAI: 'AIエージェント',
+    settingsHomepageDesc: '新しいタブを開いたときに表示するページ',
+    settingsSearchEngineDesc: 'デフォルトの検索エンジン',
+    settingsPrivacyDesc: 'プライバシーとセキュリティの設定',
+    settingsDoNotTrack: '"追跡しないでください"リクエストを送信',
+    settingsBlockPopups: 'ポップアップをブロック',
+    settingsBlockThirdParty: 'サードパーティCookieをブロック',
+    settingsAdBlockDesc: '広告とトラッカーのブロック',
+    settingsAdBlockEnabled: '広告ブロックを有効にする',
+    settingsAdBlockLists: 'フィルターリスト',
+    settingsPasswordsDesc: '保存されたパスワード',
+    settingsLanguageDesc: '優先言語',
+    settingsAppearanceDesc: 'テーマと外観',
+    settingsTheme: 'テーマ',
+    settingsThemeLight: 'ライト',
+    settingsThemeDark: 'ダーク',
+    settingsThemeAuto: '自動',
+    settingsFontSize: 'フォントサイズ',
+    settingsPageZoom: 'デフォルトのページズーム',
+    settingsStorageDesc: 'ストレージ管理',
+    settingsStorageUsed: '使用済みストレージ',
+    settingsStorageClear: 'データを消去',
+    settingsStorageClearCache: 'キャッシュを消去',
+    settingsStorageClearCookies: 'Cookieを消去',
+    settingsUpdatesDesc: 'ブラウザのアップデート',
+    settingsAutoUpdate: '自動アップデート',
+    settingsAutoUpdateDesc: 'アップデートを自動でダウンロードしてインストール',
+    settingsCheckUpdates: 'アップデートを確認',
+    settingsCurrentVersion: '現在のバージョン',
+  },
+
+  ko: {
+    // ═══════════════════════════════════════════════════════════════
+    // 메뉴 바 — 한국어
+    // ═══════════════════════════════════════════════════════════════
+    menuFile: '파일',
+    menuFileNewTab: '새 탭',
+    menuFileNewPrivate: '새 시크릿 창',
+    menuFileOpenLocation: '위치 열기…',
+    menuFileCloseTab: '탭 닫기',
+    menuFilePrint: '인쇄…',
+    menuEdit: '편집',
+    menuEditUndo: '실행 취소',
+    menuEditRedo: '다시 실행',
+    menuEditCut: '잘라내기',
+    menuEditCopy: '복사',
+    menuEditPaste: '붙여넣기',
+    menuEditSelectAll: '모두 선택',
+    menuEditFind: '찾기',
+    menuView: '보기',
+    menuViewFullScreen: '전체 화면',
+    menuViewZoomIn: '확대',
+    menuViewZoomOut: '축소',
+    menuViewActualSize: '실제 크기',
+    menuViewReload: '새로 고침',
+    menuViewDevTools: '개발자 도구',
+    menuHistory: '방문 기록',
+    menuHistoryBack: '뒤로',
+    menuHistoryForward: '앞으로',
+    menuHistoryRecentPages: '최근 방문 페이지',
+    menuHistoryShowAll: '전체 방문 기록 보기',
+    menuBookmarks: '북마크',
+    menuBookmarksAdd: '이 페이지를 북마크에 추가',
+    menuBookmarksShowAll: '모든 북마크 보기',
+    menuWindow: '창',
+    menuWindowMinimize: '최소화',
+    menuWindowZoom: '확대/축소',
+    menuWindowNewWindow: '새 창',
+    menuHelp: '도움말',
+    menuHelpAbout: 'EtherX 정보',
+    menuHelpUpdate: '업데이트 확인',
+    // 설정
+    settingsTitle: '설정',
+    settingsSearch: '설정 검색',
+    settingsNavProfile: '프로필',
+    settingsNavPrivacy: '개인 정보 및 보안',
+    settingsNavAdBlock: '광고 차단',
+    settingsNavPasswords: '비밀번호',
+    settingsNavLanguage: '언어',
+    settingsNavAppearance: '외관',
+    settingsNavSync: '동기화',
+    settingsNavAdvanced: '고급',
+    settingsNavUpdates: '업데이트',
+    settingsNavAI: 'AI 에이전트',
+    settingsHomepageDesc: '새 탭을 열 때 표시되는 페이지',
+    settingsSearchEngineDesc: '기본 검색 엔진',
+    settingsPrivacyDesc: '개인 정보 및 보안 설정',
+    settingsDoNotTrack: '"추적 안함" 요청 보내기',
+    settingsBlockPopups: '팝업 차단',
+    settingsBlockThirdParty: '타사 쿠키 차단',
+    settingsAdBlockDesc: '광고 및 추적기 차단',
+    settingsAdBlockEnabled: '광고 차단 활성화',
+    settingsAdBlockLists: '필터 목록',
+    settingsPasswordsDesc: '저장된 비밀번호',
+    settingsLanguageDesc: '기본 언어',
+    settingsAppearanceDesc: '테마 및 외관',
+    settingsTheme: '테마',
+    settingsThemeLight: '밝게',
+    settingsThemeDark: '어둡게',
+    settingsThemeAuto: '자동',
+    settingsFontSize: '글꼴 크기',
+    settingsPageZoom: '기본 페이지 확대/축소',
+    settingsStorageDesc: '저장소 관리',
+    settingsStorageUsed: '사용된 저장소',
+    settingsStorageClear: '데이터 지우기',
+    settingsStorageClearCache: '캐시 지우기',
+    settingsStorageClearCookies: '쿠키 지우기',
+    settingsUpdatesDesc: '브라우저 업데이트',
+    settingsAutoUpdate: '자동 업데이트',
+    settingsAutoUpdateDesc: '업데이트를 자동으로 다운로드하고 설치',
+    settingsCheckUpdates: '사용 가능한 업데이트 확인',
+    settingsCurrentVersion: '현재 버전',
+  },
+
+  ar: {
+    // ═══════════════════════════════════════════════════════════════
+    // شريط القوائم — العربية
+    // ═══════════════════════════════════════════════════════════════
+    menuFile: 'ملف',
+    menuFileNewTab: 'علامة تبويب جديدة',
+    menuFileNewPrivate: 'نافذة خاصة جديدة',
+    menuFileOpenLocation: 'فتح موقع…',
+    menuFileCloseTab: 'إغلاق علامة التبويب',
+    menuFilePrint: 'طباعة…',
+    menuEdit: 'تعديل',
+    menuEditUndo: 'تراجع',
+    menuEditRedo: 'إعادة',
+    menuEditCut: 'قص',
+    menuEditCopy: 'نسخ',
+    menuEditPaste: 'لصق',
+    menuEditSelectAll: 'تحديد الكل',
+    menuEditFind: 'بحث',
+    menuView: 'عرض',
+    menuViewFullScreen: 'ملء الشاشة',
+    menuViewZoomIn: 'تكبير',
+    menuViewZoomOut: 'تصغير',
+    menuViewActualSize: 'الحجم الفعلي',
+    menuViewReload: 'إعادة تحميل',
+    menuViewDevTools: 'أدوات المطور',
+    menuHistory: 'السجل',
+    menuHistoryBack: 'رجوع',
+    menuHistoryForward: 'للأمام',
+    menuHistoryRecentPages: 'الصفحات الأخيرة',
+    menuHistoryShowAll: 'عرض كل السجل',
+    menuBookmarks: 'المفضلة',
+    menuBookmarksAdd: 'إضافة هذه الصفحة إلى المفضلة',
+    menuBookmarksShowAll: 'عرض جميع المفضلة',
+    menuWindow: 'نافذة',
+    menuWindowMinimize: 'تصغير',
+    menuWindowZoom: 'تكبير',
+    menuWindowNewWindow: 'نافذة جديدة',
+    menuHelp: 'مساعدة',
+    menuHelpAbout: 'حول EtherX',
+    menuHelpUpdate: 'التحقق من التحديثات',
+    // الإعدادات
+    settingsTitle: 'الإعدادات',
+    settingsSearch: 'البحث في الإعدادات',
+    settingsNavProfile: 'الملف الشخصي',
+    settingsNavPrivacy: 'الخصوصية والأمان',
+    settingsNavAdBlock: 'حاجب الإعلانات',
+    settingsNavPasswords: 'كلمات المرور',
+    settingsNavLanguage: 'اللغة',
+    settingsNavAppearance: 'المظهر',
+    settingsNavSync: 'المزامنة',
+    settingsNavAdvanced: 'متقدم',
+    settingsNavUpdates: 'التحديثات',
+    settingsNavAI: 'وكيل الذكاء الاصطناعي',
+    settingsHomepageDesc: 'الصفحة التي تظهر عند فتح علامة تبويب جديدة',
+    settingsSearchEngineDesc: 'محرك البحث الافتراضي',
+    settingsPrivacyDesc: 'إعدادات الخصوصية والأمان',
+    settingsDoNotTrack: 'إرسال طلب "عدم التتبع"',
+    settingsBlockPopups: 'حظر النوافذ المنبثقة',
+    settingsBlockThirdParty: 'حظر ملفات تعريف الارتباط التابعة لجهات خارجية',
+    settingsAdBlockDesc: 'حظر الإعلانات والمتتبعين',
+    settingsAdBlockEnabled: 'تمكين حاجب الإعلانات',
+    settingsAdBlockLists: 'قوائم التصفية',
+    settingsPasswordsDesc: 'كلمات المرور المحفوظة',
+    settingsLanguageDesc: 'اللغة المفضلة',
+    settingsAppearanceDesc: 'السمة والمظهر',
+    settingsTheme: 'السمة',
+    settingsThemeLight: 'فاتح',
+    settingsThemeDark: 'داكن',
+    settingsThemeAuto: 'تلقائي',
+    settingsFontSize: 'حجم الخط',
+    settingsPageZoom: 'تكبير الصفحة الافتراضي',
+    settingsStorageDesc: 'إدارة التخزين',
+    settingsStorageUsed: 'التخزين المستخدم',
+    settingsStorageClear: 'مسح البيانات',
+    settingsStorageClearCache: 'مسح ذاكرة التخزين المؤقت',
+    settingsStorageClearCookies: 'مسح ملفات تعريف الارتباط',
+    settingsUpdatesDesc: 'تحديثات المتصفح',
+    settingsAutoUpdate: 'التحديث التلقائي',
+    settingsAutoUpdateDesc: 'تنزيل التحديثات وتثبيتها تلقائياً',
+    settingsCheckUpdates: 'البحث عن التحديثات المتاحة',
+    settingsCurrentVersion: 'الإصدار الحالي',
   },
 };
 

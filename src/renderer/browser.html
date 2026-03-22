@@ -4135,6 +4135,7 @@
     <button class="nav-btn icon-btn" id="btnWallet" title="Wallet">💰</button>
     <button class="nav-btn icon-btn" id="btnBobiAI" title="BobiAI Studio">🎬</button>
     <button class="nav-btn icon-btn" id="btnSummarizePage" title="AI Sažetak stranice">✨</button>
+    <button class="nav-btn icon-btn" id="btnAiAutoGroup" title="AI Tab Auto-Group">🗂️</button>
     <button class="nav-btn icon-btn" id="btnAiAgent" title="AI Agent">🤖</button>
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
@@ -4146,6 +4147,14 @@
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
     <button class="nav-btn icon-btn" id="btnBiometricLock" title="Zaključaj preglednik (biometrija)"
       style="opacity:0.55">🔐</button>
+  </div>
+  <!-- Phishing Warning Banner -->
+  <div class="phishing-banner" id="phishingBanner" style="display:none">
+    <span class="phishing-icon">🎣</span>
+    <span class="phishing-msg" id="phishingMsg">⚠️ Suspected phishing page detected</span>
+    <button class="phishing-btn" id="phishingBack">← Go Back</button>
+    <button class="phishing-btn phishing-btn-proceed" id="phishingProceed">Proceed anyway</button>
+    <button class="phishing-close" id="phishingClose">✕</button>
   </div>
   <div class="find-bar" id="findBar">
     <input type="text" class="find-input" id="findInput" placeholder="Find in page…">
@@ -5602,6 +5611,13 @@
       <div class="ctx-sep"></div>
       <div class="ctx-item" id="ctx-bookmark">⭐ Bookmark Page</div>
       <div class="ctx-item" id="ctx-find">🔍 Find in Page</div>
+      <div class="ctx-sep ctx-img-sep" style="display:none"></div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-google" style="display:none">🔍 Search with Google Lens
+      </div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-bing" style="display:none">🔍 Search with Bing</div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-yandex" style="display:none">🔍 Search with Yandex</div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-tineye" style="display:none">🔍 Search with TinEye</div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-copy-url" style="display:none">📋 Copy Image URL</div>
       <div class="ctx-sep"></div>
       <div class="ctx-item" id="ctx-devtools">🛠 DevTools</div>
       <div class="ctx-item danger" id="ctx-close-tab">✕ Close Tab</div>
