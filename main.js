@@ -86,7 +86,10 @@ try { AIManager = require('./src/main/ai'); } catch (e) { console.error('❌ ai 
           quad9: 'https://dns.quad9.net/dns-query{?dns}',
         };
         const tmpl = templates[provider] || templates.cloudflare;
-        app.commandLine.appendSwitch('enable-features', 'DnsOverHttps');
+        // Merge DoH with existing enable-features — appendSwitch('enable-features')
+        // twice causes the second call to OVERWRITE the first in Chromium's
+        // command-line parser, losing VaapiVideoDecoder and other features.
+        app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder,DnsOverHttps');
         app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
         app.commandLine.appendSwitch('dns-over-https-server-uri-template', tmpl);
       }
@@ -488,8 +491,9 @@ function createWindow() {
         }
         headers[key] = ua || CLEAN_UA;
       }
-      delete headers['Origin'];
-      delete headers['Referer'];
+      // Do NOT delete Origin/Referer in webview session — video CDNs (YouTube,
+      // TikTok, Twitch…) use Referer for hotlink protection; stripping it causes
+      // CDNs to reject media segment requests → infinite buffering spinner.
       callback({ requestHeaders: headers });
     }
   );
@@ -498,12 +502,18 @@ function createWindow() {
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
-      delete headers['access-control-allow-origin'];
-      delete headers['Access-Control-Allow-Origin'];
-      headers['Access-Control-Allow-Origin'] = ['*'];
-      headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
-      headers['Access-Control-Allow-Headers'] = ['*'];
-      headers['Access-Control-Allow-Credentials'] = ['true'];
+      // Only inject ACAO:* when the server sent none — preserves video CDN CORS
+      // headers (e.g. googlevideo.com, tiktok CDN) so credentialed media requests
+      // are not broken by the wildcard+credentials CORS spec violation.
+      if (!headers['access-control-allow-origin'] && !headers['Access-Control-Allow-Origin']) {
+        headers['Access-Control-Allow-Origin'] = ['*'];
+        headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+        headers['Access-Control-Allow-Headers'] = ['*'];
+      }
+      // Never combine ACAO:* with AACE:true — CORS spec violation that causes
+      // credentialed fetch() calls (used by video players) to be rejected.
+      delete headers['access-control-allow-credentials'];
+      delete headers['Access-Control-Allow-Credentials'];
       delete headers['x-frame-options'];
       delete headers['X-Frame-Options'];
       delete headers['content-security-policy'];
