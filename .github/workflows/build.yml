@@ -52,7 +52,11 @@ jobs:
             fakeroot \
             dpkg-dev \
             rpm \
-            libsecret-1-dev
+            libsecret-1-dev \
+            squashfs-tools \
+            fuse
+          sudo modprobe fuse || true
+          sudo chmod 666 /dev/fuse || true
 
       - name: 📦 Install npm packages (runs electron-rebuild via postinstall)
         run: npm ci
