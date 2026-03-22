@@ -14,7 +14,10 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const { execFile } = require('child_process');
+let AdmZip;
+try { AdmZip = require('adm-zip'); } catch (_) { /* optional — needed only for CWS extension downloads */ }
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
@@ -218,6 +221,24 @@ app.whenReady().then(async () => {
 
   setupDownloadTracking(session.defaultSession);
   try { setupDownloadTracking(session.fromPartition('persist:etherx')); } catch (_) { }
+
+  // Apply ad blocker to the webview session (persist:etherx) as well
+  try {
+    if (AdBlocker && adBlocker) {
+      const etherxSess = session.fromPartition('persist:etherx');
+      adBlocker.blocker?.enableBlockingInSession(etherxSess);
+    }
+  } catch (e) { console.warn('[AdBlocker] persist:etherx enable failed:', e.message); }
+
+  // Auto-load bundled Reveye Reverse Image Search extension
+  try {
+    const reveyePath = path.join(__dirname, 'reveye', 'src');
+    if (fs.existsSync(path.join(reveyePath, 'manifest.json'))) {
+      session.defaultSession.loadExtension(reveyePath, { allowFileAccess: true })
+        .then(ext => console.log('[Ext] Reveye loaded:', ext.name, ext.id))
+        .catch(e => console.warn('[Ext] Reveye load skipped:', e.message));
+    }
+  } catch (e) { console.warn('[Ext] Reveye setup error:', e.message); }
 
   // Setup IPC handlers ONCE before creating any window
   if (!_ipcSetupDone) {
@@ -684,6 +705,8 @@ function setupIPC() {
   ipcMain.handle('ai:readingMode', (_e, html) => ai ? ai.extractReadingContent(html) : noAi());
   ipcMain.handle('ai:groupTabs', (_e, tabs) => ai ? ai.groupTabs(tabs) : noAi());
   ipcMain.handle('ai:translate', (_e, text, targetLang) => ai ? ai.translate(text, targetLang) : noAi());
+  ipcMain.handle('ai:detectBotUA', (_e, ua) => ai ? ai.detectBotUA(ua) : { isBot: false, isIAB: false, reasons: [] });
+  ipcMain.handle('ai:lookupIpGeo', (_e, hostname) => ai ? ai.lookupIpGeo(hostname) : { ok: false, error: 'AI not available' });
 
   // ── AI: Page Summarizer (proxied through main to keep API key secure) ─────
   ipcMain.handle('ai:summarizePage', async (_e, url, htmlContent) => {
@@ -792,10 +815,52 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('extensions:downloadFromCWS', async (_e, extId) => {
+    if (!AdmZip) return { ok: false, error: 'adm-zip module not available — run: npm install adm-zip' };
+    try {
+      const extDir = path.join(app.getPath('userData'), 'extensions');
+      if (!fs.existsSync(extDir)) fs.mkdirSync(extDir, { recursive: true });
+      const crxFile = path.join(extDir, `${extId}.crx`);
+      const extractDir = path.join(extDir, extId);
+      if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
+      const downloadUrl = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=114.0.5735.90&acceptformat=crx2,crx3&x=id%3D${extId}%26uc`;
+      await new Promise((resolve, reject) => {
+        function doDownload(url, dest) {
+          https.get(url, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302) return doDownload(res.headers.location, dest);
+            if (res.statusCode !== 200) return reject(new Error(`CWS responded with HTTP ${res.statusCode}`));
+            const file = fs.createWriteStream(dest);
+            res.pipe(file);
+            file.on('finish', () => file.close(resolve));
+            file.on('error', (err) => { fs.unlink(dest, () => { }); reject(err); });
+          }).on('error', reject);
+        }
+        doDownload(downloadUrl, crxFile);
+      });
+      const buffer = fs.readFileSync(crxFile);
+      let zipStart = -1;
+      for (let i = 0; i < buffer.length - 4; i++) {
+        if (buffer[i] === 0x50 && buffer[i + 1] === 0x4B && buffer[i + 2] === 0x03 && buffer[i + 3] === 0x04) { zipStart = i; break; }
+      }
+      if (zipStart === -1) throw new Error('Could not find ZIP header in CRX file.');
+      const zipPath = path.join(extDir, `${extId}.zip`);
+      fs.writeFileSync(zipPath, buffer.slice(zipStart));
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(extractDir, true);
+      fs.unlinkSync(crxFile);
+      fs.unlinkSync(zipPath);
+      const ext = await session.defaultSession.loadExtension(extractDir, { allowFileAccess: true });
+      return { ok: true, id: ext.id, name: ext.name, version: ext.version, path: extractDir };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // ── App info ────────────────────────────────────────────────
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getPlatform', () => process.platform);
   ipcMain.handle('app:getUserDataPath', () => app.getPath('userData'));
+  ipcMain.handle('app:getAppPath', () => app.getAppPath());
   ipcMain.handle('app:listWindows', (event) => {
     const currentWindow = BrowserWindow.fromWebContents(event.sender);
     const windows = BrowserWindow.getAllWindows().map((win, index) => ({

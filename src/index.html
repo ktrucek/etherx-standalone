@@ -1521,6 +1521,7 @@
       opacity: 0;
       pointer-events: none;
       z-index: -1;
+      background: #0d0d1a;
     }
 
     webview.browse-frame.active {
@@ -1540,6 +1541,7 @@
       pointer-events: none;
       z-index: -1;
       display: none;
+      background: #0d0d1a;
     }
 
     webview.tab-webview.active {
@@ -5646,6 +5648,7 @@
     <button class="nav-btn icon-btn" id="btnBobiAI" title="BobiAI Studio">🎬</button>
     <button class="nav-btn icon-btn" id="btnSummarizePage" title="Sažetak stranice (BobiAI)">✨</button>
     <button class="nav-btn icon-btn" id="btnAiAgent" title="AI Agent">🤖</button>
+    <button class="nav-btn icon-btn" id="btnAiInspect" title="AI Page Inspector">🔬</button>
     <button class="nav-btn icon-btn" id="btnKripto" title="Kriptoentuzijasti.io">📰</button>
     <button class="nav-btn icon-btn" id="btnEtherX" title="EtherX.io Social">👥</button>
     <button class="nav-btn icon-btn" id="btnExtensions" title="Extensions">🧩</button>
@@ -7290,6 +7293,14 @@
                 </div>
                 <div class="toggle on" data-setting="showBtnBotDetection" data-icon="btnBotDetection"></div>
               </div>
+              <div class="s-row" draggable="true" data-icon-key="showBtnAiInspect">
+                <div class="s-row-left">
+                  <span class="tir-drag" title="Pomakni">⠏</span>
+                  <button class="s-icon-edit-btn" data-icon-target="btnAiInspect" title="Promijeni ikonu">🔬</button>
+                  <div class="s-row-label">AI Page Inspector</div>
+                </div>
+                <div class="toggle on" data-setting="showBtnAiInspect" data-icon="btnAiInspect"></div>
+              </div>
             </div>
             <div class="s-group" style="margin-top:16px">
               <div class="s-row">
@@ -7964,7 +7975,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.96</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.97</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8313,7 +8324,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.96</span></div>
+                id="helpVersionNum2">2.4.97</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8532,6 +8543,72 @@
           <input type="text" class="ai-chat-input" id="aiChatInput" placeholder="Pitaj AI agenta..." autocomplete="off">
           <button class="ai-chat-send" id="aiChatSend">↑</button>
         </div>
+      </div>
+    </div>
+    <!-- AI Page Inspector Panel -->
+    <div class="panel" id="aiInspectPanel" style="width:400px">
+      <div class="panel-header" style="padding:8px 12px;background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)">
+        <span class="panel-title">🔬 AI Page Inspector</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button id="aiInspectRun" title="Analyze current page"
+            style="background:rgba(255,255,255,.25);border:none;color:#fff;cursor:pointer;font-size:12px;padding:4px 10px;border-radius:4px;font-weight:600">▶
+            Analiziraj</button>
+          <button class="panel-close" id="closeAiInspectPanel">×</button>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
+        <!-- Security score -->
+        <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:12px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">🛡️ Sigurnost stranice</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div id="aiInspectScore" style="font-size:42px;font-weight:700;color:#4ade80;line-height:1">–</div>
+            <div style="flex:1">
+              <div style="height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
+                <div id="aiInspectScoreBar"
+                  style="height:100%;width:0%;background:linear-gradient(90deg,#4ade80,#22c55e);transition:width .4s ease,background .4s ease;border-radius:3px">
+                </div>
+              </div>
+              <div id="aiInspectVerdict" style="font-size:12px;color:var(--text2);margin-top:4px">Klikni "Analiziraj" za
+                pokretanje</div>
+            </div>
+          </div>
+          <div id="aiInspectReasons" style="margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
+        </div>
+        <!-- Page info -->
+        <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:12px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">📄 Informacije o stranici
+          </div>
+          <div id="aiInspectPageInfo" style="font-size:12px;color:var(--text2);line-height:1.6">–</div>
+        </div>
+        <!-- Translate -->
+        <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:12px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">🌍 Prijevod stranice</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="aiInspectLang"
+              style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:4px 8px;font-size:12px">
+              <option value="hr">Hrvatski</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="fr">Français</option>
+              <option value="es">Español</option>
+              <option value="it">Italiano</option>
+              <option value="pt">Português</option>
+              <option value="ru">Русский</option>
+              <option value="zh">中文</option>
+              <option value="ja">日本語</option>
+            </select>
+            <button id="aiInspectTranslate"
+              style="background:var(--accent);border:none;color:#fff;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;white-space:nowrap">Prevedi</button>
+          </div>
+          <div id="aiInspectTranslateResult"
+            style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.5;max-height:120px;overflow-y:auto">
+          </div>
+        </div>
+        <!-- Reading mode -->
+        <button id="aiInspectReaderBtn"
+          style="background:rgba(255,255,255,.07);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 12px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px;justify-content:center">
+          📖 Otvori Reader Mode
+        </button>
       </div>
     </div>
     <!-- Kriptoentuzijasti Panel -->
@@ -9804,7 +9881,7 @@
       el.className = 'tab' + (tab.pinned ? ' pinned' : '') + (tab.muted ? ' muted' : '');
       el.dataset.tabId = tab.id;
       el.draggable = true;
-      const favHtml = tab.faviconUrl ? `<img src="${tab.faviconUrl}" onerror="this.outerHTML='<span>🌐</span>'">` : `<span>${tab.favicon || '🌐'}</span>`;
+      const favHtml = tab.faviconUrl ? `<img src="${tab.faviconUrl}" onerror="if(this.parentNode)this.outerHTML='<span>🌐</span>'">` : `<span>${tab.favicon || '🌐'}</span>`;
       el.innerHTML = `<div class="tab-favicon">${favHtml}</div><div class="tab-title">${tab.title}</div><div class="tab-close">×</div>`;
 
       // Click handler
@@ -10042,7 +10119,7 @@
       el.querySelector('.tab-title').textContent = tab.title;
       const fav = el.querySelector('.tab-favicon');
       if (!fav) return;
-      if (tab.faviconUrl) { fav.innerHTML = `<img src="${tab.faviconUrl}" onerror="this.outerHTML='<span>🌐</span>'">`; }
+      if (tab.faviconUrl) { fav.innerHTML = `<img src="${tab.faviconUrl}" onerror="if(this.parentNode)this.outerHTML='<span>🌐</span>'">`; }
       else { fav.innerHTML = `<span>${tab.favicon || '🌐'}</span>`; }
     }
     const getFrame = () => document.getElementById('browseFrame');
@@ -10556,14 +10633,14 @@
       showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
     });
     function closeAllPanels() {
-      ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel'].forEach(id => document.getElementById(id)?.classList.remove('open'));
+      ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'aiInspectPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel'].forEach(id => document.getElementById(id)?.classList.remove('open'));
       document.getElementById('settingsBackdrop')?.classList.remove('open');
       const side = document.getElementById('elemSidebar'); if (side) side.style.display = 'none';
     }
     function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
     // Close panels when clicking outside (on the content/browser area)
     document.addEventListener('mousedown', e => {
-      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel']
+      const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'aiInspectPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
       if (!anyOpen) return;
       // If the click is inside any open panel or on a toolbar button, do not close
@@ -10757,6 +10834,7 @@
       document.getElementById('aiSummaryCard').classList.remove('open');
     });
     document.getElementById('btnAiAgent').addEventListener('click', () => togglePanel('aiAgentPanel'));
+    document.getElementById('btnAiInspect')?.addEventListener('click', () => togglePanel('aiInspectPanel'));
     document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
     document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
     document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
@@ -10779,7 +10857,7 @@
         }
       }, 15000);
     });
-    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closeBotDetectionPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+    ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeAiInspectPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closeBotDetectionPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
     function renderBookmarksPanel() {
       const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
       if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -11260,6 +11338,68 @@
     document.getElementById('btnDevtools').addEventListener('click', toggleDevtools);
     document.getElementById('btnBotDetection').addEventListener('click', () => togglePanel('botDetectionPanel'));
     document.getElementById('botDetectRunAll').addEventListener('click', runBotDetectionTests);
+
+    // ── AI Page Inspector ──────────────────────────────────────────────────────
+    document.getElementById('aiInspectRun')?.addEventListener('click', async () => {
+      const tab = getActiveTab();
+      if (!tab?.url || !tab.url.startsWith('http')) { showToast('❌ Nema aktivne HTTP/S stranice za analizu'); return; }
+      const verdictEl = document.getElementById('aiInspectVerdict');
+      const scoreEl = document.getElementById('aiInspectScore');
+      const barEl = document.getElementById('aiInspectScoreBar');
+      const reasonsEl = document.getElementById('aiInspectReasons');
+      const pageInfoEl = document.getElementById('aiInspectPageInfo');
+      verdictEl.textContent = '⏳ Analiziranje...';
+      scoreEl.textContent = '…';
+      barEl.style.width = '0%';
+      reasonsEl.innerHTML = '';
+      pageInfoEl.textContent = '⏳ Učitavanje...';
+      try {
+        const result = await window.etherx?.ai?.checkPhishing?.(tab.url, tab.title || '');
+        if (result) {
+          const score = Math.round(result.score ?? result.riskScore ?? 0);
+          scoreEl.textContent = score;
+          const color = score < 40 ? '#4ade80' : score < 70 ? '#facc15' : '#f87171';
+          const grad = score < 40 ? 'linear-gradient(90deg,#4ade80,#22c55e)' : score < 70 ? 'linear-gradient(90deg,#facc15,#eab308)' : 'linear-gradient(90deg,#f87171,#ef4444)';
+          scoreEl.style.color = color;
+          barEl.style.width = score + '%';
+          barEl.style.background = grad;
+          verdictEl.textContent = score < 40 ? '✅ Stranica izgleda sigurna' : score < 70 ? '⚠️ Sumnjiva aktivnost otkrivena' : '🚨 Visok rizik — mogući phishing!';
+          reasonsEl.innerHTML = (result.reasons || result.flags || []).map(r => `<div style="font-size:11px;color:var(--text3);padding:2px 0">• ${escHtml(String(r))}</div>`).join('');
+        } else {
+          verdictEl.textContent = '⚠️ AI analiza nije dostupna';
+        }
+      } catch (e) {
+        verdictEl.textContent = '❌ Greška: ' + escHtml(e.message);
+      }
+      try {
+        const url = new URL(tab.url);
+        pageInfoEl.innerHTML = `<b>URL:</b> ${escHtml(tab.url)}<br><b>Domena:</b> ${escHtml(url.hostname)}<br><b>Protokol:</b> ${escHtml(url.protocol)}<br><b>Naslov:</b> ${escHtml(tab.title || '–')}`;
+      } catch (_) {
+        pageInfoEl.textContent = tab.url;
+      }
+    });
+
+    document.getElementById('aiInspectTranslate')?.addEventListener('click', async () => {
+      const tab = getActiveTab();
+      if (!tab?.url) { showToast('❌ Nema aktivne stranice'); return; }
+      const lang = document.getElementById('aiInspectLang')?.value || 'hr';
+      const resultEl = document.getElementById('aiInspectTranslateResult');
+      resultEl.textContent = '⏳ Prevođenje...';
+      try {
+        const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
+        const text = wv ? await wv.executeJavaScript('document.body?.innerText?.slice(0,2000)||""') : (tab.title || '');
+        const result = await window.etherx?.ai?.translate?.(text, lang);
+        resultEl.textContent = result?.translation ?? result?.text ?? result ?? '❌ AI prevoditelj nije konfiguriran';
+      } catch (e) {
+        resultEl.textContent = '❌ ' + escHtml(e.message);
+      }
+    });
+
+    document.getElementById('aiInspectReaderBtn')?.addEventListener('click', () => {
+      closeAllPanels();
+      document.getElementById('btnReader')?.click();
+    });
+    // ──────────────────────────────────────────────────────────────────────────
     document.getElementById('btnTabOverview')?.addEventListener('click', toggleTabOverview);
     document.getElementById('closeDevtools').addEventListener('click', () => { document.getElementById('devtools').classList.remove('open'); STATE.devtoolsOpen = false; });
     function toggleDevtools() {
@@ -12959,13 +13099,27 @@
     // Seed default extensions on first run
     (function seedDefaultExtensions() {
       const defaults = [
-
         { id: 'pejdijmoenmkgeppbflobdenhhabjlaj', name: 'iCloud Passwords', icon: '🔑', desc: 'Open Apple/iCloud passwords support externally or via Apple Passwords', enabled: true, source: 'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj', installMode: 'cws-shortcut', installedAt: Date.now() }
       ];
       const existing = EXT_DB.get();
       let changed = false;
       defaults.forEach(def => { if (!existing.find(e => e.id === def.id)) { existing.push(def); changed = true; } });
       if (changed) EXT_DB.save(existing);
+    })();
+
+    // Seed Reveye bundled extension (unpacked — auto-loaded from app folder at startup)
+    (async function seedReveyeExtension() {
+      if (!window.etherx?.app?.getAppPath) return;
+      try {
+        const appPath = await window.etherx.app.getAppPath();
+        const reveyePath = appPath + '/reveye/src';
+        const existing = EXT_DB.get();
+        if (!existing.find(e => e.path === reveyePath || e.name === 'RevEye Reverse Image Search')) {
+          existing.push({ id: 'reveye-builtin', name: 'RevEye Reverse Image Search', icon: '🔍', desc: 'Reverse image search — Google, Bing, Yandex, TinEye (built-in extension)', enabled: true, installMode: 'unpacked', path: reveyePath, source: 'builtin', installedAt: Date.now() });
+          EXT_DB.save(existing);
+          renderExtList && renderExtList();
+        }
+      } catch (e) { console.warn('[Ext] Reveye seed failed:', e); }
     })();
 
     function renderExtList() {
@@ -15647,6 +15801,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       { id: 'btnSettings', key: 'showBtnSettings', icon: '⚙️', name: 'Settings' },
       { id: 'btnDevtools', key: 'showBtnDevtools', icon: '🛠️', name: 'DevTools' },
       { id: 'btnBotDetection', key: 'showBtnBotDetection', icon: '🔍', name: 'Bot Detection' },
+      { id: 'btnAiInspect', key: 'showBtnAiInspect', icon: '🔬', name: 'AI Page Inspector' },
     ];
 
     function openCustomToolbar() {
@@ -15994,7 +16149,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const card = document.createElement('div');
         card.className = 'wsw-tab-card' + (tab.id === STATE.activeTabId ? ' active-tab' : '');
         const favHtml = tab.faviconUrl
-          ? `<img src="${tab.faviconUrl}" style="width:20px;height:20px;border-radius:3px" onerror="this.outerHTML='<span style=font-size:18px>${tab.favicon || '🌐'}</span>'">`
+          ? `<img src="${tab.faviconUrl}" style="width:20px;height:20px;border-radius:3px" onerror="if(this.parentNode)this.outerHTML='<span style=font-size:18px>${tab.favicon || '🌐'}</span>'">`
           : `<span class="wsw-tab-favicon">${tab.favicon || '🌐'}</span>`;
         card.innerHTML = `
           ${favHtml}

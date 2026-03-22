@@ -118,6 +118,8 @@ contextBridge.exposeInMainWorld('etherx', {
     summarizePage: (url, html) => ipcRenderer.invoke('ai:summarizePage', url, html),
     getCachedSummaries: (limit) => ipcRenderer.invoke('db:getAiCache', limit),
     clearAiCache: () => ipcRenderer.invoke('db:clearAiCache'),
+    detectBotUA: (ua) => ipcRenderer.invoke('ai:detectBotUA', ua),
+    lookupIpGeo: (hostname) => ipcRenderer.invoke('ai:lookupIpGeo', hostname),
   },
 
   // ── Ad Blocker ────────────────────────────────────────────────────────────────
@@ -196,6 +198,7 @@ contextBridge.exposeInMainWorld('etherx', {
   extensions: {
     chooseFolder: () => ipcRenderer.invoke('extensions:chooseFolder'),
     loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),
+    downloadFromCWS: (extId) => ipcRenderer.invoke('extensions:downloadFromCWS', extId),
   },
 
   // ── Shell (file/folder operations) ───────────────────────────────────────────
@@ -207,6 +210,7 @@ contextBridge.exposeInMainWorld('etherx', {
   // ── App ───────────────────────────────────────────────────────────────────────
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    getAppPath: () => ipcRenderer.invoke('app:getAppPath'),
     getDownloadsPath: () => ipcRenderer.invoke('app:getDownloadsPath'),
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
     getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
