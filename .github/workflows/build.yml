@@ -227,8 +227,8 @@ jobs:
         env:
           CXXFLAGS: -std=c++20
 
-      - name: 🔨 Build macOS arm64 DMG
-        run: npx electron-builder --mac dmg zip --arm64 --publish never
+      - name: 🔨 Build macOS arm64 ZIP
+        run: npx electron-builder --mac zip --arm64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -239,7 +239,6 @@ jobs:
           name: macos-arm64-builds
           retention-days: 7
           path: |
-            dist/*.dmg
             dist/*.zip
 
   # ─── GitHub Release ───────────────────────────────────────────────────────────
