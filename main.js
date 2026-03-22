@@ -370,6 +370,39 @@ function createWindow() {
   const networkLog = [];
   const MAX_NETWORK_LOG = 500;
 
+  function isVideoOrMediaRequest(details) {
+    const url = String(details?.url || '');
+    const acceptHeader = Object.entries(details?.requestHeaders || {}).find(([k]) => k.toLowerCase() === 'accept')?.[1] || '';
+    const accept = Array.isArray(acceptHeader) ? acceptHeader.join(',') : String(acceptHeader || '');
+    const mediaExt = /\.(m3u8|mpd|mp4|webm|m4s|ts|aac|mp3|mkv)(\?|$)/i.test(url);
+    const mediaAccept = /(video\/|audio\/|application\/dash\+xml|application\/vnd\.apple\.mpegurl)/i.test(accept);
+    return mediaExt || mediaAccept;
+  }
+
+  function isKnownVideoHost(rawUrl) {
+    try {
+      const host = new URL(rawUrl).hostname.toLowerCase();
+      return [
+        'tiktok.com',
+        'tiktokcdn.com',
+        'tiktokv.com',
+        'byteoversea.com',
+        'ibytedtos.com',
+        'muscdn.com',
+        'googlevideo.com',
+        'youtube.com',
+        'youtubei.googleapis.com',
+        'ytimg.com',
+        'twimg.com',
+        'ttlivecdn.com',
+        'akamaized.net',
+        'cloudfront.net'
+      ].some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+    } catch (_) {
+      return false;
+    }
+  }
+
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
     (details, callback) => {
@@ -416,6 +449,13 @@ function createWindow() {
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
+
+      // Keep video/CDN responses untouched. Rewriting CORS/CSP headers globally
+      // can break MSE/segment playback on TikTok/YouTube and similar platforms.
+      if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
 
       // Remove CORS restrictions — only inject ACAO:* when absent (same fix as
       // the webview session: preserve video CDN CORS headers, never combine
@@ -513,6 +553,13 @@ function createWindow() {
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
+
+      // Keep video/CDN responses untouched for webviews as well.
+      if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
+
       // Only inject ACAO:* when the server sent none — preserves video CDN CORS
       // headers (e.g. googlevideo.com, tiktok CDN) so credentialed media requests
       // are not broken by the wildcard+credentials CORS spec violation.

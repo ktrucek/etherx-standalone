@@ -49,3 +49,62 @@ try {
         });
     }
 } catch (_) { }
+
+// ── Keep JS fingerprint consistent with injected Windows Chrome UA ───────────
+// The app sets a Windows Chrome UA for webviews. If platform/vendor/userAgentData
+// still expose Linux/Electron defaults, anti-bot checks can flag the session.
+try {
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+        configurable: true,
+    });
+} catch (_) { }
+
+try {
+    Object.defineProperty(navigator, 'vendor', {
+        get: () => 'Google Inc.',
+        configurable: true,
+    });
+} catch (_) { }
+
+try {
+    if (!navigator.userAgentData) {
+        const uaData = {
+            brands: [
+                { brand: 'Chromium', version: '135' },
+                { brand: 'Google Chrome', version: '135' },
+                { brand: 'Not.A/Brand', version: '24' }
+            ],
+            mobile: false,
+            platform: 'Windows',
+            getHighEntropyValues: async (hints = []) => {
+                const values = {
+                    architecture: 'x86',
+                    bitness: '64',
+                    formFactors: ['Desktop'],
+                    fullVersionList: [
+                        { brand: 'Chromium', version: '135.0.0.0' },
+                        { brand: 'Google Chrome', version: '135.0.0.0' },
+                        { brand: 'Not.A/Brand', version: '24.0.0.0' }
+                    ],
+                    model: '',
+                    platform: 'Windows',
+                    platformVersion: '10.0.0',
+                    uaFullVersion: '135.0.0.0',
+                    wow64: false
+                };
+                const out = {};
+                for (const key of hints) {
+                    if (Object.prototype.hasOwnProperty.call(values, key)) {
+                        out[key] = values[key];
+                    }
+                }
+                return out;
+            }
+        };
+        Object.defineProperty(navigator, 'userAgentData', {
+            get: () => uaData,
+            configurable: true,
+        });
+    }
+} catch (_) { }
