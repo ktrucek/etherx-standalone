@@ -248,6 +248,14 @@ app.whenReady().then(async () => {
     etherxSess.setPermissionCheckHandler((_webContents, permission) => {
       return ['media', 'fullscreen', 'pointerLock', 'clipboard-read', 'clipboard-sanitized-write'].includes(permission);
     });
+    // Inject anti-bot-detection preload into every webview (persist:etherx session)
+    // BEFORE any page JS runs. Spoofs navigator.webdriver, window.chrome, plugins,
+    // etc. — required for TikTok, Instagram, Twitter/X and similar sites.
+    const wvPreloadPath = path.join(__dirname, 'src', 'webview-preload.js');
+    if (fs.existsSync(wvPreloadPath)) {
+      etherxSess.setPreloads([wvPreloadPath]);
+      console.log('[Webview] Anti-bot preload registered:', wvPreloadPath);
+    }
   } catch (e) { console.warn('[Permissions] persist:etherx setup failed:', e.message); }
 
   // Auto-load bundled Reveye Reverse Image Search extension
@@ -385,8 +393,8 @@ function createWindow() {
 
       // ── CORS Bypass: Remove Origin/Referer restrictions ──────────────────────
       // This allows cross-origin requests without proxy
-      delete headers['Origin'];
-      delete headers['Referer'];
+      // Do NOT delete Origin/Referer from main session either — same reason as
+      // the webview session: CDNs use these for hotlink protection.
 
       // Log network request
       networkLog.push({
@@ -409,13 +417,16 @@ function createWindow() {
     (details, callback) => {
       const headers = { ...details.responseHeaders };
 
-      // Remove CORS restrictions
-      delete headers['access-control-allow-origin'];
-      delete headers['Access-Control-Allow-Origin'];
-      headers['Access-Control-Allow-Origin'] = ['*'];
-      headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
-      headers['Access-Control-Allow-Headers'] = ['*'];
-      headers['Access-Control-Allow-Credentials'] = ['true'];
+      // Remove CORS restrictions — only inject ACAO:* when absent (same fix as
+      // the webview session: preserve video CDN CORS headers, never combine
+      // ACAO:* with Access-Control-Allow-Credentials which violates CORS spec).
+      if (!headers['access-control-allow-origin'] && !headers['Access-Control-Allow-Origin']) {
+        headers['Access-Control-Allow-Origin'] = ['*'];
+        headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
+        headers['Access-Control-Allow-Headers'] = ['*'];
+      }
+      delete headers['access-control-allow-credentials'];
+      delete headers['Access-Control-Allow-Credentials'];
 
       // Remove frame restrictions (allows embedding)
       delete headers['x-frame-options'];
