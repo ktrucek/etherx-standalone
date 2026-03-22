@@ -1340,7 +1340,7 @@
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: #fff;
+      background: #0d0d1a;
       display: flex;
       flex-direction: column;
       min-height: 0
@@ -7975,7 +7975,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.97</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.98</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8324,7 +8324,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.97</span></div>
+                id="helpVersionNum2">2.4.98</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9672,11 +9672,25 @@
             srcURL: e.params?.srcURL || ''
           });
         });
+
+        // Grant media / fullscreen / clipboard permissions to embedded pages
+        wv.addEventListener('permissionrequest', (e) => {
+          const allowed = ['media', 'fullscreen', 'pointerLock', 'geolocation', 'notifications', 'clipboard-read', 'midiSysex'];
+          if (allowed.includes(e.permission)) {
+            e.request.allow();
+          } else {
+            e.request.deny();
+          }
+        });
       };
 
       document.addEventListener('DOMContentLoaded', function () {
+        // By the time DOMContentLoaded fires, createTab(1) has already renamed
+        // browseFrame → browseFrame_1 and called setupWebview. This handler is
+        // only needed if the browser starts fresh without any saved session tabs
+        // (edge case: browseFrame still exists with original id).
         const wv = origGetElementById.call(document, 'browseFrame');
-        if (wv) {
+        if (wv && !wv.dataset.tabId) {
           wv.dataset.tabId = "1";
           window.setupWebview(wv);
         }
@@ -9847,6 +9861,7 @@
           if (origWv) {
             origWv.id = 'browseFrame_1';
             origWv.dataset.tabId = "1";
+            if (window.setupWebview) window.setupWebview(origWv);
           }
         } else {
           const parent = origGetElementById.call(document, 'browseFrame_1')?.parentNode || origGetElementById.call(document, 'browseFrameWeb')?.parentNode || document.body;

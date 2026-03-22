@@ -43,6 +43,11 @@ if (process.platform !== 'darwin') {
 // Prevent GPU sandbox from crashing the renderer (fixes launch-failed / exit 1003)
 app.commandLine.appendSwitch('disable-gpu-sandbox');
 
+// Allow video autoplay without user gesture (required for YouTube, TikTok, Twitch, etc.)
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// Force enable H.264/AAC codec support for media playback in webviews
+app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder');
+
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
 app.commandLine.appendSwitch(
@@ -230,6 +235,18 @@ app.whenReady().then(async () => {
     }
   } catch (e) { console.warn('[AdBlocker] persist:etherx enable failed:', e.message); }
 
+  // Allow media / fullscreen / clipboard permissions in webviews (required for YouTube, TikTok, etc.)
+  try {
+    const etherxSess = session.fromPartition('persist:etherx');
+    etherxSess.setPermissionRequestHandler((_webContents, permission, callback) => {
+      const allowed = ['media', 'fullscreen', 'pointerLock', 'openExternal', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'geolocation', 'midi', 'midiSysex'].includes(permission);
+      callback(allowed);
+    });
+    etherxSess.setPermissionCheckHandler((_webContents, permission) => {
+      return ['media', 'fullscreen', 'pointerLock', 'clipboard-read', 'clipboard-sanitized-write'].includes(permission);
+    });
+  } catch (e) { console.warn('[Permissions] persist:etherx setup failed:', e.message); }
+
   // Auto-load bundled Reveye Reverse Image Search extension
   try {
     const reveyePath = path.join(__dirname, 'reveye', 'src');
@@ -326,6 +343,11 @@ function createWindow() {
   mainWindow.on('move', saveBounds);
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // Set dark background on all webviews before content loads (prevents white flash)
+  mainWindow.webContents.on('did-attach-webview', (_event, wvContents) => {
+    try { wvContents.setBackgroundColor('#0d0d1a'); } catch (_) { }
+  });
 
   // Strip Electron/x.x and EtherX/x.x tokens from every outgoing request.
   // Google accounts.google.com detects these tokens as "embedded webview" and
