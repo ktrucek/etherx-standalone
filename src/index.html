@@ -5989,6 +5989,7 @@
           <button class="sit-btn" data-stab="appearance"><span class="sit-icon">🎨</span>Izgled</button>
           <button class="sit-btn" data-stab="language"><span class="sit-icon">🌍</span>Jezik</button>
           <button class="sit-btn" data-stab="storage"><span class="sit-icon">💾</span>Pohrana</button>
+          <button class="sit-btn" data-stab="downloads"><span class="sit-icon">📥</span>Preuzimanja</button>
           <button class="sit-btn" data-stab="help"><span class="sit-icon">❓</span>Pomoć</button>
           <button class="sit-btn" data-stab="ai"><span class="sit-icon">🤖</span>AI</button>
         </div>
@@ -8199,6 +8200,54 @@
         </div>
       </div>
 
+      <!-- ── Downloads ─────────────────────────────────────────── -->
+      <div class="s-tab-pane" id="stab-downloads">
+        <div class="s-group">
+          <div class="s-group-title">Linkovi za preuzimanje</div>
+          <div class="s-row-desc" style="padding:4px 0 12px;font-size:12px;color:var(--text3)">Unesite direktne URL-ove
+            za preuzimanje po platformi. Koriste se u Pomoć → Verzije preglednika.</div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Linux</div>
+            </div>
+            <input type="text" class="s-input" id="dlLinux" placeholder="https://…" style="width:260px">
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Windows</div>
+            </div>
+            <input type="text" class="s-input" id="dlWindows" placeholder="https://…" style="width:260px">
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">macOS Intel</div>
+            </div>
+            <input type="text" class="s-input" id="dlMacIntel" placeholder="https://…" style="width:260px">
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">macOS ARM</div>
+            </div>
+            <input type="text" class="s-input" id="dlMacArm" placeholder="https://…" style="width:260px">
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">Android</div>
+            </div>
+            <input type="text" class="s-input" id="dlAndroid" placeholder="https://…" style="width:260px">
+          </div>
+          <div class="s-row">
+            <div class="s-row-left">
+              <div class="s-row-label">iOS</div>
+            </div>
+            <input type="text" class="s-input" id="dlIOS" placeholder="https://…" style="width:260px">
+          </div>
+          <div class="s-row" style="justify-content:flex-end">
+            <button class="s-btn" id="saveDownloadLinks">💾 Spremi linkove</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── History ─────────────────────────────────────────── -->
       <div class="s-tab-pane" id="stab-history">
         <div class="s-group">
@@ -9045,6 +9094,13 @@
       <div id="ctxWindowList" style="display:none"></div>
       <div class="ctx-sep"></div>
       <div class="ctx-item" id="ctx-save-page">💾 Save Page As…</div>
+      <div class="ctx-sep ctx-img-sep" style="display:none"></div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-google" style="display:none">🔍 Search image (Google Lens)
+      </div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-bing" style="display:none">🔍 Search image (Bing)</div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-yandex" style="display:none">🔍 Search image (Yandex)</div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-search-tineye" style="display:none">🔍 Search image (TinEye)</div>
+      <div class="ctx-item ctx-img-item" id="ctx-img-copy-url" style="display:none">📋 Copy Image URL</div>
       <div class="ctx-item" id="ctx-devtools">🛠 Inspect Element</div>
       <div class="ctx-item" id="ctx-move-to-window">⧉ Move Tab to New Window</div>
       <div class="ctx-item" id="ctx-split-screen">▥ Split Screen</div>
@@ -9535,7 +9591,8 @@
           showCtxMenu(e.params?.x ?? e.clientX ?? 0, e.params?.y ?? e.clientY ?? 0, e.params?.linkURL || null, {
             selectionText: e.params?.selectionText || '',
             isEditable: !!e.params?.isEditable,
-            pageURL: e.params?.pageURL || ''
+            pageURL: e.params?.pageURL || '',
+            srcURL: e.params?.srcURL || ''
           });
         });
       };
@@ -13488,6 +13545,7 @@
     const ctxMenu = document.getElementById('ctxMenu');
     const ctxWindowList = document.getElementById('ctxWindowList');
     let _ctxTargetUrl = null; // URL of right-clicked link (if any)
+    let _ctxImageUrl = null;  // URL of right-clicked image (if any)
     async function showCtxMenu(x, y, targetUrl, params = {}) {
       _ctxFocusedEl = document.activeElement; // Save focused element BEFORE menu steals focus
       _ctxTargetUrl = targetUrl || null;
@@ -13507,6 +13565,10 @@
       if (ctxCopyTextEl) ctxCopyTextEl.style.display = hasSel ? '' : 'none';
       const ctxPasteTextEl = document.getElementById('ctx-paste-text');
       if (ctxPasteTextEl) ctxPasteTextEl.style.display = _ctxIsEditable ? '' : 'none';
+      // Show/hide reverse image search items
+      _ctxImageUrl = params.srcURL || null;
+      const hasImage = !!_ctxImageUrl;
+      document.querySelectorAll('.ctx-img-item, .ctx-img-sep').forEach(el => { el.style.display = hasImage ? '' : 'none'; });
       if (ctxWindowList) {
         ctxWindowList.innerHTML = '';
         ctxWindowList.style.display = 'none';
@@ -13652,6 +13714,25 @@
     });
     document.getElementById('ctx-save-page').addEventListener('click', () => {
       const t = getActiveTab(); if (t?.url) { const a = document.createElement('a'); a.href = t.url; a.download = (t.title || 'page') + '.html'; a.click(); }
+    });
+    // ── Reverse image search (RevEye integration) ───────────────────────────
+    const _revEyeEngines = {
+      google: 'https://lens.google.com/uploadbyurl?url=%s',
+      bing: 'https://www.bing.com/images/searchbyimage?cbir=ssbi&imgurl=%s',
+      yandex: 'https://yandex.com/images/search?rpt=imageview&url=%s',
+      tineye: 'https://www.tineye.com/search/?url=%s',
+    };
+    function _revEyeSearch(engineId) {
+      if (!_ctxImageUrl) return;
+      const url = _revEyeEngines[engineId].replace('%s', encodeURIComponent(_ctxImageUrl));
+      createTab(url);
+    }
+    document.getElementById('ctx-img-search-google').addEventListener('click', () => _revEyeSearch('google'));
+    document.getElementById('ctx-img-search-bing').addEventListener('click', () => _revEyeSearch('bing'));
+    document.getElementById('ctx-img-search-yandex').addEventListener('click', () => _revEyeSearch('yandex'));
+    document.getElementById('ctx-img-search-tineye').addEventListener('click', () => _revEyeSearch('tineye'));
+    document.getElementById('ctx-img-copy-url').addEventListener('click', () => {
+      if (_ctxImageUrl) navigator.clipboard.writeText(_ctxImageUrl).then(() => showToast('📋 Image URL copied'));
     });
     document.querySelectorAll('.menu-item').forEach(item => {
       item.addEventListener('click', e => { e.stopPropagation(); const wasOpen = item.classList.contains('open'); document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')); if (!wasOpen) item.classList.add('open'); });
@@ -16386,6 +16467,42 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     document.getElementById('mobileInstallBtn')?.addEventListener('click', () => {
       window.open('https://ktrucek.github.io/etherx-standalone/src/index.html', '_blank');
       showToast('📱 Opening mobile install page...');
+    });
+
+    // ── Downloads settings tab ────────────────────────────────────────────────
+    function initDownloadsTab() {
+      const s = DB.getSettings();
+      const links = s.download_links || {};
+      ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
+        const el = document.getElementById('dl' + platform);
+        if (el) el.value = links[platform.toLowerCase()] || '';
+      });
+    }
+    document.getElementById('saveDownloadLinks')?.addEventListener('click', () => {
+      const links = {};
+      ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
+        const el = document.getElementById('dl' + platform);
+        if (el && el.value.trim()) links[platform.toLowerCase()] = el.value.trim();
+      });
+      DB.saveSetting('download_links', links);
+      showToast('💾 Linkovi za preuzimanje spremljeni');
+    });
+    document.querySelectorAll('.sit-btn[data-stab="downloads"]').forEach(btn => {
+      btn.addEventListener('click', () => setTimeout(initDownloadsTab, 50));
+    });
+    // ── Help → Browser Versions download buttons ──────────────────────────────
+    ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
+      document.getElementById('dlBtn' + platform)?.addEventListener('click', () => {
+        const s = DB.getSettings();
+        const links = s.download_links || {};
+        const url = links[platform.toLowerCase()];
+        if (!url) {
+          showToast('⚠️ Nema linka za ' + platform + '\n\nIdite na Postavke → Preuzimanja da dodate link');
+          return;
+        }
+        window.open(url, '_blank');
+        showToast('📥 Preuzimanje za ' + platform + '...');
+      });
     });
 
     // AES encryption helpers (simple example - use crypto library in production)
