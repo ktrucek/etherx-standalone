@@ -112,6 +112,50 @@ class AdBlocker {
   }
 
   getStats() { return { ...this.stats }; }
+
+  /**
+   * Static: apply malware/phishing/mining domain blocker to any Electron session.
+   * Loads assets/filters/malware.txt — safe to call on persist:etherx session.
+   * Returns a live stats object { blocked: number, domains: number }.
+   */
+  static applyMalwareFilter(sess) {
+    const malwarePath = path.join(__dirname, '../../assets/filters/malware.txt');
+    const patterns = [];
+
+    if (fs.existsSync(malwarePath)) {
+      const raw = fs.readFileSync(malwarePath, 'utf8');
+      for (const line of raw.split('\n')) {
+        const t = line.trim();
+        if (!t || t.startsWith('#')) continue;
+        if (t.startsWith('||') && t.endsWith('^')) {
+          const domain = t.slice(2, -1);
+          patterns.push(`*://${domain}/*`);
+          patterns.push(`*://*.${domain}/*`);
+        }
+      }
+    }
+
+    if (patterns.length === 0) {
+      console.warn('[MalwareBlocker] malware.txt not found or empty');
+      return { blocked: 0, domains: 0 };
+    }
+
+    const stats = { blocked: 0, domains: patterns.length / 2, enabled: true };
+
+    try {
+      sess.webRequest.onBeforeRequest({ urls: patterns }, (details, callback) => {
+        if (!stats.enabled) { callback({}); return; }
+        stats.blocked++;
+        console.log(`[MalwareBlocker] Blocked: ${details.url}`);
+        callback({ cancel: true });
+      });
+      console.log(`[MalwareBlocker] Active — ${stats.domains} domene blokirane`);
+    } catch (e) {
+      console.error('[MalwareBlocker] Failed to register handler:', e.message);
+    }
+
+    return stats;
+  }
 }
 
 module.exports = AdBlocker;

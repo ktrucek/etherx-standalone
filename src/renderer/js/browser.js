@@ -66,6 +66,10 @@ if (window.electronWebview) {
       if (tab && e.url) { tab.url = e.url; document.getElementById('urlInput').value = e.url; }
     });
     wv.addEventListener('new-window', (e) => {
+      try {
+        const { protocol } = new URL(e.url);
+        if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
+      } catch (_) { return; }
       navigateTo(e.url);
     });
   });
@@ -161,6 +165,15 @@ function createTabFrame(tabId, partition) {
     const link = e.params?.linkURL || null;
     const img = (e.params?.mediaType === 'image' && e.params?.srcURL) ? e.params.srcURL : null;
     showCtxMenu(e.params?.x || 0, e.params?.y || 0, link || null, img);
+  });
+
+  // Block deep-link / non-web protocols from opening OS dialogs (e.g. bytedance://)
+  wv.addEventListener('new-window', (e) => {
+    try {
+      const { protocol } = new URL(e.url);
+      if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
+    } catch (_) { return; }
+    navigateTo(e.url, tabId);
   });
 
   // Inject contextmenu listener into loaded page so right-click events bubble
@@ -362,6 +375,11 @@ function getTabWebview(tabId) {
 }
 function navigateTo(raw, tabId) {
   const url = normalizeUrl(raw); if (!url) { showNTP(); return; }
+  // Block non-web protocols (e.g. bytedance://, intent://) to prevent OS dialogs
+  try {
+    const { protocol } = new URL(url);
+    if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
+  } catch (e) { return; }
   const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
   closeAllPanels();
   tab.url = url;

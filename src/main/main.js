@@ -81,10 +81,45 @@ function broadcastToAllWindows(channel, payload) {
   });
 }
 
+// Ekstenzije datoteka koje mogu biti nosič zlonamjernog koda
+const DANGEROUS_EXTS = new Set([
+  '.exe', '.msi', '.msp', '.msix', '.msixbundle',
+  '.bat', '.cmd', '.ps1', '.psm1', '.psd1',
+  '.vbs', '.vbe', '.jse', '.hta', '.wsf', '.wsh',
+  '.scr', '.pif', '.reg', '.cpl',
+  '.jar', '.jnlp',
+]);
+
+// EtherX Shield — runtime flags (changed via IPC from renderer)
+let _shieldBlockScripts = false;
+
 function setupDownloadTracking(ses) {
   if (!ses || _downloadTrackedSessions.has(ses)) return;
   _downloadTrackedSessions.add(ses);
   ses.on('will-download', (_event, item, webContents) => {
+    // ── Upozorenje za potencijalno opasne datoteke ──────────────────────────
+    const s = db ? db.getSettings() : {};
+    if (s.warnDangerousDownloads !== false) {
+      const ext = path.extname(item.getFilename()).toLowerCase();
+      if (DANGEROUS_EXTS.has(ext)) {
+        const parentWin = BrowserWindow.fromWebContents(webContents) || mainWindow;
+        const choice = dialog.showMessageBoxSync(parentWin, {
+          type: 'warning',
+          title: 'EtherX — Opasna datoteka',
+          message: `⚠️  Potencijalno opasna datoteka`,
+          detail: `"${item.getFilename()}" (${ext.toUpperCase()}) može sadržavati zlonamjerni kôd ili virus.\n\nIzvor: ${item.getURL().slice(0, 100)}\n\nNastavi samo ako vjeruješ ovom izvoru.`,
+          buttons: ['Otkaži preuzimanje', 'Preuzmi svejedno'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+        if (choice === 0) {
+          item.cancel();
+          return;
+        }
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
     const downloadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const payload = {
       id: downloadId,
@@ -419,9 +454,32 @@ function createWindow() {
       delete headers['content-security-policy'];
       delete headers['Content-Security-Policy'];
       delete headers['content-security-policy-report-only'];
+      // EtherX Shield: Block Scripts mode — prevent all JS execution
+      if (_shieldBlockScripts) {
+        headers['Content-Security-Policy'] = ["script-src 'none'"];
+      }
       callback({ responseHeaders: headers });
     }
   );
+
+  // ── Malware domain blocker za webview session (persist:etherx) ─────────────
+  try {
+    if (AdBlocker) {
+      AdBlocker._malwareStats = AdBlocker.applyMalwareFilter(etherxSession);
+      // Apply stored setting: if user disabled the filter, honour that on startup
+      if (AdBlocker._malwareStats && db) {
+        const _ms = db.getSettings();
+        if (_ms.malwareBlockEnabled === false) AdBlocker._malwareStats.enabled = false;
+        // Shield: apply stored shieldMode — disable adblock if mode is 'disable'
+        if (_ms.shieldMode === 'disable') {
+          AdBlocker._malwareStats.enabled = false;
+          if (adBlocker) adBlocker.toggle(false);
+        }
+        // Shield: Block Scripts setting
+        if (_ms.blockScriptsEnabled === true) _shieldBlockScripts = true;
+      }
+    }
+  } catch (e) { console.error('[MalwareBlocker] Setup failed:', e.message); }
 
   // Show immediately — don't wait for ready-to-show which may never fire on macOS
   mainWindow.once('ready-to-show', () => {
@@ -657,6 +715,17 @@ function setupIPC() {
 
   // ── Security ───────────────────────────────────────────────────────────────
   ipcMain.handle('security:getCertInfo', (_e, url) => SecurityManager ? SecurityManager.getCertInfo(url) : null);
+  ipcMain.handle('security:getMalwareStats', () => AdBlocker ? AdBlocker._malwareStats || { blocked: 0, domains: 0 } : { blocked: 0, domains: 0 });
+  ipcMain.handle('security:setMalwareBlock', (_e, enabled) => {
+    if (AdBlocker?._malwareStats) AdBlocker._malwareStats.enabled = !!enabled;
+    return { ok: true };
+  });
+
+  // ── EtherX Shield ──────────────────────────────────────────────────────────
+  ipcMain.handle('shield:setBlockScripts', (_e, enabled) => {
+    _shieldBlockScripts = !!enabled;
+    return { ok: true };
+  });
 
   // ── User Agent ─────────────────────────────────────────────────────────────
   ipcMain.handle('ua:get', () => UserAgentManager ? UserAgentManager.get() : null);
@@ -1115,43 +1184,55 @@ function setupIPC() {
   ipcMain.handle('update:check', async () => {
     try {
       const s = db ? db.getSettings() : {};
-      const token = s.giteaUpdateToken || s.githubUpdateToken || '';
-      const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/vnd.github+json' };
-      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const giteaToken = s.giteaUpdateToken || '';
+      const githubToken = s.githubUpdateToken || '';
       const { net } = require('electron');
-      // ── GitHub API — javno dostupan, bez autentikacije ─────────────────────
-      const GITHUB_API = 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest';
-      const result = await new Promise((resolve, reject) => {
-        const req = net.request({ method: 'GET', url: GITHUB_API, headers });
-        let body = '';
-        req.on('response', (res) => {
-          res.on('data', (chunk) => { body += chunk.toString(); });
-          res.on('end', () => {
-            if (res.statusCode === 404) {
-              resolve({ ok: false, error: 'Nema objavljenih verzija na GitHub-u' }); return;
-            }
-            if (res.statusCode !== 200) {
-              resolve({ ok: false, error: 'GitHub API greška: HTTP ' + res.statusCode }); return;
-            }
-            try {
-              const data = JSON.parse(body);
-              const latest = (data.tag_name || '').replace(/^v/, '');
-              const current = app.getVersion();
-              const assets = (data.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || '', size: a.size }));
-              resolve({
-                ok: true, current, latest,
-                isNew: latest !== current && latest > current,
-                name: data.name || data.tag_name,
-                body: data.body || '',
-                assets,
-                publishedAt: data.published_at || '',
-              });
-            } catch (e) { resolve({ ok: false, error: 'Parse error: ' + e.message }); }
+
+      // ── Pomoćna funkcija za dohvat najnovijeg izdanja ──────────────────────
+      function fetchRelease(apiUrl, token, authScheme) {
+        return new Promise((resolve) => {
+          const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/json' };
+          if (token) headers['Authorization'] = authScheme + ' ' + token;
+          const req = net.request({ method: 'GET', url: apiUrl, headers });
+          let body = '';
+          req.on('response', (res) => {
+            res.on('data', (chunk) => { body += chunk.toString(); });
+            res.on('end', () => {
+              if (res.statusCode === 404 || res.statusCode === 410) {
+                resolve({ ok: false, error: 'Nema objavljenih verzija' }); return;
+              }
+              if (res.statusCode !== 200) {
+                resolve({ ok: false, error: 'API greška: HTTP ' + res.statusCode }); return;
+              }
+              try {
+                const data = JSON.parse(body);
+                const latest = (data.tag_name || '').replace(/^v/, '');
+                const current = app.getVersion();
+                const assets = (data.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || '', size: a.size }));
+                resolve({
+                  ok: true, current, latest,
+                  isNew: latest !== current && latest > current,
+                  name: data.name || data.tag_name,
+                  body: data.body || '',
+                  assets,
+                  publishedAt: data.published_at || '',
+                });
+              } catch (e) { resolve({ ok: false, error: 'Parse error: ' + e.message }); }
+            });
           });
+          req.on('error', (e) => resolve({ ok: false, error: e.message }));
+          req.end();
         });
-        req.on('error', (e) => reject(e));
-        req.end();
-      });
+      }
+
+      // ── Provjeri Gitea (primarna), pa GitHub (fallback) ────────────────────
+      const GITEA_API = 'https://git.kasp.top/api/v1/repos/ktrucek/etherx-standalone/releases/latest';
+      const GITHUB_API = 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest';
+
+      let result = await fetchRelease(GITEA_API, giteaToken, 'token');
+      if (!result.ok) {
+        result = await fetchRelease(GITHUB_API, githubToken, 'Bearer');
+      }
       return result;
     } catch (e) {
       return { ok: false, error: e.message };
