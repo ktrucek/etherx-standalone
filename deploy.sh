@@ -251,6 +251,20 @@ if [[ "$NO_PUSH" == false ]]; then
         warn "You can manually update at: https://etherx.io/download_stats.php"
       fi
     fi
+
+    # ── Ažuriraj api.kriptoentuzijasti.io/version ──────────────────────────
+    KRIPTOAPI_URL="https://api.kriptoentuzijasti.io/version"
+    info "Updating api.kriptoentuzijasti.io version endpoint → v$NEW_VERSION"
+    KRIPTOAPI_RESPONSE=$(curl -s -X POST "$KRIPTOAPI_URL" \
+      -H "Content-Type: application/json" \
+      -d "{\"version\": \"$NEW_VERSION\", \"api_key\": \"${ETHERX_API_KEY}\"}" \
+      --max-time 15 || echo '{"ok":false,"error":"Curl failed"}')
+
+    if echo "$KRIPTOAPI_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)" 2>/dev/null; then
+      success "api.kriptoentuzijasti.io/version updated to v$NEW_VERSION"
+    else
+      warn "Failed to update kriptoentuzijasti.io endpoint: $KRIPTOAPI_RESPONSE"
+    fi
     
   else
     warn "GitHub push failed"

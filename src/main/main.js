@@ -1225,11 +1225,48 @@ function setupIPC() {
         });
       }
 
-      // ── Provjeri Gitea (primarna), pa GitHub (fallback) ────────────────────
+      // ── Provjeri vlastiti endpoint (primaran), pa Gitea, pa GitHub (fallback) ──
+      const ETHERX_VERSION_API = 'https://api.kriptoentuzijasti.io/version';
       const GITEA_API = 'https://git.kasp.top/api/v1/repos/ktrucek/etherx-standalone/releases/latest';
       const GITHUB_API = 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest';
 
-      let result = await fetchRelease(GITEA_API, giteaToken, 'token');
+      // Vlastiti endpoint vraća samo verziju — asseti se dohvaćaju s GitHub releasa
+      let result = null;
+      try {
+        const ownResult = await new Promise((resolve) => {
+          const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/json' };
+          const req = net.request({ method: 'GET', url: ETHERX_VERSION_API, headers });
+          let body = '';
+          req.on('response', (res) => {
+            res.on('data', (c) => { body += c.toString(); });
+            res.on('end', () => {
+              try {
+                const d = JSON.parse(body);
+                if (d.ok && d.version) {
+                  const latest = d.version.replace(/^v/, '');
+                  const current = app.getVersion();
+                  resolve({ ok: true, current, latest, isNew: latest !== current && latest > current, name: 'v' + latest, body: '', assets: [], publishedAt: d.released_at || '' });
+                } else resolve({ ok: false });
+              } catch (_) { resolve({ ok: false }); }
+            });
+          });
+          req.on('error', () => resolve({ ok: false }));
+          req.end();
+        });
+
+        if (ownResult.ok) {
+          result = ownResult;
+          // Ako je nova verzija — dohvati assete s GitHub releasa
+          if (result.isNew) {
+            const ghResult = await fetchRelease(GITHUB_API, githubToken, 'Bearer');
+            if (ghResult.ok) result.assets = ghResult.assets;
+          }
+        }
+      } catch (_) { /* nastavi na fallback */ }
+
+      if (!result || !result.ok) {
+        result = await fetchRelease(GITEA_API, giteaToken, 'token');
+      }
       if (!result.ok) {
         result = await fetchRelease(GITHUB_API, githubToken, 'Bearer');
       }
