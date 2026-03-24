@@ -8089,7 +8089,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.105</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.106</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8379,7 +8379,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.105</span></div>
+                id="helpVersionNum2">2.4.106</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -9712,6 +9712,23 @@
       const _wvEl = document.getElementById('browseFrameElectron') || document.getElementById('browseFrame');
       if (_wvEl) _wvEl.id = 'browseFrame';
 
+      // Track which webviews have fired dom-ready event
+      const _readyWebviews = new Set();
+
+      // Safe wrapper for executeJavaScript that checks if webview is ready
+      window.safeExecuteJS = function (wv, script) {
+        if (!wv || wv.tagName !== 'WEBVIEW' || typeof wv.executeJavaScript !== 'function') {
+          return Promise.reject(new Error('Invalid webview'));
+        }
+        if (!_readyWebviews.has(wv.id)) {
+          return Promise.reject(new Error('Webview not ready yet'));
+        }
+        return wv.executeJavaScript(script).catch((err) => {
+          console.warn('executeJavaScript failed:', err);
+          throw err;
+        });
+      };
+
       window.setupWebview = function (wv) {
         if (!wv || wv.tagName !== 'WEBVIEW') return;
         wv.addEventListener('did-start-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(30); });
@@ -9776,6 +9793,9 @@
           }
         });
         wv.addEventListener('dom-ready', async () => {
+          // Mark this webview as ready
+          if (wv.id) _readyWebviews.add(wv.id);
+
           // Auto-dismiss cookie consent banners
           try {
             wv.executeJavaScript(`(() => {
@@ -10063,6 +10083,103 @@
         showToast('❌ Sync error: ' + e.message);
       }
     }
+
+    // ── Settings panel: init toggles from saved settings ──
+    let PENDING_SETTINGS = {};
+
+    // Osvježi vizualno stanje svih togglea iz baze (poziva se pri svakom otvaranju panela)
+    function _refreshSettingsToggles() {
+      const s = DB.getSettings();
+      PENDING_SETTINGS = { ...s };
+      document.querySelectorAll('[data-setting]').forEach(el => {
+        const k = el.dataset.setting;
+        if (el.classList.contains('toggle')) {
+          if (el.dataset.icon || el.dataset.titlebar) return;
+          const saved = s[k];
+          if (saved === true) el.classList.add('on');
+          else if (saved === false) el.classList.remove('on');
+        } else if (el.tagName === 'SELECT') {
+          if (s[k] !== undefined) el.value = s[k];
+        } else if (el.tagName === 'INPUT') {
+          if (el.type === 'checkbox') {
+            if (s[k] !== undefined) el.checked = s[k];
+          } else {
+            if (s[k] !== undefined) el.value = s[k];
+          }
+        }
+      });
+    }
+
+    function initSettingsPanel() {
+      const s = DB.getSettings();
+      PENDING_SETTINGS = { ...s };
+      document.querySelectorAll('[data-setting]').forEach(el => {
+        const k = el.dataset.setting;
+        if (el.classList.contains('toggle')) {
+          // Skip Appearance toggles that already have dedicated handlers
+          // (initIconVisibility & initTitleBarVisibility manage data-icon / data-titlebar)
+          if (el.dataset.icon || el.dataset.titlebar) return;
+          const saved = PENDING_SETTINGS[k];
+          if (saved === false) el.classList.remove('on');
+          else if (saved === true) el.classList.add('on');
+          el.addEventListener('click', () => {
+            // togglePageDarkMode ima poseban handler koji poziva applyPageDarkMode
+            // On sam radi add/remove 'on' i DB.saveSetting — ne radimo duplo ovdje
+            if (el.id === 'togglePageDarkMode') return;
+            el.classList.toggle('on');
+            const isOn = el.classList.contains('on');
+            PENDING_SETTINGS[k] = isOn;
+            DB.saveSetting(k, isOn); // auto-save immediately
+            showSettingsAutoSaveIndicator();
+          });
+        } else if (el.tagName === 'SELECT') {
+          if (PENDING_SETTINGS[k] !== undefined) el.value = PENDING_SETTINGS[k];
+          el.addEventListener('change', () => {
+            PENDING_SETTINGS[k] = el.value;
+            DB.saveSetting(k, el.value); // auto-save immediately
+            showSettingsAutoSaveIndicator();
+          });
+        } else if (el.tagName === 'INPUT') {
+          if (el.type === 'checkbox') {
+            if (PENDING_SETTINGS[k] !== undefined) el.checked = PENDING_SETTINGS[k];
+            el.addEventListener('change', () => {
+              PENDING_SETTINGS[k] = el.checked;
+              DB.saveSetting(k, el.checked); // auto-save immediately
+              showSettingsAutoSaveIndicator();
+            });
+          } else {
+            if (PENDING_SETTINGS[k] !== undefined) el.value = PENDING_SETTINGS[k];
+            el.addEventListener('input', () => {
+              PENDING_SETTINGS[k] = el.value;
+              DB.saveSetting(k, el.value); // auto-save immediately
+              showSettingsAutoSaveIndicator();
+            });
+          }
+        }
+      });
+    }
+
+    function showSettingsAutoSaveIndicator() {
+      const btn = document.getElementById('btnSaveSettings');
+      if (!btn) return;
+      btn.textContent = '✓ Saved';
+      btn.style.background = 'rgba(39,174,96,.25)';
+      btn.style.borderColor = 'rgba(39,174,96,.5)';
+      clearTimeout(btn._saveTimer);
+      btn._saveTimer = setTimeout(() => {
+        btn.textContent = 'Done';
+        btn.style.background = '';
+        btn.style.borderColor = '';
+      }, 1500);
+    }
+
+    document.getElementById('btnSaveSettings')?.addEventListener('click', () => {
+      Object.keys(PENDING_SETTINGS).forEach(k => DB.saveSetting(k, PENDING_SETTINGS[k]));
+      showToast('✓ Settings saved');
+      document.getElementById('settingsPanel').classList.remove('open');
+    });
+
+    initSettingsPanel();
 
     let tabIdCounter = 0;
     function createTab(url = '', title = 'New Tab', active = true) {
@@ -11836,17 +11953,17 @@
       // Block 'switch to app' notice
       document.getElementById('shieldBlockAppNotice')?.addEventListener('change', function () {
         DB.saveSetting('shieldBlockAppNotice', this.checked);
-        if (this.checked) {
+        if (this.checked && window.electronWebview) {
           const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
             document.querySelector('webview.active, webview');
-          try {
-            wv?.executeJavaScript?.(`(function(){
+          if (wv && window.safeExecuteJS) {
+            window.safeExecuteJS(wv, `(function(){
               const s = document.getElementById('__etherx_noappbanner') || document.createElement('style');
               s.id = '__etherx_noappbanner';
               s.textContent = 'smart-app-banner,[id*="app-banner"],[class*="app-banner"],[id*="AppBanner"],[class*="AppBanner"],[data-smart-app-banner]{display:none!important}';
               document.head?.appendChild(s);
             })()`).catch(() => { });
-          } catch (_) { }
+          }
         }
         showToast(this.checked ? '🚫 "Otvori u aplikaciji" banneri skriveni' : '⭕ App banneri vidljivi');
       });
@@ -11854,11 +11971,11 @@
       // Block all cookies
       document.getElementById('shieldBlockCookies')?.addEventListener('change', function () {
         DB.saveSetting('shieldBlockCookies', this.checked);
-        if (this.checked) {
+        if (this.checked && window.electronWebview) {
           const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
             document.querySelector('webview.active, webview');
-          try {
-            wv?.executeJavaScript?.(`(function(){
+          if (wv && window.safeExecuteJS) {
+            window.safeExecuteJS(wv, `(function(){
               try {
                 Object.defineProperty(document, 'cookie', {
                   get: function() { return ''; },
@@ -11867,17 +11984,17 @@
                 });
               } catch(_) {}
             })()`).catch(() => { });
-          } catch (_) { }
+          }
         }
         showToast(this.checked ? '🍪 Kolačići blokirani (vrijedi od sljedećeg učitavanja)' : '✅ Kolačići dozvoljeni');
       });
 
       function _injectFingerprintProtection() {
+        if (!window.electronWebview) return;
         const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
           document.querySelector('webview.active, webview');
-        if (!wv || typeof wv.executeJavaScript !== 'function') return;
-        try {
-          wv.executeJavaScript(`(function(){
+        if (!wv || !window.safeExecuteJS) return;
+        window.safeExecuteJS(wv, `(function(){
           try {
             const origTDU = HTMLCanvasElement.prototype.toDataURL;
             HTMLCanvasElement.prototype.toDataURL = function(t, q) {
@@ -11914,7 +12031,6 @@
           } catch(_) {}
           console.log('[EtherX Shield] Fingerprint protection injected');
         })();`).catch(() => { });
-        } catch (_) { }
       }
 
       // Apply Block Scripts setting to main process on startup
@@ -11973,7 +12089,10 @@
       resultEl.textContent = '⏳ Prevođenje...';
       try {
         const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
-        const text = wv ? await wv.executeJavaScript('document.body?.innerText?.slice(0,2000)||""') : (tab.title || '');
+        let text = tab.title || '';
+        if (wv && window.electronWebview && window.safeExecuteJS) {
+          text = await window.safeExecuteJS(wv, 'document.body?.innerText?.slice(0,2000)||""').catch(() => tab.title || '');
+        }
         const result = await window.etherx?.ai?.translate?.(text, lang);
         resultEl.textContent = result?.translation ?? result?.text ?? result ?? '❌ AI prevoditelj nije konfiguriran';
       } catch (e) {
@@ -17280,99 +17399,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (pane) pane.classList.add('active');
       });
     });
-    // Settings panel: init toggles from saved settings
-    let PENDING_SETTINGS = {};
-
-    // Osvježi vizualno stanje svih togglea iz baze (poziva se pri svakom otvaranju panela)
-    function _refreshSettingsToggles() {
-      const s = DB.getSettings();
-      PENDING_SETTINGS = { ...s };
-      document.querySelectorAll('[data-setting]').forEach(el => {
-        const k = el.dataset.setting;
-        if (el.classList.contains('toggle')) {
-          if (el.dataset.icon || el.dataset.titlebar) return;
-          const saved = s[k];
-          if (saved === true) el.classList.add('on');
-          else if (saved === false) el.classList.remove('on');
-        } else if (el.tagName === 'SELECT') {
-          if (s[k] !== undefined) el.value = s[k];
-        } else if (el.tagName === 'INPUT') {
-          if (el.type === 'checkbox') {
-            if (s[k] !== undefined) el.checked = s[k];
-          } else {
-            if (s[k] !== undefined) el.value = s[k];
-          }
-        }
-      });
-    }
-
-    function initSettingsPanel() {
-      const s = DB.getSettings();
-      PENDING_SETTINGS = { ...s };
-      document.querySelectorAll('[data-setting]').forEach(el => {
-        const k = el.dataset.setting;
-        if (el.classList.contains('toggle')) {
-          // Skip Appearance toggles that already have dedicated handlers
-          // (initIconVisibility & initTitleBarVisibility manage data-icon / data-titlebar)
-          if (el.dataset.icon || el.dataset.titlebar) return;
-          const saved = PENDING_SETTINGS[k];
-          if (saved === false) el.classList.remove('on');
-          else if (saved === true) el.classList.add('on');
-          el.addEventListener('click', () => {
-            // togglePageDarkMode ima poseban handler koji poziva applyPageDarkMode
-            // On sam radi add/remove 'on' i DB.saveSetting — ne radimo duplo ovdje
-            if (el.id === 'togglePageDarkMode') return;
-            el.classList.toggle('on');
-            const isOn = el.classList.contains('on');
-            PENDING_SETTINGS[k] = isOn;
-            DB.saveSetting(k, isOn); // auto-save immediately
-            showSettingsAutoSaveIndicator();
-          });
-        } else if (el.tagName === 'SELECT') {
-          if (PENDING_SETTINGS[k] !== undefined) el.value = PENDING_SETTINGS[k];
-          el.addEventListener('change', () => {
-            PENDING_SETTINGS[k] = el.value;
-            DB.saveSetting(k, el.value); // auto-save immediately
-            showSettingsAutoSaveIndicator();
-          });
-        } else if (el.tagName === 'INPUT') {
-          if (el.type === 'checkbox') {
-            if (PENDING_SETTINGS[k] !== undefined) el.checked = PENDING_SETTINGS[k];
-            el.addEventListener('change', () => {
-              PENDING_SETTINGS[k] = el.checked;
-              DB.saveSetting(k, el.checked); // auto-save immediately
-              showSettingsAutoSaveIndicator();
-            });
-          } else {
-            if (PENDING_SETTINGS[k] !== undefined) el.value = PENDING_SETTINGS[k];
-            el.addEventListener('input', () => {
-              PENDING_SETTINGS[k] = el.value;
-              DB.saveSetting(k, el.value); // auto-save immediately
-              showSettingsAutoSaveIndicator();
-            });
-          }
-        }
-      });
-    }
-    function showSettingsAutoSaveIndicator() {
-      const btn = document.getElementById('btnSaveSettings');
-      if (!btn) return;
-      btn.textContent = '✓ Saved';
-      btn.style.background = 'rgba(39,174,96,.25)';
-      btn.style.borderColor = 'rgba(39,174,96,.5)';
-      clearTimeout(btn._saveTimer);
-      btn._saveTimer = setTimeout(() => {
-        btn.textContent = 'Done';
-        btn.style.background = '';
-        btn.style.borderColor = '';
-      }, 1500);
-    }
-    document.getElementById('btnSaveSettings')?.addEventListener('click', () => {
-      Object.keys(PENDING_SETTINGS).forEach(k => DB.saveSetting(k, PENDING_SETTINGS[k]));
-      showToast('✓ Settings saved');
-      document.getElementById('settingsPanel').classList.remove('open');
-    });
-    initSettingsPanel();
 
     // ── DoH: ensure correct toggle state on security tab open and apply via IPC ──
     (function () {
