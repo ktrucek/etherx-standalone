@@ -3343,43 +3343,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       createTab(targetUrl);
       return `Otvaram ${targetUrl} u novom tabu!`;
     }
-    if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
-      return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
-
-**1. Analiza sadržaja**
-• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
-
-**2. Dijagnostika browsera**
-• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
-• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
-
-**3. Edukacija o kriptovalutama**
-• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
-• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
-
-**4. Navigacija**
-• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
-
-Sve se izvršava optimalno i brzo! Što te zanima?`;
-    }
-
-    if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
-      if (performance && performance.memory) {
-        const mb = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
-        const total = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
-        return `Trenutno koristimo **${mb} MB** memorije (od dozvoljenih ${total} MB za ovaj tab). Browser radi stabilno!`;
-      }
-      return "Nažalost ne mogu pročitati točnu potrošnju memorije u ovom okruženju, ali browser radi unutar normalnih parametara.";
-    }
-
-    if (m.startsWith('otvori ') || m.startsWith('open ')) {
-      let targetUrl = m.replace('otvori ', '').replace('open ', '').trim();
-      if (!targetUrl.startsWith('http')) {
-        targetUrl = 'https://' + targetUrl;
-      }
-      createTab(targetUrl);
-      return `Otvaram ${targetUrl} u novom tabu!`;
-    }
 
     // ── Summarize current page ──
     if (m.includes('sažetak') || m.includes('sazet') || m.includes('summar') || m.includes('analiz') || m.includes('što piše') || m.includes('sta pise') || m.includes('o čemu') || m.includes('o cemu')) {
@@ -3387,29 +3350,22 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (!tab?.url || !tab.url.startsWith('http')) {
         return '⚠️ Nema aktivne web stranice. Otvori neku stranicu pa pitaj za sažetak.';
       }
-      addMsg(m, 'user'); input.value = '';
-      const typing = document.createElement('div'); typing.className = 'ai-msg bot ai-typing';
-      typing.innerHTML = '<span></span><span></span><span></span>';
-      msgs.appendChild(typing); msgs.scrollTop = msgs.scrollHeight;
-      summarizeCurrentPage().then(result => {
-        typing.remove();
-        if (!result.ok) {
-          addMsg('⚠️ ' + (result.error || 'Greška pri generiranju sažetka.'), 'bot');
-        } else {
-          const cacheNote = result.cached ? ' _(iz cache-a)_' : '';
-          let resp = `✨ **Gemini sažetak: ${new URL(tab.url).hostname}**${cacheNote}\n\n`;
-          const cache = _summaryCache[_md5Hash(tab.url)];
-          if (cache?.bullets?.length) {
-            cache.bullets.forEach((b, i) => {
-              const clean = b.replace(/^[•\-\d\.\s]+/, '').trim();
-              resp += `${i + 1}. ${clean}\n`;
-            });
-          }
-          resp += '\n_(Sa\u017eetak je također prikazan u kartici desno dolje ✨)_';
-          addMsg(resp, 'bot');
-        }
-      });
-      return null; // handled async above
+      // Reuse send()'s typing indicator — just await the result here
+      const result = await summarizeCurrentPage();
+      if (!result.ok) {
+        return '⚠️ ' + (result.error || 'Greška pri generiranju sažetka.');
+      }
+      const cacheNote = result.cached ? ' _(iz cache-a)_' : '';
+      let resp = `✨ **Gemini sažetak: ${new URL(tab.url).hostname}**${cacheNote}\n\n`;
+      const cache = _summaryCache[_md5Hash(tab.url)];
+      if (cache?.bullets?.length) {
+        cache.bullets.forEach((b, i) => {
+          const clean = b.replace(/^[•\-\d\.\s]+/, '').trim();
+          resp += `${i + 1}. ${clean}\n`;
+        });
+      }
+      resp += '\n_(Sažetak je također prikazan u kartici desno dolje ✨)_';
+      return resp;
     }
 
     // ── Greetings ──
