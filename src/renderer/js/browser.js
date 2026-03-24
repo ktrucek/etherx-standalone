@@ -78,6 +78,8 @@ const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoo
 // Per-tab webview map: tabId → <webview> element
 // Each tab gets its own webview so audio/video keeps playing when switching tabs
 const tabFrames = new Map();
+// Track which webviews have emitted dom-ready and are safe to use
+const tabFrameReady = new Map();
 
 // ── Performance: In-memory cache za settings ──────────────────────────────
 let _settingsCache = null;
@@ -178,6 +180,7 @@ function createTabFrame(tabId, partition) {
 
   // Inject contextmenu listener into loaded page so right-click events bubble
   wv.addEventListener('dom-ready', () => {
+    tabFrameReady.set(tabId, true);
     wv.insertCSS('*{-webkit-user-select: text !important;}').catch(() => { });
   });
 
@@ -330,7 +333,7 @@ function closeTab(id) {
   const idx = STATE.tabs.findIndex(t => t.id === id); if (idx === -1) return;
   STATE.tabs.splice(idx, 1); const el = getTabEl(id); if (el) el.remove();
   // Remove this tab's dedicated webview
-  if (window.electronWebview) { const wv = tabFrames.get(id); if (wv) { wv.src = 'about:blank'; wv.remove(); tabFrames.delete(id); } }
+  if (window.electronWebview) { const wv = tabFrames.get(id); if (wv) { wv.src = 'about:blank'; wv.remove(); tabFrames.delete(id); tabFrameReady.delete(id); } }
   saveSessionTabs();
   if (STATE.tabs.length === 0) { createTab(); return; }
   switchTab(STATE.tabs[Math.min(idx, STATE.tabs.length - 1)].id);
@@ -372,6 +375,43 @@ function getTabWebview(tabId) {
   // Returns the webview for the given tab (per-tab in Electron, shared frame in web mode)
   if (window.electronWebview) return tabFrames.get(tabId) || frame;
   return frame;
+}
+function safeWebviewExecute(wv, tabId, method, ...args) {
+  // Safely execute webview methods only after dom-ready event
+  return new Promise((resolve, reject) => {
+    if (!wv || typeof wv[method] !== 'function') {
+      reject(new Error(`WebView method ${method} not available`));
+      return;
+    }
+    const execute = () => {
+      try {
+        const result = wv[method](...args);
+        if (result && typeof result.then === 'function') {
+          result.then(resolve).catch(reject);
+        } else {
+          resolve(result);
+        }
+      } catch (e) {
+        reject(e);
+      }
+    };
+    // Check if webview is ready (has emitted dom-ready)
+    if (tabId && tabFrameReady.get(tabId)) {
+      execute();
+    } else {
+      // Queue execution until dom-ready
+      const timeout = setTimeout(() => {
+        wv.removeEventListener('dom-ready', handler);
+        reject(new Error('WebView dom-ready timeout after 10 seconds'));
+      }, 10000);
+      const handler = () => {
+        clearTimeout(timeout);
+        if (tabId) tabFrameReady.set(tabId, true);
+        execute();
+      };
+      wv.addEventListener('dom-ready', handler, { once: true });
+    }
+  });
 }
 function navigateTo(raw, tabId) {
   const url = normalizeUrl(raw); if (!url) { showNTP(); return; }
@@ -723,9 +763,9 @@ function toggleReader() {
     document.getElementById('readerContent').innerHTML = '<p style="color:#888;font-style:italic">📖 Extracting readable content…</p>';
 
     // Use webview executeJavaScript to get full HTML, then AI reading mode extraction
-    const wv = document.getElementById('browseFrame');
-    if (wv && typeof wv.executeJavaScript === 'function') {
-      wv.executeJavaScript('document.documentElement.outerHTML')
+    const wv = getTabWebview(tab?.id);
+    if (wv && window.electronWebview) {
+      safeWebviewExecute(wv, tab?.id, 'executeJavaScript', 'document.documentElement.outerHTML')
         .then(html => {
           if (window.etherx?.ai?.readingMode) {
             return window.etherx.ai.readingMode(html);
@@ -879,11 +919,12 @@ async function summarizeCurrentPage() {
   // If running in Electron, use IPC with webview executeJavaScript to get HTML
   if (window.electronWebview) {
     try {
-      const wv = getTabWebview(getActiveTab()?.id);
+      const activeTab = getActiveTab();
+      const wv = getTabWebview(activeTab?.id);
       let html = '';
-      if (wv && typeof wv.executeJavaScript === 'function') {
+      if (wv) {
         try {
-          html = await wv.executeJavaScript('document.documentElement.outerHTML');
+          html = await safeWebviewExecute(wv, activeTab?.id, 'executeJavaScript', 'document.documentElement.outerHTML');
         } catch (e2) { html = ''; }
       }
       if (!html || html.length < 200) {
@@ -2026,9 +2067,10 @@ document.getElementById('mi-page-source').addEventListener('click', () => {
 function loadSourceIntoPane(url, codeEl) {
   if (!codeEl) return;
   if (window.electronWebview) {
-    const wv = document.getElementById('browseFrame');
-    if (wv && typeof wv.executeJavaScript === 'function') {
-      wv.executeJavaScript('document.documentElement.outerHTML').then(src => {
+    const activeTab = getActiveTab();
+    const wv = getTabWebview(activeTab?.id);
+    if (wv) {
+      safeWebviewExecute(wv, activeTab?.id, 'executeJavaScript', 'document.documentElement.outerHTML').then(src => {
         const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         codeEl.innerHTML = '<pre style="white-space:pre-wrap;color:#d4d4d4;font-size:12px;padding:12px">' + esc + '</pre>';
       }).catch(() => { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable in Electron mode</div>'; });
