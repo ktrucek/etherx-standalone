@@ -459,20 +459,20 @@ document.getElementById('btnBack').addEventListener('click', () => {
   const tab = getActiveTab(); if (!tab || tab.histIdx <= 0) return;
   tab.histIdx--; const u = tab.history[tab.histIdx]; tab.url = u;
   document.getElementById('urlInput').value = u; updateUrlIcon(u);
-  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.goBack(); } catch (e) { wv.src = u; } } }
+  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { safeWebviewExecute(wv, tab.id, 'goBack').catch(() => { wv.src = u; }); } }
   else { frame.src = u; } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
 });
 document.getElementById('btnFwd').addEventListener('click', () => {
   const tab = getActiveTab(); if (!tab || tab.histIdx >= tab.history.length - 1) return;
   tab.histIdx++; const u = tab.history[tab.histIdx]; tab.url = u;
   document.getElementById('urlInput').value = u; updateUrlIcon(u);
-  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.goForward(); } catch (e) { wv.src = u; } } }
+  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { safeWebviewExecute(wv, tab.id, 'goForward').catch(() => { wv.src = u; }); } }
   else { frame.src = u; } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
 });
 document.getElementById('btnReload').addEventListener('click', () => {
   const tab = getActiveTab(); if (tab && tab.url) {
     setLoading(20);
-    if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.reload(); } catch (e) { wv.src = tab.url; } } }
+    if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { safeWebviewExecute(wv, tab.id, 'reload').catch(() => { wv.src = tab.url; }); } }
     else { frame.src = tab.url; } consoleLog('log', '↺ Reload: ' + tab.url);
   }
 });
@@ -5491,8 +5491,19 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
   document.getElementById('phishingClose')?.addEventListener('click', hidePhishingBanner);
   document.getElementById('phishingBack')?.addEventListener('click', () => {
     hidePhishingBanner();
-    const wv = document.getElementById('browseFrame');
-    if (wv && wv.canGoBack()) wv.goBack(); else window.history.back();
+    const tab = getActiveTab();
+    const wv = getTabWebview(tab?.id);
+    if (wv && window.electronWebview) {
+      safeWebviewExecute(wv, tab?.id, 'canGoBack').then(canGoBack => {
+        if (canGoBack) {
+          safeWebviewExecute(wv, tab?.id, 'goBack').catch(() => window.history.back());
+        } else {
+          window.history.back();
+        }
+      }).catch(() => window.history.back());
+    } else {
+      window.history.back();
+    }
   });
   document.getElementById('phishingProceed')?.addEventListener('click', hidePhishingBanner);
 
