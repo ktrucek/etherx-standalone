@@ -1569,6 +1569,10 @@
     }
 
     /* Per-tab webviews — created dynamically, positioned inside contentArea */
+    /* NOTE: do NOT use display:none here — Electron won't init the guest process
+       for hidden webviews, causing GUEST_VIEW_MANAGER_CALL ERR_FAILED (-2) on
+       all navigations. Use opacity+pointer-events instead (inherits display:flex
+       from webview.browse-frame). */
     webview.tab-webview {
       position: absolute;
       inset: 0;
@@ -1578,7 +1582,6 @@
       opacity: 0;
       pointer-events: none;
       z-index: -1;
-      display: none;
       background: #fff;
     }
 
@@ -1586,7 +1589,6 @@
       opacity: 1;
       pointer-events: auto;
       z-index: 5;
-      display: flex;
     }
 
     /* In web mode: fully hide the Electron webview element */
@@ -8087,7 +8089,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.103</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.104</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8377,7 +8379,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.103</span></div>
+                id="helpVersionNum2">2.4.104</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -10238,8 +10240,13 @@
             }
           });
           _webviewOwnerTabId = id;
-          if (!frame.src || frame.src === 'about:blank') {
-            frame.src = tab.url;
+          // Use the real webview element directly (avoid Proxy null-deref risk)
+          const _swWv = origGetElementById.call(document, 'browseFrame_' + id) || origGetElementById.call(document, 'browseFrame');
+          if (_swWv && _swWv.tagName === 'WEBVIEW' && tab.url && (!_swWv.src || _swWv.src === 'about:blank')) {
+            // Use loadURL() and catch the returned Promise to avoid unhandled
+            // rejections appearing as 'GUEST_VIEW_MANAGER_CALL' console errors
+            const _swNavP = _swWv.loadURL(tab.url);
+            if (_swNavP && _swNavP.catch) _swNavP.catch(() => { });
           }
         } else {
           if (frame.src !== tab.url) frame.src = tab.url;
@@ -10423,7 +10430,12 @@
 
       if (window.electronWebview) {
         const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
-        if (wv && wv.tagName === 'WEBVIEW') wv.src = url;
+        if (wv && wv.tagName === 'WEBVIEW') {
+          // Use loadURL() and catch the returned Promise to avoid unhandled
+          // rejections appearing as 'GUEST_VIEW_MANAGER_CALL' console errors
+          const _navP = wv.loadURL(url);
+          if (_navP && _navP.catch) _navP.catch(() => { });
+        }
       }
 
       if (tab.id === STATE.activeTabId) {
@@ -10447,13 +10459,21 @@
       const tab = getActiveTab(); if (!tab || tab.histIdx <= 0) return;
       tab.histIdx--; const u = tab.history[tab.histIdx]; tab.url = u;
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
-      frame.src = u; setLoading(25); updateNavBtns(tab); updateTabEl(tab);
+      if (window.electronWebview) {
+        const _bWv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
+        if (_bWv && _bWv.tagName === 'WEBVIEW') { const _bp = _bWv.loadURL(u); if (_bp?.catch) _bp.catch(() => { }); }
+      } else { frame.src = u; }
+      setLoading(25); updateNavBtns(tab); updateTabEl(tab);
     });
     document.getElementById('btnFwd').addEventListener('click', () => {
       const tab = getActiveTab(); if (!tab || tab.histIdx >= tab.history.length - 1) return;
       tab.histIdx++; const u = tab.history[tab.histIdx]; tab.url = u;
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
-      frame.src = u; setLoading(25); updateNavBtns(tab); updateTabEl(tab);
+      if (window.electronWebview) {
+        const _fWv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
+        if (_fWv && _fWv.tagName === 'WEBVIEW') { const _fp = _fWv.loadURL(u); if (_fp?.catch) _fp.catch(() => { }); }
+      } else { frame.src = u; }
+      setLoading(25); updateNavBtns(tab); updateTabEl(tab);
     });
     document.getElementById('btnReload').addEventListener('click', () => {
       const tab = getActiveTab(); if (tab && tab.url) { setLoading(20); if (window.electronWebview && frame.tagName === 'WEBVIEW') { try { frame.reload(); } catch (e) { frame.src = tab.url; } } else { frame.src = tab.url; } consoleLog('log', '↺ Reload: ' + tab.url); }
