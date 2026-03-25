@@ -1,10 +1,12 @@
-// ── Self-embed guard (prevents browser.html loading inside its own proxy iframe) ──
+// ── Self-embed guard (DISABLED - caused more issues than it solved) ──
+// Previously this guard would break the browser when loaded in certain iframe contexts
+// If re-enabling, ensure it doesn't trigger in Electron webview or legitimate use cases
 (function () {
+  // GUARD DISABLED - browser should load in all contexts
+  // Uncomment carefully if you need to block specific iframe embeddings
+  /*
   try {
-    // Allow loading in Electron webview and when there is electronAPI
     if (window.self !== window.top && typeof window.electronAPI === 'undefined') {
-      // We are inside an iframe AND not in Electron — if loaded as a page, break out
-      // Only block when truly embedded in a foreign iframe (not our own Electron environment)
       const isOwnDomain = window.location.hostname === window.top.location.hostname;
       if (!isOwnDomain) {
         if (document.documentElement) {
@@ -14,7 +16,8 @@
         return;
       }
     }
-  } catch (e) { /* cross-origin: safe to ignore */ }
+  } catch (e) { }
+  */
 })();
 
 // ── Electron webview detection ──
