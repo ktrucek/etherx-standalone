@@ -45,8 +45,11 @@ app.commandLine.appendSwitch('disable-gpu-sandbox');
 
 // Allow video autoplay without user gesture (required for YouTube, TikTok, Twitch, etc.)
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// IMPORTANT: DO NOT set enable-features here — it will be set later in DoH config
+// to avoid OVERWRITING by second call (Chromium bug: last appendSwitch wins)
 // Force enable H.264/AAC codec support for media playback in webviews
-app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder');
+// app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder');
 
 // TLS 1.3 enforcement
 app.commandLine.appendSwitch('ssl-version-min', 'tls1.3');
@@ -76,6 +79,8 @@ try { AIManager = require('./src/main/ai'); } catch (e) { console.error('❌ ai 
 (function applyStartupDoH() {
   try {
     const cfgPath = path.join(app.getPath('userData'), 'etherx_doh.json');
+    let features = 'VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder';
+
     if (fs.existsSync(cfgPath)) {
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
       if (cfg.enabled) {
@@ -86,14 +91,15 @@ try { AIManager = require('./src/main/ai'); } catch (e) { console.error('❌ ai 
           quad9: 'https://dns.quad9.net/dns-query{?dns}',
         };
         const tmpl = templates[provider] || templates.cloudflare;
-        // Merge DoH with existing enable-features — appendSwitch('enable-features')
-        // twice causes the second call to OVERWRITE the first in Chromium's
-        // command-line parser, losing VaapiVideoDecoder and other features.
-        app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder,DnsOverHttps');
+        // Add DnsOverHttps to features
+        features += ',DnsOverHttps';
         app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
         app.commandLine.appendSwitch('dns-over-https-server-uri-template', tmpl);
       }
     }
+
+    // Set enable-features ONLY ONCE here (avoid overwrite bug)
+    app.commandLine.appendSwitch('enable-features', features);
   } catch (_) { /* ignore */ }
 })();
 
@@ -337,6 +343,9 @@ function createWindow() {
       webviewTag: true,                             // keep WebView tabs
       allowRunningInsecureContent: false,
       webSecurity: false,                           // allow cross-origin webviews / iframes
+      backgroundThrottling: false,                  // prevent throttling when window is in background
+      disableBlinkFeatures: '',                     // enable all Blink features for performance
+      enableBlinkFeatures: '',                      // no experimental features needed
     },
     icon: path.join(__dirname, 'src', 'logo_novi.png'),
     show: false,

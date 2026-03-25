@@ -1,11 +1,11 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.113",
+  "version": "2.4.114",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --inspect=5858",
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --no-sandbox --inspect=5858",
     "dist:linux": "electron-builder --linux",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac"
@@ -92,5 +92,5 @@
     "uuid": "^9.0.0",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-03-24T21:04:22Z"
+  "buildTime": "2026-03-25T01:07:31Z"
 }

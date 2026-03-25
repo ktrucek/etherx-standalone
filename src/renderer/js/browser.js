@@ -1,13 +1,18 @@
 // ── Self-embed guard (prevents browser.html loading inside its own proxy iframe) ──
 (function () {
   try {
-    if (window.self !== window.top) {
-      // We are inside an iframe — if loaded as a page, break out
-      if (document.documentElement) {
-        document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+    // Allow loading in Electron webview and when there is electronAPI
+    if (window.self !== window.top && typeof window.electronAPI === 'undefined') {
+      // We are inside an iframe AND not in Electron — if loaded as a page, break out
+      // Only block when truly embedded in a foreign iframe (not our own Electron environment)
+      const isOwnDomain = window.location.hostname === window.top.location.hostname;
+      if (!isOwnDomain) {
+        if (document.documentElement) {
+          document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+        }
+        window.stop && window.stop();
+        return;
       }
-      window.stop && window.stop();
-      return;
     }
   } catch (e) { /* cross-origin: safe to ignore */ }
 })();
