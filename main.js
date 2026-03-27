@@ -412,10 +412,26 @@ function createWindow() {
     }
   }
 
+  function isTrustedFirstPartyHost(rawUrl) {
+    try {
+      const host = new URL(rawUrl).hostname.toLowerCase();
+      return [
+        'kriptoentuzijasti.io',
+        'etherx.io',
+      ].some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+    } catch (_) {
+      return false;
+    }
+  }
+
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.requestHeaders };
+      if (isTrustedFirstPartyHost(details.url)) {
+        callback({ requestHeaders: headers });
+        return;
+      }
       const key = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent');
       if (key) {
         // Always strip Electron/EtherX identifiers
@@ -458,6 +474,12 @@ function createWindow() {
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
+
+      // Keep first-party domains untouched to avoid framework/runtime regressions.
+      if (isTrustedFirstPartyHost(details.url)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
 
       // Keep video/CDN responses untouched. Rewriting CORS/CSP headers globally
       // can break MSE/segment playback on TikTok/YouTube and similar platforms.
@@ -538,6 +560,10 @@ function createWindow() {
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.requestHeaders };
+      if (isTrustedFirstPartyHost(details.url)) {
+        callback({ requestHeaders: headers });
+        return;
+      }
       const key = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent');
       if (key) {
         let ua = headers[key]
@@ -562,6 +588,12 @@ function createWindow() {
     { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
+
+      // Keep first-party domains untouched to avoid framework/runtime regressions.
+      if (isTrustedFirstPartyHost(details.url)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
 
       // Keep video/CDN responses untouched for webviews as well.
       if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
