@@ -10397,15 +10397,12 @@
           // Use the real webview element directly (avoid Proxy null-deref risk)
           const _swWv = origGetElementById.call(document, 'browseFrame_' + id) || origGetElementById.call(document, 'browseFrame');
           if (_swWv && _swWv.tagName === 'WEBVIEW' && tab.url && (!_swWv.src || _swWv.src === 'about:blank')) {
-            // Use loadURL() and catch the returned Promise to avoid unhandled
-            // rejections appearing as 'GUEST_VIEW_MANAGER_CALL' console errors.
-            // Fall back to src= if loadURL fails before the guest process is ready.
-            const _swNavP = _swWv.loadURL(tab.url);
-            if (_swNavP && _swNavP.catch) {
-              _swNavP.catch(() => { try { _swWv.src = tab.url; } catch (_) { } });
-            } else if (!_swNavP) {
-              try { _swWv.src = tab.url; } catch (_) { }
-            }
+            // Set src first (always works), then loadURL if guest already attached.
+            try { _swWv.src = tab.url; } catch (_) { }
+            try {
+              const _swNavP = _swWv.loadURL(tab.url);
+              if (_swNavP && _swNavP.catch) _swNavP.catch(() => { });
+            } catch (_) { /* guest not attached yet — src fallback already applied */ }
           }
         } else {
           if (frame.src !== tab.url) frame.src = tab.url;
@@ -10590,17 +10587,14 @@
       if (window.electronWebview) {
         const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
         if (wv && wv.tagName === 'WEBVIEW') {
-          // Use loadURL() and catch the returned Promise to avoid unhandled
-          // rejections appearing as 'GUEST_VIEW_MANAGER_CALL' console errors.
-          // IMPORTANT: loadURL() rejects / returns null before webview guest
-          // process is initialised (before dom-ready). When that happens we fall
-          // back to setting wv.src which Electron handles even pre-dom-ready.
-          const _navP = wv.loadURL(url);
-          if (_navP && _navP.catch) {
-            _navP.catch(() => { try { wv.src = url; } catch (_) { } });
-          } else if (!_navP) {
-            try { wv.src = url; } catch (_) { }
-          }
+          // SAFETY: always use wv.src first (works pre-dom-ready, pre-guest-attach).
+          // Then attempt loadURL() for post-attachment navigations (better history).
+          // If loadURL throws synchronously (guest not attached) we already set src.
+          try { wv.src = url; } catch (_) { }
+          try {
+            const _navP = wv.loadURL(url);
+            if (_navP && _navP.catch) _navP.catch(() => { });
+          } catch (_) { /* guest not attached yet — src fallback already applied */ }
         }
       }
 
@@ -10627,7 +10621,10 @@
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
       if (window.electronWebview) {
         const _bWv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
-        if (_bWv && _bWv.tagName === 'WEBVIEW') { const _bp = _bWv.loadURL(u); if (_bp?.catch) _bp.catch(() => { }); }
+        if (_bWv && _bWv.tagName === 'WEBVIEW') {
+          try { _bWv.src = u; } catch (_) { }
+          try { const _bp = _bWv.loadURL(u); if (_bp?.catch) _bp.catch(() => { }); } catch (_) { }
+        }
       } else { frame.src = u; }
       setLoading(25); updateNavBtns(tab); updateTabEl(tab);
     });
@@ -10637,7 +10634,10 @@
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
       if (window.electronWebview) {
         const _fWv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
-        if (_fWv && _fWv.tagName === 'WEBVIEW') { const _fp = _fWv.loadURL(u); if (_fp?.catch) _fp.catch(() => { }); }
+        if (_fWv && _fWv.tagName === 'WEBVIEW') {
+          try { _fWv.src = u; } catch (_) { }
+          try { const _fp = _fWv.loadURL(u); if (_fp?.catch) _fp.catch(() => { }); } catch (_) { }
+        }
       } else { frame.src = u; }
       setLoading(25); updateNavBtns(tab); updateTabEl(tab);
     });
