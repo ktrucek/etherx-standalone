@@ -92,7 +92,12 @@ contextBridge.exposeInMainWorld('etherx', {
     getLog: () => ipcRenderer.invoke('network:getLog'),
     clearLog: () => ipcRenderer.invoke('network:clearLog'),
     onUpdate: (callback) => {
+      // Legacy single-entry listener (kept for compatibility)
       ipcRenderer.on('network-log', (_event, data) => callback(data));
+      // Batched listener — main process now sends batches every 250ms
+      ipcRenderer.on('network-log-batch', (_event, entries) => {
+        if (Array.isArray(entries)) entries.forEach(e => callback(e));
+      });
     },
   },
 
@@ -230,7 +235,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab', 'update:progress'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab', 'update:progress', 'network-log-batch'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

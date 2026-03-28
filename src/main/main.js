@@ -301,8 +301,26 @@ function createWindow() {
   // Google also checks Sec-Fetch-Site / Origin headers — force override for google domains
   const GOOGLE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
   // ── Network monitoring & CORS bypass ────────────────────────────────────────
-  const networkLog = [];
+  // Use Map for O(1) lookup instead of O(n) array.find() — critical for media-heavy sites
+  // that fire hundreds of requests/second (YouTube, TikTok video chunks).
+  const networkLog = new Map();
   const MAX_NETWORK_LOG = 500;
+  // Throttle IPC sends to renderer: batch network-log events instead of one IPC per request.
+  let _netLogBatch = [];
+  let _netLogFlushTimer = null;
+  function _flushNetworkLog() {
+    _netLogFlushTimer = null;
+    if (!_netLogBatch.length || !mainWindow || mainWindow.isDestroyed()) { _netLogBatch = []; return; }
+    mainWindow.webContents.send('network-log-batch', _netLogBatch.splice(0));
+  }
+  function _queueNetworkIPC(entry) {
+    _netLogBatch.push(entry);
+    // Flush at most every 250ms — avoids flooding the renderer during video streaming
+    if (!_netLogFlushTimer) _netLogFlushTimer = setTimeout(_flushNetworkLog, 250);
+  }
+
+  // Resource types that are high-frequency and don't need logging (media chunks, images)
+  const SKIP_LOG_TYPES = new Set(['media', 'image', 'font', 'ping', 'cspReport']);
 
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ['*://*/*'] },
@@ -325,21 +343,29 @@ function createWindow() {
         headers[key] = ua || CLEAN_UA;
       }
 
-      // ── CORS Bypass: Remove Origin/Referer restrictions ──────────────────────
-      // This allows cross-origin requests without proxy
-      delete headers['Origin'];
-      delete headers['Referer'];
+      // ── CORS Bypass: Remove Origin/Referer only for navigation/XHR requests ──
+      // Do NOT remove Origin/Referer for media/xhr on streaming sites (YouTube, TikTok)
+      // as they rely on Origin for CORS on video segments.
+      const rt = details.resourceType;
+      if (rt !== 'media' && rt !== 'xhr' && rt !== 'fetch') {
+        delete headers['Origin'];
+        delete headers['Referer'];
+      }
 
-      // Log network request
-      networkLog.push({
-        id: details.id,
-        url: details.url,
-        method: details.method,
-        resourceType: details.resourceType,
-        timestamp: Date.now(),
-        requestHeaders: headers
-      });
-      if (networkLog.length > MAX_NETWORK_LOG) networkLog.shift();
+      // Log network request — skip high-frequency media/image types to avoid overhead
+      if (!SKIP_LOG_TYPES.has(rt)) {
+        if (networkLog.size >= MAX_NETWORK_LOG) {
+          // Remove oldest entry (first key in insertion order)
+          networkLog.delete(networkLog.keys().next().value);
+        }
+        networkLog.set(details.id, {
+          id: details.id,
+          url: details.url,
+          method: details.method,
+          resourceType: rt,
+          timestamp: Date.now(),
+        });
+      }
 
       callback({ requestHeaders: headers });
     }
@@ -363,16 +389,18 @@ function createWindow() {
       delete headers['x-frame-options'];
       delete headers['X-Frame-Options'];
 
-      // Remove CSP restrictions
-      delete headers['content-security-policy'];
-      delete headers['Content-Security-Policy'];
-      delete headers['content-security-policy-report-only'];
+      // Remove CSP restrictions — skip for media responses (video/audio) for performance
+      const ct = (details.responseHeaders?.['content-type'] || details.responseHeaders?.['Content-Type'] || [''])[0];
+      if (!ct.startsWith('video/') && !ct.startsWith('audio/') && !ct.startsWith('application/octet')) {
+        delete headers['content-security-policy'];
+        delete headers['Content-Security-Policy'];
+        delete headers['content-security-policy-report-only'];
+      }
 
-      // Update network log with response
-      const logEntry = networkLog.find(e => e.id === details.id);
+      // Update network log entry (O(1) Map lookup)
+      const logEntry = networkLog.get(details.id);
       if (logEntry) {
         logEntry.statusCode = details.statusCode;
-        logEntry.responseHeaders = headers;
         logEntry.fromCache = details.fromCache;
       }
 
@@ -384,14 +412,12 @@ function createWindow() {
   mainWindow.webContents.session.webRequest.onCompleted(
     { urls: ['*://*/*'] },
     (details) => {
-      const logEntry = networkLog.find(e => e.id === details.id);
+      const logEntry = networkLog.get(details.id);
       if (logEntry) {
         logEntry.completed = true;
         logEntry.duration = Date.now() - logEntry.timestamp;
-        // Send to renderer for DevTools Network panel
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('network-log', logEntry);
-        }
+        networkLog.delete(details.id);
+        _queueNetworkIPC(logEntry);
       }
     }
   );
@@ -399,13 +425,12 @@ function createWindow() {
   mainWindow.webContents.session.webRequest.onErrorOccurred(
     { urls: ['*://*/*'] },
     (details) => {
-      const logEntry = networkLog.find(e => e.id === details.id);
+      const logEntry = networkLog.get(details.id);
       if (logEntry) {
         logEntry.error = details.error;
         logEntry.completed = false;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('network-log', logEntry);
-        }
+        networkLog.delete(details.id);
+        _queueNetworkIPC(logEntry);
       }
     }
   );
@@ -675,10 +700,11 @@ function setupIPC() {
 
   // ── Network Monitoring ─────────────────────────────────────────────────────
   ipcMain.handle('network:getLog', () => {
-    return networkLog.slice(-100); // Return last 100 entries
+    return Array.from(networkLog.values()).slice(-100); // Return last 100 entries
   });
   ipcMain.handle('network:clearLog', () => {
-    networkLog.length = 0;
+    networkLog.clear();
+    _netLogBatch = [];
     return { ok: true };
   });
 
