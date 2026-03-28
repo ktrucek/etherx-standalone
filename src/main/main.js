@@ -337,8 +337,19 @@ function createWindow() {
         const url = details.url || '';
         if (/google\.com|googleapis\.com|accounts\.google/i.test(url)) {
           ua = GOOGLE_UA;
-          // Remove X-Frame-Options bypass headers that trigger Google security
+          // Remove headers that trigger Google's embedded-webview detection
           delete headers['X-Requested-With'];
+          // Sec-CH-UA client hints — Chrome 135 sends these; missing ones trigger Google's
+          // "this app may not be safe" / "disallowedapp" OAuth block in Electron webviews
+          headers['Sec-CH-UA'] = '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
+          headers['Sec-CH-UA-Mobile'] = '?0';
+          headers['Sec-CH-UA-Platform'] = '"Windows"';
+          // Override Sec-Fetch headers — Electron webview sends cross-site/navigate which
+          // Google uses to detect embedded views; override to simulate top-level navigation
+          headers['Sec-Fetch-Site'] = 'none';
+          headers['Sec-Fetch-Mode'] = 'navigate';
+          headers['Sec-Fetch-Dest'] = 'document';
+          headers['Sec-Fetch-User'] = '?1';
         }
         headers[key] = ua || CLEAN_UA;
       }
@@ -455,6 +466,13 @@ function createWindow() {
         if (/google\.com|googleapis\.com|accounts\.google/i.test(url)) {
           ua = GOOGLE_UA;
           delete headers['X-Requested-With'];
+          headers['Sec-CH-UA'] = '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
+          headers['Sec-CH-UA-Mobile'] = '?0';
+          headers['Sec-CH-UA-Platform'] = '"Windows"';
+          headers['Sec-Fetch-Site'] = 'none';
+          headers['Sec-Fetch-Mode'] = 'navigate';
+          headers['Sec-Fetch-Dest'] = 'document';
+          headers['Sec-Fetch-User'] = '?1';
         }
         headers[key] = ua || CLEAN_UA;
       }
