@@ -19,6 +19,20 @@ const { execFile } = require('child_process');
 let AdmZip;
 try { AdmZip = require('adm-zip'); } catch (_) { /* optional — needed only for CWS extension downloads */ }
 
+// 🔥 PERFORMANCE: V8 Memory & Performance Tuning
+const os = require('os');
+const totalMem = os.totalmem() / 1024 / 1024 / 1024; // GB
+
+// Allocate 25% of system RAM for Electron (max 4GB)
+const maxMem = Math.min(Math.floor(totalMem * 0.25) * 1024, 4096);
+
+app.commandLine.appendSwitch('js-flags',
+  `--max-old-space-size=${maxMem} ` +        // Heap limit
+  '--optimize-for-size ' +                    // Memory over speed
+  '--gc-interval=100 ' +                      // More frequent GC
+  '--expose-gc'                               // Allow manual GC
+);
+
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
 // Only apply on Linux headless/CI environments — on desktop keep GPU enabled for performance
@@ -34,10 +48,12 @@ if (process.platform !== 'darwin') {
     app.commandLine.appendSwitch('disable-gpu');
     app.commandLine.appendSwitch('disable-software-rasterizer');
   } else {
-    // Enable hardware acceleration on desktop
+    // 🔥 PERFORMANCE: Maximum hardware acceleration on desktop
     app.commandLine.appendSwitch('enable-gpu-rasterization');
     app.commandLine.appendSwitch('enable-zero-copy');
     app.commandLine.appendSwitch('ignore-gpu-blocklist');
+    app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
+    app.commandLine.appendSwitch('enable-accelerated-video-decode');
   }
 }
 // Prevent GPU sandbox from crashing the renderer (fixes launch-failed / exit 1003)
@@ -280,6 +296,30 @@ app.whenReady().then(async () => {
     _ipcSetupDone = true;
   }
 
+  // 🔥 PERFORMANCE: Session warming - preconnect to popular domains
+  // This loads DNS/TLS handshakes in background → instant navigation
+  try {
+    const etherxSess = session.fromPartition('persist:etherx');
+    const popularDomains = [
+      'https://www.google.com',
+      'https://www.youtube.com',
+      'https://github.com',
+      'https://stackoverflow.com',
+      'https://twitter.com',
+      'https://wallet.kriptoentuzijasti.io',
+      'https://bobiai.kriptoentuzijasti.io'
+    ];
+
+    // Preconnect to popular domains (DNS + TLS handshake)
+    popularDomains.forEach(domain => {
+      etherxSess.preconnect({ url: domain, numSockets: 2 });
+    });
+
+    console.log(`[Perf] Session warmed with ${popularDomains.length} preconnects`);
+  } catch (e) {
+    console.warn('[Perf] Session warming failed:', e.message);
+  }
+
   createWindow();
 
   // Register etherx:// protocol for settings
@@ -335,6 +375,7 @@ function createWindow() {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden', // hiddenInset on macOS keeps traffic lights visible + content below
     trafficLightPosition: { x: 16, y: 16 },           // macOS: traffic lights on LEFT (like Safari)
     backgroundColor: '#1a1a2e',                       // deep navy/purple — matches UI theme
+    show: false, // 🔥 PERFORMANCE: Don't show until ready (prevents white flash)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -343,12 +384,32 @@ function createWindow() {
       webviewTag: true,                             // keep WebView tabs
       allowRunningInsecureContent: false,
       webSecurity: false,                           // allow cross-origin webviews / iframes
-      backgroundThrottling: false,                  // prevent throttling when window is in background
+      backgroundThrottling: true,                   // 🔥 PERFORMANCE: Throttle background tabs
       disableBlinkFeatures: '',                     // enable all Blink features for performance
-      enableBlinkFeatures: '',                      // no experimental features needed
+      enableBlinkFeatures: 'CSSInsetProperty',      // 🔥 PERFORMANCE: Modern CSS features
+      v8CacheOptions: 'code',                       // 🔥 PERFORMANCE: Cache compiled JS
+      enableWebSQL: false,                          // 🔥 PERFORMANCE: Disable deprecated WebSQL
     },
     icon: path.join(__dirname, 'src', 'logo_novi.png'),
-    show: false,
+  });
+
+  // 🔥 PERFORMANCE: Show window only when ready (smooth fade-in)
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    // Optional: smooth fade-in effect
+    if (mainWindow.setOpacity) {
+      mainWindow.setOpacity(0);
+      let opacity = 0;
+      const fadeIn = setInterval(() => {
+        opacity += 0.1;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setOpacity(opacity);
+        }
+        if (opacity >= 1) {
+          clearInterval(fadeIn);
+        }
+      }, 16); // 60fps
+    }
   });
 
   // Save bounds on change

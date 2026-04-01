@@ -108,3 +108,51 @@ try {
         });
     }
 } catch (_) { }
+
+// ── 🔥 PERFORMANCE: Auto-inject resource hints for common CDNs ───────────────
+// Preconnect to popular CDNs/APIs as soon as page loads → faster asset loading
+try {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', injectResourceHints);
+    } else {
+        injectResourceHints();
+    }
+
+    function injectResourceHints() {
+        const commonCDNs = [
+            'https://fonts.googleapis.com',
+            'https://fonts.gstatic.com',
+            'https://cdnjs.cloudflare.com',
+            'https://cdn.jsdelivr.net',
+            'https://unpkg.com',
+            'https://ajax.googleapis.com',
+            'https://code.jquery.com',
+            'https://stackpath.bootstrapcdn.com',
+            'https://maxcdn.bootstrapcdn.com',
+            'https://use.fontawesome.com'
+        ];
+
+        // Only inject if page is using these (check for domains in document)
+        const pageHTML = document.documentElement.innerHTML;
+        const head = document.head || document.getElementsByTagName('head')[0];
+
+        if (!head) return;
+
+        commonCDNs.forEach(cdn => {
+            const domain = new URL(cdn).hostname;
+
+            // Check if page references this CDN
+            if (pageHTML.includes(domain)) {
+                // Check if preconnect already exists
+                const existing = head.querySelector(`link[rel="preconnect"][href="${cdn}"]`);
+                if (!existing) {
+                    const link = document.createElement('link');
+                    link.rel = 'preconnect';
+                    link.href = cdn;
+                    link.crossOrigin = 'anonymous';
+                    head.appendChild(link);
+                }
+            }
+        });
+    }
+} catch (_) { }

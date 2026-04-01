@@ -3,7 +3,7 @@
 //  Provides: Offline support, caching, background sync
 // ============================================================
 
-const CACHE_VERSION = 'etherx-v2.4.123';
+const CACHE_VERSION = 'etherx-v2.4.124';
 const CACHE_ASSETS = [
     '/etherx-standalone/src/index.html',
     '/etherx-standalone/assets/filters/filters.txt',
@@ -63,7 +63,37 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Strategy: Network First, fallback to Cache
+    // 🔥 PERFORMANCE: Cache First for static assets, Network First for dynamic
+    const reqUrl = event.request.url;
+    const isStatic = /\.(css|js|png|jpg|jpeg|svg|woff2?|ttf|eot|ico)$/i.test(url.pathname) ||
+        reqUrl.includes('/assets/') ||
+        reqUrl.includes('/src/logo');
+
+    if (isStatic) {
+        // CACHE FIRST - 3-5x faster for static resources
+        event.respondWith(
+            caches.match(event.request).then((cached) => {
+                if (cached) {
+                    return cached; // Immediate return from cache
+                }
+                // Not in cache, fetch and cache it
+                return fetch(event.request).then((response) => {
+                    if (response.status === 200) {
+                        const clone = response.clone();
+                        caches.open(CACHE_VERSION).then((cache) => {
+                            cache.put(event.request, clone);
+                        });
+                    }
+                    return response;
+                }).catch(() => {
+                    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+                });
+            })
+        );
+        return;
+    }
+
+    // NETWORK FIRST - for dynamic content
     event.respondWith(
         fetch(event.request)
             .then((response) => {

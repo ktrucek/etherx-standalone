@@ -16,6 +16,13 @@
   <link rel="apple-touch-icon" href="/standalone-browser/assets/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/standalone-browser/assets/icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/standalone-browser/assets/icon-512.png">
+
+  <!-- 🔥 PERFORMANCE: Preload critical resources -->
+  <link rel="preload" href="/etherx-standalone/assets/ethers.umd.min.js" as="script">
+  <link rel="preload" href="/etherx-standalone/assets/filters/filters.txt" as="fetch" crossorigin>
+  <link rel="preconnect" href="https://wallet.kriptoentuzijasti.io">
+  <link rel="dns-prefetch" href="https://bobiai.kriptoentuzijasti.io">
+
   <title>EtherX Browser</title>
   <style>
     * {
@@ -8089,7 +8096,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.123</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.124</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8379,7 +8386,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.123</span></div>
+                id="helpVersionNum2">2.4.124</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -10004,6 +10011,89 @@
     })();
 
     const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false, autoBookmark: false };
+
+    // 🔥 PERFORMANCE: Throttle and Debounce helpers
+    function throttle(func, limit) {
+      let inThrottle;
+      return function (...args) {
+        if (!inThrottle) {
+          func.apply(this, args);
+          inThrottle = true;
+          setTimeout(() => inThrottle = false, limit);
+        }
+      };
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
+    }
+
+    // 🔥 PERFORMANCE: Simple Virtual Scroller for large lists
+    class SimpleVirtualList {
+      constructor(container, items, renderItem, itemHeight = 40) {
+        this.container = container;
+        this.items = items;
+        this.renderItem = renderItem;
+        this.itemHeight = itemHeight;
+        this.visible = Math.ceil(container.clientHeight / itemHeight) + 5;
+        this.start = 0;
+
+        this.viewport = document.createElement('div');
+        this.viewport.style.position = 'relative';
+        this.viewport.style.overflow = 'auto';
+        this.viewport.style.height = '100%';
+
+        this.phantom = document.createElement('div');
+        this.phantom.style.height = `${items.length * itemHeight}px`;
+
+        this.content = document.createElement('div');
+        this.content.style.position = 'absolute';
+        this.content.style.top = '0';
+        this.content.style.width = '100%';
+
+        this.viewport.appendChild(this.phantom);
+        this.viewport.appendChild(this.content);
+        this.container.innerHTML = '';
+        this.container.appendChild(this.viewport);
+
+        this.viewport.addEventListener('scroll', throttle(() => this.render(), 16));
+        this.render();
+      }
+
+      render() {
+        const scrollTop = this.viewport.scrollTop;
+        this.start = Math.floor(scrollTop / this.itemHeight);
+        const end = Math.min(this.start + this.visible, this.items.length);
+
+        const fragment = document.createDocumentFragment();
+        for (let i = this.start; i < end; i++) {
+          const item = this.renderItem(this.items[i], i);
+          item.style.position = 'absolute';
+          item.style.top = `${i * this.itemHeight}px`;
+          item.style.left = '0';
+          item.style.right = '0';
+          fragment.appendChild(item);
+        }
+
+        this.content.innerHTML = '';
+        this.content.appendChild(fragment);
+      }
+
+      update(newItems) {
+        this.items = newItems;
+        this.phantom.style.height = `${newItems.length * this.itemHeight}px`;
+        this.render();
+      }
+
+      destroy() {
+        this.viewport.remove();
+      }
+    }
+
     const origGetElementById = document.getElementById;
     document.getElementById = function (id) {
       if (id === 'browseFrame' && window.electronWebview) {
@@ -10509,13 +10599,39 @@
 
       if (window.electronWebview) {
         const wv = origGetElementById.call(document, 'browseFrame_' + id);
-        // NOTE: do NOT set wv.src = 'about:blank' before remove — it triggers
-        // GUEST_VIEW_MANAGER_CALL: ERR_FAILED (-2) if the guest process isn't ready.
-        // wv.remove() alone is sufficient to destroy the webview and its process.
-        if (wv) { try { wv.remove(); } catch (_) { } }
+        // 🔥 PERFORMANCE: Memory cleanup before removal
+        if (wv) {
+          try {
+            // Stop any ongoing loading
+            if (typeof wv.stop === 'function') wv.stop();
+
+            // Remove event listeners to prevent memory leaks
+            const events = ['did-start-loading', 'did-stop-loading', 'page-title-updated',
+              'page-favicon-updated', 'new-window', 'did-fail-load'];
+            events.forEach(evt => {
+              if (typeof wv.removeAllListeners === 'function') {
+                wv.removeAllListeners(evt);
+              }
+            });
+
+            // Clear content before removal (helps GC)
+            wv.src = 'about:blank';
+
+            // Delayed removal for cleanup
+            setTimeout(() => {
+              try { wv.remove(); } catch (_) { }
+            }, 50);
+          } catch (_) { }
+        }
         if (id === 1) {
           const origWv = origGetElementById.call(document, 'browseFrame');
-          if (origWv && origWv.dataset.tabId === "1") { try { origWv.remove(); } catch (_) { } }
+          if (origWv && origWv.dataset.tabId === "1") {
+            try {
+              if (typeof origWv.stop === 'function') origWv.stop();
+              origWv.src = 'about:blank';
+              setTimeout(() => { try { origWv.remove(); } catch (_) { } }, 50);
+            } catch (_) { }
+          }
         }
       }
 
@@ -10920,11 +11036,27 @@
     }
     function setLoading(pct) {
       const bar = document.getElementById('loadingBar');
-      bar.classList.remove('done');
-      bar.style.width = pct + '%';
-      if (pct >= 100) {
-        setTimeout(() => { bar.classList.add('done'); setTimeout(() => { bar.style.width = '0%'; bar.classList.remove('done'); }, 400); }, 600);
-      }
+      if (!bar) return;
+
+      // 🔥 PERFORMANCE: Use requestAnimationFrame for smooth 60fps animations
+      requestAnimationFrame(() => {
+        bar.classList.remove('done');
+        bar.style.width = pct + '%';
+
+        if (pct >= 100) {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              bar.classList.add('done');
+              setTimeout(() => {
+                requestAnimationFrame(() => {
+                  bar.style.width = '0%';
+                  bar.classList.remove('done');
+                });
+              }, 400);
+            }, 600);
+          });
+        }
+      });
     }
     function setZoom(val) {
       STATE.zoom = Math.max(25, Math.min(500, val));

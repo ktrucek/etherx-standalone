@@ -69,6 +69,9 @@ class DatabaseManager {
         );
         CREATE INDEX IF NOT EXISTS idx_history_url        ON history(url);
         CREATE INDEX IF NOT EXISTS idx_history_last_visit ON history(last_visited DESC);
+        -- 🔥 PERFORMANCE: Additional indices for faster searches
+        CREATE INDEX IF NOT EXISTS idx_history_title      ON history(title COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_history_url_title  ON history(url, title);
 
         -- ── Bookmarks ─────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS bookmarks (
@@ -81,6 +84,10 @@ class DatabaseManager {
           created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
         CREATE INDEX IF NOT EXISTS idx_bookmarks_folder ON bookmarks(folder);
+        -- 🔥 PERFORMANCE: Additional bookmark search indices
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_title  ON bookmarks(title COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_url    ON bookmarks(url);
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_search ON bookmarks(title, url);
 
         -- ── Settings ──────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS settings (
