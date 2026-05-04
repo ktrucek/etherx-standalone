@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.128",
+  "version": "2.4.129",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -98,5 +98,5 @@
     "uuid": "^9.0.0",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-05-04T23:45:22Z"
+  "buildTime": "2026-05-04T23:46:25Z"
 }

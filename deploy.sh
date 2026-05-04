@@ -223,6 +223,9 @@ if [[ "$NO_PUSH" == false ]]; then
   # Credentials via -c http.extraHeader — ne upisuje se u .git/config, vidljivo samo za ovaj poziv
   GIT_AUTH=(-c "http.extraHeader=Authorization: Basic $(echo -n "x-token:${GITHUB_TOKEN_DEPLOY}" | base64 -w0)")
 
+  info "Fetching github/main to refresh stale tracking ref..."
+  git "${GIT_AUTH[@]}" fetch github main 2>/dev/null || true
+
   info "Pushing to GitHub (triggers build)..."
   if git "${GIT_AUTH[@]}" push --force-with-lease github main && \
      git "${GIT_AUTH[@]}" push -f github "$TAG_NAME"; then
