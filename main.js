@@ -264,11 +264,15 @@ app.whenReady().then(async () => {
   try {
     const etherxSess = session.fromPartition('persist:etherx');
     etherxSess.setPermissionRequestHandler((_webContents, permission, callback) => {
-      const allowed = ['media', 'fullscreen', 'pointerLock', 'openExternal', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'geolocation', 'midi', 'midiSysex'].includes(permission);
+      // Allow all permissions needed for modern sites:
+      // - media: microphone + camera (required for calls, QR scanning, video chat)
+      // - videoCapture / audioCapture: explicit camera/mic grants (Electron-specific)
+      // - camera: used by some sites (TikTok QR login, video calls)
+      const allowed = ['media', 'videoCapture', 'audioCapture', 'camera', 'fullscreen', 'pointerLock', 'openExternal', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'geolocation', 'midi', 'midiSysex', 'screen'].includes(permission);
       callback(allowed);
     });
     etherxSess.setPermissionCheckHandler((_webContents, permission) => {
-      return ['media', 'fullscreen', 'pointerLock', 'clipboard-read', 'clipboard-sanitized-write'].includes(permission);
+      return ['media', 'videoCapture', 'audioCapture', 'camera', 'fullscreen', 'pointerLock', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'geolocation'].includes(permission);
     });
     // Inject anti-bot-detection preload into every webview (persist:etherx session)
     // BEFORE any page JS runs. Spoofs navigator.webdriver, window.chrome, plugins,
@@ -1538,8 +1542,35 @@ app.on('web-contents-created', (_event, contents) => {
         return { action: 'deny' };
       }
 
-      // Route http/https URLs as new tab inside EtherX instead of spawning a system browser
       if (['http:', 'https:', 'about:', 'chrome-extension:'].includes(parsedUrl.protocol)) {
+        // OAuth / login popup detection:
+        // These sites open small popup windows for authentication that communicate
+        // back to the opener via window.opener.postMessage(). If we convert them
+        // to a new tab the window.opener reference is lost and login breaks.
+        const isOAuthPopup =
+          details.disposition === 'new-popup' ||
+          /accounts\.google\.com|login\.live\.com|appleid\.apple\.com|facebook\.com\/dialog|twitter\.com\/oauth|x\.com\/oauth|tiktok\.com\/login|accounts\.tiktok\.com|github\.com\/login\/oauth|discord\.com\/oauth2|linkedin\.com\/oauth|reddit\.com\/api\/v1\/authorize/i.test(details.url);
+
+        if (isOAuthPopup) {
+          // Allow as a real popup BrowserWindow so window.opener is preserved
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: details.features?.match(/width=(\d+)/)?.[1] ? parseInt(details.features.match(/width=(\d+)/)[1]) : 520,
+              height: details.features?.match(/height=(\d+)/)?.[1] ? parseInt(details.features.match(/height=(\d+)/)[1]) : 620,
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: false,
+                partition: 'persist:etherx',
+                webviewTag: false,
+              },
+              parent: mainWindow || undefined,
+            },
+          };
+        }
+
+        // Regular target="_blank" / new tab link — route inside EtherX
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('app:createTab', details.url);
         }

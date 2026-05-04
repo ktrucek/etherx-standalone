@@ -178,12 +178,14 @@ function createTabFrame(tabId, partition) {
   });
 
   // Block deep-link / non-web protocols from opening OS dialogs (e.g. bytedance://)
+  // target="_blank" links should open in a new tab (not navigate the current tab)
   wv.addEventListener('new-window', (e) => {
     try {
       const { protocol } = new URL(e.url);
       if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
     } catch (_) { return; }
-    navigateTo(e.url, tabId);
+    // Open in a new tab instead of replacing current tab
+    createTab(e.url, '', true);
   });
 
   // Inject contextmenu listener into loaded page so right-click events bubble
@@ -363,7 +365,20 @@ function normalizeUrl(raw) {
   if (/\.eth$/i.test(raw)) return 'https://app.ens.domains/name/' + raw;
   if (/^[a-z][a-z0-9+\-.]*:\/\//i.test(raw)) return raw;
   if (/^[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+/.test(raw) && !raw.includes(' ')) return 'https://' + raw;
-  return 'https://www.google.com/search?q=' + encodeURIComponent(raw);
+  // Use configured search engine (falls back to Google)
+  const cfg = DB.getSettings();
+  const searchEngines = {
+    google: 'https://www.google.com/search?q=',
+    bing: 'https://www.bing.com/search?q=',
+    duckduckgo: 'https://duckduckgo.com/?q=',
+    brave: 'https://search.brave.com/search?q=',
+    ecosia: 'https://www.ecosia.org/search?q=',
+    startpage: 'https://www.startpage.com/search?q=',
+    yahoo: 'https://search.yahoo.com/search?p=',
+    baidu: 'https://www.baidu.com/s?wd=',
+  };
+  const engine = searchEngines[cfg.search_engine] || searchEngines.google;
+  return engine + encodeURIComponent(raw);
 }
 function showNTP() {
   ntp.style.display = 'flex';
@@ -619,7 +634,18 @@ if (urlInput) {
   urlInput.addEventListener('blur', () => setTimeout(closeAcDropdown, 150));
 }
 document.getElementById('goBtn')?.addEventListener('click', () => { closeAcDropdown(); doNavigate(); });
-document.getElementById('ntpSearch')?.addEventListener('keydown', e => { if (e.key === 'Enter') navigateTo(e.target.value); });
+document.getElementById('ntpSearch')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const q = e.target.value.trim();
+    if (q) {
+      navigateTo(q);
+      // Update address bar to match what was searched
+      const urlInput2 = document.getElementById('urlInput');
+      if (urlInput2) { urlInput2.value = q; urlInput2.blur(); }
+    }
+  }
+});
 
 // Save to URL history after every successful navigation
 const _origNavigateTo = navigateTo;
@@ -729,8 +755,11 @@ function setLoading(pct) {
 function setZoom(val) {
   STATE.zoom = Math.max(25, Math.min(500, val));
   const s = STATE.zoom / 100;
-  if (window.electronWebview && typeof frame.setZoomFactor === 'function') {
-    frame.setZoomFactor(s);
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.setZoomFactor === 'function') {
+      try { wv.setZoomFactor(s); } catch (e) { }
+    }
   } else {
     if (s === 1) {
       frame.style.transform = ''; frame.style.width = '100%'; frame.style.height = '100%';
@@ -748,16 +777,57 @@ function setZoom(val) {
 }
 document.getElementById('zoomIndicator').addEventListener('click', () => setZoom(100));
 function openFind() { const fb = document.getElementById('findBar'); fb.classList.add('show'); document.getElementById('findInput').focus(); document.getElementById('findInput').select(); }
-function closeFind() { document.getElementById('findBar').classList.remove('show'); document.getElementById('findInput').value = ''; document.getElementById('findCount').textContent = ''; }
+function closeFind() {
+  document.getElementById('findBar').classList.remove('show');
+  document.getElementById('findInput').value = '';
+  document.getElementById('findCount').textContent = '';
+  // Stop find in webview
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.stopFindInPage === 'function') {
+      try { wv.stopFindInPage('clearSelection'); } catch (e) { }
+    }
+  }
+}
 document.getElementById('findClose').addEventListener('click', closeFind);
 document.getElementById('findDone').addEventListener('click', closeFind);
 document.getElementById('findInput').addEventListener('input', () => {
   const q = document.getElementById('findInput').value;
   document.getElementById('findCount').textContent = q ? '(searching…)' : '';
-  try { frame.contentWindow.find(q); } catch (e) { }
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try {
+        if (!q) { wv.stopFindInPage('clearSelection'); return; }
+        wv.findInPage(q);
+        wv.addEventListener('found-in-page', function handler(e) {
+          document.getElementById('findCount').textContent = e.result.matches ? (e.result.activeMatchOrdinal + '/' + e.result.matches) : 'Not found';
+          wv.removeEventListener('found-in-page', handler);
+        });
+      } catch (e) { }
+    }
+  } else {
+    try { frame.contentWindow.find(q); } catch (e) { }
+  }
 });
-document.getElementById('findPrev').addEventListener('click', () => { try { frame.contentWindow.find(document.getElementById('findInput').value, false, true); } catch (e) { } });
-document.getElementById('findNext').addEventListener('click', () => { try { frame.contentWindow.find(document.getElementById('findInput').value); } catch (e) { } });
+document.getElementById('findPrev').addEventListener('click', () => {
+  const q = document.getElementById('findInput').value; if (!q) return;
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try { wv.findInPage(q, { forward: false, findNext: true }); } catch (e) { }
+    }
+  } else { try { frame.contentWindow.find(q, false, true); } catch (e) { } }
+});
+document.getElementById('findNext').addEventListener('click', () => {
+  const q = document.getElementById('findInput').value; if (!q) return;
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try { wv.findInPage(q, { forward: true, findNext: true }); } catch (e) { }
+    }
+  } else { try { frame.contentWindow.find(q); } catch (e) { } }
+});
 let readerFontSize = 18;
 document.getElementById('btnReader').addEventListener('click', toggleReader);
 document.getElementById('readerClose').addEventListener('click', toggleReader);
@@ -5631,6 +5701,24 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
       showToast('✓ Bot upozorenja ponovo omogućena');
       console.log('[EtherX] Bot detection warnings re-enabled');
     };
+  }
+
+  // ── IPC: handle open-url and app:createTab from main process ────────────────
+  if (window.etherx?.on) {
+    // open-url: browser opened with a URL argument (protocol handler / second instance)
+    window.etherx.on('open-url', (url) => {
+      if (!url) return;
+      if (STATE.tabs.length === 0) {
+        createTab(url, '', true);
+      } else {
+        navigateTo(url, STATE.activeTabId);
+      }
+    });
+    // app:createTab: main process wants to open a URL in a new tab
+    // (e.g. target="_blank" links intercepted in webview's setWindowOpenHandler)
+    window.etherx.on('app:createTab', (url) => {
+      if (url) createTab(url, '', true);
+    });
   }
 
   // ════════════════════════════════════════════════════════════════════════════
