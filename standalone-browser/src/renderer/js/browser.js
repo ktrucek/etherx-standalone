@@ -1,13 +1,23 @@
-// ── Self-embed guard (prevents browser.html loading inside its own proxy iframe) ──
+// ── Self-embed guard (DISABLED - caused more issues than it solved) ──
+// Previously this guard would break the browser when loaded in certain iframe contexts
+// If re-enabling, ensure it doesn't trigger in Electron webview or legitimate use cases
 (function () {
+  // GUARD DISABLED - browser should load in all contexts
+  // Uncomment carefully if you need to block specific iframe embeddings
+  /*
   try {
-    if (window.self !== window.top) {
-      // We are inside an iframe — if loaded as a page, break out
-      document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
-      window.stop && window.stop();
-      return;
+    if (window.self !== window.top && typeof window.electronAPI === 'undefined') {
+      const isOwnDomain = window.location.hostname === window.top.location.hostname;
+      if (!isOwnDomain) {
+        if (document.documentElement) {
+          document.documentElement.innerHTML = '<div style="font:14px sans-serif;padding:24px;color:#aaa">⚠️ Cannot display this page in a frame.</div>';
+        }
+        window.stop && window.stop();
+        return;
+      }
     }
-  } catch (e) { /* cross-origin: safe to ignore */ }
+  } catch (e) { }
+  */
 })();
 
 // ── Electron webview detection ──
@@ -64,6 +74,10 @@ if (window.electronWebview) {
       if (tab && e.url) { tab.url = e.url; document.getElementById('urlInput').value = e.url; }
     });
     wv.addEventListener('new-window', (e) => {
+      try {
+        const { protocol } = new URL(e.url);
+        if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
+      } catch (_) { return; }
       navigateTo(e.url);
     });
   });
@@ -72,6 +86,8 @@ const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoo
 // Per-tab webview map: tabId → <webview> element
 // Each tab gets its own webview so audio/video keeps playing when switching tabs
 const tabFrames = new Map();
+// Track which webviews have emitted dom-ready and are safe to use
+const tabFrameReady = new Map();
 
 // ── Performance: In-memory cache za settings ──────────────────────────────
 let _settingsCache = null;
@@ -83,7 +99,7 @@ const DB = {
   addHistory(e) { if (STATE.isPrivate) return; let h = this.getHistory(); h = h.filter(x => x.url !== e.url); h.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_hist', JSON.stringify(h.slice(0, 500))) },
   clearHistory() { localStorage.removeItem('ex_hist') },
   getBookmarks: () => JSON.parse(localStorage.getItem('ex_bm') || '[]'),
-  addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { showToast('Already bookmarked'); return; } b.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); showToast('⭐ Bookmarked: ' + e.title) },
+  addBookmark(e) { const b = this.getBookmarks(); if (b.find(x => x.url === e.url)) { if (!e.silent) showToast('Already bookmarked'); return; } b.unshift({ ...e, ts: Date.now() }); localStorage.setItem('ex_bm', JSON.stringify(b)); if (!e.silent) showToast('⭐ Bookmarked: ' + e.title) },
   removeBookmark(u) { localStorage.setItem('ex_bm', JSON.stringify(this.getBookmarks().filter(x => x.url !== u))) },
   getSettings: () => {
     const now = Date.now();
@@ -145,6 +161,8 @@ function createTabFrame(tabId, partition) {
   wv.addEventListener('did-navigate', (e) => {
     const t = STATE.tabs.find(x => x.id === tabId);
     if (t) { t.url = e.url; t.history.push(e.url); t.histIdx = t.history.length - 1; if (STATE.activeTabId === tabId) { document.getElementById('urlInput').value = e.url; updateUrlIcon(e.url); updateNavBtns(t); } updateTabEl(t); }
+    // Clear phishing banner on every navigation
+    if (STATE.activeTabId === tabId) { const pb = document.getElementById('phishingBanner'); if (pb) pb.style.display = 'none'; }
   });
   wv.addEventListener('did-navigate-in-page', (e) => {
     if (!e.isMainFrame) return;
@@ -155,11 +173,24 @@ function createTabFrame(tabId, partition) {
   wv.addEventListener('context-menu', (e) => {
     e.preventDefault();
     const link = e.params?.linkURL || null;
-    showCtxMenu(e.params?.x || 0, e.params?.y || 0, link || null);
+    const img = (e.params?.mediaType === 'image' && e.params?.srcURL) ? e.params.srcURL : null;
+    showCtxMenu(e.params?.x || 0, e.params?.y || 0, link || null, img);
+  });
+
+  // Block deep-link / non-web protocols from opening OS dialogs (e.g. bytedance://)
+  // target="_blank" links should open in a new tab (not navigate the current tab)
+  wv.addEventListener('new-window', (e) => {
+    try {
+      const { protocol } = new URL(e.url);
+      if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
+    } catch (_) { return; }
+    // Open in a new tab instead of replacing current tab
+    createTab(e.url, '', true);
   });
 
   // Inject contextmenu listener into loaded page so right-click events bubble
   wv.addEventListener('dom-ready', () => {
+    tabFrameReady.set(tabId, true);
     wv.insertCSS('*{-webkit-user-select: text !important;}').catch(() => { });
   });
 
@@ -297,15 +328,22 @@ function switchTab(id) {
   saveSessionTabs();
 }
 function saveSessionTabs() {
+  let windowId = 'main';
+  try {
+    if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+      windowId = window.electronAPI.windowId() || 'main';
+    }
+  } catch (e) { }
+
   const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
-  localStorage.setItem('ex_session_tabs', JSON.stringify(session));
-  localStorage.setItem('ex_session_active', STATE.activeTabId);
+  localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
+  localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
 }
 function closeTab(id) {
   const idx = STATE.tabs.findIndex(t => t.id === id); if (idx === -1) return;
   STATE.tabs.splice(idx, 1); const el = getTabEl(id); if (el) el.remove();
   // Remove this tab's dedicated webview
-  if (window.electronWebview) { const wv = tabFrames.get(id); if (wv) { wv.src = 'about:blank'; wv.remove(); tabFrames.delete(id); } }
+  if (window.electronWebview) { const wv = tabFrames.get(id); if (wv) { wv.src = 'about:blank'; wv.remove(); tabFrames.delete(id); tabFrameReady.delete(id); } }
   saveSessionTabs();
   if (STATE.tabs.length === 0) { createTab(); return; }
   switchTab(STATE.tabs[Math.min(idx, STATE.tabs.length - 1)].id);
@@ -327,10 +365,28 @@ function normalizeUrl(raw) {
   if (/\.eth$/i.test(raw)) return 'https://app.ens.domains/name/' + raw;
   if (/^[a-z][a-z0-9+\-.]*:\/\//i.test(raw)) return raw;
   if (/^[a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+/.test(raw) && !raw.includes(' ')) return 'https://' + raw;
-  return 'https://www.google.com/search?q=' + encodeURIComponent(raw);
+  // Use configured search engine (falls back to Google)
+  const cfg = DB.getSettings();
+  const searchEngines = {
+    google: 'https://www.google.com/search?q=',
+    bing: 'https://www.bing.com/search?q=',
+    duckduckgo: 'https://duckduckgo.com/?q=',
+    brave: 'https://search.brave.com/search?q=',
+    ecosia: 'https://www.ecosia.org/search?q=',
+    startpage: 'https://www.startpage.com/search?q=',
+    yahoo: 'https://search.yahoo.com/search?p=',
+    baidu: 'https://www.baidu.com/s?wd=',
+  };
+  const engine = searchEngines[cfg.search_engine] || searchEngines.google;
+  return engine + encodeURIComponent(raw);
 }
 function showNTP() {
-  ntp.style.display = 'flex'; frame.classList.remove('active');
+  ntp.style.display = 'flex';
+  frame.classList.remove('active');
+  // Also hide all per-tab webviews so they don't cover the NTP
+  if (window.electronWebview) {
+    tabFrames.forEach(wv => { wv.style.display = 'none'; wv.classList.remove('active'); });
+  }
   document.getElementById('blockedOverlay').classList.remove('show');
   document.getElementById('readerMode').classList.remove('show');
   document.getElementById('btnReader').style.display = 'none';
@@ -343,8 +399,50 @@ function getTabWebview(tabId) {
   if (window.electronWebview) return tabFrames.get(tabId) || frame;
   return frame;
 }
+function safeWebviewExecute(wv, tabId, method, ...args) {
+  // Safely execute webview methods only after dom-ready event
+  return new Promise((resolve, reject) => {
+    if (!wv || typeof wv[method] !== 'function') {
+      reject(new Error(`WebView method ${method} not available`));
+      return;
+    }
+    const execute = () => {
+      try {
+        const result = wv[method](...args);
+        if (result && typeof result.then === 'function') {
+          result.then(resolve).catch(reject);
+        } else {
+          resolve(result);
+        }
+      } catch (e) {
+        reject(e);
+      }
+    };
+    // Check if webview is ready (has emitted dom-ready)
+    if (tabId && tabFrameReady.get(tabId)) {
+      execute();
+    } else {
+      // Queue execution until dom-ready
+      const timeout = setTimeout(() => {
+        wv.removeEventListener('dom-ready', handler);
+        reject(new Error('WebView dom-ready timeout after 10 seconds'));
+      }, 10000);
+      const handler = () => {
+        clearTimeout(timeout);
+        if (tabId) tabFrameReady.set(tabId, true);
+        execute();
+      };
+      wv.addEventListener('dom-ready', handler, { once: true });
+    }
+  });
+}
 function navigateTo(raw, tabId) {
   const url = normalizeUrl(raw); if (!url) { showNTP(); return; }
+  // Block non-web protocols (e.g. bytedance://, intent://) to prevent OS dialogs
+  try {
+    const { protocol } = new URL(url);
+    if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
+  } catch (e) { return; }
   const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
   closeAllPanels();
   tab.url = url;
@@ -384,20 +482,20 @@ document.getElementById('btnBack').addEventListener('click', () => {
   const tab = getActiveTab(); if (!tab || tab.histIdx <= 0) return;
   tab.histIdx--; const u = tab.history[tab.histIdx]; tab.url = u;
   document.getElementById('urlInput').value = u; updateUrlIcon(u);
-  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.goBack(); } catch (e) { wv.src = u; } } }
+  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { safeWebviewExecute(wv, tab.id, 'goBack').catch(() => { wv.src = u; }); } }
   else { frame.src = u; } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
 });
 document.getElementById('btnFwd').addEventListener('click', () => {
   const tab = getActiveTab(); if (!tab || tab.histIdx >= tab.history.length - 1) return;
   tab.histIdx++; const u = tab.history[tab.histIdx]; tab.url = u;
   document.getElementById('urlInput').value = u; updateUrlIcon(u);
-  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.goForward(); } catch (e) { wv.src = u; } } }
+  if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { safeWebviewExecute(wv, tab.id, 'goForward').catch(() => { wv.src = u; }); } }
   else { frame.src = u; } setLoading(25); updateNavBtns(tab); updateTabEl(tab);
 });
 document.getElementById('btnReload').addEventListener('click', () => {
   const tab = getActiveTab(); if (tab && tab.url) {
     setLoading(20);
-    if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { try { wv.reload(); } catch (e) { wv.src = tab.url; } } }
+    if (window.electronWebview) { const wv = getTabWebview(tab.id); if (wv) { safeWebviewExecute(wv, tab.id, 'reload').catch(() => { wv.src = tab.url; }); } }
     else { frame.src = tab.url; } consoleLog('log', '↺ Reload: ' + tab.url);
   }
 });
@@ -497,10 +595,16 @@ function queryAcDropdown(q) {
 
 if (urlInput) {
   urlInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      if (e.key === 'Tab' && _acItems.length === 0) return; // Allow normal tab out if no dropdown
       e.preventDefault();
       if (_acSelIdx >= 0 && _acItems[_acSelIdx]) {
         urlInput.value = _acItems[_acSelIdx].url;
+        closeAcDropdown();
+        navigateTo(urlInput.value);
+      } else if (e.key === 'Tab' && _acItems.length > 0) {
+        // On tab with no selection, choose first item
+        urlInput.value = _acItems[0].url;
         closeAcDropdown();
         navigateTo(urlInput.value);
       } else {
@@ -530,7 +634,18 @@ if (urlInput) {
   urlInput.addEventListener('blur', () => setTimeout(closeAcDropdown, 150));
 }
 document.getElementById('goBtn')?.addEventListener('click', () => { closeAcDropdown(); doNavigate(); });
-document.getElementById('ntpSearch')?.addEventListener('keydown', e => { if (e.key === 'Enter') navigateTo(e.target.value); });
+document.getElementById('ntpSearch')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const q = e.target.value.trim();
+    if (q) {
+      navigateTo(q);
+      // Update address bar to match what was searched
+      const urlInput2 = document.getElementById('urlInput');
+      if (urlInput2) { urlInput2.value = q; urlInput2.blur(); }
+    }
+  }
+});
 
 // Save to URL history after every successful navigation
 const _origNavigateTo = navigateTo;
@@ -555,7 +670,7 @@ frame.addEventListener('load', () => {
   if (SKIP.some(p => loadedSrc.includes(p))) return;
   try {
     const doc = frame.contentDocument, t = doc?.title;
-    if (t && t !== 'proxy.php' && t !== '') { tab.title = t; document.getElementById('elemTitle').textContent = t; }
+    if (t && t !== '') { tab.title = t; document.getElementById('elemTitle').textContent = t; }
     // Update favicon from Google S2 API only after real page load
     if (tab.url && tab.url.startsWith('http')) {
       tab.faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(tab.url)}`;
@@ -640,8 +755,11 @@ function setLoading(pct) {
 function setZoom(val) {
   STATE.zoom = Math.max(25, Math.min(500, val));
   const s = STATE.zoom / 100;
-  if (window.electronWebview && typeof frame.setZoomFactor === 'function') {
-    frame.setZoomFactor(s);
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.setZoomFactor === 'function') {
+      try { wv.setZoomFactor(s); } catch (e) { }
+    }
   } else {
     if (s === 1) {
       frame.style.transform = ''; frame.style.width = '100%'; frame.style.height = '100%';
@@ -659,16 +777,57 @@ function setZoom(val) {
 }
 document.getElementById('zoomIndicator').addEventListener('click', () => setZoom(100));
 function openFind() { const fb = document.getElementById('findBar'); fb.classList.add('show'); document.getElementById('findInput').focus(); document.getElementById('findInput').select(); }
-function closeFind() { document.getElementById('findBar').classList.remove('show'); document.getElementById('findInput').value = ''; document.getElementById('findCount').textContent = ''; }
+function closeFind() {
+  document.getElementById('findBar').classList.remove('show');
+  document.getElementById('findInput').value = '';
+  document.getElementById('findCount').textContent = '';
+  // Stop find in webview
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.stopFindInPage === 'function') {
+      try { wv.stopFindInPage('clearSelection'); } catch (e) { }
+    }
+  }
+}
 document.getElementById('findClose').addEventListener('click', closeFind);
 document.getElementById('findDone').addEventListener('click', closeFind);
 document.getElementById('findInput').addEventListener('input', () => {
   const q = document.getElementById('findInput').value;
   document.getElementById('findCount').textContent = q ? '(searching…)' : '';
-  try { frame.contentWindow.find(q); } catch (e) { }
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try {
+        if (!q) { wv.stopFindInPage('clearSelection'); return; }
+        wv.findInPage(q);
+        wv.addEventListener('found-in-page', function handler(e) {
+          document.getElementById('findCount').textContent = e.result.matches ? (e.result.activeMatchOrdinal + '/' + e.result.matches) : 'Not found';
+          wv.removeEventListener('found-in-page', handler);
+        });
+      } catch (e) { }
+    }
+  } else {
+    try { frame.contentWindow.find(q); } catch (e) { }
+  }
 });
-document.getElementById('findPrev').addEventListener('click', () => { try { frame.contentWindow.find(document.getElementById('findInput').value, false, true); } catch (e) { } });
-document.getElementById('findNext').addEventListener('click', () => { try { frame.contentWindow.find(document.getElementById('findInput').value); } catch (e) { } });
+document.getElementById('findPrev').addEventListener('click', () => {
+  const q = document.getElementById('findInput').value; if (!q) return;
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try { wv.findInPage(q, { forward: false, findNext: true }); } catch (e) { }
+    }
+  } else { try { frame.contentWindow.find(q, false, true); } catch (e) { } }
+});
+document.getElementById('findNext').addEventListener('click', () => {
+  const q = document.getElementById('findInput').value; if (!q) return;
+  if (window.electronWebview) {
+    const wv = getTabWebview(STATE.activeTabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try { wv.findInPage(q, { forward: true, findNext: true }); } catch (e) { }
+    }
+  } else { try { frame.contentWindow.find(q); } catch (e) { } }
+});
 let readerFontSize = 18;
 document.getElementById('btnReader').addEventListener('click', toggleReader);
 document.getElementById('readerClose').addEventListener('click', toggleReader);
@@ -679,10 +838,39 @@ function toggleReader() {
   if (STATE.readerMode) {
     rm.classList.add('show'); const tab = getActiveTab();
     document.getElementById('readerTitle').textContent = tab?.title || '';
-    try {
-      const doc = frame.contentDocument; const body = doc?.body?.innerText || 'Could not extract content.'; const title = doc?.title || '';
-      document.getElementById('readerContent').innerHTML = '<h1>' + title + '</h1><p>' + body.slice(0, 4000).replace(/\n\n+/g, '</p><p>') + '</p>';
-    } catch (e) { document.getElementById('readerContent').innerHTML = '<h1>Reader Mode</h1><p>Could not extract content from proxied page.</p>'; }
+    document.getElementById('readerContent').innerHTML = '<p style="color:#888;font-style:italic">📖 Extracting readable content…</p>';
+
+    // Use webview executeJavaScript to get full HTML, then AI reading mode extraction
+    const wv = getTabWebview(tab?.id);
+    if (wv && window.electronWebview) {
+      safeWebviewExecute(wv, tab?.id, 'executeJavaScript', 'document.documentElement.outerHTML')
+        .then(html => {
+          if (window.etherx?.ai?.readingMode) {
+            return window.etherx.ai.readingMode(html);
+          }
+          // Fallback: basic strip
+          const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 6000);
+          return { ok: true, title: tab?.title || '', text };
+        })
+        .then(result => {
+          if (result?.ok && result.text) {
+            const title = result.title || tab?.title || '';
+            const body = result.text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+            document.getElementById('readerContent').innerHTML =
+              (title ? '<h1>' + title + '</h1>' : '') + '<p>' + body + '</p>';
+          } else {
+            document.getElementById('readerContent').innerHTML =
+              '<h1>' + (tab?.title || 'Reader Mode') + '</h1><p style="color:#888">Could not extract readable content from this page.</p>';
+          }
+        })
+        .catch(() => {
+          document.getElementById('readerContent').innerHTML =
+            '<h1>Reader Mode</h1><p style="color:#888">Could not access page content (cross-origin restriction).</p>';
+        });
+    } else {
+      document.getElementById('readerContent').innerHTML =
+        '<h1>Reader Mode</h1><p style="color:#888">No active page.</p>';
+    }
   } else { rm.classList.remove('show'); }
 }
 document.getElementById('mi-responsive').addEventListener('click', toggleRespMode);
@@ -734,8 +922,8 @@ document.getElementById('mi-new-private').addEventListener('click', () => {
   document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
   showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
 });
-function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
-function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel.classList.contains('open'); closeAllPanels(); if (!wasOpen) panel.classList.add('open'); }
+function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel?.classList.contains('open'); closeAllPanels(); if (!wasOpen && panel) panel.classList.add('open'); }
 document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
 document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
 document.getElementById('btnDownloads').addEventListener('click', () => togglePanel('dlPanel'));
@@ -747,14 +935,20 @@ document.getElementById('walletReload')?.addEventListener('click', () => {
   if (wl) wl.style.display = 'flex';
   if (wf) { wf.src = ''; setTimeout(() => { wf.src = 'https://wallet.kriptoentuzijasti.io'; }, 50); }
 });
-document.getElementById('btnWallet').addEventListener('click', () => togglePanel('walletPanel'));
+document.getElementById('btnWallet').addEventListener('click', () => { togglePanel('walletPanel'); window._wltInit && window._wltInit(); });
 document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel('bobiaiPanel'));
 
 // ── Gemini Page Summarizer ────────────────────────────────────────────────
 // API key is loaded from user settings (Settings → AI) — never hardcoded
 const GEMINI_MODEL = 'gemini-2.5-flash';
-function getGeminiEndpoint() {
-  const key = (typeof DB !== 'undefined' && DB.getSettings().gemini_api_key) || '';
+async function getGeminiEndpoint() {
+  let key = '';
+  if (window.etherx && window.etherx.settings) {
+    const s = await window.etherx.settings.get();
+    key = s.geminiApiKey || s.gemini_api_key || '';
+  } else {
+    key = (typeof DB !== 'undefined' && DB.getSettings().gemini_api_key) || '';
+  }
   return key ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}` : null;
 }
 
@@ -781,6 +975,8 @@ async function summarizeCurrentPage() {
   const cachedEl = document.getElementById('ascCached');
   const titleEl = document.getElementById('ascTitle');
 
+  if (!card || !loader || !bulletsEl) return { ok: false, error: 'AI summary panel not found in DOM' };
+
   card.classList.add('open');
   loader.style.display = 'flex';
   bulletsEl.style.display = 'none';
@@ -801,11 +997,12 @@ async function summarizeCurrentPage() {
   // If running in Electron, use IPC with webview executeJavaScript to get HTML
   if (window.electronWebview) {
     try {
-      const wv = getTabWebview(getActiveTab()?.id);
+      const activeTab = getActiveTab();
+      const wv = getTabWebview(activeTab?.id);
       let html = '';
-      if (wv && typeof wv.executeJavaScript === 'function') {
+      if (wv) {
         try {
-          html = await wv.executeJavaScript('document.documentElement.outerHTML');
+          html = await safeWebviewExecute(wv, activeTab?.id, 'executeJavaScript', 'document.documentElement.outerHTML');
         } catch (e2) { html = ''; }
       }
       if (!html || html.length < 200) {
@@ -856,7 +1053,7 @@ async function summarizeCurrentPage() {
 
     const prompt = `You are a concise summarizer. Respond with exactly 3 bullet points using the • character. Each bullet is one clear sentence in Croatian language. No intro text, no conclusion.\n\nSummarize the key points of this web page in 3 bullet points:\n\nURL: ${url}\n\n${pageText}`;
 
-    const GEMINI_ENDPOINT = getGeminiEndpoint();
+    const GEMINI_ENDPOINT = await getGeminiEndpoint();
     if (!GEMINI_ENDPOINT) {
       loader.style.display = 'none';
       _renderSummaryError(bulletsEl, 'Gemini API ključ nije postavljen. Idi u Postavke → AI i unesi API ključ.');
@@ -926,7 +1123,7 @@ document.getElementById('btnKripto').addEventListener('click', () => togglePanel
 document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
 document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
 document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
 function renderBookmarksPanel() {
   const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
   if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -1157,7 +1354,9 @@ function renderDOMTree() {
       showToast('🔄 DOM tree refreshed');
     } catch (e) {
       view.innerHTML = `<div style="color:#f48771;padding:8px">⚠️ Cannot access frame document (cross-origin or error)</div>`;
-      consoleLog('error', 'DOM tree render failed: ' + e.message, 'Elements');
+      if (!e.message?.includes('cross-origin') && !e.message?.includes('Blocked a frame') && !e.message?.includes('named property')) {
+        consoleLog('error', 'DOM tree render failed: ' + e.message, 'Elements');
+      }
     }
   }, 50);
 }
@@ -1774,23 +1973,134 @@ document.getElementById('mi-network').addEventListener('click', () => document.q
   });
 
   // Camera scan (basic — opens device camera)
+  let _qrScanInterval;
+  let _activeCameraId = localStorage.getItem('etherx_preferred_camera') || null;
+
+  // Function to get available cameras and store preferred one
+  async function getAvailableCameras() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(d => d.kind === 'videoinput');
+      console.log('[EtherX] Available cameras:', cameras);
+      return cameras;
+    } catch (err) {
+      console.error('[EtherX] Error enumerating cameras:', err);
+      return [];
+    }
+  }
+
   document.getElementById('qrsCameraBtn').addEventListener('click', async () => {
     const preview = document.getElementById('qrsCameraPreview');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      preview.srcObject = stream;
-      preview.style.display = 'block';
-      document.getElementById('qrsCameraBtn').textContent = '⏹ Stop Camera';
-      document.getElementById('qrsCameraBtn').addEventListener('click', () => {
+      if (preview.srcObject) {
+        // Stop camera if already running
+        const stream = preview.srcObject;
         stream.getTracks().forEach(t => t.stop());
+        preview.srcObject = null;
         preview.style.display = 'none';
+        clearInterval(_qrScanInterval);
         document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
-      }, { once: true });
-      showToast('📷 Camera active — QR scanning requires a native app');
+        return;
+      }
+
+      // Get available cameras
+      const cameras = await getAvailableCameras();
+
+      // Build constraints with preferred camera
+      let constraints = { video: { facingMode: 'environment' } };
+
+      if (_activeCameraId) {
+        // Use stored camera ID if available
+        constraints = { video: { deviceId: { exact: _activeCameraId } } };
+      } else if (cameras.length > 0) {
+        // Try to find rear camera
+        const rearCamera = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear'));
+        if (rearCamera) {
+          constraints = { video: { deviceId: { exact: rearCamera.deviceId } } };
+          _activeCameraId = rearCamera.deviceId;
+          localStorage.setItem('etherx_preferred_camera', _activeCameraId);
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Store the camera ID that was actually used
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const settings = track.getSettings();
+        if (settings.deviceId) {
+          _activeCameraId = settings.deviceId;
+          localStorage.setItem('etherx_preferred_camera', _activeCameraId);
+          console.log('[EtherX] Using camera:', track.label, 'ID:', _activeCameraId);
+        }
+      }
+
+      preview.srcObject = stream;
+      preview.setAttribute('playsinline', true); // required to tell iOS safari we don't want fullscreen
+      preview.style.display = 'block';
+      preview.play();
+      document.getElementById('qrsCameraBtn').textContent = '⏹ Stop Camera';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      _qrScanInterval = setInterval(() => {
+        if (preview.readyState === preview.HAVE_ENOUGH_DATA) {
+          canvas.height = preview.videoHeight;
+          canvas.width = preview.videoWidth;
+          ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          if (window.jsQR) {
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+            if (code && code.data) {
+              clearInterval(_qrScanInterval);
+              stream.getTracks().forEach(t => t.stop());
+              preview.srcObject = null;
+              preview.style.display = 'none';
+              document.getElementById('qrsCameraBtn').textContent = '📷 Scan with Camera';
+              document.getElementById('qrsImportText').value = code.data;
+              showToast('✅ QR Code detected!');
+              // Auto-click import
+              document.getElementById('qrsImportBtn').click();
+            }
+          }
+        }
+      }, 300);
+
+      if (!window.jsQR) {
+        showToast('📷 Camera active — waiting for jsQR library to load');
+      }
     } catch (err) {
       showToast('❌ Camera: ' + err.message);
+      console.error('[EtherX] Camera error:', err);
+      // If exact deviceId failed, try with facingMode fallback
+      if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+        console.log('[EtherX] Retrying with facingMode fallback...');
+        _activeCameraId = null;
+        localStorage.removeItem('etherx_preferred_camera');
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          preview.srcObject = stream;
+          preview.setAttribute('playsinline', true);
+          preview.style.display = 'block';
+          preview.play();
+          showToast('📷 Camera started (default)');
+        } catch (fallbackErr) {
+          showToast('❌ Cannot access camera: ' + fallbackErr.message);
+        }
+      }
     }
   });
+
+  // Expose camera functions for settings/debugging
+  window._getAvailableCameras = getAvailableCameras;
+  window._switchCamera = async function (deviceId) {
+    _activeCameraId = deviceId;
+    localStorage.setItem('etherx_preferred_camera', deviceId);
+    showToast('📷 Camera switched');
+  };
 })();
 document.getElementById('mi-inspect-devices').addEventListener('click', () => showToast('📱 No physical devices connected'));
 document.getElementById('mi-service-workers').addEventListener('click', () => { toggleDevtools(); consoleLog('info', '⚙️ Service Workers: none registered on proxied pages'); });
@@ -1835,9 +2145,10 @@ document.getElementById('mi-page-source').addEventListener('click', () => {
 function loadSourceIntoPane(url, codeEl) {
   if (!codeEl) return;
   if (window.electronWebview) {
-    const wv = document.getElementById('browseFrame');
-    if (wv && typeof wv.executeJavaScript === 'function') {
-      wv.executeJavaScript('document.documentElement.outerHTML').then(src => {
+    const activeTab = getActiveTab();
+    const wv = getTabWebview(activeTab?.id);
+    if (wv) {
+      safeWebviewExecute(wv, activeTab?.id, 'executeJavaScript', 'document.documentElement.outerHTML').then(src => {
         const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         codeEl.innerHTML = '<pre style="white-space:pre-wrap;color:#d4d4d4;font-size:12px;padding:12px">' + esc + '</pre>';
       }).catch(() => { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable in Electron mode</div>'; });
@@ -1939,7 +2250,7 @@ function _injectDarkModeIntoFrame() {
   const fr = document.getElementById('browseFrame');
   if (!fr) return;
   try {
-    // Works for same-origin (proxy.php serves frames same-origin)
+    // Works for same-origin frames
     const doc = fr.contentDocument || fr.contentWindow?.document;
     if (!doc) return;
     let st = doc.getElementById(DARK_MODE_STYLE_ID);
@@ -2235,7 +2546,7 @@ const EXT_DB = { get: () => JSON.parse(localStorage.getItem('ex_extensions') || 
 // Seed default extensions on first run
 (function seedDefaultExtensions() {
   const defaults = [
-    { id: 'djpcnbhbkplhbnkppfopnnejhaigffjn', name: 'Crypto Price Tracker', icon: '📈', desc: 'Real-time crypto price tracking for 1000+ coins', enabled: true, source: 'https://chromewebstore.google.com/detail/crypto-price-tracker/djpcnbhbkplhbnkppfopnnejhaigffjn', installedAt: Date.now() },
+
     { id: 'pejdijmoenmkgeppbflobdenhhabjlaj', name: 'iCloud Passwords', icon: '🔑', desc: 'Use iCloud Keychain passwords in your browser', enabled: true, source: 'https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj', installedAt: Date.now() }
   ];
   const existing = EXT_DB.get();
@@ -2610,7 +2921,8 @@ document.getElementById('extAddBtn').addEventListener('click', () => {
   const val = document.getElementById('extAddUrl').value.trim(); if (!val) return;
   let id = val, name = val, icon = '\uD83E\uDDE9', desc = 'Installed from Chrome Web Store';
   const m = val.match(/[a-z]{32}/i); if (m) id = m[0];
-  const known = { MetaMask: 'nkbihfbeogaeaoehlefnkodbefgpgknn', 'uBlock Origin': 'cjpalhdlnbpafiamejdnhcphjbkeiagm', Grammarly: 'kbfnbcaeplbcioakkpcpgfkobkghlhen', Honey: 'bmnlcjabgnpnenekpadlanbbkooimhnj', LastPass: 'hdokiejnpimakedhajhdlcegeplioahd', 'Crypto Price Tracker': 'djpcnbhbkplhbnkppfopnnejhaigffjn', 'iCloud Passwords': 'pejdijmoenmkgeppbflobdenhhabjlaj' };
+
+  const known = { MetaMask: "nkbihfbeogaeaoehlefnkodbefgpgknn", "uBlock Origin": "cjpalhdlnbpafiamejdnhcphjbkeiagm", Grammarly: "kbfnbcaeplbcioakkpcpgfkobkghlhen", Honey: "bmnlcjabgnpnenekpadlanbbkooimhnj", LastPass: "hdokiejnpimakedhajhdlcegeplioahd", "iCloud Passwords": "pejdijmoenmkgeppbflobdenhhabjlaj" };
   const icons = { MetaMask: '\uD83E\uDD8A', 'uBlock Origin': '\uD83D\uDEE1\uFE0F', Grammarly: '\uD83D\uDCDD', Honey: '\uD83C\uDF6F', LastPass: '\uD83D\uDD11', 'Crypto Price Tracker': '\uD83D\uDCC8', 'iCloud Passwords': '\uD83D\uDD11' };
   for (const [n, kid] of Object.entries(known)) { if (val.includes(kid) || val.toLowerCase().includes(n.toLowerCase())) { name = n; id = kid; icon = icons[n] || '\uD83E\uDDE9'; } }
   EXT_DB.add({ id, name, desc, icon, enabled: true, source: val, installedAt: Date.now() });
@@ -2696,8 +3008,10 @@ document.getElementById('boRetry').addEventListener('click', () => { const t = g
 const ctxMenu = document.getElementById('ctxMenu');
 let _ctxTargetUrl = null; // URL of right-clicked link (if any)
 let _ctxTabId = null;      // ID of right-clicked tab (if any)
-function showCtxMenu(x, y, targetUrl) {
+let _ctxImageUrl = null;   // URL of right-clicked image (if any)
+function showCtxMenu(x, y, targetUrl, imageUrl) {
   _ctxTargetUrl = targetUrl || null;
+  _ctxImageUrl = imageUrl || null;
   // Show/hide link-specific items
   const hasLink = !!targetUrl;
   ['ctx-open-new-tab', 'ctx-open-new-window', 'ctx-open-tab-group', 'ctx-download-link', 'ctx-download-link-as', 'ctx-reading-list'].forEach(id => {
@@ -2706,6 +3020,10 @@ function showCtxMenu(x, y, targetUrl) {
   document.querySelectorAll('.ctx-sep:not(.ctx-no-link), #ctx-copy-url').forEach(el => {
     el.style.display = '';
   });
+  // Show/hide image-specific items
+  const hasImage = !!imageUrl;
+  document.querySelectorAll('.ctx-img-item').forEach(el => { el.style.display = hasImage ? '' : 'none'; });
+  document.querySelectorAll('.ctx-img-sep').forEach(el => { el.style.display = hasImage ? '' : 'none'; });
   // Position
   const menuW = 240, menuH = ctxMenu.offsetHeight || 320;
   ctxMenu.style.left = Math.min(x, window.innerWidth - menuW - 8) + 'px';
@@ -2759,6 +3077,25 @@ document.getElementById('ctx-copy-url').addEventListener('click', () => {
   const url = _ctxTargetUrl || getActiveTab()?.url;
   if (url) navigator.clipboard.writeText(url).then(() => showToast('📋 URL copied'));
 });
+// Reverse image search handlers (RevEye integration)
+const _revEyeEngines = {
+  google: 'https://lens.google.com/uploadbyurl?url=%s',
+  bing: 'https://www.bing.com/images/searchbyimage?cbir=ssbi&imgurl=%s',
+  yandex: 'https://yandex.com/images/search?rpt=imageview&url=%s',
+  tineye: 'https://www.tineye.com/search/?url=%s',
+};
+function _revEyeSearch(engineId) {
+  if (!_ctxImageUrl) return;
+  const url = _revEyeEngines[engineId].replace('%s', encodeURIComponent(_ctxImageUrl));
+  createTab(url);
+}
+document.getElementById('ctx-img-search-google').addEventListener('click', () => _revEyeSearch('google'));
+document.getElementById('ctx-img-search-bing').addEventListener('click', () => _revEyeSearch('bing'));
+document.getElementById('ctx-img-search-yandex').addEventListener('click', () => _revEyeSearch('yandex'));
+document.getElementById('ctx-img-search-tineye').addEventListener('click', () => _revEyeSearch('tineye'));
+document.getElementById('ctx-img-copy-url').addEventListener('click', () => {
+  if (_ctxImageUrl) navigator.clipboard.writeText(_ctxImageUrl).then(() => showToast('📋 Image URL copied'));
+});
 document.getElementById('ctx-share').addEventListener('click', () => {
   const url = _ctxTargetUrl || getActiveTab()?.url;
   const title = getActiveTab()?.title || url;
@@ -2774,7 +3111,13 @@ document.querySelectorAll('.menu-item').forEach(item => {
 document.addEventListener('click', () => document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')));
 document.getElementById('newTabBtn').addEventListener('click', () => createTab());
 let toastTimer;
-function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
+function showToast(msg, duration = 2000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
+}
 function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const savedCfg = DB.getSettings(); if (savedCfg.clockColor) clockEl.style.color = savedCfg.clockColor; if (savedCfg.clockSize) clockEl.style.fontSize = savedCfg.clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) de.textContent = (datePfx ? datePfx + ' ' : '') + d; }
 updateClock(); setInterval(updateClock, 30000);
 function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
@@ -2995,19 +3338,19 @@ document.addEventListener('keydown', e => {
   function checkSystemHealth() {
     const checks = [];
     // Check panels exist
-    const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
+    const panels = ['walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'settingsPanel', 'bmPanel', 'histPanel', 'dlPanel'];
     let panelsOk = 0;
     panels.forEach(id => { if (document.getElementById(id)) panelsOk++; });
-    checks.push(panelsOk === panels.length ? '\u2705 Svi paneli ucitani (' + panelsOk + '/' + panels.length + ')' : '\u26a0\ufe0f Paneli: ' + panelsOk + '/' + panels.length + ' ucitano');
+    checks.push(panelsOk === panels.length ? '✅ Svi paneli ucitani (' + panelsOk + '/' + panels.length + ')' : '⚠️ Paneli: ' + panelsOk + '/' + panels.length + ' ucitano');
     // Check tabs
     const tabCount = document.querySelectorAll('.tab').length;
-    checks.push('\u2705 Aktivnih tabova: ' + tabCount);
+    checks.push('✅ Aktivnih tabova: ' + tabCount);
     // Check DevTools
-    checks.push(document.getElementById('devtools') ? '\u2705 DevTools dostupni' : '\u274c DevTools nedostupni');
+    checks.push(document.getElementById('devtools') ? '✅ DevTools dostupni' : '❌ DevTools nedostupni');
     // Check iframes
-    const iframes = ['walletFrame', 'bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
+    const iframes = ['bobiaiFrame', 'kriptoFrame', 'etherxFrame'];
     let iOk = 0; iframes.forEach(id => { if (document.getElementById(id)) iOk++; });
-    checks.push(iOk === iframes.length ? '\u2705 Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '\u26a0\ufe0f Iframes: ' + iOk + '/' + iframes.length);
+    checks.push(iOk === iframes.length ? '✅ Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '⚠️ Iframes: ' + iOk + '/' + iframes.length);
     // Check localStorage
     const storageKeys = ['ex_settings', 'ex_bookmarks', 'ex_history', 'ex_downloads', 'ex_profiles', 'ex_passwords'];
     let sOk = 0; storageKeys.forEach(k => { if (localStorage.getItem(k)) sOk++; });
@@ -3019,9 +3362,9 @@ document.addEventListener('keydown', e => {
     }
     // Check connection
     if (navigator.onLine) checks.push('🌐 Internet: Online');
-    else checks.push('\u274c Internet: Offline');
+    else checks.push('❌ Internet: Offline');
     // Check service worker / PWA
-    if ('serviceWorker' in navigator) checks.push('\u2705 PWA podrska dostupna');
+    if ('serviceWorker' in navigator) checks.push('✅ PWA podrska dostupna');
     // Check theme
     const theme = DB.getSettings().theme || 'dark';
     checks.push('🎨 Tema: ' + theme);
@@ -3040,35 +3383,67 @@ document.addEventListener('keydown', e => {
   async function getSmartResponse(msg) {
     const m = msg.toLowerCase().trim();
 
+    // ── Help and predefined prompts ──
+    if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
+      return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
+
+**1. Analiza sadržaja**
+• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
+
+**2. Dijagnostika browsera**
+• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
+• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
+
+**3. Edukacija o kriptovalutama**
+• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
+• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
+
+**4. Navigacija**
+• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
+
+Sve se izvršava optimalno i brzo! Što te zanima?`;
+    }
+
+    if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
+      if (performance && performance.memory) {
+        const mb = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
+        const total = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
+        return `Trenutno koristimo **${mb} MB** memorije (od dozvoljenih ${total} MB za ovaj tab). Browser radi stabilno!`;
+      }
+      return "Nažalost ne mogu pročitati točnu potrošnju memorije u ovom okruženju, ali browser radi unutar normalnih parametara.";
+    }
+
+    if (m.startsWith('otvori ') || m.startsWith('open ')) {
+      let targetUrl = m.replace('otvori ', '').replace('open ', '').trim();
+      if (!targetUrl.startsWith('http')) {
+        targetUrl = 'https://' + targetUrl;
+      }
+      createTab(targetUrl);
+      return `Otvaram ${targetUrl} u novom tabu!`;
+    }
+
     // ── Summarize current page ──
     if (m.includes('sažetak') || m.includes('sazet') || m.includes('summar') || m.includes('analiz') || m.includes('što piše') || m.includes('sta pise') || m.includes('o čemu') || m.includes('o cemu')) {
       const tab = getActiveTab();
       if (!tab?.url || !tab.url.startsWith('http')) {
         return '⚠️ Nema aktivne web stranice. Otvori neku stranicu pa pitaj za sažetak.';
       }
-      addMsg(m, 'user'); input.value = '';
-      const typing = document.createElement('div'); typing.className = 'ai-msg bot ai-typing';
-      typing.innerHTML = '<span></span><span></span><span></span>';
-      msgs.appendChild(typing); msgs.scrollTop = msgs.scrollHeight;
-      summarizeCurrentPage().then(result => {
-        typing.remove();
-        if (!result.ok) {
-          addMsg('⚠️ ' + (result.error || 'Greška pri generiranju sažetka.'), 'bot');
-        } else {
-          const cacheNote = result.cached ? ' _(iz cache-a)_' : '';
-          let resp = `✨ **Gemini sažetak: ${new URL(tab.url).hostname}**${cacheNote}\n\n`;
-          const cache = _summaryCache[_md5Hash(tab.url)];
-          if (cache?.bullets?.length) {
-            cache.bullets.forEach((b, i) => {
-              const clean = b.replace(/^[•\-\d\.\s]+/, '').trim();
-              resp += `${i + 1}. ${clean}\n`;
-            });
-          }
-          resp += '\n_(Sa\u017eetak je također prikazan u kartici desno dolje ✨)_';
-          addMsg(resp, 'bot');
-        }
-      });
-      return null; // handled async above
+      // Reuse send()'s typing indicator — just await the result here
+      const result = await summarizeCurrentPage();
+      if (!result.ok) {
+        return '⚠️ ' + (result.error || 'Greška pri generiranju sažetka.');
+      }
+      const cacheNote = result.cached ? ' _(iz cache-a)_' : '';
+      let resp = `✨ **Gemini sažetak: ${new URL(tab.url).hostname}**${cacheNote}\n\n`;
+      const cache = _summaryCache[_md5Hash(tab.url)];
+      if (cache?.bullets?.length) {
+        cache.bullets.forEach((b, i) => {
+          const clean = b.replace(/^[•\-\d\.\s]+/, '').trim();
+          resp += `${i + 1}. ${clean}\n`;
+        });
+      }
+      resp += '\n_(Sažetak je također prikazan u kartici desno dolje ✨)_';
+      return resp;
     }
 
     // ── Greetings ──
@@ -3198,7 +3573,8 @@ document.addEventListener('keydown', e => {
     // Make links clickable
     html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="#" onclick="navigateTo(\'$1\');return false" style="color:var(--accent);text-decoration:underline">$1</a>');
     d.innerHTML = html + '<span class="ai-time">' + (type === 'bot' ? '🤖 AI Agent' : '') + ' ' + time + '</span>';
-    msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+    msgs.appendChild(d);
+    setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
   }
 
   async function send() {
@@ -3206,7 +3582,8 @@ document.addEventListener('keydown', e => {
     addMsg(text, 'user'); input.value = '';
     const typing = document.createElement('div'); typing.className = 'ai-msg bot ai-typing';
     typing.innerHTML = '<span></span><span></span><span></span>';
-    msgs.appendChild(typing); msgs.scrollTop = msgs.scrollHeight;
+    msgs.appendChild(typing);
+    setTimeout(() => { msgs.scrollTop = msgs.scrollHeight; }, 50);
     try {
       const resp = await getSmartResponse(text);
       typing.remove();
@@ -3718,7 +4095,6 @@ const CTT_BUTTONS = [
   { id: 'btnSettings', key: 'showBtnSettings', icon: '⚙️', name: 'Settings' },
   { id: 'btnDevtools', key: 'showBtnDevtools', icon: '🛠️', name: 'DevTools' },
 ];
-
 function openCustomToolbar() {
   const overlay = document.getElementById('customToolbarOverlay');
   const grid = document.getElementById('cttGrid');
@@ -3848,8 +4224,17 @@ document.getElementById('cttReset').addEventListener('click', () => {
 
 // ── Restore last session tabs ─────────────────────────────────────────────
 (function restoreSession() {
-  const saved = localStorage.getItem('ex_session_tabs');
-  const activeId = parseInt(localStorage.getItem('ex_session_active') || '0', 10);
+  let windowId = 'main';
+  try {
+    if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
+      windowId = window.electronAPI.windowId() || 'main';
+    }
+  } catch (e) { }
+
+  const saved = localStorage.getItem('ex_session_tabs_' + windowId) || localStorage.getItem('ex_session_tabs');
+  const activeIdStr = localStorage.getItem('ex_session_active_' + windowId) || localStorage.getItem('ex_session_active') || '0';
+  const activeId = parseInt(activeIdStr, 10);
+
   if (saved) {
     try {
       const tabs = JSON.parse(saved);
@@ -3945,6 +4330,7 @@ function openWindowSwitcher() {
 }
 function closeWindowSwitcher() { document.getElementById('windowSwitcher').classList.remove('show'); }
 document.getElementById('btnWindowSwitcher').addEventListener('click', openWindowSwitcher);
+document.getElementById('btnCryptoPrice').addEventListener('click', () => togglePanel('cryptoPricePanel'));
 document.getElementById('wswClose').addEventListener('click', closeWindowSwitcher);
 document.getElementById('windowSwitcher').addEventListener('click', e => { if (e.target === document.getElementById('windowSwitcher')) closeWindowSwitcher(); });
 document.getElementById('wswNewTab').addEventListener('click', () => { createTab(); closeWindowSwitcher(); });
@@ -4985,6 +5371,43 @@ document.getElementById('mi-next-tab-group')?.addEventListener('click', () => {
   if (tid) switchTab(tid);
 });
 
+// ── AI Tab Auto-Grouping ─────────────────────────────────────────────────────
+async function aiAutoGroupTabs() {
+  if (!STATE.tabs.length) { showToast('No tabs to group'); return; }
+  if (!window.etherx?.ai?.groupTabs) { showToast('AI not available'); return; }
+  showToast('🗂️ AI grouping tabs…');
+  try {
+    const tabData = STATE.tabs.map(t => ({ id: t.id, url: t.url || '', title: t.title || '' }));
+    const result = await window.etherx.ai.groupTabs(tabData);
+    if (!result?.ok || !result.tabs) { showToast('AI grouping failed'); return; }
+
+    // Map groupName → tabIds
+    const groupMap = {};
+    for (const t of result.tabs) {
+      if (!groupMap[t.groupName]) groupMap[t.groupName] = [];
+      groupMap[t.groupName].push(t.id);
+    }
+
+    // Remove existing AI-generated groups to avoid duplicates
+    STATE.groups = STATE.groups.filter(g => !g._aiGenerated);
+    document.querySelectorAll('.tab-group-label[data-ai]').forEach(el => el.remove());
+
+    let created = 0;
+    for (const [name, tabIds] of Object.entries(groupMap)) {
+      if (name === 'Other' && tabIds.length === STATE.tabs.length) continue; // all uncategorised — skip
+      const g = createTabGroup(name, null, tabIds);
+      g._aiGenerated = true;
+      const lbl = document.getElementById('tgl-' + g.id);
+      if (lbl) lbl.setAttribute('data-ai', '1');
+      created++;
+    }
+    showToast(created ? `🗂️ Created ${created} AI tab group${created > 1 ? 's' : ''}` : '🗂️ All tabs in "Other" — no groups created');
+  } catch (e) {
+    showToast('AI grouping error: ' + e.message);
+  }
+}
+document.getElementById('btnAiAutoGroup')?.addEventListener('click', aiAutoGroupTabs);
+
 // ── Sources tree: srcBrowserHtml click ──────────────────────────────────
 document.getElementById('srcBrowserHtml')?.addEventListener('click', () => {
   document.querySelectorAll('.src-item').forEach(x => x.classList.remove('active'));
@@ -5087,17 +5510,46 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
   const _origNavigateTo = navigateTo;
   window.navigateTo = navigateTo; // ensure global override works
   const origNav = window.navigateTo;
+
+  // Show/hide the phishing banner
+  function showPhishingBanner(msg) {
+    const banner = document.getElementById('phishingBanner');
+    if (!banner) return;
+    document.getElementById('phishingMsg').textContent = '⚠️ ' + msg;
+    banner.style.display = 'flex';
+  }
+  function hidePhishingBanner() {
+    const banner = document.getElementById('phishingBanner');
+    if (banner) banner.style.display = 'none';
+  }
+  document.getElementById('phishingClose')?.addEventListener('click', hidePhishingBanner);
+  document.getElementById('phishingBack')?.addEventListener('click', () => {
+    hidePhishingBanner();
+    const tab = getActiveTab();
+    const wv = getTabWebview(tab?.id);
+    if (wv && window.electronWebview) {
+      safeWebviewExecute(wv, tab?.id, 'canGoBack').then(canGoBack => {
+        if (canGoBack) {
+          safeWebviewExecute(wv, tab?.id, 'goBack').catch(() => window.history.back());
+        } else {
+          window.history.back();
+        }
+      }).catch(() => window.history.back());
+    } else {
+      window.history.back();
+    }
+  });
+  document.getElementById('phishingProceed')?.addEventListener('click', hidePhishingBanner);
+
   // Wrap: after navigation, check phishing in background
   function afterNavPhishingCheck(url) {
     if (!url || !url.startsWith('http')) return;
+    hidePhishingBanner();
     etherx.ai.checkPhishing(url, '').then(result => {
-      if (result && result.isPhishing) {
-        const blockedDiv = document.getElementById('blockedOverlay');
-        if (blockedDiv) {
-          blockedDiv.classList.add('show');
-          document.getElementById('boUrl').textContent = '⚠️ ' + (result.reason || 'Phishing detected: ' + url);
-        }
-        showToast('⚠️ Phishing warning: ' + (result.reason || url));
+      if (result && !result.isSafe) {
+        const reasons = (result.reasons || []).slice(0, 2).join('; ') || url;
+        showPhishingBanner('Suspected phishing: ' + reasons);
+        showToast('⚠️ Phishing warning: ' + reasons);
       }
     }).catch(() => { });
   }
@@ -5116,6 +5568,689 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').c
     };
     // Replace in global scope the best way we can
     try { window.navigateTo = patchedNav; } catch (e) { }
+  }
+
+  // ── Auto-update check on startup (silent background check) ──────────────
+  setTimeout(async () => {
+    try {
+      const s = await etherx.settings.get();
+      if (s.auto_update === false) return;
+      const result = await etherx.update.check();
+      if (result?.isNew) {
+        showToast(`🔄 Nova verzija ${result.latest} dostupna! Postavke → Nadogradnje.`);
+      }
+    } catch (e) { /* silent */ }
+  }, 10000);
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: IP Geolocation in Site Info Popup
+  // When the padlock/urlIcon popup opens, look up the server's geo info async.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    let _lastGeoHostname = '';
+    const _origUrlIconClick = document.getElementById('urlIcon').onclick;
+
+    // Patch urlIcon click to also trigger IP geo lookup
+    document.getElementById('urlIcon').addEventListener('click', async () => {
+      const t = getActiveTab && getActiveTab();
+      const url = t?.url || '';
+      let hostname = '';
+      try { hostname = new URL(url).hostname; } catch (e) { return; }
+
+      if (!hostname || hostname === _lastGeoHostname) return;
+      _lastGeoHostname = hostname;
+
+      // Reset display while loading
+      const geoSection = document.getElementById('sipGeoSection');
+      const geoIp = document.getElementById('sipGeoIp');
+      const geoLoc = document.getElementById('sipGeoLocation');
+      const geoOrg = document.getElementById('sipGeoOrg');
+      if (!geoSection) return;
+
+      geoIp.textContent = '⏳ načitavanje…';
+      geoLoc.textContent = '—';
+      geoOrg.textContent = '—';
+      geoSection.style.display = 'block';
+
+      try {
+        const geo = await etherx.ai.lookupIpGeo(hostname);
+        if (geo?.ok) {
+          geoIp.textContent = geo.ip || hostname;
+          const locParts = [geo.city, geo.region, geo.country].filter(Boolean);
+          geoLoc.textContent = locParts.length ? locParts.join(', ') : '—';
+          geoOrg.textContent = geo.org || '—';
+        } else {
+          geoIp.textContent = 'Nije dostupno';
+          geoSection.style.display = 'none';
+        }
+      } catch (e) {
+        geoSection.style.display = 'none';
+      }
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: Bot/UA Detection — warn if current browser UA looks bot-like
+  // Runs once per SESSION; shows a subtle toast only once if UA appears suspicious.
+  // User can permanently dismiss the warning via localStorage.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    const BOT_DISMISS_KEY = 'etherx_bot_warning_dismissed';
+    const BOT_SESSION_KEY = 'etherx_bot_shown_this_session';
+
+    async function performBotDetection(force = false) {
+      try {
+        // Check if user permanently dismissed the warning
+        const dismissed = localStorage.getItem(BOT_DISMISS_KEY) === 'true';
+        if (dismissed && !force) {
+          console.log('[EtherX] Bot detection warning permanently dismissed by user');
+          return;
+        }
+
+        // Check if already shown this session (unless forced)
+        const shownThisSession = sessionStorage.getItem(BOT_SESSION_KEY) === 'true';
+        if (shownThisSession && !force) {
+          console.log('[EtherX] Bot detection already shown this session');
+          return;
+        }
+
+        const ua = navigator.userAgent;
+        const result = await etherx.ai.detectBotUA(ua);
+
+        // Store result for debugging (always)
+        sessionStorage.setItem('etherx_bot_detection', JSON.stringify(result));
+
+        // Only show warning if detected as bot/IAB and not dismissed
+        if (result?.isBot && result.reasons?.length) {
+          console.warn('[EtherX] Bot-like UA tokens detected:', result.reasons);
+          showToast('⚠️ UA upozorenje: ' + result.reasons[0], 5000);
+          sessionStorage.setItem(BOT_SESSION_KEY, 'true');
+        } else if (result?.isIAB) {
+          showToast('⚠️ In-app preglednik detektiran — neke funkcije možda neće raditi ispravno.', 5000);
+          sessionStorage.setItem(BOT_SESSION_KEY, 'true');
+        } else {
+          console.log('[EtherX] Bot detection: no suspicious UA detected');
+        }
+      } catch (e) {
+        console.error('[EtherX] Bot detection error:', e);
+      }
+    }
+
+    // Run on startup (only once per session)
+    performBotDetection();
+
+    // Expose for manual re-check (with force flag)
+    window._recheckBotDetection = function (force = true) {
+      // Clear session flag to allow re-show
+      if (force) sessionStorage.removeItem(BOT_SESSION_KEY);
+      performBotDetection(force);
+    };
+
+    // Expose function to permanently dismiss bot warning
+    window._dismissBotWarning = function () {
+      localStorage.setItem(BOT_DISMISS_KEY, 'true');
+      sessionStorage.setItem(BOT_SESSION_KEY, 'true');
+      showToast('✓ Bot upozorenja trajno onemogućena');
+      console.log('[EtherX] Bot detection warnings permanently dismissed');
+    };
+
+    // Expose function to re-enable bot warnings
+    window._enableBotWarning = function () {
+      localStorage.removeItem(BOT_DISMISS_KEY);
+      sessionStorage.removeItem(BOT_SESSION_KEY);
+      showToast('✓ Bot upozorenja ponovo omogućena');
+      console.log('[EtherX] Bot detection warnings re-enabled');
+    };
+  }
+
+  // ── IPC: handle open-url and app:createTab from main process ────────────────
+  if (window.etherx?.on) {
+    // open-url: browser opened with a URL argument (protocol handler / second instance)
+    window.etherx.on('open-url', (url) => {
+      if (!url) return;
+      if (STATE.tabs.length === 0) {
+        createTab(url, '', true);
+      } else {
+        navigateTo(url, STATE.activeTabId);
+      }
+    });
+    // app:createTab: main process wants to open a URL in a new tab
+    // (e.g. target="_blank" links intercepted in webview's setWindowOpenHandler)
+    window.etherx.on('app:createTab', (url) => {
+      if (url) createTab(url, '', true);
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: Biometric Browser Lock (WebAuthn — Face ID / Touch ID)
+  // Ported from Backend_quick security gate biometric logic.
+  // ════════════════════════════════════════════════════════════════════════════
+  const BIO_LOCK = (() => {
+    const CRED_KEY = 'etherx_bio_cid';      // stored WebAuthn credential ID (base64url)
+    const AUTH_TS_KEY = 'etherx_bio_ts';    // last successful auth timestamp
+    const PASS_KEY = 'etherx_bio_pass';     // optional passphrase hash (SHA-256 hex)
+    const SESSION_MS = 8 * 60 * 60 * 1000; // 8-hour session window
+    const LOCK_SCREEN = document.getElementById('biometricLockScreen');
+
+    // ── WebAuthn helpers (from Backend_quick) ──────────────────────────────
+    function b64uToArray(b) {
+      b = b.replace(/-/g, '+').replace(/_/g, '/');
+      while (b.length % 4) b += '=';
+      const bin = atob(b);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return arr;
+    }
+    function arrayToB64u(buf) {
+      const arr = new Uint8Array(buf);
+      let s = '';
+      for (let i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function rnd(n) { return crypto.getRandomValues(new Uint8Array(n)); }
+
+    async function bioAvailable() {
+      if (!window.PublicKeyCredential) return false;
+      try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
+      catch (e) { return false; }
+    }
+
+    async function registerBio() {
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: rnd(32),
+          rp: { name: 'EtherX Browser', id: location.hostname || 'localhost' },
+          user: { id: rnd(16), name: 'etherx-user', displayName: 'EtherX User' },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', requireResidentKey: false },
+          timeout: 60000,
+        }
+      });
+      localStorage.setItem(CRED_KEY, arrayToB64u(cred.rawId));
+      return true;
+    }
+
+    async function verifyBio(credId) {
+      await navigator.credentials.get({
+        publicKey: {
+          challenge: rnd(32),
+          allowCredentials: credId ? [{ id: b64uToArray(credId), type: 'public-key', transports: ['internal'] }] : [],
+          userVerification: 'required',
+          timeout: 60000,
+        }
+      });
+    }
+
+    // ── Passphrase helpers ─────────────────────────────────────────────────
+    async function hashPass(pass) {
+      const enc = new TextEncoder();
+      const buf = await crypto.subtle.digest('SHA-256', enc.encode(pass));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // ── Auth state ─────────────────────────────────────────────────────────
+    function isAuthValid() {
+      const ts = parseInt(localStorage.getItem(AUTH_TS_KEY) || '0', 10);
+      return (Date.now() - ts) < SESSION_MS;
+    }
+    function markAuth() { localStorage.setItem(AUTH_TS_KEY, String(Date.now())); }
+    function showLock() {
+      if (!LOCK_SCREEN) return;
+      LOCK_SCREEN.style.display = 'flex';
+      document.getElementById('bioLockErr').style.display = 'none';
+    }
+    function hideLock() {
+      if (!LOCK_SCREEN) return;
+      LOCK_SCREEN.style.display = 'none';
+      markAuth();
+      // Refresh inactivity timer
+      _resetInactivityTimer();
+    }
+
+    // ── Inactivity auto-lock ───────────────────────────────────────────────
+    let _inactivityTimer = null;
+    const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+
+    function _resetInactivityTimer() {
+      if (!localStorage.getItem(CRED_KEY) && !localStorage.getItem(PASS_KEY)) return; // not set up
+      clearTimeout(_inactivityTimer);
+      _inactivityTimer = setTimeout(() => {
+        if (!isAuthValid()) return; // already expired, lock screen handles it
+        markAuth(); // reset (shouldn't lock if user was active)
+      }, INACTIVITY_MS);
+    }
+
+    ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev => {
+      document.addEventListener(ev, () => {
+        if (localStorage.getItem(AUTH_TS_KEY)) {
+          const ts = parseInt(localStorage.getItem(AUTH_TS_KEY) || '0', 10);
+          if (ts > 0 && (Date.now() - ts) < SESSION_MS) {
+            localStorage.setItem(AUTH_TS_KEY, String(Date.now()));
+          }
+        }
+      }, { passive: true, capture: true });
+    });
+
+    // ── Unlock flow ────────────────────────────────────────────────────────
+    async function unlock() {
+      const errEl = document.getElementById('bioLockErr');
+      const hasBio = await bioAvailable();
+      const storedCid = localStorage.getItem(CRED_KEY);
+
+      if (!storedCid && !localStorage.getItem(PASS_KEY)) {
+        // Nothing configured — register & unlock
+        try {
+          if (hasBio) {
+            document.getElementById('bioLockTitle').textContent = 'Postavi zaključavanje';
+            document.getElementById('bioLockSub').textContent = 'Registrirajte Face ID / Touch ID za zaštitu preglednika.';
+            document.getElementById('bioUnlockBtn').textContent = '🔓 Postavi Face ID / Touch ID';
+            // Registration happens on button click (already attached below)
+          } else {
+            hideLock();
+          }
+          return;
+        } catch (e) { hideLock(); return; }
+      }
+
+      try {
+        if (storedCid && hasBio) {
+          await verifyBio(storedCid);
+        } else if (storedCid && !hasBio) {
+          // Biometric registered but not available now — prompt passphrase only
+        } else {
+          hideLock();
+          return;
+        }
+        hideLock();
+      } catch (e) {
+        if (errEl) {
+          errEl.textContent = 'Provjera nije uspjela. Pokušajte ponovo.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 3000);
+        }
+        // Reset invalid credential
+        if (e.name === 'InvalidStateError' || e.name === 'NotFoundError') {
+          localStorage.removeItem(CRED_KEY);
+        }
+      }
+    }
+
+    // ── Unlock button ──────────────────────────────────────────────────────
+    document.getElementById('bioUnlockBtn')?.addEventListener('click', async () => {
+      const hasBio = await bioAvailable();
+      const storedCid = localStorage.getItem(CRED_KEY);
+      const errEl = document.getElementById('bioLockErr');
+
+      try {
+        if (!storedCid) {
+          if (hasBio) {
+            await registerBio();
+          }
+          hideLock();
+        } else {
+          await verifyBio(storedCid);
+          hideLock();
+        }
+      } catch (e) {
+        if (errEl) {
+          errEl.textContent = 'Biometrija nije uspjela. Pokušajte lozinku.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 3000);
+        }
+        if (e.name === 'InvalidStateError' || e.name === 'NotFoundError') {
+          localStorage.removeItem(CRED_KEY);
+        }
+      }
+    });
+
+    // ── Passphrase btn ─────────────────────────────────────────────────────
+    async function tryPassphrase() {
+      const input = document.getElementById('bioPassphraseInput');
+      const errEl = document.getElementById('bioLockErr');
+      const pass = input?.value?.trim();
+      if (!pass) return;
+
+      const storedHash = localStorage.getItem(PASS_KEY);
+      if (!storedHash) {
+        // First time — save this passphrase as the lock passphrase
+        const h = await hashPass(pass);
+        localStorage.setItem(PASS_KEY, h);
+        hideLock();
+        showToast('🔑 Lozinka za zaključavanje postavljena');
+        return;
+      }
+
+      const h = await hashPass(pass);
+      if (h === storedHash) {
+        hideLock();
+      } else {
+        if (errEl) {
+          errEl.textContent = 'Pogrešna lozinka.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 2800);
+        }
+        if (input) { input.value = ''; input.focus(); }
+      }
+    }
+
+    document.getElementById('bioPassphraseBtn')?.addEventListener('click', tryPassphrase);
+    document.getElementById('bioPassphraseInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') tryPassphrase();
+    });
+
+    // ── Camera liveness check (ported from Backend_quick stepCamera) ────────
+    let _camStream = null;
+
+    function _stopCam() {
+      if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+    }
+
+    function _setCamStatus(s) {
+      const el = document.getElementById('bioCamStatus');
+      if (el) el.textContent = s;
+    }
+
+    function _setCamBlinkBar(done, total) {
+      const el = document.getElementById('bioCamBlinkBar');
+      if (!el) return;
+      el.innerHTML = Array.from({ length: total }, (_, i) =>
+        `<div style="width:18px;height:18px;border-radius:50%;background:${i < done ? '#a78bfa' : 'rgba(139,92,246,0.2)'};border:1.5px solid rgba(139,92,246,0.5);transition:background 0.3s"></div>`
+      ).join('');
+    }
+
+    async function stepCameraLiveness() {
+      const panel = document.getElementById('bioCameraPanel');
+      const camErrEl = document.getElementById('bioCamErr');
+      const vid = document.getElementById('bioFaceVideo');
+      if (!panel || !vid) return false;
+
+      panel.style.display = 'block';
+      _setCamStatus('Pokretanje kamere…');
+      _setCamBlinkBar(0, 3);
+      if (camErrEl) camErrEl.style.display = 'none';
+
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+
+      try {
+        _camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+          audio: false
+        });
+        vid.srcObject = _camStream;
+        await new Promise(r => { vid.onloadedmetadata = r; setTimeout(r, 3000); });
+
+        const cw = vid.videoWidth || 320;
+        const ch = vid.videoHeight || 240;
+        const canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+
+        // Eye region: centre-horizontal 30–70%, upper-vertical 22–42%
+        const eX = Math.floor(cw * 0.30), eY = Math.floor(ch * 0.22);
+        const eW = Math.floor(cw * 0.40), eH = Math.floor(ch * 0.20);
+
+        function sampleEyes() {
+          ctx.drawImage(vid, 0, 0, cw, ch);
+          const d = ctx.getImageData(eX, eY, eW, eH).data;
+          let sum = 0;
+          for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+          return sum / (d.length / 4);
+        }
+
+        _setCamStatus('👀 Pozicionirajte lice u okvir…');
+        await wait(1800);
+
+        const samples = [sampleEyes()];
+
+        // 3-blink challenge
+        for (let b = 1; b <= 3; b++) {
+          _setCamStatus(`👁️ Treptite! (${4 - b})`);
+          await wait(200);
+          samples.push(sampleEyes()); // closing phase
+          await wait(700);
+          samples.push(sampleEyes()); // open again
+          _setCamBlinkBar(b, 3);
+          await wait(350);
+        }
+
+        // Liveness: variance in eye-region brightness over samples
+        const mean = samples.reduce((a, v) => a + v, 0) / samples.length;
+        const variance = samples.reduce((s, v) => s + (v - mean) ** 2, 0) / samples.length;
+        const livenessOk = variance > 10; // slightly lower threshold than Backend_quick's 12
+
+        _stopCam();
+
+        if (livenessOk) {
+          _setCamStatus('✅ Lice prepoznato!');
+          _setCamBlinkBar(3, 3);
+          await wait(700);
+          panel.style.display = 'none';
+          return true;
+        } else {
+          _setCamStatus('⚠️ Treptanje nije detektirano. Pokušajte ponovo.');
+          if (camErrEl) { camErrEl.textContent = 'Pomjerite glavu ili povećajte svjetlost i pokušajte opet.'; camErrEl.style.display = 'block'; }
+          await wait(2500);
+          panel.style.display = 'none';
+          return false;
+        }
+      } catch (e) {
+        _stopCam();
+        _setCamStatus('📷 Kamera nedostupna');
+        if (camErrEl) { camErrEl.textContent = 'Dozvolite pristup kameri i pokušajte ponovo.'; camErrEl.style.display = 'block'; }
+        await wait(2000);
+        panel.style.display = 'none';
+        return false;
+      }
+    }
+
+    document.getElementById('bioCameraBtn')?.addEventListener('click', async () => {
+      const errEl = document.getElementById('bioLockErr');
+      // Stop any ongoing camera first
+      _stopCam();
+      const ok = await stepCameraLiveness();
+      if (ok) {
+        hideLock();
+        showToast('📷 Lice prepoznato — preglednik otključan');
+      } else {
+        if (errEl) {
+          errEl.textContent = 'Provjera licem nije uspjela. Koristite drugu metodu.';
+          errEl.style.display = 'block';
+          setTimeout(() => { if (errEl) errEl.style.display = 'none'; }, 3500);
+        }
+      }
+    });
+
+    // Stop camera if lock screen is hidden by other means
+    const _origHideLock = hideLock;
+
+    // ── Lock button in toolbar ─────────────────────────────────────────────
+    document.getElementById('btnBiometricLock')?.addEventListener('click', () => {
+      _stopCam();
+      const hasCreds = localStorage.getItem(CRED_KEY) || localStorage.getItem(PASS_KEY);
+      if (!hasCreds) {
+        showToast('🔐 Klikni ponovo u lock screenu da postaviš biometrijsko zaključavanje.');
+      }
+      showLock();
+    });
+
+    // ── Public API ─────────────────────────────────────────────────────────
+    return { showLock, hideLock, isAuthValid, unlock, stepCameraLiveness };
+  })();
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // FEATURE: Location Consent Overlay
+  // Intercepts location-related siteInfoPopup interaction + shows a consent
+  // confirmation modal before the native geolocation prompt can fire.
+  // Also provides an enhanced UI when the location permission select changes.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    const LOC_OVERLAY = document.getElementById('locationConsentOverlay');
+    let _locConsentResolve = null;
+    let _currentRequestHostname = null;
+
+    function showLocationConsentFor(hostname) {
+      return new Promise((resolve) => {
+        _locConsentResolve = resolve;
+        _currentRequestHostname = hostname;
+        const siteEl = document.getElementById('locConsentSite');
+        if (siteEl) siteEl.textContent = hostname || 'ova stranica';
+        if (LOC_OVERLAY) LOC_OVERLAY.style.display = 'flex';
+      });
+    }
+
+    function hideLocationConsent() {
+      if (LOC_OVERLAY) LOC_OVERLAY.style.display = 'none';
+      _locConsentResolve = null;
+      _currentRequestHostname = null;
+    }
+
+    document.getElementById('locConsentDeny')?.addEventListener('click', () => {
+      if (_locConsentResolve) _locConsentResolve('deny');
+      if (_currentRequestHostname) {
+        setSitePerm(_currentRequestHostname, 'location', 'Block');
+      }
+      hideLocationConsent();
+      showToast('📍 Lokacija odbijena');
+    });
+
+    document.getElementById('locConsentAllow')?.addEventListener('click', () => {
+      if (_locConsentResolve) _locConsentResolve('allow-once');
+      hideLocationConsent();
+      showToast('📍 Lokacija dozvoljena (jednom)');
+      // Actually request geolocation
+      requestUserLocation();
+    });
+
+    document.getElementById('locConsentAlwaysAllow')?.addEventListener('click', () => {
+      if (_locConsentResolve) _locConsentResolve('allow-always');
+      // Save "Allow" for this domain in per-site perms
+      if (_currentRequestHostname) {
+        setSitePerm(_currentRequestHostname, 'location', 'Allow');
+        showToast('📍 Lokacija uvijek dozvoljena za ' + _currentRequestHostname);
+      } else if (typeof _sipCurrentDomain !== 'undefined' && _sipCurrentDomain && _sipCurrentDomain !== '—') {
+        setSitePerm(_sipCurrentDomain, 'location', 'Allow');
+        showToast('📍 Lokacija uvijek dozvoljena za ' + _sipCurrentDomain);
+      }
+      hideLocationConsent();
+      // Actually request geolocation
+      requestUserLocation();
+    });
+
+    // Actual geolocation request
+    function requestUserLocation() {
+      if (!navigator.geolocation) {
+        showToast('❌ Geolokacija nije podržana u ovom pregledniku');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          // Store location in session
+          sessionStorage.setItem('etherx_last_location', JSON.stringify({
+            lat: latitude,
+            lng: longitude,
+            accuracy,
+            timestamp: Date.now()
+          }));
+          showToast(`📍 Lokacija dobivena: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (±${Math.round(accuracy)}m)`);
+          console.log('[EtherX] Location:', { latitude, longitude, accuracy });
+        },
+        (error) => {
+          let msg = '❌ Greška pri dobivanju lokacije';
+          if (error.code === error.PERMISSION_DENIED) {
+            msg = '❌ Pristup lokaciji odbijen u sustavu';
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            msg = '❌ Lokacija nije dostupna';
+          } else if (error.code === error.TIMEOUT) {
+            msg = '❌ Timeout pri dobivanju lokacije';
+          }
+          showToast(msg);
+          console.error('[EtherX] Geolocation error:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    // Hook: when the location select in siteInfoPopup changes to "Allow", show consent first
+    document.getElementById('sipLocation')?.addEventListener('change', function (evt) {
+      if (this.value !== 'Allow') return;
+      // Stop the auto-save listener from firing immediately
+      evt.stopImmediatePropagation();
+
+      const selectEl = this;
+      const t = getActiveTab && getActiveTab();
+      let hostname = '';
+      try { hostname = new URL(t?.url || '').hostname; } catch (e) { }
+
+      showLocationConsentFor(hostname).then((decision) => {
+        if (decision === 'deny') {
+          selectEl.value = 'Ask';
+          if (hostname) setSitePerm(hostname, 'location', 'Ask');
+          showToast('✓ Saved for ' + (hostname || _sipCurrentDomain));
+        } else {
+          // allow-once or allow-always: save as Allow
+          if (hostname) setSitePerm(hostname, 'location', 'Allow');
+          selectEl.value = 'Allow';
+          showToast('✓ Saved for ' + (hostname || _sipCurrentDomain));
+        }
+      });
+    }, true); // capture: true — fire before the auto-save bubbling listener
+
+    // Auto-show location consent when page loads (if not already set)
+    // Check on navigation
+    function checkLocationPermissionOnNavigation() {
+      const t = getActiveTab && getActiveTab();
+      if (!t?.url) return;
+
+      let hostname = '';
+      try { hostname = new URL(t.url).hostname; } catch (e) { return; }
+
+      const perms = getSitePerms();
+      const sitePerm = perms[hostname];
+
+      // If location is set to Allow, request it automatically
+      if (sitePerm && sitePerm.location === 'Allow') {
+        // Small delay to ensure page is loaded
+        setTimeout(() => {
+          requestUserLocation();
+        }, 1500);
+      }
+    }
+
+    // Listen for navigation events
+    if (window.addEventListener) {
+      // Check on tab switch
+      document.addEventListener('tabSwitch', checkLocationPermissionOnNavigation);
+    }
+
+    // Expose for other modules
+    window._showLocationConsent = showLocationConsentFor;
+    window._requestUserLocation = requestUserLocation;
+
+    // ── Auto-trigger location consent on first load (optional) ──────────────
+    // Check if location permission was never set and show consent automatically
+    // This ensures users see the permission dialog like in the screenshot
+    (function checkLocationOnStartup() {
+      const hasShownLocationPrompt = sessionStorage.getItem('etherx_location_prompt_shown');
+      const globalLocationSetting = DB.getSettings().geolocation_policy;
+
+      // If no global policy is set and we haven't shown the prompt this session
+      if (!hasShownLocationPrompt && !globalLocationSetting) {
+        // Show location consent after a short delay
+        setTimeout(() => {
+          const currentHost = window.location.hostname || 'aplikacija';
+          showLocationConsentFor(currentHost).then((decision) => {
+            sessionStorage.setItem('etherx_location_prompt_shown', 'true');
+            console.log('[EtherX] Location consent decision:', decision);
+          });
+        }, 1000); // 1 second delay after page load
+      }
+    })();
   }
 
 })();

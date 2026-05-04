@@ -117,17 +117,26 @@ else:
     print("  standalone src/index.html version updated")
 PYEOF
 
-# ── 4. Copy standalone-browser to temporary directory for push ───────────────
-info "Preparing standalone-only repository structure..."
-TEMP_DIR=$(mktemp -d)
-trap "rm -rf $TEMP_DIR" EXIT
+# ── 4. Setup git in standalone-browser directory ────────────────────────────
+info "Preparing standalone repository..."
+cd "$STANDALONE_DIR"
 
-# Copy all standalone-browser contents to temp
-cp -r "$STANDALONE_DIR/"* "$TEMP_DIR/"
-cp "$STANDALONE_DIR/.gitignore" "$TEMP_DIR/" 2>/dev/null || true
+# Initialize git if not already done
+if [[ ! -d ".git" ]]; then
+  info "Initializing git repository in standalone-browser/"
+  git init -b main
+fi
 
-# Create README for standalone repo
-cat > "$TEMP_DIR/README.md" <<'EOFREADME'
+# Check if remote exists
+if ! git remote get-url origin &>/dev/null; then
+  info "Adding remote origin → $STANDALONE_REPO"
+  REPO_URL="https://${GITHUB_TOKEN}@github.com/ktrucek/etherx-standalone.git"
+  git remote add origin "$REPO_URL"
+fi
+
+# Create README in root if doesn't exist
+if [[ ! -f "README.md" ]]; then
+  cat > "README.md" <<'EOFREADME'
 # EtherX Standalone Browser
 
 **Pure web version of EtherX Browser** — runs directly in any modern web browser without installation.
@@ -187,26 +196,30 @@ Proprietary and Confidential — See LICENSE file.
 - **Website**: [kriptoentuzijasti.io](https://kriptoentuzijasti.io)
 - **Email**: support@kriptoentuzijasti.io
 EOFREADME
+fi
 
-success "Standalone structure prepared in $TEMP_DIR"
+success "Standalone repository prepared"
 
-# ── 5. Initialize git in temp dir and push to standalone repo ────────────────
-cd "$TEMP_DIR"
-
-git init -b main
+# ── 5. Commit and push to standalone repo ────────────────────────────────────
+info "Committing changes..."
 git add -A
-git commit -m "v${NEW_VERSION}: EtherX Standalone Browser" || warn "Nothing to commit"
+git commit -m "v${NEW_VERSION}: EtherX Standalone Browser" || warn "Nothing to commit (no changes)"
 
 TAG_NAME="v${NEW_VERSION}"
+
+# Delete local tag if exists
+if git tag -l | grep -q "^${TAG_NAME}$"; then
+  info "Tag $TAG_NAME already exists locally — deleting old tag"
+  git tag -d "$TAG_NAME"
+fi
+
 git tag "$TAG_NAME"
+success "Tagged: $TAG_NAME"
 
 if [[ "$NO_PUSH" == false ]]; then
   info "Pushing to $STANDALONE_REPO ..."
-  # Use HTTPS with token authentication
-  REPO_URL="https://${GITHUB_TOKEN}@github.com/ktrucek/etherx-standalone.git"
-  git remote add origin "$REPO_URL"
   git push -f origin main || warn "Push to main failed"
-  git push origin "$TAG_NAME" || warn "Tag push failed"
+  git push -f origin "$TAG_NAME" || warn "Tag push failed"
   success "Pushed to etherx-standalone repository"
 else
   warn "--no-push: Skipping GitHub push"

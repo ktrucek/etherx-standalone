@@ -56,6 +56,15 @@ contextBridge.exposeInMainWorld('etherx', {
     save: (s) => ipcRenderer.invoke('db:saveSettings', s),
   },
 
+  // ── Network Monitoring ───────────────────────────────────────────────────────
+  network: {
+    getLog: () => ipcRenderer.invoke('network:getLog'),
+    clearLog: () => ipcRenderer.invoke('network:clearLog'),
+    onUpdate: (callback) => {
+      ipcRenderer.on('network-log', (_event, data) => callback(data));
+    },
+  },
+
   // ── Passwords ────────────────────────────────────────────────────────────────
   passwords: {
     save: (site, user, encrypted) => ipcRenderer.invoke('passwords:save', site, user, encrypted),

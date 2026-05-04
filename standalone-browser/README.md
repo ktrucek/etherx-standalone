@@ -2,6 +2,9 @@
 
 Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 
+
+<!-- GitHub token se NE sprema u fajlove — upiši ga u Settings → Developer -->
+
 ## Što je uključeno
 
 ✅ Sve browser funkcije (kartice, bookmarks, povijest, itd.)  

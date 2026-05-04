@@ -5558,6 +5558,7 @@
     <button class="nav-btn icon-btn" id="btnDownloads" title="Downloads">⬇️</button>
     <button class="nav-btn icon-btn" id="btnSettings" title="Settings">⚙️</button>
     <button class="nav-btn icon-btn" id="btnDevtools" title="DevTools (F12)">🛠️</button>
+    <button class="nav-btn icon-btn" id="btnBiometricLock" title="Zaključaj browser (biometrija)">🔐</button>
   </div>
   <!-- Bookmark Folder Bar -->
   <div id="bmFolderBar">
@@ -7593,7 +7594,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.20</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.26</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; Licenca: MIT</div>
@@ -8808,6 +8809,23 @@
             <option>Deny</option>
             <option>Allow</option>
           </select>
+        </div>
+      </div>
+      <!-- IP geolokacija posjetitelja -->
+      <div class="sip-section" id="sipGeoSection" style="display:none">
+        <div class="sip-row"><span class="sip-row-label" style="font-size:10px;color:var(--text3)">🌐 SERVER IP</span>
+        </div>
+        <div class="sip-row">
+          <span class="sip-row-label">IP adresa</span>
+          <span class="sip-row-val" id="sipGeoIp" style="font-size:11px">—</span>
+        </div>
+        <div class="sip-row">
+          <span class="sip-row-label">Lokacija</span>
+          <span class="sip-row-val" id="sipGeoLocation" style="font-size:11px">—</span>
+        </div>
+        <div class="sip-row">
+          <span class="sip-row-label">ISP / Org</span>
+          <span class="sip-row-val" id="sipGeoOrg" style="font-size:10px;word-break:break-all">—</span>
         </div>
       </div>
       <!-- Clear site data -->
@@ -15405,6 +15423,302 @@
         };
         input.click();
       });
+
+    })();
+  </script>
+
+  <!-- ── Biometrijski lock screen overlay ── -->
+  <div id="biometricLockScreen"
+    style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(15,12,25,.97);flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e9d5ff">
+    <div style="font-size:48px">🔐</div>
+    <h2 style="margin:0;font-size:1.3rem;color:#f3f4f6">Browser zaključan</h2>
+    <p style="margin:0;font-size:.85rem;color:#9ca3af;text-align:center;max-width:300px">Koristite biometriju, kameru
+      ili lozinku za otključavanje.</p>
+    <button id="bioUnlockBtn"
+      style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:1rem;cursor:pointer">🔐
+      Otključaj (Face ID / Touch ID)</button>
+    <button id="bioCameraBtn"
+      style="background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.4);border-radius:10px;padding:10px 24px;font-size:.95rem;cursor:pointer">📷
+      Provjeri lice kamerom</button>
+    <div id="bioCameraPanel" style="display:none;position:relative;width:260px;text-align:center">
+      <video id="bioFaceVideo" autoplay playsinline muted
+        style="width:100%;border-radius:12px;transform:scaleX(-1);background:#111"></video>
+      <div
+        style="position:absolute;border-radius:50%;border:2.5px dashed rgba(167,139,250,.6);pointer-events:none;width:130px;height:160px;top:50%;left:50%;transform:translate(-50%,-50%)">
+      </div>
+      <div id="bioCamStatus" style="color:#e9d5ff;font-size:.95rem;font-weight:700;margin-top:8px">Pokretanje…</div>
+      <div id="bioCamBlinkBar" style="margin:4px 0"></div>
+      <p id="bioCamErr" style="color:#fca5a5;font-size:.8rem;margin:4px 0"></p>
+    </div>
+    <div
+      style="width:280px;border-top:1px solid rgba(139,92,246,.2);padding-top:14px;display:flex;flex-direction:column;gap:8px">
+      <input id="bioPassphraseInput" type="password" placeholder="ili unesi lozinku…" autocomplete="off"
+        style="width:100%;box-sizing:border-box;background:rgba(31,41,55,.8);color:#f3f4f6;border:1px solid rgba(139,92,246,.35);border-radius:8px;padding:10px 12px;font-size:.9rem;outline:none">
+      <button id="bioPassphraseBtn"
+        style="background:rgba(139,92,246,.25);color:#c4b5fd;border:1px solid rgba(139,92,246,.35);border-radius:8px;padding:8px;cursor:pointer;font-size:.9rem">→
+        Otključaj lozinkom</button>
+      <p id="bioLockErr" style="color:#fca5a5;font-size:.8rem;text-align:center;margin:0;display:none"></p>
+    </div>
+  </div>
+
+  <!-- ── Location consent overlay ── -->
+  <div id="locationConsentOverlay"
+    style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.6);flex-direction:column;align-items:flex-end;justify-content:center">
+    <div
+      style="background:#1a1a2e;border-radius:14px 14px 0 0;padding:20px 20px 28px;width:100%;max-width:480px;margin:0 auto;color:#e9d5ff;font-family:-apple-system,sans-serif">
+      <h3 style="margin:0 0 8px;font-size:1rem">📍 Dijeljenje lokacije</h3>
+      <p style="margin:0 0 14px;font-size:.85rem;color:#9ca3af">Stranica <b id="lcSiteName">—</b> želi pristup vašoj
+        lokaciji.</p>
+      <div style="display:flex;gap:8px">
+        <button id="lcBtnDeny"
+          style="flex:1;padding:10px;background:rgba(192,57,43,.2);color:#e74c3c;border:1px solid rgba(192,57,43,.4);border-radius:8px;cursor:pointer">✕
+          Odbij</button>
+        <button id="lcBtnAllowOnce"
+          style="flex:1;padding:10px;background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.3);border-radius:8px;cursor:pointer">✓
+          Jednom</button>
+        <button id="lcBtnAllowAlways"
+          style="flex:1;padding:10px;background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.35);border-radius:8px;cursor:pointer">✓
+          Uvijek</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Security Layer: Bot/IAB, IP geo, Biometrijski lock, Location consent ──
+    (function () {
+      'use strict';
+
+      function _st(msg) {
+        const t = document.getElementById('toast');
+        if (!t) return;
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2800);
+      }
+
+      // ── 1. Bot / IAB detekcija (pri pokretanju) ───────────────────────────
+      (function () {
+        const ua = navigator.userAgent || '';
+        const bots = ['headless', 'phantomjs', 'selenium', 'htmlunit', 'bot/', 'spider', 'crawler',
+          'slurp', 'baiduspider', 'yandex', 'sogou', 'exabot', 'ia_archiver',
+          'python-requests', 'python-urllib', 'curl/', 'wget/', 'go-http-client',
+          'java/', 'scrapy', 'httpx', 'aiohttp', 'node-fetch', 'axios'];
+        const uaLow = ua.toLowerCase();
+        if (navigator.webdriver || bots.some(b => uaLow.includes(b))) {
+          _st('⚠️ Bot/scraper user-agent detektiran!');
+        }
+        if (/FBAN|FBAV|Instagram|Twitter\/|LinkedInApp|Snapchat|TikTok/i.test(ua)) {
+          _st('⚠️ In-app browser (FB/IG) – WebAuthn možda ne radi');
+        }
+      })();
+
+      // ── 2. IP geolokacija (padlock klik → dohvati geo servera) ───────────
+      document.getElementById('urlIcon')?.addEventListener('click', async () => {
+        const geoSection = document.getElementById('sipGeoSection');
+        if (!geoSection) return;
+        const rawUrl = document.getElementById('urlInput')?.value || '';
+        let hostname = '';
+        try { hostname = new URL(rawUrl).hostname; } catch (e) { return; }
+        if (!hostname) return;
+        try {
+          const geo = await fetch(`https://ipapi.co/${encodeURIComponent(hostname)}/json/`).then(r => r.json());
+          if (geo && geo.ip) {
+            document.getElementById('sipGeoIp').textContent = geo.ip;
+            document.getElementById('sipGeoLocation').textContent =
+              [geo.city, geo.region, geo.country_name].filter(Boolean).join(', ') || '—';
+            document.getElementById('sipGeoOrg').textContent = geo.org || '—';
+            geoSection.style.display = '';
+          }
+        } catch (e) { /* tiho */ }
+      });
+
+      // ── 3. BIO_LOCK — biometrijski lock screen ────────────────────────────
+      const BIO_LOCK = (() => {
+        const AUTH_TS_KEY = 'etherx_bio_ts';
+        const PASS_KEY = 'etherx_bio_pw';
+        const SESSION_MS = 8 * 60 * 60 * 1000;
+        const IDLE_MS = 30 * 60 * 1000;
+        let _idleTimer = null;
+        let _camStream = null;
+
+        function isAuthValid() {
+          return (Date.now() - parseInt(localStorage.getItem(AUTH_TS_KEY) || '0', 10)) < SESSION_MS;
+        }
+        function markAuth() { localStorage.setItem(AUTH_TS_KEY, String(Date.now())); }
+
+        function _stopCam() {
+          if (_camStream) { _camStream.getTracks().forEach(t => t.stop()); _camStream = null; }
+          const v = document.getElementById('bioFaceVideo');
+          if (v) v.srcObject = null;
+          const p = document.getElementById('bioCameraPanel');
+          if (p) p.style.display = 'none';
+        }
+        function showLock() {
+          _stopCam();
+          const el = document.getElementById('biometricLockScreen');
+          if (el) el.style.display = 'flex';
+        }
+        function hideLock() {
+          markAuth();
+          const el = document.getElementById('biometricLockScreen');
+          if (el) el.style.display = 'none';
+          _st('✅ Browser otključan');
+        }
+
+        async function hashPass(s) {
+          const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+          return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Camera liveness (eye-blink)
+        async function stepCameraLiveness() {
+          const panel = document.getElementById('bioCameraPanel');
+          const vid = document.getElementById('bioFaceVideo');
+          const status = document.getElementById('bioCamStatus');
+          const errEl = document.getElementById('bioCamErr');
+          if (!panel || !vid || !navigator.mediaDevices?.getUserMedia) {
+            if (errEl) errEl.textContent = 'Kamera nije dostupna.';
+            return false;
+          }
+          panel.style.display = 'block';
+          if (status) status.textContent = 'Pokretanje kamere…';
+          if (errEl) errEl.textContent = '';
+          const wait = ms => new Promise(r => setTimeout(r, ms));
+          function _setBar(n) {
+            const bar = document.getElementById('bioCamBlinkBar');
+            if (!bar) return;
+            bar.innerHTML = [0, 1, 2].map(i =>
+              `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 3px;background:${i < n ? '#a78bfa' : 'rgba(167,139,250,.25)'}"></span>`).join('');
+          }
+          _setBar(0);
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }, audio: false
+            });
+            _camStream = stream;
+            vid.srcObject = stream;
+            await new Promise(r => { vid.onloadedmetadata = r; setTimeout(r, 3000); });
+            const cw = vid.videoWidth || 320, ch = vid.videoHeight || 240;
+            const canvas = document.createElement('canvas');
+            canvas.width = cw; canvas.height = ch;
+            const ctx = canvas.getContext('2d');
+            const eX = Math.floor(cw * .30), eY = Math.floor(ch * .22);
+            const eW = Math.floor(cw * .40), eH = Math.floor(ch * .20);
+            function sampleEyes() {
+              ctx.drawImage(vid, 0, 0, cw, ch);
+              const d = ctx.getImageData(eX, eY, eW, eH).data;
+              let sum = 0;
+              for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+              return sum / (d.length / 4);
+            }
+            if (status) status.textContent = '👀 Pozicionirajte lice u okvir…';
+            await wait(2000);
+            const samples = [sampleEyes()];
+            for (let b = 3; b >= 1; b--) {
+              if (status) status.textContent = `👁️ Treptite! (${b})`;
+              _setBar(4 - b);
+              await wait(200); samples.push(sampleEyes());
+              await wait(700); samples.push(sampleEyes());
+              await wait(300);
+            }
+            _setBar(3);
+            const mean = samples.reduce((a, v) => a + v, 0) / samples.length;
+            const variance = samples.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / samples.length;
+            _stopCam();
+            if (variance > 10) { hideLock(); return true; }
+            if (errEl) errEl.textContent = '❌ Liveness provjera nije uspjela. Pokušajte ponovo.';
+            if (status) status.textContent = '';
+            return false;
+          } catch (e) {
+            _stopCam();
+            if (errEl) errEl.textContent = 'Kamera nedostupna: ' + (e.message || '');
+            return false;
+          }
+        }
+
+        // Camera button
+        document.getElementById('bioCameraBtn')?.addEventListener('click', async () => {
+          if (!(await stepCameraLiveness())) _st('❌ Camera liveness nije prošla');
+        });
+
+        // Biometric (WebAuthn) unlock — reuse existing etherx implementation
+        document.getElementById('bioUnlockBtn')?.addEventListener('click', async () => {
+          const errEl = document.getElementById('bioLockErr');
+          try {
+            const result = await window.__etherxBiometricUnlock?.(() => hideLock());
+            if (!result?.ok) throw new Error(result?.error || 'Biometric nije uspjelo.');
+          } catch (e) {
+            if (errEl) { errEl.textContent = e.message; errEl.style.display = 'block'; setTimeout(() => { errEl.style.display = 'none'; }, 2500); }
+          }
+        });
+
+        // Passphrase
+        async function tryPassphrase() {
+          const input = document.getElementById('bioPassphraseInput');
+          const errEl = document.getElementById('bioLockErr');
+          const val = input?.value?.trim() || '';
+          if (!val) return;
+          const hash = await hashPass(val);
+          const stored = localStorage.getItem(PASS_KEY);
+          if (!stored) { localStorage.setItem(PASS_KEY, hash); hideLock(); return; }
+          if (hash === stored) { hideLock(); return; }
+          if (errEl) { errEl.textContent = 'Pogrešna lozinka.'; errEl.style.display = 'block'; setTimeout(() => { errEl.style.display = 'none'; }, 2000); }
+          if (input) input.value = '';
+        }
+        document.getElementById('bioPassphraseBtn')?.addEventListener('click', tryPassphrase);
+        document.getElementById('bioPassphraseInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') tryPassphrase(); });
+
+        // 🔐 Lock button
+        document.getElementById('btnBiometricLock')?.addEventListener('click', () => { _stopCam(); showLock(); });
+
+        // Inactivity auto-lock
+        (() => {
+          function _reset() {
+            clearTimeout(_idleTimer);
+            _idleTimer = setTimeout(() => { localStorage.removeItem(AUTH_TS_KEY); showLock(); }, IDLE_MS);
+          }
+          ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev =>
+            document.addEventListener(ev, _reset, { passive: true, capture: true }));
+          _reset();
+        })();
+
+        return { showLock, hideLock, isAuthValid, stepCameraLiveness };
+      })();
+      window.BIO_LOCK = BIO_LOCK;
+
+      // ── 4. Location consent overlay ───────────────────────────────────────
+      (() => {
+        const OVERLAY = document.getElementById('locationConsentOverlay');
+        let _resolve = null;
+
+        function showConsentFor(hostname) {
+          return new Promise(resolve => {
+            _resolve = resolve;
+            const el = document.getElementById('lcSiteName');
+            if (el) el.textContent = hostname;
+            if (OVERLAY) OVERLAY.style.display = 'flex';
+          });
+        }
+        function hideConsent() { if (OVERLAY) OVERLAY.style.display = 'none'; _resolve = null; }
+
+        document.getElementById('lcBtnDeny')?.addEventListener('click', () => { _resolve?.('deny'); hideConsent(); });
+        document.getElementById('lcBtnAllowOnce')?.addEventListener('click', () => { _resolve?.('allow-once'); hideConsent(); });
+        document.getElementById('lcBtnAllowAlways')?.addEventListener('click', () => { _resolve?.('allow-always'); hideConsent(); });
+
+        document.getElementById('sipLocation')?.addEventListener('change', async function (e) {
+          if (this.value !== 'Allow') return;
+          e.stopImmediatePropagation();
+          let hostname = 'ova stranica';
+          try { hostname = new URL(document.getElementById('urlInput')?.value || '').hostname; } catch (_) { }
+          const decision = await showConsentFor(hostname);
+          if (decision === 'deny') {
+            this.value = 'Deny';
+            this.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }, true);
+
+        window._showLocationConsent = showConsentFor;
+      })();
 
     })();
   </script>

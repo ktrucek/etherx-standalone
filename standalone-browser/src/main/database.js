@@ -69,6 +69,9 @@ class DatabaseManager {
         );
         CREATE INDEX IF NOT EXISTS idx_history_url        ON history(url);
         CREATE INDEX IF NOT EXISTS idx_history_last_visit ON history(last_visited DESC);
+        -- 🔥 PERFORMANCE: Additional indices for faster searches
+        CREATE INDEX IF NOT EXISTS idx_history_title      ON history(title COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_history_url_title  ON history(url, title);
 
         -- ── Bookmarks ─────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS bookmarks (
@@ -81,6 +84,10 @@ class DatabaseManager {
           created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
         CREATE INDEX IF NOT EXISTS idx_bookmarks_folder ON bookmarks(folder);
+        -- 🔥 PERFORMANCE: Additional bookmark search indices
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_title  ON bookmarks(title COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_url    ON bookmarks(url);
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_search ON bookmarks(title, url);
 
         -- ── Settings ──────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS settings (
@@ -176,10 +183,12 @@ class DatabaseManager {
           value        TEXT    NOT NULL DEFAULT ''
         );
         INSERT OR IGNORE INTO user_profile (key, value) VALUES
-          ('displayName', 'EtherX User'),
-          ('email',       ''),
-          ('avatar',      ''),
-          ('walletAddress','');
+          ('displayName',    'EtherX User'),
+          ('email',          ''),
+          ('avatar',         ''),
+          ('walletAddress',  ''),
+          ('walletEncrypted',''),
+          ('walletKeyHash',  '');
 
         -- ── Lighthouse Audits ─────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS lighthouse_audits (
@@ -197,6 +206,16 @@ class DatabaseManager {
         INSERT OR REPLACE INTO schema_version (version) VALUES (3);
       `);
     }
+  }
+
+  /**
+   * Prune history based on retention setting.
+   */
+  pruneHistory(days) {
+    if (!days || days <= 0) return { ok: true, pruned: 0 };
+    const cutoff = Math.floor(Date.now() / 1000) - (days * 86400);
+    const result = this.db.prepare('DELETE FROM history WHERE last_visited < ?').run(cutoff);
+    return { ok: true, pruned: result.changes };
   }
 
   // ─── Tabs ─────────────────────────────────────────────────────────────────
@@ -355,23 +374,41 @@ class DatabaseManager {
 
   // ─── Settings ──────────────────────────────────────────────────────────────
 
-  getSettings() {
-    const rows = this.db.prepare('SELECT key, value FROM settings').all();
-    return rows.reduce((acc, r) => {
-      acc[r.key] = r.value;
-      return acc;
-    }, {});
+  saveSettings(settings) {
+    const stmt = this.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+    const transaction = this.db.transaction((data) => {
+      for (const [k, v] of Object.entries(data)) {
+        stmt.run(k, String(v));
+      }
+    });
+    transaction(settings);
+    return { ok: true };
   }
 
-  saveSettings(obj) {
-    const upsert = this.db.prepare(
-      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-    );
-    const tx = this.db.transaction((pairs) => {
-      for (const [k, v] of pairs) upsert.run(k, String(v));
-    });
-    tx(Object.entries(obj));
+  getSettings() {
+    const rows = this.db.prepare('SELECT * FROM settings').all();
+    const cfg = {};
+    rows.forEach(r => { cfg[r.key] = r.value; });
+    return cfg;
+  }
+
+  /**
+   * Save window size and position.
+   */
+  saveWindowBounds(bounds) {
+    this.saveSettings({ 'window_bounds': JSON.stringify(bounds) });
     return { ok: true };
+  }
+
+  /**
+   * Get saved window size and position.
+   */
+  getWindowBounds() {
+    const rows = this.db.prepare('SELECT value FROM settings WHERE key = ?').all('window_bounds');
+    if (rows.length && rows[0].value) {
+      try { return JSON.parse(rows[0].value); } catch (_) { return null; }
+    }
+    return null;
   }
 
   // ─── AI Cache ─────────────────────────────────────────────────────────────
