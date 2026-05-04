@@ -78,7 +78,8 @@ if (window.electronWebview) {
         const { protocol } = new URL(e.url);
         if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
       } catch (_) { return; }
-      navigateTo(e.url);
+      // Open in new tab (consistent with per-tab webview new-window handler)
+      createTab(e.url, '', true);
     });
   });
 }
@@ -444,7 +445,6 @@ function navigateTo(raw, tabId) {
     if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
   } catch (e) { return; }
   const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
-  closeAllPanels();
   tab.url = url;
   try {
     const h = new URL(url).hostname;
@@ -456,6 +456,8 @@ function navigateTo(raw, tabId) {
   tab.history = tab.history.slice(0, tab.histIdx + 1);
   tab.history.push(url); tab.histIdx = tab.history.length - 1;
   if (tab.id === STATE.activeTabId) {
+    // Only close panels when the user navigates the active tab (not for background tabs)
+    closeAllPanels();
     document.getElementById('urlInput').value = url; updateUrlIcon(url); updateNavBtns(tab);
     ntp.style.display = 'none';
     document.getElementById('blockedOverlay').classList.remove('show');
@@ -1119,9 +1121,19 @@ document.getElementById('bobiaiReload')?.addEventListener('click', () => {
   const bl = document.getElementById('bobiaiLoading'); bl.style.display = 'flex';
   document.getElementById('bobiaiFrame').src = 'https://bobiai.kriptoentuzijasti.io';
 });
-document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
+document.getElementById('btnKripto').addEventListener('click', () => {
+  const isOpening = !document.getElementById('kriptoPanel')?.classList.contains('open');
+  togglePanel('kriptoPanel');
+  // Fallback: hide loading overlay after 8s if iframe onload never fires (e.g. site has X-Frame-Options)
+  if (isOpening) setTimeout(() => { const kl = document.getElementById('kriptoLoading'); if (kl) kl.style.display = 'none'; }, 8000);
+});
 document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
-document.getElementById('kriptoReload')?.addEventListener('click', () => { document.getElementById('kriptoLoading').style.display = 'flex'; document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io'; });
+document.getElementById('kriptoReload')?.addEventListener('click', () => {
+  document.getElementById('kriptoLoading').style.display = 'flex';
+  document.getElementById('kriptoFrame').src = 'https://kriptoentuzijasti.io';
+  // Fallback timeout if onload doesn't fire
+  setTimeout(() => { const kl = document.getElementById('kriptoLoading'); if (kl) kl.style.display = 'none'; }, 8000);
+});
 document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
 ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
 function renderBookmarksPanel() {
