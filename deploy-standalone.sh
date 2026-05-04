@@ -141,10 +141,10 @@ git tag "$TAG_NAME"
 
 # ── 5. Push to GitHub (triggers CI build) ─────────────────────────────────────
 if [[ "$NO_PUSH" == false ]]; then
-  info "Pushing to GitHub (triggers Actions CI build for standalone)..."
-  git push origin main || warn "Push to main failed — check remote"
+  info "Pushing to GitHub standalone repo (triggers Actions CI build)..."
+  git push standalone main || warn "Push to standalone/main failed — check remote"
   # Push only the new tag (avoid re-pushing old tags)
-  git push origin "$TAG_NAME" || warn "Tag push failed"
+  git push standalone "$TAG_NAME" || warn "Tag push failed"
   success "GitHub push done — CI build triggered for $TAG_NAME"
 else
   warn "--no-push: Skipping GitHub push"
