@@ -192,6 +192,7 @@ contextBridge.exposeInMainWorld('etherx', {
   // ── App ───────────────────────────────────────────────────────────────────────
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    getProcessMetrics: () => ipcRenderer.invoke('app:getProcessMetrics'),
     getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
     getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
     openApplePasswords: () => ipcRenderer.invoke('app:openApplePasswords'),

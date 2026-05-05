@@ -929,6 +929,36 @@ function setupIPC() {
     }
   });
 
+  // ── Performance / Process Metrics ─────────────────────────────────────────
+  ipcMain.handle('app:getProcessMetrics', async () => {
+    const metrics = app.getAppMetrics(); // per-process CPU + memory
+    const mem = process.memoryUsage();   // main process heap
+
+    // Build per-process list (renderer, GPU, utility, etc.)
+    const processes = metrics.map(m => ({
+      pid: m.pid,
+      type: m.type,
+      cpuPercent: (m.cpu?.percentCPUUsage ?? 0).toFixed(1),
+      ramMB: m.memory ? (m.memory.workingSetSize / 1024).toFixed(1) : '?',
+      sharedMB: m.memory ? (m.memory.sharedMemory / 1024 / 1024).toFixed(1) : '?',
+    }));
+
+    // Total RAM = sum of all working set sizes
+    const totalRamMB = metrics.reduce((s, m) => s + (m.memory?.workingSetSize ?? 0) / 1024, 0);
+    const totalCpu = metrics.reduce((s, m) => s + (m.cpu?.percentCPUUsage ?? 0), 0);
+
+    return {
+      processes,
+      totalRamMB: totalRamMB.toFixed(1),
+      totalCpuPercent: totalCpu.toFixed(1),
+      mainHeapUsedMB: (mem.heapUsed / 1024 / 1024).toFixed(1),
+      mainHeapTotalMB: (mem.heapTotal / 1024 / 1024).toFixed(1),
+      mainRssMB: (mem.rss / 1024 / 1024).toFixed(1),
+      uptime: Math.round(process.uptime()),
+      windowCount: BrowserWindow.getAllWindows().length,
+    };
+  });
+
   // ── App info ────────────────────────────────────────────────
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getPlatform', () => process.platform);

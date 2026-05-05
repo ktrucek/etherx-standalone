@@ -679,13 +679,36 @@ frame.addEventListener('load', () => {
     }
     updateTabEl(tab);
     document.getElementById('btnReader').style.display = 'block';
-    const rnd = (a, b) => (Math.random() * (b - a) + a).toFixed(0);
-    document.getElementById('perfFcp').textContent = rnd(80, 250) + 'ms';
-    document.getElementById('perfLcp').textContent = rnd(150, 400) + 'ms';
-    document.getElementById('perfTbt').textContent = rnd(20, 80) + 'ms';
-    document.getElementById('perfCls').textContent = (Math.random() * 0.05).toFixed(3);
-    document.getElementById('perfTti').textContent = rnd(200, 600) + 'ms';
-    document.getElementById('perfLoad').textContent = rnd(300, 900) + 'ms';
+    // Measure real page load timing via executeJavaScript (Electron webview only)
+    const activeWv = getTabWebview(tab.id);
+    if (activeWv && typeof activeWv.executeJavaScript === 'function') {
+      safeWebviewExecute(activeWv, tab.id, 'executeJavaScript', `
+      (function(){
+        const nav = performance.getEntriesByType('navigation')[0];
+        const fcp = performance.getEntriesByName('first-contentful-paint')[0];
+        return {
+          fcp: fcp ? Math.round(fcp.startTime) : null,
+          load: nav ? Math.round(nav.loadEventEnd - nav.startTime) : null,
+          domInteractive: nav ? Math.round(nav.domInteractive) : null,
+        };
+      })()
+    `).then(perf => {
+      if (!perf) return;
+      const fcpMs = perf.fcp; const loadMs = perf.load;
+      const fcpTxt = fcpMs != null ? fcpMs+'ms' : '—';
+      const loadTxt = loadMs != null ? loadMs+'ms' : '—';
+      document.getElementById('perfFcp').textContent = fcpTxt;
+      document.getElementById('perfLcp').textContent = '—';
+      document.getElementById('perfLoad').textContent = loadTxt;
+      document.getElementById('perfTbt').textContent = perf.domInteractive != null ? perf.domInteractive+'ms' : '—';
+      document.getElementById('perfCls').textContent = '—';
+      document.getElementById('perfTti').textContent = perf.domInteractive != null ? perf.domInteractive+'ms' : '—';
+      // Store in tab state for Performance Monitor panel
+      if (STATE.tabs?.[tab.id]) STATE.tabs[tab.id].perfData = { fcp: fcpMs, lcp: null, load: loadMs };
+    }).catch(() => {
+      ['perfFcp','perfLcp','perfTbt','perfCls','perfTti','perfLoad'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
+    });
+    } // end if activeWv
   } catch (e) { }
   consoleLog('success', '✓ Loaded: ' + (tab.url || '—'));
 });
@@ -924,7 +947,7 @@ document.getElementById('mi-new-private').addEventListener('click', () => {
   document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
   showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
 });
-function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'perfMonPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
 function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel?.classList.contains('open'); closeAllPanels(); if (!wasOpen && panel) panel.classList.add('open'); }
 document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
 document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
@@ -1135,7 +1158,7 @@ document.getElementById('kriptoReload')?.addEventListener('click', () => {
   setTimeout(() => { const kl = document.getElementById('kriptoLoading'); if (kl) kl.style.display = 'none'; }, 8000);
 });
 document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closePerfMonPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
 function renderBookmarksPanel() {
   const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
   if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -1167,7 +1190,165 @@ document.getElementById('clearHistBtn').addEventListener('click', () => { DB.cle
 document.getElementById('btnDevtools').addEventListener('click', toggleDevtools);
 document.getElementById('closeDevtools').addEventListener('click', () => { document.getElementById('devtools').classList.remove('open'); STATE.devtoolsOpen = false; });
 function toggleDevtools() { STATE.devtoolsOpen = !STATE.devtoolsOpen; document.getElementById('devtools').classList.toggle('open', STATE.devtoolsOpen); }
-// ── DevTools tab switching
+
+// ── Performance Monitor ───────────────────────────────────────────────────────
+(function initPerfMon() {
+  const MAX_HIST = 60;
+  let ramHist = [], cpuHist = [], pmPaused = false, pmTimer = null;
+  let peakRam = 0, peakCpu = 0;
+
+  function fmt(mb) { return mb >= 1000 ? (mb/1024).toFixed(1)+' GB' : mb+' MB'; }
+  function fmtSec(s) { const m=Math.floor(s/60), h=Math.floor(m/60); return h ? h+'h '+( m%60)+'m' : m ? m+'m '+(s%60)+'s' : s+'s'; }
+
+  function drawSparkline(canvasId, data, color, maxVal) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const w = canvas.offsetWidth || canvas.parentElement?.offsetWidth || 436;
+    canvas.width = w;
+    const h = canvas.height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    if (!data.length) return;
+    const top = maxVal || Math.max(...data, 1);
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = (i / (MAX_HIST - 1)) * w;
+      const y = h - (v / top) * (h - 4) - 2;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // fill under line
+    ctx.lineTo((data.length - 1) / (MAX_HIST - 1) * w, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, color.replace(')', ',0.25)').replace('rgb', 'rgba').replace('#', 'rgba(').replace('rgba(', color.startsWith('#') ? 'rgba(' : 'rgba('));
+    // simpler fill approach:
+    ctx.fillStyle = color + '30';
+    ctx.fill();
+  }
+
+  async function tick() {
+    if (pmPaused) return;
+    let metrics;
+    try {
+      metrics = await window.etherx?.app?.getProcessMetrics?.();
+    } catch(e) { return; }
+    if (!metrics) return;
+
+    const ramVal = parseFloat(metrics.totalRamMB);
+    const cpuVal = parseFloat(metrics.totalCpuPercent);
+    ramHist.push(ramVal); if (ramHist.length > MAX_HIST) ramHist.shift();
+    cpuHist.push(cpuVal); if (cpuHist.length > MAX_HIST) cpuHist.shift();
+    if (ramVal > peakRam) peakRam = ramVal;
+    if (cpuVal > peakCpu) peakCpu = cpuVal;
+
+    // Summary cards
+    const totalRamEl = document.getElementById('pmTotalRam');
+    const totalCpuEl = document.getElementById('pmTotalCpu');
+    if (totalRamEl) { totalRamEl.textContent = fmt(ramVal); totalRamEl.className = 'pm-card-val' + (ramVal > 2000 ? ' bad' : ramVal > 1000 ? ' warn' : ''); }
+    if (totalCpuEl) { totalCpuEl.textContent = cpuVal + '%'; totalCpuEl.className = 'pm-card-val' + (cpuVal > 80 ? ' bad' : cpuVal > 50 ? ' warn' : ''); }
+    const uptimeEl = document.getElementById('pmUptime'); if (uptimeEl) uptimeEl.textContent = fmtSec(metrics.uptime);
+
+    // Peak labels
+    const rp = document.getElementById('pmRamPeak'); if (rp) rp.textContent = 'peak ' + fmt(peakRam);
+    const cp = document.getElementById('pmCpuPeak'); if (cp) cp.textContent = 'peak ' + peakCpu + '%';
+
+    // Charts
+    drawSparkline('pmRamChart', ramHist, '#667eea', null);
+    drawSparkline('pmCpuChart', cpuHist, '#f5a623', 100);
+
+    // JS Heap (renderer side)
+    const heapMem = performance.memory;
+    if (heapMem) {
+      const used = (heapMem.usedJSHeapSize / 1048576).toFixed(1);
+      const total = (heapMem.totalJSHeapSize / 1048576).toFixed(1);
+      const limit = heapMem.jsHeapSizeLimit / 1048576;
+      const pct = Math.min(100, (heapMem.usedJSHeapSize / heapMem.jsHeapSizeLimit) * 100).toFixed(0);
+      const hu = document.getElementById('pmHeapUsed'); if (hu) hu.textContent = used + ' MB';
+      const ht = document.getElementById('pmHeapTotal'); if (ht) ht.textContent = total + ' MB';
+      const hb = document.getElementById('pmHeapBar'); if (hb) hb.style.width = pct + '%';
+    }
+
+    // Main process RSS in uptime tooltip
+    const uptEl = document.getElementById('pmUptime');
+    if (uptEl) uptEl.title = 'Main RSS: ' + metrics.mainRssMB + ' MB';
+
+    // Per-process list
+    const pl = document.getElementById('pmProcessList');
+    if (pl && metrics.processes) {
+      pl.innerHTML = '<div class="pm-proc-row" style="color:#666;font-size:9px;font-weight:600"><span>TYPE</span><span>PID</span><span style="text-align:right">RAM</span><span style="text-align:right">CPU</span></div>' +
+        metrics.processes.map(p =>
+          `<div class="pm-proc-row"><span class="pm-proc-type">${p.type}</span><span style="color:#555">${p.pid}</span><span style="text-align:right">${p.ramMB} MB</span><span style="text-align:right;color:${parseFloat(p.cpuPercent)>50?'var(--red)':parseFloat(p.cpuPercent)>20?'var(--yellow)':'var(--text2)'}">${p.cpuPercent}%</span></div>`
+        ).join('');
+    }
+
+    // Tabs info
+    const ti = document.getElementById('pmTabsInfo');
+    if (ti) ti.textContent = metrics.windowCount + ' window(s) · ' + (Object.keys(STATE.tabs || {}).length || '?') + ' tabs';
+
+    // Page metrics from active tab's perf data
+    const tab = STATE.tabs?.[STATE.activeTabId];
+    const pmFcp = document.getElementById('pmPageFcp');
+    const pmLcp = document.getElementById('pmPageLcp');
+    const pmLoad = document.getElementById('pmPageLoad');
+    if (tab?.perfData) {
+      if (pmFcp) pmFcp.textContent = tab.perfData.fcp != null ? tab.perfData.fcp + ' ms' : '—';
+      if (pmLcp) pmLcp.textContent = tab.perfData.lcp != null ? tab.perfData.lcp + ' ms' : '—';
+      if (pmLoad) pmLoad.textContent = tab.perfData.load != null ? tab.perfData.load + ' ms' : '—';
+    } else {
+      if (pmFcp) pmFcp.textContent = '—';
+      if (pmLcp) pmLcp.textContent = '—';
+      if (pmLoad) pmLoad.textContent = '—';
+    }
+  }
+
+  function startPerfMon() {
+    tick();
+    pmTimer = setInterval(tick, 1500);
+  }
+  function stopPerfMon() {
+    clearInterval(pmTimer);
+    pmTimer = null;
+  }
+
+  // Pause/Resume button
+  const pauseBtn = document.getElementById('pmPauseBtn');
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', () => {
+      pmPaused = !pmPaused;
+      pauseBtn.textContent = pmPaused ? '▶' : '⏸';
+      document.getElementById('pmLiveIndicator').style.animationName = pmPaused ? 'none' : 'pmBlink';
+      document.getElementById('pmLiveIndicator').textContent = pmPaused ? '● PAUSED' : '● LIVE';
+      document.getElementById('pmLiveIndicator').style.color = pmPaused ? '#888' : '#27c93f';
+    });
+  }
+
+  // Toggle button in toolbar
+  const btnPerfMon = document.getElementById('btnPerfMon');
+  if (btnPerfMon) {
+    btnPerfMon.addEventListener('click', () => {
+      const panel = document.getElementById('perfMonPanel');
+      const wasOpen = panel?.classList.contains('open');
+      closeAllPanels();
+      if (!wasOpen && panel) {
+        panel.classList.add('open');
+        if (!pmTimer) startPerfMon();
+        else { peakRam = 0; peakCpu = 0; tick(); }
+      } else {
+        stopPerfMon();
+      }
+    });
+  }
+
+  // Close button stops timer
+  const closeBtn = document.getElementById('closePerfMonPanel');
+  if (closeBtn) closeBtn.addEventListener('click', stopPerfMon);
+})();
+// ── End Performance Monitor ───────────────────────────────────────────────────
+
 document.querySelectorAll('.dt-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.dt-tab').forEach(t => t.classList.remove('active'));
