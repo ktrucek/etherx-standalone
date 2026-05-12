@@ -3413,6 +3413,43 @@
     #tiktokAIPanel .panel-header {
       background: linear-gradient(135deg, #010101 0%, #ff0050 100%)
     }
+
+    /* ── Auto-Update Styles ─────────────────────────── */
+    .upd-hero { display:flex; flex-direction:column; align-items:center; padding:24px 16px 16px; gap:10px; }
+    .upd-logo { width:56px; height:56px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:28px; }
+    .upd-name { font-size:16px; font-weight:700; color:var(--text); }
+    .upd-ver { font-size:12px; color:var(--text2); }
+    .upd-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+    .upd-badge.up-to-date { background:rgba(39,201,63,.15); color:var(--green); }
+    .upd-badge.update-available { background:rgba(102,126,234,.15); color:var(--accent); animation:updPulse 2s infinite; }
+    .upd-badge.checking { background:rgba(170,170,170,.12); color:var(--text2); }
+    .upd-badge.error { background:rgba(255,95,86,.12); color:var(--red); }
+    @keyframes updPulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+    .upd-card { margin:0 14px 10px; background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:14px; }
+    .upd-card-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text3); margin-bottom:10px; }
+    .upd-info-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); font-size:12px; }
+    .upd-info-row:last-child { border-bottom:none; }
+    .upd-info-label { color:var(--text2); }
+    .upd-info-val { color:var(--text); font-weight:500; font-family:monospace; }
+    .upd-actions { display:flex; flex-direction:column; gap:8px; margin:0 14px 10px; }
+    .upd-btn { padding:9px 16px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; width:100%; display:flex; align-items:center; justify-content:center; gap:6px; }
+    .upd-btn.primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+    .upd-btn.primary:hover { opacity:.88; }
+    .upd-btn.secondary { background:var(--bg2); border:1px solid var(--border2); color:var(--text); }
+    .upd-btn.secondary:hover { background:var(--border); }
+    .upd-btn.danger { background:rgba(255,95,86,.12); border:1px solid var(--red); color:var(--red); }
+    .upd-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .upd-progress-wrap { margin:0 14px 10px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px; display:none; }
+    .upd-progress-label { font-size:11px; color:var(--text2); margin-bottom:6px; display:flex; justify-content:space-between; }
+    .upd-progress-bar-bg { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+    .upd-progress-bar { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:3px; transition:width .3s; width:0%; }
+    .upd-changelog { margin:0 14px 10px; background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:12px; display:none; }
+    .upd-changelog-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text3); margin-bottom:8px; }
+    .upd-changelog-body { font-size:12px; color:var(--text); line-height:1.6; max-height:140px; overflow-y:auto; }
+    .upd-changelog-body::-webkit-scrollbar { width:3px; }
+    .upd-changelog-body::-webkit-scrollbar-thumb { background:var(--border2); }
+    .upd-auto-row { display:flex; align-items:center; justify-content:space-between; margin:0 14px 14px; font-size:12px; color:var(--text2); }
+    .upd-footer { text-align:center; font-size:10px; color:var(--text3); padding:4px 14px 14px; }
     .tkai-body { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg); }
     .tkai-config { padding:10px 12px; border-bottom:1px solid var(--border); background:var(--bg2); }
     .tkai-config-title { font-size:11px; font-weight:600; color:var(--text2); margin-bottom:8px; text-transform:uppercase; letter-spacing:.5px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
@@ -4414,6 +4451,7 @@
           <button class="sit-btn" data-stab="flags"><span class="sit-icon">��</span>Feature Flags</button>
           <button class="sit-btn" data-stab="migration"><span class="sit-icon">📥</span>Import Data</button>
           <button class="sit-btn" data-stab="appearance"><span class="sit-icon">🎨</span>Appearance</button>
+          <button class="sit-btn" data-stab="updates"><span class="sit-icon">🔄</span>Ažuriranja</button>
         </div>
         <!-- Settings body -->
         <div class="settings-body" id="settingsBody">
@@ -4956,7 +4994,58 @@
                 <div class="toggle" data-setting="autoConnect"></div>
               </div>
             </div>
-          </div>
+            <!-- Developer: Build & Version info -->
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">Build informacije</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Verzija aplikacije</div>
+                </div>
+                <span style="font-size:11px;color:var(--accent);font-family:monospace;font-weight:600"
+                  id="devVerDisplay">2.4.133</span>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Build datum</div>
+                </div>
+                <span style="font-size:11px;color:var(--text2);font-family:monospace" id="devBuildDate">—</span>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">User Agent</div>
+                </div>
+                <span style="font-size:10px;color:var(--text3);font-family:monospace;word-break:break-all;max-width:280px"
+                  id="devUA">—</span>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Update kanal</div>
+                </div>
+                <span style="font-size:11px;color:var(--text2);font-family:monospace" id="devUpdateChannel">Stable</span>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Zadnje ažuriranje</div>
+                </div>
+                <span style="font-size:11px;color:var(--text2);font-family:monospace" id="devLastUpdate">—</span>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Status ažuriranja</div>
+                </div>
+                <span style="font-size:11px;font-family:monospace" id="devUpdateStatus">—</span>
+              </div>
+              <div style="padding:8px 0;display:flex;gap:8px">
+                <button class="s-btn-sm" id="devBtnCheckUpdate" style="padding:5px 14px;border-radius:7px">🔍 Provjeri
+                  update</button>
+                <button class="s-btn-sm" id="devBtnOpenUpdateTab" style="padding:5px 14px;border-radius:7px">🔄 Otvori
+                  Ažuriranja</button>
+              </div>
+            </div>
           <!-- FEATURE FLAGS -->
           <div class="s-tab-pane" id="stab-flags">
             <div class="s-group">
@@ -5060,6 +5149,68 @@
             </div>
             <div style="padding:8px 0"><button class="s-btn-sm" id="btnExportData"
                 style="padding:6px 16px;border-radius:8px">Export All Data</button></div>
+          </div>
+          <!-- UPDATES -->
+          <div class="s-tab-pane" id="stab-updates">
+            <div class="upd-hero">
+              <div class="upd-logo">🌐</div>
+              <div class="upd-name">EtherX Browser</div>
+              <div class="upd-ver" id="updCurrentVer">Verzija <strong id="updVerSpan">2.4.133</strong></div>
+              <span class="upd-badge checking" id="updStatusBadge">⏳ Provjera…</span>
+            </div>
+            <!-- Version info card -->
+            <div class="upd-card">
+              <div class="upd-card-title">ℹ️ Informacije o verziji</div>
+              <div class="upd-info-row">
+                <span class="upd-info-label">Trenutna verzija</span>
+                <span class="upd-info-val" id="updInfoCurrent">2.4.133</span>
+              </div>
+              <div class="upd-info-row">
+                <span class="upd-info-label">Najnovija verzija</span>
+                <span class="upd-info-val" id="updInfoLatest">—</span>
+              </div>
+              <div class="upd-info-row">
+                <span class="upd-info-label">Zadnja provjera</span>
+                <span class="upd-info-val" id="updInfoLastCheck">—</span>
+              </div>
+              <div class="upd-info-row">
+                <span class="upd-info-label">Kanal</span>
+                <span class="upd-info-val" id="updInfoChannel">Stable</span>
+              </div>
+            </div>
+            <!-- Changelog (shown when update is available) -->
+            <div class="upd-changelog" id="updChangelog">
+              <div class="upd-changelog-title">📋 Što je novo</div>
+              <div class="upd-changelog-body" id="updChangelogBody"></div>
+            </div>
+            <!-- Progress bar (shown during download) -->
+            <div class="upd-progress-wrap" id="updProgressWrap">
+              <div class="upd-progress-label">
+                <span id="updProgressLabel">Preuzimanje ažuriranja…</span>
+                <span id="updProgressPct">0%</span>
+              </div>
+              <div class="upd-progress-bar-bg">
+                <div class="upd-progress-bar" id="updProgressBar"></div>
+              </div>
+            </div>
+            <!-- Actions -->
+            <div class="upd-actions">
+              <button class="upd-btn primary" id="updBtnCheck">🔍 Provjeri ažuriranja</button>
+              <button class="upd-btn primary" id="updBtnInstall"
+                style="display:none;background:linear-gradient(135deg,#27c93f,#1aaa2e)">⬇️ Instalirati ažuriranje</button>
+              <button class="upd-btn secondary" id="updBtnChangelog" style="display:none">📋 Prikaži promjene</button>
+              <button class="upd-btn secondary" id="updBtnRestart" style="display:none">🔄 Restart i primijeni ažuriranje</button>
+            </div>
+            <!-- Auto-update toggle -->
+            <div class="upd-auto-row">
+              <span>Automatski provjeri ažuriranja</span>
+              <div class="toggle on" data-setting="autoCheckUpdates" id="updAutoToggle"></div>
+            </div>
+            <div class="upd-auto-row" style="margin-top:-6px">
+              <span>Automatski instaliraj ažuriranja</span>
+              <div class="toggle" data-setting="autoInstallUpdates" id="updAutoInstallToggle"></div>
+            </div>
+            <div class="upd-footer" id="updFooter">EtherX Browser — Web3-Native Browser<br>© 2024–2026 kriptoentuzijasti.io</div>
           </div>
           <!-- APPEARANCE -->
           <div class="s-tab-pane" id="stab-appearance">

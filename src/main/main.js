@@ -616,12 +616,18 @@ function createWindow() {
   ipcMain.removeAllListeners('window-minimize');
   ipcMain.removeAllListeners('window-maximize');
   ipcMain.removeAllListeners('window-close');
+  ipcMain.removeAllListeners('app-relaunch');
   ipcMain.on('window-minimize', () => mainWindow?.minimize());
   ipcMain.on('window-maximize', () => {
     if (mainWindow?.isMaximized()) mainWindow.unmaximize();
     else mainWindow?.maximize();
   });
   ipcMain.on('window-close', () => mainWindow?.close());
+  ipcMain.on('app-relaunch', () => {
+    const { app } = require('electron');
+    app.relaunch();
+    app.quit();
+  });
 
   // setupIPC is called once from app.whenReady — never call it from createWindow
 

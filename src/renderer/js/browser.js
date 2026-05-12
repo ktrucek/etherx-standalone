@@ -4358,6 +4358,281 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   });
 })();
 
+// ── Auto-Update System ───────────────────────────────────────────────────────
+(function initAutoUpdater() {
+  // ── Config ──
+  // Update manifest URL — host this JSON file on your server to control updates
+  // Example manifest structure shown in UPDATE_LOG.md
+  const UPDATE_MANIFEST_URL = 'https://kriptoentuzijasti.io/etherx-update/manifest.json';
+  const CURRENT_VERSION = '2.4.133';
+  const BUILD_DATE = '2026-05-12';
+  const STORAGE_KEY = 'ex_update_state';
+  const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+  // ── State ──
+  let updateState = loadState();
+  let latestInfo = null;
+  let isDownloaded = false;
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (e) { return {}; }
+  }
+  function saveState(patch) {
+    updateState = { ...updateState, ...patch };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updateState));
+  }
+
+  // ── DOM refs (settings tab) ──
+  function $id(id) { return document.getElementById(id); }
+
+  // ── Version comparison (semver) ──
+  function compareVer(a, b) {
+    const pa = String(a).split('.').map(Number);
+    const pb = String(b).split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const diff = (pa[i] || 0) - (pb[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  }
+
+  // ── Fetch update manifest ──
+  async function fetchManifest() {
+    const res = await fetch(UPDATE_MANIFEST_URL + '?_=' + Date.now(), {
+      signal: AbortSignal.timeout(10000),
+      cache: 'no-store'
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+
+  // ── Update UI elements ──
+  function setBadge(type, text) {
+    const badge = $id('updStatusBadge');
+    if (!badge) return;
+    badge.className = 'upd-badge ' + type;
+    badge.textContent = text;
+  }
+
+  function syncUI() {
+    // Populate version fields
+    const cur = CURRENT_VERSION;
+    [$id('updVerSpan'), $id('updInfoCurrent'), $id('devVerDisplay')].forEach(el => { if (el) el.textContent = cur; });
+    if ($id('updInfoLatest')) $id('updInfoLatest').textContent = latestInfo ? latestInfo.version : (updateState.latestVersion || '—');
+    if ($id('updInfoLastCheck')) $id('updInfoLastCheck').textContent = updateState.lastCheck ? new Date(updateState.lastCheck).toLocaleString('hr-HR') : '—';
+    if ($id('devBuildDate')) $id('devBuildDate').textContent = BUILD_DATE;
+    if ($id('devUA')) $id('devUA').textContent = navigator.userAgent.slice(0, 80) + '…';
+    if ($id('devLastUpdate')) $id('devLastUpdate').textContent = updateState.lastInstalled ? new Date(updateState.lastInstalled).toLocaleString('hr-HR') : '—';
+  }
+
+  // ── Check for updates ──
+  async function checkForUpdates(silent = false) {
+    setBadge('checking', '⏳ Provjera…');
+    if ($id('devUpdateStatus')) $id('devUpdateStatus').textContent = '⏳ Provjerava…';
+    if ($id('updBtnCheck')) { $id('updBtnCheck').disabled = true; $id('updBtnCheck').textContent = '⏳ Provjera…'; }
+
+    try {
+      const manifest = await fetchManifest();
+      latestInfo = manifest;
+      saveState({ lastCheck: Date.now(), latestVersion: manifest.version });
+      syncUI();
+
+      const hasUpdate = compareVer(manifest.version, CURRENT_VERSION) > 0;
+
+      if (hasUpdate) {
+        setBadge('update-available', '🆕 Dostupno: v' + manifest.version);
+        if ($id('devUpdateStatus')) $id('devUpdateStatus').style.color = 'var(--accent)';
+        if ($id('devUpdateStatus')) $id('devUpdateStatus').textContent = '🆕 v' + manifest.version + ' dostupno';
+
+        // Show changelog if available
+        if (manifest.changelog && $id('updChangelogBody')) {
+          $id('updChangelogBody').innerHTML = manifest.changelog
+            .split('\n').map(l => l.startsWith('-') ? '<li>' + l.slice(1).trim() + '</li>' : l)
+            .join('<br>').replace(/(<li>.*<\/li>)/g, '<ul style="margin:4px 0 4px 12px">$1</ul>');
+          $id('updChangelog').style.display = '';
+        }
+
+        // Show install button
+        if ($id('updBtnInstall')) $id('updBtnInstall').style.display = '';
+        if ($id('updBtnChangelog')) $id('updBtnChangelog').style.display = '';
+
+        if (!silent) showToast('🆕 EtherX ažuriranje dostupno: v' + manifest.version);
+
+        // Auto-install if enabled
+        const cfg = DB.getSettings();
+        if (cfg.autoInstallUpdates) {
+          setTimeout(() => downloadAndInstall(manifest), 2000);
+        }
+      } else {
+        setBadge('up-to-date', '✅ Ažuran');
+        if ($id('devUpdateStatus')) { $id('devUpdateStatus').style.color = 'var(--green)'; $id('devUpdateStatus').textContent = '✅ Ažuran'; }
+        if ($id('updBtnInstall')) $id('updBtnInstall').style.display = 'none';
+        if ($id('updBtnChangelog')) $id('updBtnChangelog').style.display = 'none';
+        if (!silent) showToast('✅ EtherX Browser je ažuran (v' + CURRENT_VERSION + ')');
+      }
+    } catch (err) {
+      setBadge('error', '❌ Greška pri provjeri');
+      if ($id('devUpdateStatus')) { $id('devUpdateStatus').style.color = 'var(--red)'; $id('devUpdateStatus').textContent = '❌ ' + (err.message || 'Greška'); }
+      if (!silent) showToast('⚠️ Nije moguće provjeriti ažuriranja: ' + err.message, 4000);
+      console.warn('[AutoUpdater] check failed:', err);
+    } finally {
+      if ($id('updBtnCheck')) { $id('updBtnCheck').disabled = false; $id('updBtnCheck').textContent = '🔍 Provjeri ažuriranja'; }
+    }
+  }
+
+  // ── Download & install update ──
+  async function downloadAndInstall(info) {
+    if (!info || !info.downloadUrl) {
+      showToast('⚠️ Nema download URL-a u manifestu.');
+      return;
+    }
+    if ($id('updBtnInstall')) $id('updBtnInstall').disabled = true;
+    if ($id('updProgressWrap')) $id('updProgressWrap').style.display = '';
+    setProgress(0, 'Preuzimanje ažuriranja…');
+
+    try {
+      // Fetch with progress tracking
+      const resp = await fetch(info.downloadUrl, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      const contentLength = parseInt(resp.headers.get('Content-Length') || '0');
+      const reader = resp.body.getReader();
+      let received = 0;
+      const chunks = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (contentLength > 0) setProgress(Math.round((received / contentLength) * 90), 'Preuzimanje… ' + Math.round(received / 1024) + ' KB');
+        else setProgress(Math.min(80, Math.round((received / 512000) * 80)), 'Preuzimanje… ' + Math.round(received / 1024) + ' KB');
+      }
+
+      setProgress(95, 'Primjena ažuriranja…');
+
+      // Combine chunks
+      const blob = new Blob(chunks, { type: 'application/octet-stream' });
+
+      // In Electron: use IPC to write update; in web: trigger download
+      if (window.electronAPI && typeof window.electronAPI.installUpdate === 'function') {
+        const buffer = await blob.arrayBuffer();
+        await window.electronAPI.installUpdate(buffer, info.version);
+      } else {
+        // Web mode: download the file for manual install
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'EtherX-v' + info.version + '.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
+
+      setProgress(100, 'Ažuriranje preuzeto!');
+      isDownloaded = true;
+      saveState({ lastInstalled: Date.now(), installedVersion: info.version });
+
+      setBadge('up-to-date', '✅ Spreman za restart');
+      if ($id('updBtnRestart')) $id('updBtnRestart').style.display = '';
+      if ($id('updBtnInstall')) $id('updBtnInstall').style.display = 'none';
+      showToast('✅ Ažuriranje preuzeto! Klikni "Restart i primijeni" za primjenu.', 5000);
+
+    } catch (err) {
+      setBadge('error', '❌ Greška pri preuzimanju');
+      if ($id('updProgressWrap')) $id('updProgressWrap').style.display = 'none';
+      if ($id('updBtnInstall')) $id('updBtnInstall').disabled = false;
+      showToast('❌ Greška pri preuzimanju: ' + err.message, 4000);
+      console.error('[AutoUpdater] download error:', err);
+    }
+  }
+
+  function setProgress(pct, label) {
+    if ($id('updProgressBar')) $id('updProgressBar').style.width = pct + '%';
+    if ($id('updProgressPct')) $id('updProgressPct').textContent = pct + '%';
+    if ($id('updProgressLabel')) $id('updProgressLabel').textContent = label;
+  }
+
+  // ── Restart browser ──
+  function restartBrowser() {
+    showToast('🔄 Restarting EtherX Browser…');
+    setTimeout(() => {
+      if (window.electronAPI && typeof window.electronAPI.relaunch === 'function') {
+        window.electronAPI.relaunch();
+      } else {
+        // Web mode: hard reload
+        window.location.reload(true);
+      }
+    }, 800);
+  }
+
+  // ── Button event listeners ──
+  $id('updBtnCheck')?.addEventListener('click', () => checkForUpdates(false));
+  $id('updBtnInstall')?.addEventListener('click', () => { if (latestInfo) downloadAndInstall(latestInfo); });
+  $id('updBtnRestart')?.addEventListener('click', restartBrowser);
+  $id('updBtnChangelog')?.addEventListener('click', () => {
+    const cl = $id('updChangelog');
+    if (cl) cl.style.display = cl.style.display === 'none' ? '' : 'none';
+  });
+  $id('devBtnCheckUpdate')?.addEventListener('click', () => checkForUpdates(false));
+  $id('devBtnOpenUpdateTab')?.addEventListener('click', () => {
+    // Switch to Updates tab in settings
+    document.querySelectorAll('.sit-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.s-tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelector('.sit-btn[data-stab="updates"]')?.classList.add('active');
+    $id('stab-updates')?.classList.add('active');
+  });
+
+  // ── Auto-update toggle persistence ──
+  $id('updAutoToggle')?.addEventListener('click', () => {
+    const isOn = $id('updAutoToggle')?.classList.contains('on');
+    DB.saveSetting('autoCheckUpdates', isOn);
+  });
+  $id('updAutoInstallToggle')?.addEventListener('click', () => {
+    const isOn = $id('updAutoInstallToggle')?.classList.contains('on');
+    DB.saveSetting('autoInstallUpdates', isOn);
+  });
+
+  // ── Run on init ──
+  syncUI();
+
+  // Check on settings tab open (debounced)
+  document.querySelector('.sit-btn[data-stab="updates"]')?.addEventListener('click', () => {
+    syncUI();
+    // Auto-check if last check was > 10 min ago
+    const lastCheck = updateState.lastCheck || 0;
+    if (Date.now() - lastCheck > 10 * 60 * 1000) {
+      checkForUpdates(true);
+    } else {
+      // Just restore badge from last state
+      const lv = updateState.latestVersion;
+      if (lv && compareVer(lv, CURRENT_VERSION) > 0) {
+        setBadge('update-available', '🆕 Dostupno: v' + lv);
+        if ($id('updBtnInstall')) $id('updBtnInstall').style.display = '';
+      } else if (lv) {
+        setBadge('up-to-date', '✅ Ažuran');
+      } else {
+        setBadge('checking', '⏳ Nije provjereno');
+      }
+    }
+  });
+
+  // ── Periodic auto-check ──
+  const cfg = DB.getSettings();
+  if (cfg.autoCheckUpdates !== false) {
+    // Check on startup (delayed 30s so not to block initial load)
+    const lastCheck = updateState.lastCheck || 0;
+    if (Date.now() - lastCheck > CHECK_INTERVAL_MS) {
+      setTimeout(() => checkForUpdates(true), 30000);
+    }
+    // Periodic check
+    setInterval(() => {
+      if (DB.getSettings().autoCheckUpdates !== false) checkForUpdates(true);
+    }, CHECK_INTERVAL_MS);
+  }
+})();
+
 // ── Menu Bar Toggle (Settings → Tabs) ──
 (function initMenuBarToggle() {
   const toggleEl = document.getElementById('toggleMenuBar');

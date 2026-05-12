@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   // Generic invoke wrapper for backward compatibility
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  // Auto-updater helpers
+  relaunch: () => ipcRenderer.send('app-relaunch'),
+  installUpdate: (buffer, version) => ipcRenderer.invoke('app-install-update', buffer, version),
 });
 
 // ── Full EtherX API (new features) ────────────────────────────────────────────
