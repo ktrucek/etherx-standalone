@@ -947,7 +947,7 @@ document.getElementById('mi-new-private').addEventListener('click', () => {
   document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
   showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
 });
-function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'perfMonPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
+function closeAllPanels() { ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'tiktokAIPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'perfMonPanel'].forEach(id => document.getElementById(id)?.classList.remove('open')); document.getElementById('settingsBackdrop')?.classList.remove('open'); }
 function togglePanel(id) { const panel = document.getElementById(id); const wasOpen = panel?.classList.contains('open'); closeAllPanels(); if (!wasOpen && panel) panel.classList.add('open'); }
 document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
 document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
@@ -1140,6 +1140,7 @@ document.getElementById('ascClose').addEventListener('click', () => {
   document.getElementById('aiSummaryCard').classList.remove('open');
 });
 document.getElementById('btnAiAgent').addEventListener('click', () => togglePanel('aiAgentPanel'));
+document.getElementById('btnTikTokAI')?.addEventListener('click', () => togglePanel('tiktokAIPanel'));
 document.getElementById('bobiaiReload')?.addEventListener('click', () => {
   const bl = document.getElementById('bobiaiLoading'); bl.style.display = 'flex';
   document.getElementById('bobiaiFrame').src = 'https://bobiai.kriptoentuzijasti.io';
@@ -1158,7 +1159,7 @@ document.getElementById('kriptoReload')?.addEventListener('click', () => {
   setTimeout(() => { const kl = document.getElementById('kriptoLoading'); if (kl) kl.style.display = 'none'; }, 8000);
 });
 document.getElementById('etherxReload')?.addEventListener('click', () => { document.getElementById('etherxLoading').style.display = 'flex'; document.getElementById('etherxFrame').src = 'https://etherx.io'; });
-['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closePerfMonPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
+['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeTiktokAIPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closePerfMonPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
 function renderBookmarksPanel() {
   const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
   if (bm.length === 0) { list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No bookmarks yet<br><br>Press Ctrl+D to bookmark the current page</div>'; return; }
@@ -3970,6 +3971,393 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
   });
 })();
 
+// ── TikTok Chat AI Assistant ──────────────────────────────────────────────────
+(function initTikTokChatAI() {
+  const panel = document.getElementById('tiktokAIPanel');
+  if (!panel) return;
+
+  // ── State ──
+  let scanActive = false;
+  let scanInterval = null;
+  let collectedMessages = []; // { user, text, id }
+  let selectedMsgIds = new Set();
+  let isGenerating = false;
+  const STORAGE_KEY = 'ex_tkai_cfg';
+
+  // ── DOM refs ──
+  const messagesEl = document.getElementById('tkaiMessages');
+  const repliesEl = document.getElementById('tkaiReplies');
+  const toggleBtn = document.getElementById('tkaiBtnToggle');
+  const genBtn = document.getElementById('tkaiGenBtn');
+  const genAllBtn = document.getElementById('tkaiGenAllBtn');
+  const statusEl = document.getElementById('tkaiScanStatus');
+  const msgCountEl = document.getElementById('tkaiMsgCount');
+  const toneEl = document.getElementById('tkaiTone');
+  const langEl = document.getElementById('tkaiLang');
+  const countEl = document.getElementById('tkaiCount');
+  const contextEl = document.getElementById('tkaiContext');
+  const customPromptEl = document.getElementById('tkaiCustomPrompt');
+  const configToggle = document.getElementById('tkaiConfigToggle');
+  const configInner = document.getElementById('tkaiConfigInner');
+  const configArrow = document.getElementById('tkaiConfigArrow');
+
+  // ── Load saved settings ──
+  function loadCfg() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      if (toneEl && s.tone) toneEl.value = s.tone;
+      if (langEl && s.lang) langEl.value = s.lang;
+      if (countEl && s.count) countEl.value = s.count;
+      if (contextEl && s.context) contextEl.value = s.context;
+      if (customPromptEl && s.customPrompt) customPromptEl.value = s.customPrompt;
+    } catch (e) { }
+  }
+  function saveCfg() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        tone: toneEl?.value, lang: langEl?.value,
+        count: countEl?.value, context: contextEl?.value,
+        customPrompt: customPromptEl?.value
+      }));
+    } catch (e) { }
+  }
+  loadCfg();
+  [toneEl, langEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+  customPromptEl?.addEventListener('input', saveCfg);
+  contextEl?.addEventListener('input', saveCfg);
+
+  // ── Config toggle ──
+  configToggle?.addEventListener('click', () => {
+    const hidden = configInner?.style.display === 'none';
+    if (configInner) configInner.style.display = hidden ? '' : 'none';
+    if (configArrow) configArrow.textContent = hidden ? '▼' : '▶';
+  });
+
+  // ── TikTok chat scraper script (injected into webview) ──
+  const SCRAPER_SCRIPT = `(function() {
+    const results = [];
+    // TikTok Live chat selectors (multiple fallbacks for DOM changes)
+    const selectors = [
+      '[data-e2e="chat-room-message-item"]',
+      '.webcast-chatroom__message-list > .webcast-chatroom__message-item',
+      '.css-1yn0y6n-DivChatItemContainer',
+      '[class*="ChatItem"]',
+      '[class*="chat-message"]',
+      '[class*="LiveComment"]',
+      '[class*="webcast-chatroom__message"]',
+    ];
+    let items = [];
+    for (const sel of selectors) {
+      const found = document.querySelectorAll(sel);
+      if (found.length > 0) { items = Array.from(found); break; }
+    }
+    // If no live chat, try regular video comments
+    if (items.length === 0) {
+      const commentSels = [
+        '[data-e2e="comment-level-1"]',
+        '[class*="CommentItem"]',
+        '.comment-item',
+        '[data-e2e="browse-comment-item"]',
+      ];
+      for (const sel of commentSels) {
+        const found = document.querySelectorAll(sel);
+        if (found.length > 0) { items = Array.from(found); break; }
+      }
+    }
+    items.slice(-30).forEach(function(el, i) {
+      // Try various selectors for username
+      const userEl = el.querySelector('[data-e2e="user-name"], .user-name, [class*="Username"], [class*="user-name"], .owner-name, [class*="AuthorName"], strong');
+      // Try various selectors for message text
+      const textEl = el.querySelector('[data-e2e="message-text"], [class*="comment-text"], [class*="message-content"], [class*="CommentText"], [class*="chat-content"], p, span:last-child');
+      const user = userEl ? userEl.textContent.trim() : ('Korisnik ' + (i + 1));
+      const text = textEl ? textEl.textContent.trim() : el.textContent.trim().slice(0, 200);
+      if (text && text.length > 1 && text !== user) {
+        results.push({ user: user.slice(0, 40), text: text.slice(0, 300), id: i + '_' + Date.now() });
+      }
+    });
+    return JSON.stringify(results);
+  })()`;
+
+  // ── Scrape chat from active tab ──
+  async function scrapeTikTokChat() {
+    if (!window.electronWebview) return;
+    const tab = getActiveTab();
+    if (!tab) return;
+    const url = tab.url || '';
+    const isTikTok = url.includes('tiktok.com');
+    if (!isTikTok) {
+      setStatus('⚠️ Nisi na TikTok stranici');
+      return;
+    }
+    try {
+      const wv = getTabWebview(tab.id);
+      if (!wv || typeof wv.executeJavaScript !== 'function') {
+        setStatus('⚠️ Webview nije spreman');
+        return;
+      }
+      const raw = await safeWebviewExecute(wv, tab.id, 'executeJavaScript', SCRAPER_SCRIPT);
+      let msgs = [];
+      try { msgs = JSON.parse(raw || '[]'); } catch (e) { msgs = []; }
+      if (!Array.isArray(msgs) || msgs.length === 0) {
+        setStatus('📭 Nema poruka u chatu');
+        return;
+      }
+      // Merge with existing (avoid duplicates by text+user)
+      const existing = new Set(collectedMessages.map(m => m.user + ':' + m.text));
+      let added = 0;
+      msgs.forEach(m => {
+        const key = m.user + ':' + m.text;
+        if (!existing.has(key)) {
+          collectedMessages.push(m);
+          existing.add(key);
+          added++;
+        }
+      });
+      // Keep last 50 messages
+      if (collectedMessages.length > 50) collectedMessages = collectedMessages.slice(-50);
+      renderMessages();
+      setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : '');
+      if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
+    } catch (e) {
+      setStatus('⚠️ Greška pri skeniranju');
+      console.warn('[TikTokAI] scrape error:', e);
+    }
+  }
+
+  // ── Render chat messages ──
+  function renderMessages() {
+    if (!messagesEl) return;
+    if (collectedMessages.length === 0) {
+      messagesEl.innerHTML = '<div class="tkai-empty">Nema poruka.<br>Klikni "Skeniranje ON" dok si<br>na TikTok Live.</div>';
+      return;
+    }
+    messagesEl.innerHTML = '';
+    collectedMessages.slice(-30).forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'tkai-msg' + (selectedMsgIds.has(m.id) ? ' selected' : '');
+      div.innerHTML = '<div class="tkai-msg-user">' + escHtml(m.user) + '</div><div class="tkai-msg-text">' + escHtml(m.text) + '</div>';
+      div.title = 'Klikni za odabir/deodabir';
+      div.addEventListener('click', () => {
+        if (selectedMsgIds.has(m.id)) selectedMsgIds.delete(m.id);
+        else selectedMsgIds.add(m.id);
+        div.classList.toggle('selected', selectedMsgIds.has(m.id));
+      });
+      messagesEl.appendChild(div);
+    });
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ── Set status label ──
+  function setStatus(html) {
+    if (statusEl) statusEl.innerHTML = html;
+  }
+
+  // ── Build AI prompt ──
+  function buildPrompt(msgs) {
+    const tone = toneEl?.value || 'friendly';
+    const lang = langEl?.value || 'hr';
+    const count = parseInt(countEl?.value || '3');
+    const ctx = contextEl?.value?.trim() || '';
+    const custom = customPromptEl?.value?.trim() || '';
+
+    const toneMap = {
+      friendly: 'prijateljski i topao',
+      funny: 'smiješan i zabavan, koristi humor',
+      hype: 'energičan i nabijen hype-om, kao da slaviš s gledateljem',
+      engaging: 'angažirajući, potiče interakciju i komentare',
+      formal: 'formalan i profesionalan',
+      flirty: 'koketno i šaljivo',
+      custom: custom || 'prijateljski',
+    };
+    const langMap = {
+      hr: 'ISKLJUČIVO na hrvatskom jeziku',
+      en: 'EXCLUSIVELY in English',
+      sr: 'ISKLJUČIVO na srpskom jeziku',
+      bs: 'ISKLJUČIVO na bosanskom jeziku',
+      de: 'AUSSCHLIESSLICH auf Deutsch',
+      it: 'ESCLUSIVAMENTE in italiano',
+      es: 'EXCLUSIVAMENTE en español',
+      fr: 'EXCLUSIVEMENT en français',
+      auto: 'na istom jeziku kao poruke u chatu',
+    };
+
+    const chatLines = msgs.map(m => `${m.user}: ${m.text}`).join('\n');
+    let prompt = `Ti si TikTok streamer AI asistent. Tvoj zadatak je generirati kratke, prirodne odgovore za TikTok chat.
+
+KONTEKST STREAMERA: ${ctx || 'TikTok streamer koji želi angažirati svoju publiku'}
+TON: ${toneMap[tone] || toneMap.friendly}
+JEZIK: Odgovaraj ${langMap[lang] || langMap.hr}
+BROJ PRIJEDLOGA: Generiraj točno ${count} različita prijedloga odgovora.
+
+PORUKE IZ CHATA:
+${chatLines}
+
+PRAVILA:
+- Svaki odgovor mora biti kratak (1-2 rečenice, max 150 znakova)
+- Zvuči prirodno kao da streamer osobno piše
+- Ako ima pitanje u chatu — odgovori na njega
+- Možeš koristiti max 1-2 emojia po odgovoru
+- NE PIŠИ korisničko ime ili prefiks poput "Odgovor 1:"
+${custom ? '- POSEBNE UPUTE: ' + custom : ''}
+
+Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numeracije, bez objašnjenja.`;
+
+    return prompt;
+  }
+
+  // ── Call Gemini API ──
+  async function callGemini(prompt) {
+    const endpoint = await getGeminiEndpoint();
+    if (!endpoint) {
+      throw new Error('Gemini API ključ nije postavljen. Idi na Settings → AI → Gemini API Key.');
+    }
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.85, maxOutputTokens: 600 }
+      }),
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error('Gemini greška ' + res.status + ': ' + err.slice(0, 120));
+    }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return text.trim();
+  }
+
+  // ── Generate replies ──
+  async function generateReplies(msgs) {
+    if (!msgs || msgs.length === 0) {
+      showToast('⚠️ Nema poruka za analizu. Skeniraj chat prvo.');
+      return;
+    }
+    if (isGenerating) return;
+    isGenerating = true;
+    if (genBtn) { genBtn.disabled = true; genBtn.textContent = '⏳ Generiram…'; }
+    if (genAllBtn) { genAllBtn.disabled = true; }
+    repliesEl.innerHTML = '<div class="tkai-status"><span class="tkai-scanning-dot"></span>AI generira odgovore…</div>';
+
+    try {
+      const prompt = buildPrompt(msgs);
+      const raw = await callGemini(prompt);
+      const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.match(/^[\d\.\-\*]/));
+      // Also try lines that start with numbers (strip prefix)
+      const allLines = raw.split('\n')
+        .map(l => l.replace(/^[\d]+[\.\)]\s*/, '').replace(/^\*+\s*/, '').replace(/^-\s*/, '').trim())
+        .filter(l => l.length > 3 && l.length < 300);
+
+      const suggestions = (allLines.length >= 2 ? allLines : lines).slice(0, parseInt(countEl?.value || '3'));
+      renderReplies(suggestions, msgs);
+    } catch (e) {
+      repliesEl.innerHTML = '<div class="tkai-status" style="color:var(--red)">❌ ' + escHtml(e.message || 'Greška') + '</div>';
+    } finally {
+      isGenerating = false;
+      if (genBtn) { genBtn.disabled = false; genBtn.textContent = '↺ Generiraj'; }
+      if (genAllBtn) { genAllBtn.disabled = false; }
+    }
+  }
+
+  // ── Render reply suggestions ──
+  function renderReplies(suggestions, sourceMsgs) {
+    if (!repliesEl) return;
+    if (!suggestions || suggestions.length === 0) {
+      repliesEl.innerHTML = '<div class="tkai-empty">AI nije generirao prijedloge.<br>Provjeri API ključ u Settings.</div>';
+      return;
+    }
+    repliesEl.innerHTML = '';
+    suggestions.forEach((text, i) => {
+      const card = document.createElement('div');
+      card.className = 'tkai-reply-card';
+      card.innerHTML = `
+        <div class="tkai-reply-label">Prijedlog ${i + 1}</div>
+        <div class="tkai-reply-text">${escHtml(text)}</div>
+        <div class="tkai-reply-actions">
+          <button class="tkai-reply-copy" data-text="${escHtml(text)}">📋 Kopiraj</button>
+          <span style="font-size:10px;color:var(--text3);margin-left:4px">${text.length} znakova</span>
+        </div>`;
+      const copyBtn = card.querySelector('.tkai-reply-copy');
+      copyBtn?.addEventListener('click', () => {
+        navigator.clipboard.writeText(text).then(() => {
+          copyBtn.textContent = '✅ Kopirano!';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = '📋 Kopiraj';
+            copyBtn.classList.remove('copied');
+          }, 2000);
+        }).catch(() => {
+          // Fallback
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          copyBtn.textContent = '✅ Kopirano!';
+          setTimeout(() => { copyBtn.textContent = '📋 Kopiraj'; }, 2000);
+        });
+      });
+      repliesEl.appendChild(card);
+    });
+  }
+
+  // ── Toggle scan ──
+  toggleBtn?.addEventListener('click', () => {
+    if (scanActive) {
+      // Stop
+      scanActive = false;
+      clearInterval(scanInterval);
+      scanInterval = null;
+      toggleBtn.textContent = '▶ Skeniranje ON';
+      toggleBtn.className = 'tkai-scan-btn start';
+      setStatus('');
+    } else {
+      // Start
+      const tab = getActiveTab();
+      const url = tab?.url || '';
+      if (!url.includes('tiktok.com')) {
+        showToast('⚠️ Otvori TikTok Live stranicu u browseru pa klikni Skeniranje ON');
+        return;
+      }
+      scanActive = true;
+      toggleBtn.textContent = '⏹ Skeniranje OFF';
+      toggleBtn.className = 'tkai-scan-btn stop';
+      setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
+      scrapeTikTokChat();
+      scanInterval = setInterval(scrapeTikTokChat, 4000);
+    }
+  });
+
+  // ── Generate for selected messages ──
+  genBtn?.addEventListener('click', () => {
+    const selected = selectedMsgIds.size > 0
+      ? collectedMessages.filter(m => selectedMsgIds.has(m.id))
+      : collectedMessages.slice(-10);
+    generateReplies(selected);
+  });
+
+  // ── Generate for all recent messages ──
+  genAllBtn?.addEventListener('click', () => {
+    generateReplies(collectedMessages.slice(-15));
+  });
+
+  // ── Stop scan when panel is closed ──
+  document.getElementById('closeTiktokAIPanel')?.addEventListener('click', () => {
+    if (scanActive) {
+      scanActive = false;
+      clearInterval(scanInterval);
+      scanInterval = null;
+    }
+  });
+})();
+
 // ── Menu Bar Toggle (Settings → Tabs) ──
 (function initMenuBarToggle() {
   const toggleEl = document.getElementById('toggleMenuBar');
@@ -4279,6 +4667,7 @@ const CTT_BUTTONS = [
   { id: 'btnWallet', key: 'showBtnWallet', icon: '💰', name: 'Wallet' },
   { id: 'btnBobiAI', key: 'showBtnBobiAI', icon: '🎬', name: 'Bobi AI' },
   { id: 'btnAiAgent', key: 'showBtnAiAgent', icon: '🤖', name: 'AI Agent' },
+  { id: 'btnTikTokAI', key: 'showBtnTikTokAI', icon: '🎵', name: 'TikTok Chat AI' },
   { id: 'btnKripto', key: 'showBtnKripto', icon: '📰', name: 'Kripto' },
   { id: 'btnEtherX', key: 'showBtnEtherX', icon: '👥', name: 'EtherX' },
   { id: 'btnExtensions', key: 'showBtnExtensions', icon: '🧩', name: 'Extensions' },
