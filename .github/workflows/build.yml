@@ -91,11 +91,6 @@ jobs:
           node-version: "24"
           cache: "npm"
 
-      - name: 🛠️ Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: 🧹 Clear npm cache
         run: npm cache clean --force
 
@@ -163,18 +158,8 @@ jobs:
           node-version: "24"
           cache: "npm"
 
-      - name: 🛠️ Install Python setuptools (distutils for node-gyp)
-        run: brew install python-setuptools || true
-
-      - name: 📦 Install npm packages (skip postinstall rebuild — we do it manually below)
-        run: npm ci --ignore-scripts
-        env:
-          CXXFLAGS: -std=c++20
-
-      - name: 🔧 Rebuild native modules for x64
-        run: npx @electron/rebuild --arch x64 -f -w better-sqlite3
-        env:
-          CXXFLAGS: -std=c++20
+      - name: � Install npm packages
+        run: npm ci
 
       - name: 🔨 Build macOS x64 ZIP (cross-compile, no DMG — hdiutil can't mount x64 DMG on ARM64 runner)
         run: npx electron-builder --mac zip --x64 --publish never
@@ -204,18 +189,8 @@ jobs:
           node-version: "24"
           cache: "npm"
 
-      - name: 🛠️ Install Python setuptools (distutils for node-gyp)
-        run: brew install python-setuptools || true
-
-      - name: 📦 Install npm packages (skip postinstall rebuild — we do it manually below)
-        run: npm ci --ignore-scripts
-        env:
-          CXXFLAGS: -std=c++20
-
-      - name: 🔧 Rebuild native modules for arm64
-        run: npx @electron/rebuild --arch arm64 -f -w better-sqlite3
-        env:
-          CXXFLAGS: -std=c++20
+      - name: � Install npm packages
+        run: npm ci
 
       - name: 🔨 Build macOS arm64 DMG + ZIP
         run: npx electron-builder --mac dmg zip --arm64 --publish never
