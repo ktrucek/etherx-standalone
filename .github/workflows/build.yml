@@ -289,14 +289,18 @@ jobs:
           tag="${{ steps.tag.outputs.tag }}"
           title="EtherX Browser $tag"
 
-          if gh release view "$tag" >/dev/null 2>&1; then
+          repo="${{ github.repository }}"
+
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
             gh release edit "$tag" \
+              --repo "$repo" \
               --title "$title" \
               --notes-file release-notes.md \
               --draft=false \
               --prerelease=false
           else
             gh release create "$tag" \
+              --repo "$repo" \
               --title "$title" \
               --notes-file release-notes.md \
               --draft=false \
@@ -310,8 +314,9 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ steps.tag.outputs.tag }}"
+          repo="${{ github.repository }}"
           mapfile -t files < release-assets.txt
-          gh release upload "$tag" "${files[@]}" --clobber
+          gh release upload "$tag" "${files[@]}" --repo "$repo" --clobber
 
             **Linux AppImage:**
             ```bash

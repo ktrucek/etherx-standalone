@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.137",
+  "version": "2.4.138",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -62,7 +62,7 @@
       ],
       "category": "Network",
       "maintainer": "EtherX Team <info@kriptoentuzijasti.io>",
-      "artifactName": "EtherX.Browser-${version}.${ext}"
+      "artifactName": "EtherX.Browser-${version}-linux.${ext}"
     },
     "win": {
       "target": [
@@ -71,7 +71,7 @@
       ],
       "verifyUpdateCodeSignature": false,
       "signAndEditExecutable": false,
-      "artifactName": "EtherX.Browser-${version}-Setup.${ext}"
+      "artifactName": "EtherX.Browser-${version}-win.${ext}"
     },
     "mac": {
       "target": [
@@ -84,7 +84,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": false,
-      "artifactName": "EtherX.Browser-${version}-${arch}.${ext}"
+      "artifactName": "EtherX.Browser-${version}-mac-${arch}.${ext}"
     },
     "artifactName": "EtherX.Browser-${version}-${arch}.${ext}"
   },
@@ -106,5 +106,5 @@
     "uuid": "^9.0.0",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-05-14T20:35:52Z"
+  "buildTime": "2026-05-14T20:57:11Z"
 }

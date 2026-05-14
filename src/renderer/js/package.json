@@ -61,7 +61,8 @@
         "deb"
       ],
       "category": "Network",
-      "maintainer": "EtherX Team <info@kriptoentuzijasti.io>"
+      "maintainer": "EtherX Team <info@kriptoentuzijasti.io>",
+      "artifactName": "EtherX.Browser-${version}-linux.${ext}"
     },
     "win": {
       "target": [
@@ -69,7 +70,8 @@
         "zip"
       ],
       "verifyUpdateCodeSignature": false,
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "artifactName": "EtherX.Browser-${version}-win.${ext}"
     },
     "mac": {
       "target": [
@@ -81,7 +83,8 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": false
+      "notarize": false,
+      "artifactName": "EtherX.Browser-${version}-mac-${arch}.${ext}"
     }
   },
   "devDependencies": {
