@@ -257,6 +257,28 @@ jobs:
           | 🍎 **macOS** | `.zip` | macOS archive |
 
           ### ⚙️ Install Notes
+
+          **Linux AppImage:**
+          ```bash
+          chmod +x "EtherX Browser-*.AppImage"
+          ./"EtherX Browser-*.AppImage" --no-sandbox
+          ```
+
+          **Linux .deb:**
+          ```bash
+          sudo dpkg -i etherx-browser_*.deb
+          ```
+
+          **Windows:** Double-click `.exe` — no installation required.
+
+          **macOS:** Open `.dmg`, drag to Applications. If macOS says the app is "damaged and can't be opened. You should move it to the Bin", open Terminal and run this command to remove the quarantine flag:
+          ```bash
+          xattr -cr "/Applications/EtherX Browser.app"
+          ```
+          Then open the app normally.
+
+          ---
+          © 2024–2026 kriptoentuzijasti.io. All Rights Reserved. — [Proprietary License](https://github.com/ktrucek/etherx-browser/blob/main/LICENSE)
           EOF
 
       - name: 📦 Collect release assets
@@ -317,25 +339,3 @@ jobs:
           repo="${{ github.repository }}"
           mapfile -t files < release-assets.txt
           gh release upload "$tag" "${files[@]}" --repo "$repo" --clobber
-
-            **Linux AppImage:**
-            ```bash
-            chmod +x "EtherX Browser-*.AppImage"
-            ./"EtherX Browser-*.AppImage" --no-sandbox
-            ```
-
-            **Linux .deb:**
-            ```bash
-            sudo dpkg -i etherx-browser_*.deb
-            ```
-
-            **Windows:** Double-click `.exe` — no installation required.
-
-            **macOS:** Open `.dmg`, drag to Applications. If macOS says the app is "damaged and can't be opened. You should move it to the Bin", open Terminal and run this command to remove the quarantine flag:
-            ```bash
-            xattr -cr "/Applications/EtherX Browser.app"
-            ```
-            Then open the app normally.
-
-            ---
-            © 2024–2026 kriptoentuzijasti.io. All Rights Reserved. — [Proprietary License](https://github.com/ktrucek/etherx-browser/blob/main/LICENSE)
