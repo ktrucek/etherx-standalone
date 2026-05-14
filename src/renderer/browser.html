@@ -3409,9 +3409,29 @@
       background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)
     }
 
-    /* TikTok Chat AI Panel */
+    /* TikTok Chat AI Panel — free-floating, draggable */
+    #tiktokAIPanel {
+      position: fixed !important;
+      top: 44px !important;
+      right: 0 !important;
+      left: auto !important;
+      bottom: auto !important;
+      height: 580px !important;
+      border-radius: 10px 0 0 10px;
+      box-shadow: -6px 6px 32px rgba(0,0,0,.55);
+      z-index: 9999;
+    }
     #tiktokAIPanel .panel-header {
-      background: linear-gradient(135deg, #010101 0%, #ff0050 100%)
+      background: linear-gradient(135deg, #010101 0%, #ff0050 100%);
+      cursor: move;
+      user-select: none;
+    }
+    .tkai-drag-hint {
+      font-size: 14px;
+      opacity: .55;
+      margin-right: 4px;
+      cursor: move;
+      line-height: 1;
     }
 
     /* ── Auto-Update Styles ─────────────────────────── */
@@ -5422,8 +5442,9 @@
     </div>
     <!-- TikTok Chat AI Panel -->
     <div class="panel" id="tiktokAIPanel" style="width:520px">
-      <div class="panel-header" style="padding:8px 12px">
-        <span class="panel-title">🎵 TikTok Chat AI</span>
+      <div class="panel-header" id="tiktokAIPanelHeader" style="padding:8px 12px">
+        <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
+            title="Povuci za premještanje">⠿</span></span>
         <div style="display:flex;align-items:center;gap:6px">
           <span id="tkaiScanStatus" style="font-size:10px;color:var(--text3)"></span>
           <button class="panel-close" id="closeTiktokAIPanel">×</button>

@@ -76,6 +76,12 @@ app.commandLine.appendSwitch(
 
 app.setName('EtherX Browser');
 
+// ─── Global UA fallback — must be set before app.ready ───────────────────────
+// Prevents Electron from ever sending "Electron/x.x" in any session that hasn't
+// had setUserAgent() called on it (e.g. extension background pages, new sessions).
+const CHROME_CLEAN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+app.userAgentFallback = CHROME_CLEAN_UA;
+
 // ─── New modules (wrapped in try/catch — native modules can crash on wrong arch) ─
 let DatabaseManager, AdBlocker, SecurityManager, PasswordManager;
 let QRSyncManager, DefaultBrowser, UserAgentManager, I18nManager, AIManager;
@@ -245,6 +251,14 @@ app.whenReady().then(async () => {
 
   // Init security
   try { if (SecurityManager) SecurityManager.enforce(session.defaultSession); } catch (e) { console.error('❌ Security init failed:', e.message); }
+
+  // Set clean Chrome UA on both sessions so Google OAuth never sees "Electron/x.x".
+  // onBeforeSendHeaders patches per-request, but setUserAgent() is what Electron
+  // uses for the initial handshake and any request before the handler fires.
+  try {
+    session.defaultSession.setUserAgent(CHROME_CLEAN_UA);
+    session.fromPartition('persist:etherx').setUserAgent(CHROME_CLEAN_UA);
+  } catch (e) { console.error('❌ UA session init failed:', e.message); }
 
   // Init AI
   try { if (AIManager) ai = new AIManager(); } catch (e) { console.error('❌ AI init failed:', e.message); ai = null; }
@@ -528,18 +542,13 @@ function createWindow() {
           .trim();
         // For Google domains force clean modern Chrome UA
         const url = details.url || '';
-        if (/google\.com|googleapis\.com|accounts\.google/i.test(url)) {
+        if (/google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login/i.test(url)) {
           ua = GOOGLE_UA;
-          // Remove X-Frame-Options bypass headers that trigger Google security
+          // Remove X-Frame-Options bypass headers that trigger security checks
           delete headers['X-Requested-With'];
         }
         headers[key] = ua || CLEAN_UA;
       }
-
-      // ── CORS Bypass: Remove Origin/Referer restrictions ──────────────────────
-      // This allows cross-origin requests without proxy
-      // Do NOT delete Origin/Referer from main session either — same reason as
-      // the webview session: CDNs use these for hotlink protection.
 
       // Log network request, but skip high-frequency resource types that can
       // overwhelm the main/renderer processes during streaming playback.
@@ -656,12 +665,14 @@ function createWindow() {
       }
       const key = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent');
       if (key) {
+        // Always strip Electron/EtherX identifiers
         let ua = headers[key]
           .replace(/\s*Electron\/[\d.]+/gi, '')
           .replace(/\s*EtherX\/[\d.]+/gi, '')
           .trim();
+        // For Google domains force clean modern Chrome UA
         const url = details.url || '';
-        if (/google\.com|googleapis\.com|accounts\.google/i.test(url)) {
+        if (/google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login/i.test(url)) {
           ua = GOOGLE_UA;
           delete headers['X-Requested-With'];
         }
@@ -1599,10 +1610,13 @@ app.on('web-contents-created', (_event, contents) => {
         // to a new tab the window.opener reference is lost and login breaks.
         const isOAuthPopup =
           details.disposition === 'new-popup' ||
-          /accounts\.google\.com|login\.live\.com|appleid\.apple\.com|facebook\.com\/dialog|twitter\.com\/oauth|x\.com\/oauth|tiktok\.com\/login|accounts\.tiktok\.com|github\.com\/login\/oauth|discord\.com\/oauth2|linkedin\.com\/oauth|reddit\.com\/api\/v1\/authorize/i.test(details.url);
+          /accounts\.google\.com|login\.live\.com|appleid\.apple\.com|facebook\.com\/dialog|twitter\.com\/oauth|x\.com\/oauth|tiktok\.com\/login|accounts\.tiktok\.com|github\.com\/login\/oauth|discord\.com\/oauth2|linkedin\.com\/oauth|reddit\.com\/api\/v1\/authorize|openrouter\.ai\/auth|accounts\.openrouter\.ai|clerk\.openrouter\.ai|auth\.openrouter\.ai|[^/]*\.clerk\.accounts\.dev|[^/]*\.clerk\.com|auth0\.com|okta\.com\/oauth2|login\.microsoftonline\.com|huggingface\.co\/login|openai\.com\/auth|anthropic\.com\/login/i.test(details.url);
 
         if (isOAuthPopup) {
-          // Allow as a real popup BrowserWindow so window.opener is preserved
+          // Allow as a real popup BrowserWindow so window.opener is preserved.
+          // Include the webview-preload so navigator.webdriver = false and other
+          // bot-detection spoofs are active inside the popup (needed for Clerk,
+          // Google OAuth, GitHub OAuth, etc.).
           return {
             action: 'allow',
             overrideBrowserWindowOptions: {
@@ -1614,6 +1628,7 @@ app.on('web-contents-created', (_event, contents) => {
                 sandbox: false,
                 partition: 'persist:etherx',
                 webviewTag: false,
+                preload: path.join(__dirname, 'src', 'webview-preload.js'),
               },
               parent: mainWindow || undefined,
             },

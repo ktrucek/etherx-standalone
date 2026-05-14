@@ -4612,9 +4612,30 @@
       background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)
     }
 
+    /* TikTok AI Panel — free-floating, draggable */
+    #tiktokAIPanel {
+      position: fixed !important;
+      top: 44px !important;
+      right: 0 !important;
+      left: auto !important;
+      bottom: auto !important;
+      height: 580px !important;
+      border-radius: 10px 0 0 10px;
+      box-shadow: -6px 6px 32px rgba(0,0,0,.55);
+      z-index: 9999;
+    }
     #tiktokAIPanel .panel-header {
       background: linear-gradient(135deg, #ff0050 0%, #ff7a00 100%);
-      box-shadow: 0 0 24px rgba(255, 0, 80, .18)
+      box-shadow: 0 0 24px rgba(255, 0, 80, .18);
+      cursor: move;
+      user-select: none;
+    }
+    .tkai-drag-hint {
+      font-size: 14px;
+      opacity: .55;
+      margin-right: 4px;
+      cursor: move;
+      line-height: 1;
     }
 
     .tkai-body {
@@ -8400,7 +8421,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.140</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.141</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8462,6 +8483,9 @@
                   <option value="gemini">Google Gemini</option>
                   <option value="openai">OpenAI (GPT)</option>
                   <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="groq">⚡ Groq (ultra-brzo)</option>
+                  <option value="openrouter">OpenRouter (200+ modela)</option>
+                  <option value="ollama">Ollama (lokalno)</option>
                   <option value="local">Local / OpenAI-compatible</option>
                 </select>
               </div>
@@ -8526,7 +8550,61 @@
                     title="Prikaži/sakrij ključ">🙈</button>
                 </div>
               </div>
-              <div class="s-row" id="aiKeyRowLocal" style="display:none">
+              <!-- Groq API Key -->
+              <div class="s-row" id="aiKeyRowGroq" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">Groq API ključ</div>
+                  <div class="s-row-desc">Dobavi ključ na <a href="https://console.groq.com/keys" style="color:var(--accent)"
+                      onclick="navigateTo(this.href);return false">console.groq.com</a>
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="password" class="s-input" id="settingsGroqKey" placeholder="gsk_..."
+                    style="width:220px;font-family:monospace;letter-spacing:0.5px" autocomplete="off" spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsGroqKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                  <button id="aiFetchModelsGroqBtn" title="Dohvati dostupne modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
+                </div>
+              </div>
+              <!-- OpenRouter API Key -->
+              <div class="s-row" id="aiKeyRowOpenrouter" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">OpenRouter API ključ</div>
+                  <div class="s-row-desc">Dobavi ključ na <a href="https://openrouter.ai/keys" style="color:var(--accent)"
+                      onclick="navigateTo(this.href);return false">openrouter.ai/keys</a>
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="password" class="s-input" id="settingsOpenrouterKey" placeholder="sk-or-v1-..."
+                    style="width:220px;font-family:monospace;letter-spacing:0.5px" autocomplete="off" spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsOpenrouterKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                  <button id="aiFetchModelsOpenrouterBtn" title="Dohvati dostupne modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
+                </div>
+              </div>
+              <!-- Ollama (lokalni, bez ključa) -->
+              <div class="s-row" id="aiKeyRowOllama" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">Ollama endpoint</div>
+                  <div class="s-row-desc">Lokalni Ollama server (obično localhost:11434). Ne treba API ključ.</div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="text" class="s-input" id="settingsOllamaBaseUrl" placeholder="http://localhost:11434/v1"
+                    style="width:220px;font-family:monospace;letter-spacing:0.2px" autocomplete="off" spellcheck="false"
+                    value="http://localhost:11434/v1">
+                  <button id="aiFetchModelsOllamaBtn" title="Dohvati instalirane modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
+                </div>
+              </div>
                 <div class="s-row-left">
                   <div class="s-row-label">Local AI endpoint</div>
                   <div class="s-row-desc">OpenAI-compatible lokalni server, npr. Ollama, LM Studio ili vLLM</div>
@@ -8560,8 +8638,14 @@
                   <option value="gpt-4o-mini">GPT-4o Mini (OpenAI)</option>
                   <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Anthropic)</option>
                   <option value="claude-3-haiku">Claude 3 Haiku (Anthropic)</option>
-                  <option value="llama3.1:8b">llama3.1:8b (Local)</option>
-                  <option value="mistral:7b-instruct">mistral:7b-instruct (Local)</option>
+                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Groq)</option>
+                  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Groq)</option>
+                  <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Groq)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">llama-3.3-70b (OpenRouter)</option>
+                  <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash (OpenRouter)</option>
+                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
+                  <option value="llama3.1:8b">llama3.1:8b (Ollama)</option>
+                  <option value="mistral:7b-instruct">mistral:7b-instruct (Ollama)</option>
                 </select>
               </div>
 
@@ -8712,7 +8796,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.140</span></div>
+                id="helpVersionNum2">2.4.141</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -8907,8 +8991,9 @@
       </div>
     </div>
     <div class="panel" id="tiktokAIPanel" style="width:520px">
-      <div class="panel-header" style="padding:8px 12px">
-        <span class="panel-title">🎵 TikTok Chat AI</span>
+      <div class="panel-header" id="tiktokAIPanelHeader" style="padding:8px 12px">
+        <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
+            title="Povuci za premještanje">⠿</span></span>
         <div style="display:flex;align-items:center;gap:6px">
           <span id="tkaiScanStatus" style="font-size:10px;color:#ffe0ea"></span>
           <button class="panel-close" id="closeTiktokAIPanel">×</button>
@@ -10219,6 +10304,18 @@
           const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
           if (tab && e.url && !e.url.startsWith('about:')) {
             tab.url = e.url;
+            const pending = tab._pendingNav;
+            tab._pendingNav = null;
+            if (!pending) {
+              // Link clicked inside webview (no navigateTo call) — push to history
+              tab.history = tab.history.slice(0, tab.histIdx + 1);
+              tab.history.push(e.url);
+              tab.histIdx = tab.history.length - 1;
+            } else if (pending === 'navigate') {
+              // navigateTo already pushed — update the entry for redirect final URL
+              tab.history[tab.histIdx] = e.url;
+            }
+            // pending === 'back' or 'forward': history managed by button handler, skip
             if (Number(wv.dataset.tabId) === STATE.activeTabId) {
               document.getElementById('urlInput').value = e.url;
               updateUrlIcon(e.url);
@@ -10238,12 +10335,22 @@
           }
         });
         wv.addEventListener('did-navigate-in-page', (e) => {
+          if (!e.isMainFrame) return;
           const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
           if (tab && e.url) {
             tab.url = e.url;
+            // Push SPA/hash navigation into history so Back works
+            const pending = tab._pendingNav;
+            tab._pendingNav = null;
+            if (!pending) {
+              tab.history = tab.history.slice(0, tab.histIdx + 1);
+              tab.history.push(e.url);
+              tab.histIdx = tab.history.length - 1;
+            }
             if (Number(wv.dataset.tabId) === STATE.activeTabId) {
               document.getElementById('urlInput').value = e.url;
               updateAutofillBtnState();
+              updateNavBtns(tab);
             }
           }
         });
@@ -11138,6 +11245,7 @@
       } catch (e) { tab.title = url.slice(0, 30); tab.favicon = '🌐'; tab.faviconUrl = null; }
       tab.history = tab.history.slice(0, tab.histIdx + 1);
       tab.history.push(url); tab.histIdx = tab.history.length - 1;
+      tab._pendingNav = 'navigate'; // tells did-navigate to update vs. skip double-push
 
       if (window.electronWebview) {
         const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
@@ -11173,6 +11281,7 @@
     document.getElementById('btnBack').addEventListener('click', () => {
       const tab = getActiveTab(); if (!tab || tab.histIdx <= 0) return;
       tab.histIdx--; const u = tab.history[tab.histIdx]; tab.url = u;
+      tab._pendingNav = 'back'; // prevent did-navigate from re-pushing this URL
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
       if (window.electronWebview) {
         const _bWv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
@@ -11186,6 +11295,7 @@
     document.getElementById('btnFwd').addEventListener('click', () => {
       const tab = getActiveTab(); if (!tab || tab.histIdx >= tab.history.length - 1) return;
       tab.histIdx++; const u = tab.history[tab.histIdx]; tab.url = u;
+      tab._pendingNav = 'forward'; // prevent did-navigate from re-pushing this URL
       document.getElementById('urlInput').value = u; updateUrlIcon(u);
       if (window.electronWebview) {
         const _fWv = origGetElementById.call(document, 'browseFrame_' + tab.id) || origGetElementById.call(document, 'browseFrame');
@@ -11692,8 +11802,15 @@
     function inferAiProviderFromModel(model) {
       const value = String(model || '').toLowerCase();
       if (value.startsWith('gpt')) return 'openai';
-      if (value.startsWith('claude')) return 'anthropic';
-      if (value.startsWith('gemini')) return 'gemini';
+      if (value.startsWith('claude') && !value.includes('/')) return 'anthropic';
+      if (value.startsWith('gemini') && !value.includes('/')) return 'gemini';
+      // OpenRouter models always contain a slash (e.g. "meta-llama/llama-3.3")
+      if (value.includes('/')) return 'openrouter';
+      // Groq-specific models (no slash, served by Groq API)
+      const groqModels = ['llama-', 'mixtral-', 'gemma2-', 'qwen-qwq', 'whisper-'];
+      if (groqModels.some(p => value.startsWith(p))) return 'groq';
+      // Ollama models usually have a colon tag (llama3.1:8b) or are plain names
+      if (value.includes(':')) return 'ollama';
       return 'local';
     }
     function getSelectedAiProvider() {
@@ -11734,6 +11851,9 @@
         anthropicApiKey: document.getElementById('settingsAnthropicKey')?.value?.trim() || settings.anthropicApiKey || settings.anthropic_api_key || '',
         localAiApiKey: document.getElementById('settingsLocalAiKey')?.value?.trim() || settings.localAiApiKey || settings.local_ai_api_key || '',
         localAiBaseUrl: localBaseUrl,
+        groqApiKey: document.getElementById('settingsGroqKey')?.value?.trim() || settings.groqApiKey || settings.groq_api_key || '',
+        openrouterApiKey: document.getElementById('settingsOpenrouterKey')?.value?.trim() || settings.openrouterApiKey || settings.openrouter_api_key || '',
+        ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || 'http://localhost:11434/v1'),
       };
     }
     async function runAiTextRequest(prompt, opts = {}) {
@@ -11769,6 +11889,73 @@
         const response = await fetch(baseUrl + '/chat/completions', {
           method: 'POST',
           headers,
+          body: JSON.stringify({
+            model,
+            messages: [
+              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+              { role: 'user', content: prompt }
+            ],
+            temperature,
+            max_tokens: maxOutputTokens
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        return (data.choices?.[0]?.message?.content || '').trim();
+      }
+
+      if (provider === 'groq') {
+        const apiKey = opts.apiKey || runtime.groqApiKey;
+        if (!apiKey) throw new Error('Groq API ključ nije postavljen.');
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+          body: JSON.stringify({
+            model,
+            messages: [
+              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+              { role: 'user', content: prompt }
+            ],
+            temperature,
+            max_tokens: maxOutputTokens
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        return (data.choices?.[0]?.message?.content || '').trim();
+      }
+
+      if (provider === 'openrouter') {
+        const apiKey = opts.apiKey || runtime.openrouterApiKey;
+        if (!apiKey) throw new Error('OpenRouter API ključ nije postavljen.');
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey,
+            'HTTP-Referer': 'https://etherx.io',
+            'X-Title': 'EtherX Browser'
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+              { role: 'user', content: prompt }
+            ],
+            temperature,
+            max_tokens: maxOutputTokens
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        return (data.choices?.[0]?.message?.content || '').trim();
+      }
+
+      if (provider === 'ollama') {
+        const baseUrl = normalizeLocalAiBaseUrl(opts.baseUrl || runtime.ollamaBaseUrl || 'http://localhost:11434/v1');
+        const response = await fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
             messages: [
@@ -12142,45 +12329,85 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
       const scraperScript = `(function() {
         const results = [];
-        const selectors = [
+        // Primary selectors — TikTok Live chat (updated for 2025 DOM)
+        const primarySelectors = [
+          '[data-e2e="chat-message-item"]',
           '[data-e2e="chat-room-message-item"]',
-          '.webcast-chatroom__message-list > .webcast-chatroom__message-item',
-          '.css-1yn0y6n-DivChatItemContainer',
+          '[data-e2e="webcast-live-message-item"]',
+          '[data-e2e="live-chat-message"]',
+          '[data-e2e="comment-level-1"]',
+          '[data-e2e="chatroom-message-container"] > div',
+          '[class*="DivChatMessage"]',
+          '[class*="ChatMessageItem"]',
+          '[class*="MessageItem"][class*="chat"]',
+          '[class*="LiveComment"]',
+          '.webcast-chatroom__message-list > div',
+          '.webcast-chatroom__message-item',
+          '[class*="webcast-chatroom__message"]',
           '[class*="ChatItem"]',
           '[class*="chat-message"]',
-          '[class*="LiveComment"]',
-          '[class*="webcast-chatroom__message"]'
+          '[class*="CommentItem"]'
         ];
         let items = [];
-        for (const selector of selectors) {
-          const found = document.querySelectorAll(selector);
-          if (found.length > 0) {
-            items = Array.from(found);
-            break;
-          }
+        for (const sel of primarySelectors) {
+          try {
+            const found = document.querySelectorAll(sel);
+            if (found.length > 1) { items = Array.from(found); break; }
+          } catch(_) {}
         }
+        // Deep DOM scan fallback: find container with many child divs that look like chat
         if (items.length === 0) {
-          const fallbackSelectors = [
-            '[data-e2e="comment-level-1"]',
-            '[class*="CommentItem"]',
-            '.comment-item',
-            '[data-e2e="browse-comment-item"]'
+          const chatContainerSelectors = [
+            '[data-e2e="chat-message-list"]',
+            '[data-e2e="chatroom-message-list"]',
+            '[data-e2e="live-chat-container"]',
+            '[class*="DivChatContainer"]',
+            '[class*="ChatContainer"]',
+            '[class*="webcast-chatroom"] > ul',
+            '[class*="webcast-chatroom"] > div',
+            '[class*="MessageList"]'
           ];
-          for (const selector of fallbackSelectors) {
-            const found = document.querySelectorAll(selector);
-            if (found.length > 0) {
-              items = Array.from(found);
-              break;
-            }
+          for (const csel of chatContainerSelectors) {
+            try {
+              const container = document.querySelector(csel);
+              if (container) {
+                const children = Array.from(container.children).filter(c => c.textContent.trim().length > 5);
+                if (children.length > 1) { items = children; break; }
+              }
+            } catch(_) {}
           }
         }
         items.slice(-30).forEach((el, index) => {
-          const userEl = el.querySelector('[data-e2e="user-name"], .user-name, [class*="Username"], [class*="user-name"], .owner-name, [class*="AuthorName"], strong');
-          const textEl = el.querySelector('[data-e2e="message-text"], [class*="comment-text"], [class*="message-content"], [class*="CommentText"], [class*="chat-content"], p, span:last-child');
-          const user = userEl ? userEl.textContent.trim() : ('Korisnik ' + (index + 1));
-          const text = textEl ? textEl.textContent.trim() : el.textContent.trim().slice(0, 200);
-          if (text && text.length > 1 && text !== user) {
-            results.push({ user: user.slice(0, 40), text: text.slice(0, 300) });
+          const userEl = el.querySelector(
+            '[data-e2e="chat-message-user-name"],'
+            + '[data-e2e="user-name"],'
+            + '[data-e2e="webcast-live-user-name"],'
+            + '[data-e2e="live-user-name"],'
+            + '[class*="UserName"]:not([class*="avatar"]),'
+            + '[class*="Username"]:not([class*="avatar"]),'
+            + '[class*="user-name"],'
+            + '[class*="AuthorName"],'
+            + '[class*="NickName"],'
+            + 'strong, b'
+          );
+          const textEl = el.querySelector(
+            '[data-e2e="chat-message-text"],'
+            + '[data-e2e="message-text"],'
+            + '[data-e2e="webcast-live-comment"],'
+            + '[data-e2e="live-comment-text"],'
+            + '[class*="MessageText"],'
+            + '[class*="CommentText"],'
+            + '[class*="message-content"],'
+            + '[class*="chat-content"],'
+            + '[class*="SpanMessage"],'
+            + '[class*="comment-text"],'
+            + 'p, span:last-child'
+          );
+          const user = (userEl ? userEl.textContent.trim() : ('Korisnik ' + (index + 1))).slice(0, 40);
+          const rawText = textEl ? textEl.textContent.trim() : el.textContent.trim().slice(0, 200);
+          const text = rawText.replace(user, '').replace(/^[:\s]+/, '').trim().slice(0, 300);
+          if (text && text.length > 1) {
+            results.push({ user, text });
           }
         });
         return JSON.stringify(results);
@@ -12293,6 +12520,77 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       });
       genAllBtn?.addEventListener('click', () => generateReplies(collectedMessages.slice(-15)));
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', stopScanning);
+
+      // ── Draggable panel ──────────────────────────────────────────────────────
+      (function makePanelDraggable() {
+        const TKAI_POS_KEY = 'ex_tkai_panel_pos';
+        const dragHandle = document.getElementById('tiktokAIPanelHeader');
+        if (!dragHandle || !panel) return;
+
+        // Restore saved position
+        try {
+          const saved = JSON.parse(localStorage.getItem(TKAI_POS_KEY) || 'null');
+          if (saved) {
+            panel.style.right = 'auto';
+            panel.style.left = saved.left + 'px';
+            panel.style.top = saved.top + 'px';
+          }
+        } catch (e) { }
+
+        let dragging = false, ox = 0, oy = 0;
+
+        dragHandle.addEventListener('mousedown', e => {
+          if (e.target.closest('button, select, input, textarea')) return;
+          dragging = true;
+          const rect = panel.getBoundingClientRect();
+          // Switch from right-anchored to left-anchored
+          panel.style.right = 'auto';
+          panel.style.bottom = 'auto';
+          panel.style.left = rect.left + 'px';
+          panel.style.top = rect.top + 'px';
+          ox = e.clientX - rect.left;
+          oy = e.clientY - rect.top;
+          panel.style.transition = 'none';
+          e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', e => {
+          if (!dragging) return;
+          let nx = e.clientX - ox;
+          let ny = e.clientY - oy;
+          // Clamp inside viewport
+          const pw = panel.offsetWidth;
+          const ph = panel.offsetHeight;
+          nx = Math.max(0, Math.min(nx, window.innerWidth - pw));
+          ny = Math.max(0, Math.min(ny, window.innerHeight - ph));
+          panel.style.left = nx + 'px';
+          panel.style.top = ny + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+          if (!dragging) return;
+          dragging = false;
+          // Save position
+          try {
+            localStorage.setItem(TKAI_POS_KEY, JSON.stringify({
+              left: parseFloat(panel.style.left),
+              top: parseFloat(panel.style.top)
+            }));
+          } catch (e) { }
+        });
+
+        // Double-click header → reset to default right-side position
+        dragHandle.addEventListener('dblclick', e => {
+          if (e.target.closest('button')) return;
+          panel.style.transition = 'left .25s, top .25s';
+          panel.style.right = '0';
+          panel.style.left = 'auto';
+          panel.style.top = '44px';
+          panel.style.bottom = 'auto';
+          localStorage.removeItem(TKAI_POS_KEY);
+          setTimeout(() => { panel.style.transition = 'none'; }, 300);
+        });
+      })();
     })();
 
     function renderBookmarksPanel() {
@@ -16721,6 +17019,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       const anthropicKeyEl = document.getElementById('settingsAnthropicKey');
       const localKeyEl = document.getElementById('settingsLocalAiKey');
       const localBaseUrlEl = document.getElementById('settingsLocalAiBaseUrl');
+      const groqKeyEl = document.getElementById('settingsGroqKey');
+      const openrouterKeyEl = document.getElementById('settingsOpenrouterKey');
+      const ollamaBaseUrlEl = document.getElementById('settingsOllamaBaseUrl');
       const tempSlider = document.getElementById('settingsAiTemp');
       const tempVal = document.getElementById('settingsAiTempVal');
       const banner = document.getElementById('aiStatusBanner');
@@ -16734,6 +17035,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (provider === 'openai') return s.openaiApiKey || s.openai_api_key || '';
         if (provider === 'local') return s.localAiApiKey || s.local_ai_api_key || '';
         if (provider === 'anthropic') return s.anthropicApiKey || s.anthropic_api_key || '';
+        if (provider === 'groq') return s.groqApiKey || s.groq_api_key || '';
+        if (provider === 'openrouter') return s.openrouterApiKey || s.openrouter_api_key || '';
         return '';
       }
       function currentProvider() {
@@ -16745,6 +17048,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (p === 'openai') return openaiKeyEl?.value.trim() || await getStoredApiKey('openai');
         if (p === 'local') return localKeyEl?.value.trim() || await getStoredApiKey('local') || 'local';
         if (p === 'anthropic') return anthropicKeyEl?.value.trim() || await getStoredApiKey('anthropic');
+        if (p === 'groq') return groqKeyEl?.value.trim() || await getStoredApiKey('groq');
+        if (p === 'openrouter') return openrouterKeyEl?.value.trim() || await getStoredApiKey('openrouter');
+        if (p === 'ollama') return 'ollama';
         return '';
       }
       function showBanner(ok, msg) {
@@ -16760,6 +17066,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (providerSel) providerSel.value = savedProvider;
       if (cfg.aiModel) modelSel.value = cfg.aiModel;
       if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
+      if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || 'http://localhost:11434/v1';
       getStoredApiKey('gemini').then(gk => {
         if (gk && geminiKeyEl) geminiKeyEl.value = gk;
         getStoredApiKey('openai').then(ok_ => {
@@ -16768,13 +17075,19 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (lk && localKeyEl) localKeyEl.value = lk;
             getStoredApiKey('anthropic').then(ak => {
               if (ak && anthropicKeyEl) anthropicKeyEl.value = ak;
-              if (cfg.aiTemperature !== undefined && tempSlider) {
-                tempSlider.value = cfg.aiTemperature;
-                if (tempVal) tempVal.textContent = cfg.aiTemperature;
-              }
-              const hasKey = gk || ok_ || lk || ak;
-              if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || GEMINI_DEFAULT_MODEL) + '</strong>');
-              else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+              getStoredApiKey('groq').then(grk => {
+                if (grk && groqKeyEl) groqKeyEl.value = grk;
+                getStoredApiKey('openrouter').then(ork => {
+                  if (ork && openrouterKeyEl) openrouterKeyEl.value = ork;
+                  if (cfg.aiTemperature !== undefined && tempSlider) {
+                    tempSlider.value = cfg.aiTemperature;
+                    if (tempVal) tempVal.textContent = cfg.aiTemperature;
+                  }
+                  const hasKey = gk || ok_ || lk || ak || grk || ork;
+                  if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || GEMINI_DEFAULT_MODEL) + '</strong>');
+                  else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+                });
+              });
             });
           });
         });
@@ -16786,11 +17099,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         document.getElementById('aiKeyRowOpenai')?.style && (document.getElementById('aiKeyRowOpenai').style.display = p === 'openai' ? '' : 'none');
         document.getElementById('aiKeyRowLocal')?.style && (document.getElementById('aiKeyRowLocal').style.display = p === 'local' ? '' : 'none');
         document.getElementById('aiKeyRowAnthropic')?.style && (document.getElementById('aiKeyRowAnthropic').style.display = p === 'anthropic' ? '' : 'none');
+        document.getElementById('aiKeyRowGroq')?.style && (document.getElementById('aiKeyRowGroq').style.display = p === 'groq' ? '' : 'none');
+        document.getElementById('aiKeyRowOpenrouter')?.style && (document.getElementById('aiKeyRowOpenrouter').style.display = p === 'openrouter' ? '' : 'none');
+        document.getElementById('aiKeyRowOllama')?.style && (document.getElementById('aiKeyRowOllama').style.display = p === 'ollama' ? '' : 'none');
         const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'];
         const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
         const localModels = ['llama3.1:8b', 'qwen2.5:7b-instruct', 'mistral:7b-instruct'];
         const claudeModels = ['claude-3-5-sonnet', 'claude-3-haiku', 'claude-3-opus'];
-        const defaults = p === 'openai' ? openaiModels : p === 'local' ? localModels : p === 'anthropic' ? claudeModels : geminiModels;
+        const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'qwen-qwq-32b'];
+        const openrouterModels = ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash-preview', 'anthropic/claude-3.5-sonnet', 'deepseek/deepseek-r1', 'openai/gpt-4o'];
+        const ollamaModels = ['llama3.1:8b', 'llama3.2:latest', 'mistral:7b-instruct', 'qwen2.5:7b'];
+        const defaults = p === 'openai' ? openaiModels : p === 'local' ? localModels : p === 'anthropic' ? claudeModels
+          : p === 'groq' ? groqModels : p === 'openrouter' ? openrouterModels : p === 'ollama' ? ollamaModels : geminiModels;
         if (!modelSel.dataset['populated_' + p]) {
           const prev = modelSel.value;
           modelSel.innerHTML = defaults.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -16803,7 +17123,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (tempSlider && tempVal) tempSlider.addEventListener('input', () => { tempVal.textContent = tempSlider.value; });
 
       async function fetchModels(provider, key) {
-        const fetchBtn = document.getElementById(provider === 'gemini' ? 'aiFetchModelsBtn' : provider === 'openai' ? 'aiFetchModelsOpenaiBtn' : 'aiFetchModelsLocalBtn');
+        const btnId = { gemini: 'aiFetchModelsBtn', openai: 'aiFetchModelsOpenaiBtn', local: 'aiFetchModelsLocalBtn', groq: 'aiFetchModelsGroqBtn', openrouter: 'aiFetchModelsOpenrouterBtn', ollama: 'aiFetchModelsOllamaBtn' }[provider];
+        const fetchBtn = document.getElementById(btnId || '');
         if (fetchBtn) { fetchBtn.disabled = true; fetchBtn.textContent = '⏳'; }
         const modelDesc = document.getElementById('aiModelDesc');
         try {
@@ -16823,6 +17144,22 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (key && key !== 'local') headers.Authorization = 'Bearer ' + key;
             const r = await fetch(normalizeLocalAiBaseUrl(localBaseUrlEl?.value) + '/models', { headers });
             if (!r.ok) throw new Error('HTTP ' + r.status + ' — provjeri local endpoint');
+            const d = await r.json();
+            models = (d.data || []).map(m => m.id).filter(Boolean).sort();
+          } else if (provider === 'groq') {
+            const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: 'Bearer ' + key } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            models = (d.data || []).map(m => m.id).filter(m => !m.includes('whisper') || true).sort();
+          } else if (provider === 'openrouter') {
+            const r = await fetch('https://openrouter.ai/api/v1/models', { headers: { Authorization: 'Bearer ' + key } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            models = (d.data || []).map(m => m.id).filter(Boolean).sort();
+          } else if (provider === 'ollama') {
+            const baseUrl = normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || 'http://localhost:11434/v1');
+            const r = await fetch(baseUrl + '/models').catch(() => null);
+            if (!r || !r.ok) throw new Error('Ollama nije dostupan na ' + baseUrl);
             const d = await r.json();
             models = (d.data || []).map(m => m.id).filter(Boolean).sort();
           }
@@ -16859,6 +17196,19 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (!baseUrl) { showBanner(false, 'Unesi Local AI endpoint prije dohvata modela.'); return; }
         fetchModels('local', localKeyEl?.value.trim() || 'local');
       });
+      document.getElementById('aiFetchModelsGroqBtn')?.addEventListener('click', () => {
+        const k = groqKeyEl?.value.trim();
+        if (!k) { showBanner(false, 'Unesi Groq API ključ prije dohvata modela.'); return; }
+        fetchModels('groq', k);
+      });
+      document.getElementById('aiFetchModelsOpenrouterBtn')?.addEventListener('click', () => {
+        const k = openrouterKeyEl?.value.trim();
+        if (!k) { showBanner(false, 'Unesi OpenRouter API ključ prije dohvata modela.'); return; }
+        fetchModels('openrouter', k);
+      });
+      document.getElementById('aiFetchModelsOllamaBtn')?.addEventListener('click', () => {
+        fetchModels('ollama', '');
+      });
 
       const saveBtn = document.getElementById('saveAiSettings');
       if (saveBtn) saveBtn.addEventListener('click', () => {
@@ -16868,6 +17218,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const aKey = anthropicKeyEl?.value.trim() || '';
         const lKey = localKeyEl?.value.trim() || '';
         const lBaseUrl = normalizeLocalAiBaseUrl(localBaseUrlEl?.value);
+        const grKey = groqKeyEl?.value.trim() || '';
+        const orKey = openrouterKeyEl?.value.trim() || '';
+        const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || 'http://localhost:11434/v1');
         DB.saveSetting('aiProvider', p);
         DB.saveSetting('aiModel', modelSel.value);
         DB.saveSetting('geminiApiKey', gKey);
@@ -16880,6 +17233,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         DB.saveSetting('anthropic_api_key', aKey);
         DB.saveSetting('local_ai_api_key', lKey);
         DB.saveSetting('local_ai_base_url', lBaseUrl);
+        DB.saveSetting('groqApiKey', grKey);
+        DB.saveSetting('groq_api_key', grKey);
+        DB.saveSetting('openrouterApiKey', orKey);
+        DB.saveSetting('openrouter_api_key', orKey);
+        DB.saveSetting('ollamaBaseUrl', olBaseUrl);
         if (tempSlider) DB.saveSetting('aiTemperature', Number(tempSlider.value));
         if (window.etherx?.db?.settings?.save) {
           window.etherx.db.settings.save(DB.getSettings()).catch(() => { });
@@ -16890,10 +17248,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       const testBtn = document.getElementById('testAiSettings');
       if (testBtn) testBtn.addEventListener('click', async () => {
-        const key = await currentApiKey();
-        if (!key) { showBanner(false, 'API ključ nije unesen. Unesi ključ i klikni Spremi.'); return; }
         const model = modelSel.value;
         const provider = currentProvider();
+        const key = await currentApiKey();
+        if (provider !== 'ollama' && !key) { showBanner(false, 'API ključ nije unesen. Unesi ključ i klikni Spremi.'); return; }
         testBtn.disabled = true;
         testBtn.innerHTML = '⏳ Testiranje...';
         const resultsGroup = document.getElementById('aiTestResultsGroup');
@@ -20002,6 +20360,15 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const statusEl = document.getElementById('swStatus');
         const scopeEl = document.getElementById('swScope');
         const cacheVersionEl = document.getElementById('swCacheVersion');
+
+        // In Electron (file:// protocol) service workers cannot be registered.
+        // Show a clear N/A message instead of a confusing empty dash.
+        if (window.electronAPI !== undefined || location.protocol === 'file:') {
+          if (statusEl) { statusEl.textContent = 'N/A (Electron)'; statusEl.style.color = '#f39c12'; }
+          if (scopeEl) scopeEl.textContent = '—';
+          if (cacheVersionEl) cacheVersionEl.textContent = '—';
+          return;
+        }
 
         if (!('serviceWorker' in navigator)) {
           if (statusEl) {

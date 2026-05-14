@@ -4356,6 +4356,74 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       scanInterval = null;
     }
   });
+
+  // ── Draggable panel ──────────────────────────────────────────────────────
+  (function makePanelDraggable() {
+    const TKAI_POS_KEY = 'ex_tkai_panel_pos';
+    const dragHandle = document.getElementById('tiktokAIPanelHeader');
+    if (!dragHandle || !panel) return;
+
+    // Restore saved position
+    try {
+      const saved = JSON.parse(localStorage.getItem(TKAI_POS_KEY) || 'null');
+      if (saved) {
+        panel.style.right = 'auto';
+        panel.style.left = saved.left + 'px';
+        panel.style.top  = saved.top  + 'px';
+      }
+    } catch(e) {}
+
+    let dragging = false, ox = 0, oy = 0;
+
+    dragHandle.addEventListener('mousedown', e => {
+      if (e.target.closest('button, select, input, textarea')) return;
+      dragging = true;
+      const rect = panel.getBoundingClientRect();
+      panel.style.right  = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.left   = rect.left + 'px';
+      panel.style.top    = rect.top  + 'px';
+      ox = e.clientX - rect.left;
+      oy = e.clientY - rect.top;
+      panel.style.transition = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      let nx = e.clientX - ox;
+      let ny = e.clientY - oy;
+      const pw = panel.offsetWidth;
+      const ph = panel.offsetHeight;
+      nx = Math.max(0, Math.min(nx, window.innerWidth  - pw));
+      ny = Math.max(0, Math.min(ny, window.innerHeight - ph));
+      panel.style.left = nx + 'px';
+      panel.style.top  = ny + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        localStorage.setItem(TKAI_POS_KEY, JSON.stringify({
+          left: parseFloat(panel.style.left),
+          top:  parseFloat(panel.style.top)
+        }));
+      } catch(e) {}
+    });
+
+    // Double-click header → reset to default right-side position
+    dragHandle.addEventListener('dblclick', e => {
+      if (e.target.closest('button')) return;
+      panel.style.transition = 'left .25s, top .25s';
+      panel.style.right  = '0';
+      panel.style.left   = 'auto';
+      panel.style.top    = '44px';
+      panel.style.bottom = 'auto';
+      localStorage.removeItem(TKAI_POS_KEY);
+      setTimeout(() => { panel.style.transition = 'none'; }, 300);
+    });
+  })();
 })();
 
 // ── Auto-Update System ───────────────────────────────────────────────────────
