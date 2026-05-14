@@ -262,36 +262,81 @@ jobs:
             echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🚀 Create GitHub Release
-        uses: softprops/action-gh-release@v2.3.0
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: "EtherX Browser ${{ steps.tag.outputs.tag }}"
-          draft: false
-          prerelease: false
-          generate_release_notes: false
-          files: |
+      - name: 🧾 Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## 🚀 EtherX Browser ${{ steps.tag.outputs.tag }}
+
+          Built automatically by GitHub Actions.
+
+          ### 📥 Downloads
+
+          | Platform | File | Notes |
+          |----------|------|-------|
+          | 🐧 **Linux** | `.AppImage` | Portable, runs on any distro |
+          | 🐧 **Linux** | `.deb` | Ubuntu / Debian installer |
+          | 🪟 **Windows** | `.exe` | Portable, no install needed |
+          | 🪟 **Windows** | `.zip` | ZIP archive |
+          | 🍎 **macOS** | `.zip` | macOS archive |
+
+          ### ⚙️ Install Notes
+          EOF
+
+      - name: 📦 Collect release assets
+        id: assets
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(
             artifacts/*.AppImage
             artifacts/*.deb
             artifacts/*.exe
             artifacts/*.zip
             artifacts/*.dmg
-          body: |
-            ## 🚀 EtherX Browser ${{ steps.tag.outputs.tag }}
+          )
 
-            Built automatically by GitHub Actions.
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release assets found in artifacts/." >&2
+            exit 1
+          fi
 
-            ### 📥 Downloads
+          printf '%s\n' "${files[@]}" | sort > release-assets.txt
+          echo "count=${#files[@]}" >> "$GITHUB_OUTPUT"
 
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | 🐧 **Linux** | `.AppImage` | Portable, runs on any distro |
-            | 🐧 **Linux** | `.deb` | Ubuntu / Debian installer |
-            | 🪟 **Windows** | `.exe` | Portable, no install needed |
-            | 🪟 **Windows** | `.zip` | ZIP archive |
-            | 🍎 **macOS** | `.dmg` | Disk image |
+      - name: 🚀 Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          title="EtherX Browser $tag"
 
-            ### ⚙️ Install Notes
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --draft=false \
+              --prerelease=false
+          else
+            gh release create "$tag" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --draft=false \
+              --prerelease=false
+          fi
+
+      - name: ⬆️ Upload release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          mapfile -t files < release-assets.txt
+          gh release upload "$tag" "${files[@]}" --clobber
 
             **Linux AppImage:**
             ```bash

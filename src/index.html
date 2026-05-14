@@ -8400,7 +8400,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.135</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.136</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8712,7 +8712,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.135</span></div>
+                id="helpVersionNum2">2.4.136</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -11030,9 +11030,6 @@
               }
             });
 
-            // Clear content before removal (helps GC)
-            wv.src = 'about:blank';
-
             // Delayed removal for cleanup
             setTimeout(() => {
               try { wv.remove(); } catch (_) { }
@@ -11044,7 +11041,6 @@
           if (origWv && origWv.dataset.tabId === "1") {
             try {
               if (typeof origWv.stop === 'function') origWv.stop();
-              origWv.src = 'about:blank';
               setTimeout(() => { try { origWv.remove(); } catch (_) { } }, 50);
             } catch (_) { }
           }
@@ -14110,7 +14106,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.getElementById('mi-show-rl-sidebar').addEventListener('click', () => { const chk = document.getElementById('mi-show-rl-sidebar-chk'); const rl = RL.get(); if (!rl.length) { showToast('Reading List is empty'); return; } renderHistoryPanel(); togglePanel('histPanel'); chk.style.opacity = document.getElementById('histPanel').classList.contains('open') ? '1' : '0'; showToast('∞ Reading List (' + rl.length + ' items)'); });
     document.getElementById('mi-show-shared').addEventListener('click', () => showToast('👥 Shared with You — not available in web mode'));
     document.getElementById('mi-show-downloads-view').addEventListener('click', () => togglePanel('dlPanel'));
-    document.getElementById('mi-stop').addEventListener('click', () => { frame.src = 'about:blank'; setLoading(0); showToast('✕ Stopped'); consoleLog('warn', '✕ Page load stopped'); });
+      document.getElementById('mi-stop').addEventListener('click', () => {
+        if (window.electronWebview && frame.tagName === 'WEBVIEW') {
+          try { frame.stop(); } catch (_) { }
+        } else {
+          frame.src = 'about:blank';
+        }
+        setLoading(0);
+        showToast('✕ Stopped');
+        consoleLog('warn', '✕ Page load stopped');
+      });
     document.getElementById('mi-translation').addEventListener('click', async () => { const t = getActiveTab(); if (!t?.url) { showToast('No page to translate'); return; } const lang = await showPrompt('Translate to (e.g. hr, de, fr, es):', 'hr'); if (lang) { navigateTo('https://translate.google.com/translate?sl=auto&tl=' + lang + '&u=' + encodeURIComponent(t.url)); } });
     document.getElementById('mi-text-encoding').addEventListener('click', async () => { const enc = await showPrompt('Text encoding (e.g. UTF-8, ISO-8859-1):', 'UTF-8'); if (enc) showToast('⌘ Encoding set to: ' + enc); });
     document.getElementById('mi-show-history').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
@@ -19946,7 +19951,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
               const webview = document.getElementById('wv-' + id);
               if (webview && webview.src && webview.src !== 'about:blank') {
                 suspendedTabs.set(id, { originalSrc: webview.src, html: tab.htmlContent });
-                webview.src = 'about:blank';
+                if (window.electronWebview && webview.tagName === 'WEBVIEW') {
+                  try { if (typeof webview.stop === 'function') webview.stop(); } catch (_) { }
+                  try { webview.remove(); } catch (_) { }
+                } else {
+                  webview.src = 'about:blank';
+                }
                 tab.suspended = true;
                 tab.title = '💤 ' + (tab.title || 'Suspended');
                 const tEl = getTabEl(id);
