@@ -441,8 +441,30 @@ function createWindow() {
   // Google also checks Sec-Fetch-Site / Origin headers — force override for google domains
   const GOOGLE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
   // ── Network monitoring & CORS bypass ────────────────────────────────────────
-  const networkLog = [];
+  // Keep request tracking O(1) and batch IPC to avoid flooding the renderer on
+  // media-heavy pages such as YouTube or TikTok.
+  const networkLog = new Map();
   const MAX_NETWORK_LOG = 500;
+  let _netLogBatch = [];
+  let _netLogFlushTimer = null;
+
+  function flushNetworkLogBatch() {
+    _netLogFlushTimer = null;
+    if (!_netLogBatch.length || !mainWindow || mainWindow.isDestroyed()) {
+      _netLogBatch = [];
+      return;
+    }
+    mainWindow.webContents.send('network-log-batch', _netLogBatch.splice(0));
+  }
+
+  function queueNetworkLogEntry(entry) {
+    _netLogBatch.push(entry);
+    if (!_netLogFlushTimer) {
+      _netLogFlushTimer = setTimeout(flushNetworkLogBatch, 250);
+    }
+  }
+
+  const SKIP_LOG_TYPES = new Set(['media', 'image', 'font', 'ping', 'cspreport']);
 
   function isVideoOrMediaRequest(details) {
     const url = String(details?.url || '');
@@ -519,16 +541,22 @@ function createWindow() {
       // Do NOT delete Origin/Referer from main session either — same reason as
       // the webview session: CDNs use these for hotlink protection.
 
-      // Log network request
-      networkLog.push({
-        id: details.id,
-        url: details.url,
-        method: details.method,
-        resourceType: details.resourceType,
-        timestamp: Date.now(),
-        requestHeaders: headers
-      });
-      if (networkLog.length > MAX_NETWORK_LOG) networkLog.shift();
+      // Log network request, but skip high-frequency resource types that can
+      // overwhelm the main/renderer processes during streaming playback.
+      const resourceType = String(details.resourceType || '').toLowerCase();
+      if (!SKIP_LOG_TYPES.has(resourceType)) {
+        if (networkLog.size >= MAX_NETWORK_LOG) {
+          networkLog.delete(networkLog.keys().next().value);
+        }
+        networkLog.set(details.id, {
+          id: details.id,
+          url: details.url,
+          method: details.method,
+          resourceType: details.resourceType,
+          timestamp: Date.now(),
+          requestHeaders: headers
+        });
+      }
 
       callback({ requestHeaders: headers });
     }
@@ -574,7 +602,7 @@ function createWindow() {
       delete headers['content-security-policy-report-only'];
 
       // Update network log with response
-      const logEntry = networkLog.find(e => e.id === details.id);
+      const logEntry = networkLog.get(details.id);
       if (logEntry) {
         logEntry.statusCode = details.statusCode;
         logEntry.responseHeaders = headers;
@@ -589,14 +617,12 @@ function createWindow() {
   mainWindow.webContents.session.webRequest.onCompleted(
     { urls: ['*://*/*'] },
     (details) => {
-      const logEntry = networkLog.find(e => e.id === details.id);
+      const logEntry = networkLog.get(details.id);
       if (logEntry) {
         logEntry.completed = true;
         logEntry.duration = Date.now() - logEntry.timestamp;
-        // Send to renderer for DevTools Network panel
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('network-log', logEntry);
-        }
+        networkLog.delete(details.id);
+        queueNetworkLogEntry(logEntry);
       }
     }
   );
@@ -604,13 +630,12 @@ function createWindow() {
   mainWindow.webContents.session.webRequest.onErrorOccurred(
     { urls: ['*://*/*'] },
     (details) => {
-      const logEntry = networkLog.find(e => e.id === details.id);
+      const logEntry = networkLog.get(details.id);
       if (logEntry) {
         logEntry.error = details.error;
         logEntry.completed = false;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('network-log', logEntry);
-        }
+        networkLog.delete(details.id);
+        queueNetworkLogEntry(logEntry);
       }
     }
   );
@@ -1082,6 +1107,31 @@ function setupIPC() {
     } catch (e) {
       return { version: app.getVersion(), buildTime: null };
     }
+  });
+
+  ipcMain.handle('app:getProcessMetrics', async () => {
+    const metrics = app.getAppMetrics();
+    const mem = process.memoryUsage();
+    const processes = metrics.map(m => ({
+      pid: m.pid,
+      type: m.type,
+      cpuPercent: (m.cpu?.percentCPUUsage ?? 0).toFixed(1),
+      ramMB: m.memory ? (m.memory.workingSetSize / 1024).toFixed(1) : '?',
+      sharedMB: m.memory ? (m.memory.sharedMemory / 1024 / 1024).toFixed(1) : '?',
+    }));
+    const totalRamMB = metrics.reduce((sum, m) => sum + (m.memory?.workingSetSize ?? 0) / 1024, 0);
+    const totalCpu = metrics.reduce((sum, m) => sum + (m.cpu?.percentCPUUsage ?? 0), 0);
+
+    return {
+      processes,
+      totalRamMB: totalRamMB.toFixed(1),
+      totalCpuPercent: totalCpu.toFixed(1),
+      mainHeapUsedMB: (mem.heapUsed / 1024 / 1024).toFixed(1),
+      mainHeapTotalMB: (mem.heapTotal / 1024 / 1024).toFixed(1),
+      mainRssMB: (mem.rss / 1024 / 1024).toFixed(1),
+      uptime: Math.round(process.uptime()),
+      windowCount: BrowserWindow.getAllWindows().length,
+    };
   });
 
   // ── Icon management ───────────────────────────────────────────────────────
