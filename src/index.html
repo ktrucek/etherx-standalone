@@ -8440,7 +8440,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.158</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.159</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8817,7 +8817,7 @@
         <div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
           <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.158</span></div>
+              id="helpVersionNum2">2.4.159</span></div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
           </div>
         </div>
@@ -19117,9 +19117,20 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (lastCheckedEl && !lastCheckedEl.textContent.trim()) lastCheckedEl.textContent = 'Zadnja provjera: nikad';
     }
     window.refreshSettingsPane = function (stab) {
+      const paneId = 'stab-' + stab;
+      const pane = document.getElementById(paneId);
+      if (!pane) return;
+
+      document.querySelectorAll('.s-tab-pane').forEach(p => p.classList.remove('active'));
+      pane.classList.add('active');
+
       if (stab === 'history') {
+        const list = document.getElementById('historyIdxList');
+        if (list) list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3);font-size:12px">Učitavanje…</div>';
         const query = document.getElementById('histSearchInputIdx')?.value || '';
-        loadIndexHistory(query);
+        loadIndexHistory(query).catch(() => {
+          if (list) list.innerHTML = '<div style="text-align:center;padding:24px;color:#f48771;font-size:12px">Greška pri učitavanju povijesti.</div>';
+        });
         return;
       }
       if (stab === 'updates') {
@@ -19858,7 +19869,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       document.getElementById('btnClearAllHistory')?.addEventListener('click', async () => {
         if (confirm('Obrisati svu povijest pregledavanja? Ova radnja je nepovratna.')) {
-          await etherx.db?.clearHistory();
+          await window.etherx?.db?.clearHistory?.();
           DB.clearHistory();
           loadIndexHistory(document.getElementById('histSearchInputIdx')?.value || '');
           alert('Povijest obrisana.');
@@ -19868,7 +19879,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       document.getElementById('btnClearHistoryPeriod')?.addEventListener('click', async () => {
         const hours = parseInt(document.getElementById('selectHistoryPeriod').value);
         const cutoff = Date.now() - (hours * 60 * 60 * 1000);
-        await etherx.db?.clearHistorySince(cutoff);
+        await window.etherx?.db?.clearHistorySince?.(cutoff);
         loadIndexHistory(document.getElementById('histSearchInputIdx')?.value || '');
         alert(`Povijest obrisana za zadnjih ${hours}h.`);
       });
@@ -19880,7 +19891,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       document.getElementById('btnClearAllCookies')?.addEventListener('click', async () => {
         if (confirm('Obrisati sve kolačiće? Bit ćeš odjavljen sa svih stranica.')) {
-          await etherx.cookies?.clearAll();
+          await window.etherx?.cookies?.clearAll?.();
           alert('Kolačići obrisani.');
         }
       });
@@ -19908,7 +19919,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       // ── Cache ────────────────────────────────────────────────────────────────
       (async () => {
-        const size = await etherx.cache?.getSize() || 0;
+        const size = await window.etherx?.cache?.getSize?.() || 0;
         const mb = (size / 1024 / 1024).toFixed(2);
         const el = document.getElementById('cacheSize');
         if (el) el.textContent = `${mb} MB`;
@@ -19916,9 +19927,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       document.getElementById('btnClearCache')?.addEventListener('click', async () => {
         if (confirm('Očistiti sav cache? Stranice će se morati ponovo učitati.')) {
-          await etherx.cache?.clear();
+          await window.etherx?.cache?.clear?.();
           alert('Cache očišćen.');
-          const size = await etherx.cache?.getSize() || 0;
+          const size = await window.etherx?.cache?.getSize?.() || 0;
           const mb = (size / 1024 / 1024).toFixed(2);
           const el = document.getElementById('cacheSize');
           if (el) el.textContent = `${mb} MB`;
@@ -20675,7 +20686,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
       // ── Backup ───────────────────────────────────────────────────────────────
       document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
-        const allSettings = await etherx.settings.get();
+        const allSettings = await window.etherx?.settings?.get?.() || {};
         const json = JSON.stringify(allSettings, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -20696,7 +20707,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
           const text = await file.text();
           try {
             const imported = JSON.parse(text);
-            await etherx.settings.set(imported);
+            await window.etherx?.settings?.set?.(imported);
             alert('Postavke uspješno učitane. Browser će se restartirati.');
             window.location.reload();
           } catch (err) {
