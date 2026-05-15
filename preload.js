@@ -137,6 +137,8 @@ contextBridge.exposeInMainWorld('etherx', {
   // ── Security ──────────────────────────────────────────────────────────────────
   security: {
     getCertInfo: (url) => ipcRenderer.invoke('security:getCertInfo', url),
+    getMalwareStats: () => ipcRenderer.invoke('security:getMalwareStats'),
+    setMalwareBlock: (enabled) => ipcRenderer.invoke('security:setMalwareBlock', enabled),
   },
 
   // ── User Agent ────────────────────────────────────────────────────────────────

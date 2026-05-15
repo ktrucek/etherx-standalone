@@ -955,6 +955,15 @@ function setupIPC() {
 
   // ── Security ───────────────────────────────────────────────────────────────
   ipcMain.handle('security:getCertInfo', (_e, url) => SecurityManager ? SecurityManager.getCertInfo(url) : null);
+  ipcMain.handle('security:getMalwareStats', () => {
+    const stats = AdBlocker?._malwareStats;
+    if (stats) return { ...stats };
+    return { blocked: 0, domains: 0, enabled: true };
+  });
+  ipcMain.handle('security:setMalwareBlock', (_e, enabled) => {
+    if (AdBlocker?._malwareStats) AdBlocker._malwareStats.enabled = !!enabled;
+    return { ok: true, enabled: !!enabled };
+  });
 
   // ── User Agent ─────────────────────────────────────────────────────────────
   ipcMain.handle('ua:get', () => UserAgentManager ? UserAgentManager.get() : null);
