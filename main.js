@@ -513,6 +513,20 @@ function createWindow() {
     }
   }
 
+  function isGoogleAuthRequest(rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      const host = parsed.hostname.toLowerCase();
+      const full = String(rawUrl || '').toLowerCase();
+      return host === 'accounts.google.com'
+        || host === 'consent.google.com'
+        || host === 'myaccount.google.com'
+        || (host.endsWith('.google.com') && (full.includes('/signin/') || full.includes('flowname=glifwebsignin') || full.includes('flowentry=servicelogin')));
+    } catch (_) {
+      return false;
+    }
+  }
+
   function isTrustedFirstPartyHost(rawUrl) {
     try {
       const host = new URL(rawUrl).hostname.toLowerCase();
@@ -546,6 +560,15 @@ function createWindow() {
           ua = GOOGLE_UA;
           // Remove X-Frame-Options bypass headers that trigger security checks
           delete headers['X-Requested-With'];
+          if (isGoogleAuthRequest(url)) {
+            headers['Sec-CH-UA'] = '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
+            headers['Sec-CH-UA-Mobile'] = '?0';
+            headers['Sec-CH-UA-Platform'] = '"Windows"';
+            headers['Sec-Fetch-Site'] = 'none';
+            headers['Sec-Fetch-Mode'] = 'navigate';
+            headers['Sec-Fetch-Dest'] = 'document';
+            headers['Sec-Fetch-User'] = '?1';
+          }
         }
         headers[key] = ua || CLEAN_UA;
       }
@@ -675,6 +698,15 @@ function createWindow() {
         if (/google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login/i.test(url)) {
           ua = GOOGLE_UA;
           delete headers['X-Requested-With'];
+          if (isGoogleAuthRequest(url)) {
+            headers['Sec-CH-UA'] = '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
+            headers['Sec-CH-UA-Mobile'] = '?0';
+            headers['Sec-CH-UA-Platform'] = '"Windows"';
+            headers['Sec-Fetch-Site'] = 'none';
+            headers['Sec-Fetch-Mode'] = 'navigate';
+            headers['Sec-Fetch-Dest'] = 'document';
+            headers['Sec-Fetch-User'] = '?1';
+          }
         }
         headers[key] = ua || CLEAN_UA;
       }
@@ -924,10 +956,15 @@ function setupIPC() {
 
   // ── Network Monitoring ─────────────────────────────────────────────────────
   ipcMain.handle('network:getLog', () => {
-    return networkLog.slice(-100); // Return last 100 entries
+    return Array.from(networkLog.values()).slice(-100);
   });
   ipcMain.handle('network:clearLog', () => {
-    networkLog.length = 0;
+    networkLog.clear();
+    _netLogBatch = [];
+    if (_netLogFlushTimer) {
+      clearTimeout(_netLogFlushTimer);
+      _netLogFlushTimer = null;
+    }
     return { ok: true };
   });
 

@@ -132,17 +132,24 @@ try {
             'https://use.fontawesome.com'
         ];
 
-        // Only inject if page is using these (check for domains in document)
-        const pageHTML = document.documentElement.innerHTML;
         const head = document.head || document.getElementsByTagName('head')[0];
 
         if (!head) return;
 
+        const referencedHosts = new Set();
+        document.querySelectorAll('link[href], script[src], img[src], source[src]').forEach((el) => {
+            const raw = el.getAttribute('href') || el.getAttribute('src');
+            if (!raw) return;
+            try {
+                referencedHosts.add(new URL(raw, location.href).hostname);
+            } catch (_) { }
+        });
+
         commonCDNs.forEach(cdn => {
             const domain = new URL(cdn).hostname;
 
-            // Check if page references this CDN
-            if (pageHTML.includes(domain)) {
+            // Check if page references this CDN without materializing the entire DOM as HTML
+            if (referencedHosts.has(domain)) {
                 // Check if preconnect already exists
                 const existing = head.querySelector(`link[rel="preconnect"][href="${cdn}"]`);
                 if (!existing) {
