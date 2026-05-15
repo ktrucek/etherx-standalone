@@ -8481,7 +8481,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.163</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.164</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8862,7 +8862,7 @@
         <div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
           <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.163</span></div>
+              id="helpVersionNum2">2.4.164</span></div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
           </div>
         </div>
@@ -19250,7 +19250,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       }
       if (stab === 'updates') {
         refreshUpdatesPane();
-        checkForUpdates(true).catch(() => { });
+        if (typeof window.checkForUpdates === 'function') {
+          window.checkForUpdates(true).catch(() => { });
+        }
         return;
       }
       if (stab === 'ai' && window.renderAiHistory) {
@@ -20182,7 +20184,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
       }
 
-      async function checkForUpdates(silent = false) {
+      window.checkForUpdates = async function (silent = false) {
         const btn = document.getElementById('btnCheckUpdates');
         const badge = document.getElementById('updStatusBadge');
         const currentTag = (document.getElementById('helpVersionNum')?.textContent || '0.0.0').replace(/^v/, '');
@@ -20247,7 +20249,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
       }
 
-      document.getElementById('btnCheckUpdates')?.addEventListener('click', () => checkForUpdates(false));
+      document.getElementById('btnCheckUpdates')?.addEventListener('click', () => window.checkForUpdates(false));
 
       // ── One-click auto-update (Electron only) ──────────────────────────────
       document.getElementById('updOneClickBtn')?.addEventListener('click', async function () {
@@ -20307,8 +20309,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       setTimeout(() => {
         const autoUpd = document.getElementById('settingAutoUpdate');
         const autoEnabled = autoUpd ? autoUpd.checked : (DB.getSettings().auto_update !== false);
-        if (autoEnabled) {
-          checkForUpdates(true).then(() => {
+        if (autoEnabled && typeof window.checkForUpdates === 'function') {
+          window.checkForUpdates(true).then(() => {
             // After check — if badge shows update available, show NTP banner too
             const badge = document.getElementById('updStatusBadge');
             const banner = document.getElementById('ntpUpdateBanner');

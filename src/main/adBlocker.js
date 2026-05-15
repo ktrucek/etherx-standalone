@@ -141,6 +141,11 @@ class AdBlocker {
         const rt = String(details.resourceType || '').toLowerCase();
         if (rt === 'image') {
           const firstParty = details.firstPartyURL || details.referrer || details.initiator || '';
+          if (!firstParty) {
+            this.stats.allowed++;
+            callback({});
+            return;
+          }
           if (firstParty && this._isSameSite(details.url, firstParty)) {
             this.stats.allowed++;
             callback({});
