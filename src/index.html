@@ -8438,7 +8438,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.153</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.154</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8813,7 +8813,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.153</span></div>
+                id="helpVersionNum2">2.4.154</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -11695,10 +11695,12 @@
       }
       function hideBarsFS() {
         if (!document.fullscreenElement) return;
-        const h = (titleBar ? titleBar.offsetHeight : 0) + (menuBar && menuBar.style.display !== 'none' ? menuBar.offsetHeight : 0) + (tabBar ? tabBar.offsetHeight : 0);
-        if (titleBar) titleBar.style.transform = 'translateY(-' + (titleBar.offsetHeight) + 'px)';
-        if (menuBar && menuBar.style.display !== 'none') menuBar.style.transform = 'translateY(-' + h + 'px)';
-        if (tabBar) tabBar.style.transform = 'translateY(-' + h + 'px)';
+        const titleH = titleBar ? titleBar.offsetHeight : 0;
+        const menuH = (menuBar && menuBar.style.display !== 'none') ? menuBar.offsetHeight : 0;
+        const tabH = tabBar ? tabBar.offsetHeight : 0;
+        if (titleBar) titleBar.style.transform = 'translateY(-' + titleH + 'px)';
+        if (menuBar && menuBar.style.display !== 'none') menuBar.style.transform = 'translateY(-' + (titleH + menuH) + 'px)';
+        if (tabBar) tabBar.style.transform = 'translateY(-' + (titleH + menuH + tabH) + 'px)';
       }
       hoverZone.addEventListener('mouseenter', showBarsFS);
       hoverZone.addEventListener('mousemove', showBarsFS);
@@ -11766,6 +11768,8 @@
         updateSettingsExtCount && updateSettingsExtCount();
         renderSitePermsList && renderSitePermsList();
         _refreshSettingsToggles();
+        const activeStab = document.querySelector('.sit-btn.active')?.dataset.stab || 'general';
+        if (window.refreshSettingsPane) window.refreshSettingsPane(activeStab);
       }
     });
     document.getElementById('settingsBackdrop')?.addEventListener('click', () => {
@@ -18866,6 +18870,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const pane = document.getElementById('stab-' + btn.dataset.stab);
         if (pane) pane.classList.add('active');
         if (window.syncAiSettingsVisibility) window.syncAiSettingsVisibility();
+        if (window.refreshSettingsPane) window.refreshSettingsPane(btn.dataset.stab);
         
         // Renderaj AI povijest samo kad se otvori AI tab
         if (btn.dataset.stab === 'ai' && window.renderAiHistory) {
@@ -19083,6 +19088,33 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         });
       });
     }
+        function refreshUpdatesPane() {
+          const currentTag = (
+            document.getElementById('helpVersionNum')?.textContent ||
+            document.getElementById('helpVersionNum2')?.textContent ||
+            '0.0.0'
+          ).replace(/^v/, '');
+          const currentVerSpan = document.getElementById('helpVersionNum2');
+          if (currentVerSpan) currentVerSpan.textContent = currentTag;
+          const badge = document.getElementById('updStatusBadge');
+          if (badge && !badge.textContent.trim()) badge.textContent = '✓ Ažuran';
+          const lastCheckedEl = document.getElementById('updLastChecked');
+          if (lastCheckedEl && !lastCheckedEl.textContent.trim()) lastCheckedEl.textContent = 'Zadnja provjera: nikad';
+        }
+        window.refreshSettingsPane = function (stab) {
+          if (stab === 'history') {
+            const query = document.getElementById('histSearchInputIdx')?.value || '';
+            loadIndexHistory(query);
+            return;
+          }
+          if (stab === 'updates') {
+            refreshUpdatesPane();
+            return;
+          }
+          if (stab === 'ai' && window.renderAiHistory) {
+            window.renderAiHistory();
+          }
+        };
     document.getElementById('histSearchInputIdx')?.addEventListener('input', e => loadIndexHistory(e.target.value));
     document.querySelector('[data-stab="history"]')?.addEventListener('click', () => loadIndexHistory(''));
 
@@ -19812,6 +19844,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       document.getElementById('btnClearAllHistory')?.addEventListener('click', async () => {
         if (confirm('Obrisati svu povijest pregledavanja? Ova radnja je nepovratna.')) {
           await etherx.db?.clearHistory();
+          DB.clearHistory();
+          loadIndexHistory(document.getElementById('histSearchInputIdx')?.value || '');
           alert('Povijest obrisana.');
         }
       });
@@ -19820,6 +19854,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const hours = parseInt(document.getElementById('selectHistoryPeriod').value);
         const cutoff = Date.now() - (hours * 60 * 60 * 1000);
         await etherx.db?.clearHistorySince(cutoff);
+        loadIndexHistory(document.getElementById('histSearchInputIdx')?.value || '');
         alert(`Povijest obrisana za zadnjih ${hours}h.`);
       });
 
