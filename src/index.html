@@ -1726,6 +1726,45 @@
       display: flex
     }
 
+    /* Bottom-docked utility panels: open downward flow and animate from top to bottom.
+       Scope intentionally limited to user-requested panels to avoid settings regressions. */
+    #bmPanel,
+    #histPanel,
+    #dlPanel,
+    #kriptoPanel,
+    #shieldPanel {
+      top: auto;
+      bottom: 0;
+      height: min(78vh, 760px);
+      border-top: 1px solid var(--border);
+      border-radius: 12px 0 0 0;
+    }
+
+    /* Shield panel stays intentionally more compact than full utility panels. */
+    #shieldPanel {
+      height: min(72vh, 680px);
+    }
+
+    #bmPanel.open,
+    #histPanel.open,
+    #dlPanel.open,
+    #kriptoPanel.open,
+    #shieldPanel.open {
+      animation: panelDropIn .18s ease;
+    }
+
+    @keyframes panelDropIn {
+      from {
+        transform: translateY(-12px);
+        opacity: .88;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
     .panel-header {
       padding: 12px 16px;
       border-bottom: 1px solid var(--border);
@@ -8442,7 +8481,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.162</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.163</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8823,7 +8862,7 @@
         <div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
           <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.162</span></div>
+              id="helpVersionNum2">2.4.163</span></div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
           </div>
         </div>
@@ -19211,6 +19250,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       }
       if (stab === 'updates') {
         refreshUpdatesPane();
+        checkForUpdates(true).catch(() => { });
         return;
       }
       if (stab === 'ai' && window.renderAiHistory) {
@@ -20129,7 +20169,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (newNum) newNum.textContent = 'Koristiš najnoviju verziju: v' + currentTag;
             if (oneClickBtn) oneClickBtn.style.display = 'none';
           }
-          if (notes) notes.textContent = (data.body || '').replace(/\r\n/g, '\n').slice(0, 600) || (isNew ? '' : '');
+          if (notes) {
+            const rawNotes = (data.body || '').replace(/\r\n/g, '\n').slice(0, 600).trim();
+            if (rawNotes) {
+              notes.textContent = rawNotes;
+            } else if (isNew) {
+              notes.textContent = 'Nema dostupnih release bilješki za ovu verziju.';
+            } else {
+              notes.textContent = 'Nema novih promjena. Koristiš najnoviju verziju.';
+            }
+          }
         }
       }
 
@@ -20146,7 +20195,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (!data.ok) throw new Error(data.error || 'Nepoznata greška');
           } else {
             // ── Web fallback: vlastiti endpoint → GitHub (rezerva) ──
-            let latestTag = null, ghAssets = [];
+            let latestTag = null, ghAssets = [], ghBody = '';
             try {
               const ownRes = await fetch('https://api.kriptoentuzijasti.io/version', { cache: 'no-store' });
               if (ownRes.ok) {
@@ -20154,17 +20203,25 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 if (ownData.ok && ownData.version) latestTag = ownData.version.replace(/^v/, '');
               }
             } catch (_) { }
-            if (!latestTag) {
+
+            // Always try to hydrate release details from GitHub so Updates tab can show notes/assets.
+            // If own API fails or returns partial data, GitHub response fills in missing fields.
+            try {
               const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
                 headers: { 'Accept': 'application/vnd.github+json' }
               });
-              if (!res.ok) throw new Error('GitHub API greška: ' + res.status);
-              const raw = await res.json();
-              if (!raw) throw new Error('Nema dostupnih verzija');
-              latestTag = (raw.tag_name || '').replace(/^v/, '');
-              ghAssets = (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.download_url || '' }));
-            }
-            data = { ok: true, latest: latestTag, current: currentTag, isNew: semverNewer(latestTag, currentTag), body: '', assets: ghAssets };
+              if (res.ok) {
+                const raw = await res.json();
+                if (raw) {
+                  if (!latestTag) latestTag = (raw.tag_name || '').replace(/^v/, '');
+                  ghBody = raw.body || '';
+                  ghAssets = (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.download_url || '' }));
+                }
+              }
+            } catch (_) { }
+
+            if (!latestTag) throw new Error('Nema dostupnih verzija');
+            data = { ok: true, latest: latestTag, current: currentTag, isNew: semverNewer(latestTag, currentTag), body: ghBody, assets: ghAssets };
           }
           _applyUpdateResult(data, currentTag);
           if (!silent) showToast(data.isNew ? ('⬆️ Nova verzija: v' + data.latest + ' dostupna!') : ('✓ Browser je ažuran — v' + currentTag));
@@ -20174,7 +20231,17 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
           // Show error in result box
           const resultBox = document.getElementById('updResultBox');
           const newLabel = document.getElementById('updNewVerLabel');
-          if (resultBox) { resultBox.style.display = 'block'; if (newLabel) { newLabel.style.color = '#e74c3c'; newLabel.textContent = '❌ ' + err.message; } const newNum = document.getElementById('updNewVerNum'); if (newNum) newNum.textContent = ''; }
+          if (resultBox) {
+            resultBox.style.display = 'block';
+            if (newLabel) {
+              newLabel.style.color = '#e74c3c';
+              newLabel.textContent = '❌ ' + err.message;
+            }
+            const newNum = document.getElementById('updNewVerNum');
+            if (newNum) newNum.textContent = '';
+            const notes = document.getElementById('updReleaseNotes');
+            if (notes) notes.textContent = 'Provjera nije uspjela. Provjeri internetsku vezu i pokušaj ponovno.';
+          }
         } finally {
           if (btn) { btn.textContent = '🔍 Provjeri sada'; btn.disabled = false; }
         }

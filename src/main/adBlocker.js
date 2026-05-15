@@ -25,6 +25,37 @@ class AdBlocker {
     this.blocker = null;
     this.enabled = true;
     this.stats = { blocked: 0, allowed: 0 };
+    this.blockedDomains = new Set();
+  }
+
+  _normalizeHost(rawUrl) {
+    try {
+      return new URL(rawUrl).hostname.toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  _registrableDomain(host) {
+    if (!host) return '';
+    const parts = host.split('.').filter(Boolean);
+    if (parts.length <= 2) return host;
+    return parts.slice(-2).join('.');
+  }
+
+  _isDomainBlocked(host) {
+    if (!host) return false;
+    for (const d of this.blockedDomains) {
+      if (host === d || host.endsWith(`.${d}`)) return true;
+    }
+    return false;
+  }
+
+  _isSameSite(requestUrl, firstPartyUrl) {
+    const reqHost = this._normalizeHost(requestUrl);
+    const fpHost = this._normalizeHost(firstPartyUrl);
+    if (!reqHost || !fpHost) return false;
+    return this._registrableDomain(reqHost) === this._registrableDomain(fpHost);
   }
 
   async init() {
@@ -49,6 +80,7 @@ class AdBlocker {
 
   async _loadFallbackFilters() {
     let patterns = [];
+    this.blockedDomains.clear();
 
     // Use the bundled filter list in assets/filters/
     const filterPath = path.join(__dirname, '../../assets/filters/filters.txt');
@@ -59,8 +91,11 @@ class AdBlocker {
         const t = line.trim();
         if (t.startsWith('||') && t.endsWith('^')) {
           const domain = t.slice(2, -1);
-          patterns.push(`*://${domain}/*`);
-          patterns.push(`*://*.${domain}/*`);
+          if (/^[a-z0-9.-]+$/i.test(domain)) {
+            this.blockedDomains.add(domain.toLowerCase());
+            patterns.push(`*://${domain}/*`);
+            patterns.push(`*://*.${domain}/*`);
+          }
         }
       }
       console.log(`[AdBlocker] Loaded ${patterns.length / 2} filter rules from disk`);
@@ -80,6 +115,7 @@ class AdBlocker {
         'hotjar.com', 'fullstory.com', 'mixpanel.com',
         'segment.io', 'segment.com', 'heap.io',
       ];
+      AD_DOMAINS.forEach((d) => this.blockedDomains.add(d.toLowerCase()));
       patterns = AD_DOMAINS.flatMap(d => [`*://${d}/*`, `*://*.${d}/*`]);
     }
 
@@ -92,6 +128,26 @@ class AdBlocker {
       { urls: patterns },
       (details, callback) => {
         if (!this.enabled) { callback({}); return; }
+
+        const reqHost = this._normalizeHost(details.url);
+        if (!this._isDomainBlocked(reqHost)) {
+          this.stats.allowed++;
+          callback({});
+          return;
+        }
+
+        // Safe image mode: keep same-site images alive to avoid accidental
+        // "all images missing" regressions when filter lists are aggressive.
+        const rt = String(details.resourceType || '').toLowerCase();
+        if (rt === 'image') {
+          const firstParty = details.firstPartyURL || details.referrer || details.initiator || '';
+          if (firstParty && this._isSameSite(details.url, firstParty)) {
+            this.stats.allowed++;
+            callback({});
+            return;
+          }
+        }
+
         this.stats.blocked++;
         callback({ cancel: true });
       }

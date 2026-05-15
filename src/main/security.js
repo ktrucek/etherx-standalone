@@ -35,8 +35,17 @@ class SecurityManager {
       callback(0);
     });
 
-    // HTTP → HTTPS upgrade headers
+    // HTTP -> HTTPS upgrade only for top-level navigations.
+    // Do not force-upgrade subresources (images/css/js/media), because many
+    // legacy origins still serve those over HTTP and hard redirecting breaks rendering.
     sess.webRequest.onBeforeRequest({ urls: ['http://*/*'] }, (details, callback) => {
+      const rt = String(details.resourceType || '').toLowerCase();
+      const isTopLevelNav = rt === 'mainframe';
+      if (!isTopLevelNav) {
+        callback({});
+        return;
+      }
+
       const upgraded = details.url.replace(/^http:\/\//, 'https://');
       callback({ redirectURL: upgraded });
     });
