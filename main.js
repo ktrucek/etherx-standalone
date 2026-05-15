@@ -113,9 +113,10 @@ try { AIManager = require('./src/main/ai'); } catch (e) { console.error('❌ ai 
           quad9: 'https://dns.quad9.net/dns-query{?dns}',
         };
         const tmpl = templates[provider] || templates.cloudflare;
-        // Add DnsOverHttps to features
+        // Add DnsOverHttps to features. Use automatic mode to allow
+        // fallback to system DNS if DoH endpoint is unavailable.
         features += ',DnsOverHttps';
-        app.commandLine.appendSwitch('dns-over-https-mode', 'secure');
+        app.commandLine.appendSwitch('dns-over-https-mode', 'automatic');
         app.commandLine.appendSwitch('dns-over-https-server-uri-template', tmpl);
       }
     }
