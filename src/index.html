@@ -8442,7 +8442,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.161</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.162</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8628,22 +8628,26 @@
                     Modeli</button>
                 </div>
               </div>
-              <div class="s-row-left">
-                <div class="s-row-label">Local AI endpoint</div>
-                <div class="s-row-desc">OpenAI-compatible lokalni server, npr. Ollama, LM Studio ili vLLM</div>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-                <input type="text" class="s-input" id="settingsLocalAiBaseUrl" placeholder="http://127.0.0.1:11434/v1"
-                  style="width:220px;font-family:monospace;letter-spacing:0.2px" autocomplete="off" spellcheck="false">
-                <input type="text" class="s-input" id="settingsLocalAiKey" placeholder="optional"
-                  style="width:150px;font-family:monospace;letter-spacing:0.5px" autocomplete="off" spellcheck="false">
-                <button
-                  onclick="(function(b){var i=document.getElementById('settingsLocalAiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
-                  style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
-                  title="Prikaži/sakrij ključ">🙈</button>
-                <button id="aiFetchModelsLocalBtn" title="Dohvati dostupne modele"
-                  style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
-                  Modeli</button>
+              <div class="s-row" id="aiKeyRowLocal" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">Local AI endpoint</div>
+                  <div class="s-row-desc">OpenAI-compatible lokalni server, npr. Ollama, LM Studio ili vLLM</div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                  <input type="text" class="s-input" id="settingsLocalAiBaseUrl" placeholder="http://127.0.0.1:11434/v1"
+                    style="width:220px;font-family:monospace;letter-spacing:0.2px" autocomplete="off"
+                    spellcheck="false">
+                  <input type="text" class="s-input" id="settingsLocalAiKey" placeholder="optional"
+                    style="width:150px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                    spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsLocalAiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                  <button id="aiFetchModelsLocalBtn" title="Dohvati dostupne modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
+                </div>
               </div>
             </div>
 
@@ -8819,7 +8823,7 @@
         <div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
           <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.161</span></div>
+              id="helpVersionNum2">2.4.162</span></div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
           </div>
         </div>
@@ -10649,6 +10653,15 @@
       if (!id || typeof id !== 'string') return false;
       // Never fake browser frame nodes; those must stay real.
       if (id === 'browseFrame' || id === 'browseFrameWeb' || id.startsWith('browseFrame_')) return false;
+      // Optional settings/menu controls are often feature-flagged or removed.
+      // Returning null keeps optional chaining effective and avoids phantom nodes.
+      if (
+        id.startsWith('_etx_') ||
+        id.startsWith('setting') ||
+        id.startsWith('btnClear') ||
+        id.startsWith('save') ||
+        id.startsWith('mi-')
+      ) return false;
       return true;
     }
 
@@ -18906,27 +18919,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       showToast('📱 Opening mobile install page...');
     });
 
-    // ── Downloads settings tab ────────────────────────────────────────────────
-    function initDownloadsTab() {
-      const s = DB.getSettings();
-      const links = s.download_links || {};
-      ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
-        const el = document.getElementById('dl' + platform);
-        if (el) el.value = links[platform.toLowerCase()] || '';
-      });
-    }
-    document.getElementById('saveDownloadLinks')?.addEventListener('click', () => {
-      const links = {};
-      ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
-        const el = document.getElementById('dl' + platform);
-        if (el && el.value.trim()) links[platform.toLowerCase()] = el.value.trim();
-      });
-      DB.saveSetting('download_links', links);
-      showToast('💾 Linkovi za preuzimanje spremljeni');
-    });
-    document.querySelectorAll('.sit-btn[data-stab="downloads"]').forEach(btn => {
-      btn.addEventListener('click', () => setTimeout(initDownloadsTab, 50));
-    });
     // ── Help → Browser Versions download buttons ──────────────────────────────
     ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
       document.getElementById('dlBtn' + platform)?.addEventListener('click', () => {
@@ -19747,17 +19739,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (codeEl) loadSourceIntoPane(window.location.href, codeEl);
     });
 
-
-    // ── Download App click handler ──
-    document.getElementById('mi-download-app')?.addEventListener('click', () => {
-      const cf = document.getElementById('browseFrame');
-      if (cf) {
-        const ghUrl = 'https://ktrucek.github.io/etherx-standalone/src/index.html';
-        cf.src = ghUrl;
-        document.getElementById('urlInput').value = ghUrl;
-      }
-    });
-
     // PWA Service Worker
     if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-standalone/sw.js', { scope: '/etherx-standalone/' }).catch(() => { }); }
 
@@ -19896,24 +19877,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (s.history_retention_days !== undefined && document.getElementById('settingHistoryDays')) {
           document.getElementById('settingHistoryDays').value = String(s.history_retention_days);
         }
-        if (s.cookie_policy !== undefined && document.getElementById('settingCookiePolicy')) {
-          document.getElementById('settingCookiePolicy').value = s.cookie_policy;
-        }
-        if (s.notifications_enabled !== undefined && document.getElementById('settingNotifications')) {
-          document.getElementById('settingNotifications').checked = s.notifications_enabled;
-        }
-        if (s.notification_sound !== undefined && document.getElementById('settingNotificationSound')) {
-          document.getElementById('settingNotificationSound').checked = s.notification_sound;
-        }
-        if (s.geolocation_policy !== undefined && document.getElementById('settingGeolocation')) {
-          document.getElementById('settingGeolocation').value = s.geolocation_policy;
-        }
-        if (s.microphone_policy !== undefined && document.getElementById('settingMicrophone')) {
-          document.getElementById('settingMicrophone').value = s.microphone_policy;
-        }
-        if (s.camera_policy !== undefined && document.getElementById('settingCamera')) {
-          document.getElementById('settingCamera').value = s.camera_policy;
-        }
         // Toolbars visibility
         if (s.show_fav_bar !== undefined && document.getElementById('settingShowFavBar')) {
           document.getElementById('settingShowFavBar').checked = s.show_fav_bar;
@@ -19966,58 +19929,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         await window.etherx?.db?.clearHistorySince?.(cutoff);
         loadIndexHistory(document.getElementById('histSearchInputIdx')?.value || '');
         alert(`Povijest obrisana za zadnjih ${hours}h.`);
-      });
-
-      // ── Cookies ──────────────────────────────────────────────────────────────
-      document.getElementById('settingCookiePolicy')?.addEventListener('change', async (e) => {
-        await saveSettings({ cookie_policy: e.target.value });
-      });
-
-      document.getElementById('btnClearAllCookies')?.addEventListener('click', async () => {
-        if (confirm('Obrisati sve kolačiće? Bit ćeš odjavljen sa svih stranica.')) {
-          await window.etherx?.cookies?.clearAll?.();
-          alert('Kolačići obrisani.');
-        }
-      });
-
-      // ── Permissions ──────────────────────────────────────────────────────────
-      document.getElementById('settingNotifications')?.addEventListener('change', async (e) => {
-        await saveSettings({ notifications_enabled: e.target.checked });
-      });
-
-      document.getElementById('settingNotificationSound')?.addEventListener('change', async (e) => {
-        await saveSettings({ notification_sound: e.target.checked });
-      });
-
-      document.getElementById('settingGeolocation')?.addEventListener('change', async (e) => {
-        await saveSettings({ geolocation_policy: e.target.value });
-      });
-
-      document.getElementById('settingMicrophone')?.addEventListener('change', async (e) => {
-        await saveSettings({ microphone_policy: e.target.value });
-      });
-
-      document.getElementById('settingCamera')?.addEventListener('change', async (e) => {
-        await saveSettings({ camera_policy: e.target.value });
-      });
-
-      // ── Cache ────────────────────────────────────────────────────────────────
-      (async () => {
-        const size = await window.etherx?.cache?.getSize?.() || 0;
-        const mb = (size / 1024 / 1024).toFixed(2);
-        const el = document.getElementById('cacheSize');
-        if (el) el.textContent = `${mb} MB`;
-      })();
-
-      document.getElementById('btnClearCache')?.addEventListener('click', async () => {
-        if (confirm('Očistiti sav cache? Stranice će se morati ponovo učitati.')) {
-          await window.etherx?.cache?.clear?.();
-          alert('Cache očišćen.');
-          const size = await window.etherx?.cache?.getSize?.() || 0;
-          const mb = (size / 1024 / 1024).toFixed(2);
-          const el = document.getElementById('cacheSize');
-          if (el) el.textContent = `${mb} MB`;
-        }
       });
 
       // DNS over HTTPS settings are now handled by universal data-setting system
@@ -20629,7 +20540,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       }
 
       // Update SW status when settings panel opens (also updates on flags tab click)
-      document.getElementById('settingsBtn')?.addEventListener('click', () => {
+      document.getElementById('btnSettings')?.addEventListener('click', () => {
         setTimeout(updateServiceWorkerStatus, 300);
         setTimeout(detectGPU, 300);
       });
