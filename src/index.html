@@ -8442,7 +8442,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.160</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.161</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8819,7 +8819,7 @@
         <div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
           <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.160</span></div>
+              id="helpVersionNum2">2.4.161</span></div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
           </div>
         </div>
@@ -10643,6 +10643,34 @@
     }
 
     const origGetElementById = document.getElementById;
+    const MISSING_DOM_FALLBACK_IDS = new Set();
+
+    function shouldCreateMissingFallback(id) {
+      if (!id || typeof id !== 'string') return false;
+      // Never fake browser frame nodes; those must stay real.
+      if (id === 'browseFrame' || id === 'browseFrameWeb' || id.startsWith('browseFrame_')) return false;
+      return true;
+    }
+
+    function getOrCreateMissingElement(id) {
+      if (!shouldCreateMissingFallback(id)) return null;
+      let el = origGetElementById.call(document, id);
+      if (el) return el;
+
+      el = document.createElement('div');
+      el.id = id;
+      el.dataset.missingFallback = '1';
+      el.setAttribute('aria-hidden', 'true');
+      el.style.cssText = 'display:none !important; visibility:hidden !important; pointer-events:none !important;';
+      (document.body || document.documentElement).appendChild(el);
+
+      if (!MISSING_DOM_FALLBACK_IDS.has(id)) {
+        MISSING_DOM_FALLBACK_IDS.add(id);
+        try { console.warn('[EtherX] Missing DOM id fallback created:', id); } catch (_) { }
+      }
+      return el;
+    }
+
     document.getElementById = function (id) {
       if (id === 'browseFrame' && window.electronWebview) {
         if (STATE && STATE.activeTabId) {
@@ -10650,7 +10678,12 @@
           if (activeWv) return activeWv;
         }
       }
-      return origGetElementById.call(document, id);
+
+      const found = origGetElementById.call(document, id);
+      if (found) return found;
+
+      // Guard against hard crashes when an expected node was removed/renamed.
+      return getOrCreateMissingElement(id);
     };
     const DB = {
       getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
@@ -11191,9 +11224,45 @@
     const getFrame = () => document.getElementById('browseFrame');
     const frame = new Proxy({}, { get: (t, p) => typeof getFrame()[p] === "function" ? getFrame()[p].bind(getFrame()) : getFrame()[p], set: (t, p, v) => { getFrame()[p] = v; return true; } });
     const ntp = document.getElementById('ntpPage');
+    const QUICK_SITE_ALIASES = {
+      google: 'https://www.google.com',
+      youtube: 'https://www.youtube.com',
+      yt: 'https://www.youtube.com',
+      gmail: 'https://mail.google.com',
+      tiktok: 'https://www.tiktok.com',
+      instagram: 'https://www.instagram.com',
+      facebook: 'https://www.facebook.com',
+      x: 'https://x.com',
+      twitter: 'https://x.com',
+      github: 'https://github.com',
+      reddit: 'https://www.reddit.com',
+      wikipedia: 'https://www.wikipedia.org',
+      wiki: 'https://www.wikipedia.org',
+      whatsapp: 'https://web.whatsapp.com',
+      telegram: 'https://web.telegram.org',
+      linkedin: 'https://www.linkedin.com',
+      netflix: 'https://www.netflix.com',
+      amazon: 'https://www.amazon.com'
+    };
+
+    function resolveQuickSiteAlias(raw) {
+      if (!raw || typeof raw !== 'string') return '';
+      const q = raw.trim().toLowerCase();
+      if (!q || q.includes(' ') || q.includes('.') || q.includes('/')) return '';
+      if (!/^[a-z0-9-]+$/.test(q)) return '';
+      return QUICK_SITE_ALIASES[q] || '';
+    }
+
     function normalizeUrl(raw) {
       if (!raw || typeof raw !== 'string') return '';
       raw = raw.trim(); if (!raw) return '';
+
+      // Known one-word website shortcuts: tiktok, youtube, github, ...
+      if (DB.getSettings().quickWebSearch !== false) {
+        const quickSite = resolveQuickSiteAlias(raw);
+        if (quickSite) return quickSite;
+      }
+
       if (/^0x[0-9a-fA-F]{40}$/.test(raw)) return 'https://etherscan.io/address/' + raw;
       if (/\.eth$/i.test(raw)) return 'https://app.ens.domains/name/' + raw;
       if (/^[a-z][a-z0-9+\-.]*:\/\//i.test(raw)) return raw;
