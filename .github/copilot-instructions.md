@@ -9,7 +9,7 @@ EtherX is a **dual-mode Electron + Web browser** built with Electron v33 and Nod
 ### Process Boundary (Critical)
 
 ```
-Main Process (main.js)         ←IPC→   Renderer (browser.html + browser.js)
+Main Process (main.js)         ←IPC→   Renderer (src/index.html)
   └─ src/main/*.js modules              └─ window.etherx.*  (via preload.js)
        database.js (SQLite)             └─ window.electronAPI (legacy compat)
        ai.js
@@ -24,14 +24,8 @@ Main Process (main.js)         ←IPC→   Renderer (browser.html + browser.js)
 
 ### Dual-Mode Rendering
 
-`browser.js` detects Electron at runtime:
-
-```js
-window.electronWebview = typeof window.electronAPI !== "undefined";
-```
-
-- **Electron mode**: uses `<webview>` tag with full navigation events.
-- **Web mode**: falls back to `<iframe id="browseFrameWeb">`, renamed to `browseFrame` at runtime. Always code against `#browseFrame` — the swap is transparent.
+- **Electron mode**: `src/index.html` uses `<webview>` with full navigation events.
+- **Web mode**: `src/index.html` falls back to `<iframe id="browseFrameWeb">`, renamed to `browseFrame` at runtime. Always code against `#browseFrame`.
 
 ### Data Persistence
 
@@ -118,7 +112,7 @@ Croatian (`hr`) is the default language. All UI strings live in `src/main/i18n.j
 | ----------------------------- | ---------------------------------------------------------------- |
 | `main.js`                     | Electron entry: window creation, IPC handlers, module wiring     |
 | `preload.js`                  | Full IPC surface exposed to renderer as `window.etherx`          |
-| `src/renderer/js/browser.js`  | ~5100-line renderer: tabs, navigation, UI, all user interactions |
+| `src/index.html`              | Main renderer UI: tabs, navigation, settings, and browser logic  |
 | `src/main/database.js`        | SQLite schema + versioned migrations                             |
 | `src/main/passwordManager.js` | AES-256-GCM vault, Bitwarden-compatible export                   |
 | `src/main/ai.js`              | Phishing detection, smart search, Gemini summarization           |

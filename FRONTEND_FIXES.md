@@ -66,10 +66,11 @@ window._recheckBotDetection(); // Ponovi bot detection
 
 ## 📦 Izmijenjene datoteke
 
-1. **`src/renderer/js/browser.js`**
-   - Location consent overlay logic (linije ~5711-5900)
-   - Camera ID storage i handling (linije ~1801-1900)
-   - Bot detection refactoring (linije ~5350-5390)
+1. **Legacy renderer (`src/renderer/js/browser.js`)**
+  - Povijesna referenca; fajl je uklonjen nakon konsolidacije na `src/index.html`
+  - Location consent overlay logic
+  - Camera ID storage i handling
+  - Bot detection refactoring
 
 2. **`TEST_FEATURES.md`** ⭐ NOVO
    - Kompletan test guide sa svim komandama

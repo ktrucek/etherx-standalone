@@ -9,8 +9,7 @@
 ### 1. Maknut proxy.php i n8n.kriptoentuzijasti.io
 
 - `src/index.html` — sve reference na `proxy.php` zamijenjene direktnim URL-om
-- `src/renderer/browser.html` — isto
-- `src/renderer/js/browser.js` — isto
+- stari `src/renderer/browser.html` i `src/renderer/js/browser.js` više se ne koriste
 - Download link `n8n.kriptoentuzijasti.io/download.html` → `ktrucek.github.io/etherx-standalone/src/index.html`
 - Commitano: `"refactor: remove proxy.php and n8n.kriptoentuzijasti.io references"`
 

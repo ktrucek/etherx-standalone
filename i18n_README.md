@@ -298,7 +298,7 @@ Kada integriraš sve u svoje production fajlove:
 1. ✅ `src/main/i18n.js` - već postoji, ostavi ga
 2. ✅ `src/main/i18n-extended.js` - kopiraj novi fajl
 3. ✅ `src/main/i18n-loader.js` - kopiraj novi fajl
-4. ✅ `src/renderer/browser.html` - dodaj `<script>` tagove i `data-i18n` atribute
+4. ✅ `src/index.html` - dodaj `<script>` tagove i `data-i18n` atribute
 5. ✅ `src/renderer/settings.html` - dodaj `<script>` tagove i `data-i18n` atribute
 
 ## 🐛 Debugging
