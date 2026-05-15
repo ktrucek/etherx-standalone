@@ -5903,8 +5903,7 @@
         <div class="di disabled" id="mi-remove-from-set" style="opacity:.4;cursor:default"><span
             class="icon">🪟</span>Remove Window from Set</div>
         <div class="dsep"></div>
-        <div class="di disabled" style="opacity:.4;cursor:default"><span class="icon">📱</span>Move to iPad od:
-          Kristijan</div>
+
         <div class="dsep"></div>
         <div class="di" id="mi-arrange-tabs"><span class="icon">⇅</span>Arrange Tabs By<span class="sc"
             style="font-size:10px">▶</span></div>
@@ -8421,7 +8420,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.144</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.146</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8796,7 +8795,7 @@
           <div>
             <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
             <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                id="helpVersionNum2">2.4.144</span></div>
+                id="helpVersionNum2">2.4.146</span></div>
             <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
             </div>
           </div>
@@ -19883,8 +19882,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const blockedEl = document.getElementById('malwareBlockedCount');
         if (countEl && stats.domains > 0) countEl.textContent = stats.domains;
         if (blockedEl) blockedEl.textContent = stats.blocked;
-        // Refresh count every 30s while settings panel is open
-        setInterval(async () => {
+        // Refresh count every 30s while settings panel is open — use stored ID to avoid leak
+        if (window._malwareStatsInterval) clearInterval(window._malwareStatsInterval);
+        window._malwareStatsInterval = setInterval(async () => {
           const s2 = await window.etherx.security.getMalwareStats().catch(() => null);
           if (s2 && blockedEl) blockedEl.textContent = s2.blocked;
         }, 30000);
@@ -19991,7 +19991,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       }
 
       // Stored data for one-click update
-      window.window._pendingUpdateAsset = null;
+      window._pendingUpdateAsset = null;
 
 
       // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────

@@ -5,6 +5,19 @@ Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 
 <!-- GitHub token se NE sprema u fajlove — upiši ga u Settings → Developer -->
 
+## 📥 Download & Installation
+
+**Download:** https://etherx.io/browser.html
+
+**Platforms:**
+- 🍎 macOS (arm64 DMG, x64 ZIP)
+- 🪟 Windows (EXE installer)
+- 🐧 Linux (AppImage)
+
+**⚠️ macOS Users:** If you see **"EtherX Browser is damaged"** message, see [macOS Installation Guide](INSTALL_MACOS.md) for quick fix.
+
+---
+
 ## Što je uključeno
 
 ✅ Sve browser funkcije (kartice, bookmarks, povijest, itd.)  
