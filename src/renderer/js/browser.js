@@ -7200,10 +7200,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   // ── State ──
   let scanActive = false;
   let scanInterval = null;
-  let collectedMessages = []; // { user, text, id }
-  let selectedMsgIds = new Set();
-  let isGenerating = false;
-  const STORAGE_KEY = "ex_tkai_cfg";
+  let autoScanActive = false; // New state for auto-scanning
+  let autoScanInterval = null; // New interval for auto-scanning check
+  let collectedMessages = []; // { user, text, id, type, translatedText, translatedLang }
 
   // ── DOM refs ──
   const messagesEl = document.getElementById("tkaiMessages");
@@ -7232,6 +7231,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       if (contextEl && s.context) contextEl.value = s.context;
       if (customPromptEl && s.customPrompt)
         customPromptEl.value = s.customPrompt;
+      if (typeof s.autoScanActive === "boolean")
+        autoScanActive = s.autoScanActive; // Load autoScanActive
     } catch (e) {}
   }
   function saveCfg() {
@@ -7244,6 +7245,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           count: countEl?.value,
           context: contextEl?.value,
           customPrompt: customPromptEl?.value,
+          autoScanActive: autoScanActive, // New line
         }),
       );
     } catch (e) {}
@@ -7303,10 +7305,30 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const userEl = el.querySelector('[data-e2e="user-name"], .user-name, [class*="Username"], [class*="user-name"], .owner-name, [class*="AuthorName"], strong');
       // Try various selectors for message text
       const textEl = el.querySelector('[data-e2e="message-text"], [class*="comment-text"], [class*="message-content"], [class*="CommentText"], [class*="chat-content"], p, span:last-child');
+      let text = '';
+      if (textEl) {
+        // Filter out emojis that might be represented as [thumb] or similar
+        text = textEl.textContent.trim().replace(/\s*\[(thumb|image|emoji)\]\s*/gi, '');
+      } else {
+        text = el.textContent.trim().slice(0, 200);
+      }
       const user = userEl ? userEl.textContent.trim() : ('Korisnik ' + (i + 1));
-      const text = textEl ? textEl.textContent.trim() : el.textContent.trim().slice(0, 200);
+      // Further clean up the text from common emoji/media placeholders
+      text = text.replace(/\s*\[(thumb|image|emoji|video|gif)\]\s*/gi, '').trim();
+
+      // Determine message type (gift, subscriber, or chat)
+      let messageType = 'chat'; // Default to chat message
+      if (el.querySelector('[data-e2e*="gift"], [class*="GiftMessage"], [class*="GiftEvent"]')) {
+        messageType = 'gift';
+      } else if (el.querySelector('[data-e2e*="subscribe"], [class*="SubscribeMessage"], [class*="SubscriptionEvent"]')) {
+        messageType = 'subscriber';
+      } else if (el.querySelector('[data-e2e*="join"], [class*="JoinMessage"], [class*="JoinEvent"]')) {
+        // Assuming a 'join' event type for new users entering the stream
+        messageType = 'join';
+      }
+
       if (text && text.length > 1 && text !== user) {
-        results.push({ user: user.slice(0, 40), text: text.slice(0, 300), id: i + '_' + Date.now() });
+        results.push({ user: user.slice(0, 40), text: text.slice(0, 300), id: i + '_' + Date.now(), type: messageType });
       }
     });
     return JSON.stringify(results);
