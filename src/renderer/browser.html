@@ -8726,6 +8726,21 @@
               </div>
               <div class="s-row">
                 <div class="s-row-left" style="flex:0 0 auto">
+                  <div class="s-row-label" style="font-weight:400">Provider</div>
+                </div>
+                <select class="s-select" id="settingsTranslateProvider">
+                  <option value="__main__">Isti kao glavni AI provider</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI (GPT)</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
+                  <option value="groq">Groq</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="ollama">Ollama</option>
+                  <option value="local">Local / OpenAI-compatible</option>
+                </select>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left" style="flex:0 0 auto">
                   <div class="s-row-label" style="font-weight:400">Model</div>
                 </div>
                 <select class="s-select" id="settingsTranslateModel">
@@ -8936,7 +8951,7 @@
 
           <!-- Update result (hidden by default) -->
           <div id="updResultBox"
-            style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">
+            style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;max-width:920px;margin:0 auto 16px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
               <div>
                 <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel"
@@ -10029,6 +10044,7 @@
     <div class="ctx-sep"></div>
     <!-- Clipboard -->
     <div class="ctx-item" id="ctx-copy-text">📋 Kopiraj</div>
+    <div class="ctx-item" id="ctx-send-tiktok-ai" style="display:none">🎵 Pošalji u TikTok Chat AI</div>
     <div class="ctx-item" id="ctx-paste-text">📌 Zalijepi</div>
     <div class="ctx-sep"></div>
     <!-- Page / general items -->
@@ -12494,6 +12510,7 @@
           if (contextEl && saved.context) contextEl.value = saved.context;
           if (customPromptEl && saved.customPrompt) customPromptEl.value = saved.customPrompt;
           if (autoTranslateEl) autoTranslateEl.checked = saved.autoTranslate !== false;
+          if (typeof saved.holdL === 'boolean') holdLActive = saved.holdL;
         } catch (e) { }
       }
       function saveCfg() {
@@ -12504,7 +12521,8 @@
             autoTranslate: autoTranslateEl?.checked !== false,
             count: countEl?.value,
             context: contextEl?.value,
-            customPrompt: customPromptEl?.value
+            customPrompt: customPromptEl?.value,
+            holdL: holdLActive === true
           }));
         } catch (e) { }
       }
@@ -12562,6 +12580,7 @@
         holdLBtn.style.background = holdLActive
           ? 'linear-gradient(135deg,#1f8f4a,#136534)'
           : '';
+        holdLBtn.style.boxShadow = holdLActive ? '0 0 0 1px rgba(31,143,74,.55) inset' : '';
       }
       async function stopHoldL() {
         holdLActive = false;
@@ -12569,24 +12588,32 @@
         holdLInterval = null;
         await sendLKeyEvent('keyup');
         updateHoldLButton();
+        saveCfg();
       }
       async function startHoldL() {
+        if (holdLInterval) clearInterval(holdLInterval);
+        holdLInterval = null;
         const tab = getActiveTab();
         if (!tab?.url || !tab.url.includes('tiktok.com')) {
-          showToast('⚠️ Otvori TikTok stranicu za L Hold opciju');
+          holdLActive = true;
+          updateHoldLButton();
+          saveCfg();
+          setStatus('⌨️ L Hold ON (pauza) — otvori TikTok tab za slanje tipke');
           return;
         }
         holdLActive = true;
         updateHoldLButton();
+        saveCfg();
+        setStatus('⌨️ L Hold aktivan');
         await sendLKeyEvent('keydown');
         holdLInterval = setInterval(async () => {
           const currentTab = getActiveTab();
           if (!holdLActive) return;
           if (!currentTab?.url || !currentTab.url.includes('tiktok.com')) {
-            await stopHoldL();
-            showToast('ℹ️ L Hold ugašen jer aktivni tab nije TikTok');
+            setStatus('⌨️ L Hold ON (pauza) — vrati se na TikTok tab');
             return;
           }
+          setStatus('⌨️ L Hold aktivan');
           await sendLKeyEvent('keydown');
         }, 120);
       }
@@ -12672,6 +12699,22 @@
           repliesEl.appendChild(card);
         });
       }
+      window.pushTextToTikTokAI = async function (rawText, source = 'Manual') {
+        const text = String(rawText || '').replace(/\s+/g, ' ').trim().slice(0, 380);
+        if (!text) return false;
+        const user = source || 'Manual';
+        const id = 'ctx:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
+        collectedMessages.push({ user, text, id, ts: Date.now(), type: 'chat' });
+        if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
+        const targetLang = langEl?.value || 'hr';
+        if (autoTranslateEl?.checked !== false && targetLang !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, targetLang);
+        }
+        if (panel && !panel.classList.contains('open')) panel.classList.add('open');
+        renderMessages();
+        showToast('🎵 Tekst poslan u TikTok Chat AI');
+        return true;
+      };
       async function translateViaGoogle(text, targetLang) {
         const key = targetLang + '|' + text;
         if (translateCache.has(key)) return translateCache.get(key);
@@ -13042,10 +13085,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       clearBtn?.addEventListener('click', clearConversation);
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', async () => {
         stopScanning();
-        await stopHoldL();
       });
       document.addEventListener('keydown', onTikTokHoldLShortcut);
       updateHoldLButton();
+      if (holdLActive) startHoldL().catch(() => { });
 
       // ── Draggable panel ──────────────────────────────────────────────────────
       (function makePanelDraggable() {
@@ -13986,13 +14029,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       // Determine model to use
       const panelModelSel = document.getElementById('aiTranslateModel')?.value || '__settings__';
       const settingsModelSel = document.getElementById('settingsTranslateModel')?.value || '__main__';
+      const settingsProviderSel = document.getElementById('settingsTranslateProvider')?.value || '__main__';
       let translateModel;
+      let translateProvider;
       if (panelModelSel !== '__settings__') {
         translateModel = panelModelSel;
       } else if (settingsModelSel !== '__main__') {
         translateModel = settingsModelSel;
       } else {
         translateModel = getSelectedAiModel();
+      }
+      if (settingsProviderSel !== '__main__') {
+        translateProvider = settingsProviderSel;
+      } else {
+        translateProvider = getSelectedAiProvider();
       }
 
       // Max chars
@@ -14011,10 +14061,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           text = await window.safeExecuteJS(wv, 'document.body?.innerText?.slice(0,8000)||""').catch(() => tab.title || '');
         }
         const trimmed = text.slice(0, maxChars);
-        if (infoEl) infoEl.textContent = `📝 ${trimmed.length} znakova · 🤖 ${translateModel}`;
+        if (infoEl) infoEl.textContent = `📝 ${trimmed.length} znakova · 🤖 ${translateProvider}/${translateModel}`;
 
         const prompt = `Prevedi sljedeći tekst na jezik: "${langName}" (${lang}). Vrati SAMO prijevod, bez objašnjenja, naslova ili uvodne rečenice.\n\n${trimmed}`;
         const translated = await runAiTextRequest(prompt, {
+          provider: translateProvider,
           model: translateModel,
           maxOutputTokens: 2000,
           systemPrompt: `Ti si profesionalni prevoditelj. Prevedi tekst precizno i prirodno na zadani jezik.`
@@ -16397,6 +16448,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       const hasSel = !!_ctxSelectionText;
       const ctxCopyTextEl = document.getElementById('ctx-copy-text');
       if (ctxCopyTextEl) ctxCopyTextEl.style.display = hasSel ? '' : 'none';
+      const onTikTok = !!(getActiveTab()?.url && getActiveTab().url.includes('tiktok.com'));
+      const ctxSendTikTokEl = document.getElementById('ctx-send-tiktok-ai');
+      if (ctxSendTikTokEl) ctxSendTikTokEl.style.display = (onTikTok && hasSel) ? '' : 'none';
       const ctxPasteTextEl = document.getElementById('ctx-paste-text');
       if (ctxPasteTextEl) ctxPasteTextEl.style.display = _ctxIsEditable ? '' : 'none';
       // Show/hide reverse image search items
@@ -16522,6 +16576,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       const sel = _ctxSelectionText || window.getSelection()?.toString();
       if (sel) { navigator.clipboard.writeText(sel).then(() => showToast('📋 Kopirano')); }
       else { document.execCommand('copy'); }
+    });
+    document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', () => {
+      const sel = String(_ctxSelectionText || window.getSelection()?.toString() || '').trim();
+      if (!sel) {
+        showToast('⚠️ Nema označenog teksta');
+        return;
+      }
+      const tab = getActiveTab();
+      if (!tab?.url || !tab.url.includes('tiktok.com')) {
+        showToast('⚠️ Ova opcija radi na TikTok stranici');
+        return;
+      }
+      if (typeof window.pushTextToTikTokAI !== 'function') {
+        showToast('⚠️ TikTok Chat AI nije spreman');
+        return;
+      }
+      window.pushTextToTikTokAI(sel, 'Desni klik');
+      closeCtxMenu();
     });
     document.getElementById('ctx-paste-text').addEventListener('click', async () => {
       try {
@@ -17658,6 +17730,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       const savedProvider = cfg.aiProvider || inferAiProviderFromModel(cfg.aiModel);
       if (providerSel) providerSel.value = savedProvider;
       if (cfg.aiModel) modelSel.value = cfg.aiModel;
+      if (cfg.translateAiProvider) { const el = document.getElementById('settingsTranslateProvider'); if (el) el.value = cfg.translateAiProvider; }
       if (cfg.translateAiModel) { const el = document.getElementById('settingsTranslateModel'); if (el) el.value = cfg.translateAiModel; }
       if (cfg.translateMaxChars) { const el = document.getElementById('settingsTranslateMaxChars'); if (el) el.value = cfg.translateMaxChars; }
       if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
@@ -17818,6 +17891,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || 'http://localhost:11434/v1');
         DB.saveSetting('aiProvider', p);
         DB.saveSetting('aiModel', modelSel.value);
+        DB.saveSetting('translateAiProvider', document.getElementById('settingsTranslateProvider')?.value || '__main__');
         DB.saveSetting('translateAiModel', document.getElementById('settingsTranslateModel')?.value || '__main__');
         DB.saveSetting('translateMaxChars', document.getElementById('settingsTranslateMaxChars')?.value || '2000');
         DB.saveSetting('geminiApiKey', gKey);

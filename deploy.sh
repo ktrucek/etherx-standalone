@@ -183,12 +183,8 @@ if [[ "$SYNC_BROWSER_HTML" == true ]]; then
     info "Syncing $TARGET_BROWSER_HTML ← src/index.html"
     cp -f "src/index.html" "$TARGET_BROWSER_HTML"
     success "$TARGET_BROWSER_HTML synced from src/index.html"
-  elif [[ -f "browser.html" ]]; then
-    warn "$TARGET_BROWSER_HTML not found; syncing legacy browser.html in repo root"
-    cp -f "src/index.html" "browser.html"
-    success "browser.html synced from src/index.html"
   else
-    warn "No browser.html target found (expected $TARGET_BROWSER_HTML or browser.html) — skipping sync"
+    warn "No browser.html target found at $TARGET_BROWSER_HTML — skipping sync"
   fi
 else
   info "Skipping browser.html sync (use --sync-browser-html to force sync from src/index.html)"
