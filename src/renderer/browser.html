@@ -4679,9 +4679,13 @@
       left: auto;
       top: auto;
       height: 580px;
+      min-width: 520px;
+      min-height: 430px;
       border-radius: 10px 0 0 10px;
       box-shadow: -6px 6px 32px rgba(0, 0, 0, .55);
       z-index: 9999;
+      resize: both;
+      overflow: hidden;
     }
 
     #tiktokAIPanel .panel-header {
@@ -4774,15 +4778,31 @@
     .tkai-main {
       display: flex;
       flex: 1;
+      position: relative;
       overflow: hidden
     }
 
     .tkai-chat-col {
-      width: 48%;
+      width: var(--tkai-chat-col-width, 48%);
+      min-width: 200px;
+      flex: none;
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden
+    }
+
+    .tkai-splitter {
+      width: 8px;
+      flex: none;
+      cursor: col-resize;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02));
+      border-left: 1px solid rgba(255, 255, 255, .04);
+      border-right: 1px solid rgba(0, 0, 0, .25);
+    }
+
+    .tkai-splitter:hover {
+      background: linear-gradient(180deg, rgba(102, 126, 234, .3), rgba(102, 126, 234, .15));
     }
 
     .tkai-reply-col {
@@ -4852,6 +4872,47 @@
     .tkai-msg.selected {
       border-color: var(--accent);
       background: rgba(102, 126, 234, .15)
+    }
+
+    .tkai-gift-gallery {
+      max-height: 132px;
+      min-height: 78px;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255, 211, 122, .06), rgba(90, 145, 220, .04));
+    }
+
+    .tkai-gift-gallery.collapsed {
+      display: none;
+    }
+
+    .tkai-gift-item {
+      background: rgba(255, 213, 132, .12);
+      border: 1px solid rgba(255, 213, 132, .28);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: #ffe7bc;
+    }
+
+    .tkai-gift-item.sub {
+      background: rgba(120, 200, 255, .14);
+      border-color: rgba(150, 220, 255, .3);
+      color: #d6f2ff;
+    }
+
+    .tkai-gift-item .g-user {
+      font-weight: 700;
+      color: #fff8e6;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
 
     .tkai-reply-card {
@@ -9147,8 +9208,23 @@
             </select>
           </div>
           <div class="tkai-cfg-row">
-            <span class="tkai-cfg-label">Jezik:</span>
-            <select class="tkai-cfg-select" id="tkaiLang">
+            <span class="tkai-cfg-label">Jezik čitanja:</span>
+            <select class="tkai-cfg-select" id="tkaiReadLang">
+              <option value="hr">Hrvatski</option>
+              <option value="en">English</option>
+              <option value="sr">Srpski</option>
+              <option value="bs">Bosanski</option>
+              <option value="de">Deutsch</option>
+              <option value="it">Italiano</option>
+              <option value="es">Español</option>
+              <option value="fr">Français</option>
+              <option value="id">Indonesian</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
+          <div class="tkai-cfg-row">
+            <span class="tkai-cfg-label">Jezik pisanja:</span>
+            <select class="tkai-cfg-select" id="tkaiReplyLang">
               <option value="hr">Hrvatski</option>
               <option value="en">English</option>
               <option value="sr">Srpski</option>
@@ -9171,6 +9247,7 @@
           <div class="tkai-cfg-row">
             <span class="tkai-cfg-label">Br. odgovora:</span>
             <select class="tkai-cfg-select" id="tkaiCount">
+              <option value="1">1</option>
               <option value="2">2</option>
               <option value="3" selected>3</option>
               <option value="4">4</option>
@@ -9199,7 +9276,18 @@
             <div class="tkai-empty">Klikni "Skeniranje ON" dok si<br>na TikTok Live stranici.<br><br>AI će čitati poruke
               chata<br>i predlagati odgovore.</div>
           </div>
+          <div class="tkai-col-header" style="border-top:1px solid var(--border)">
+            <span>🎁 Gift Galerija</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="tkaiGiftCount" style="font-size:9px;color:var(--text3)"></span>
+              <button id="tkaiGiftToggle" class="tkai-gen-btn" style="font-size:10px;padding:2px 6px">Sakrij</button>
+            </div>
+          </div>
+          <div class="tkai-gift-gallery" id="tkaiGiftGallery">
+            <div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>
+          </div>
         </div>
+        <div class="tkai-splitter" id="tkaiColSplitter" title="Povuci za širinu kolona"></div>
         <div class="tkai-reply-col">
           <div class="tkai-col-header">
             <span>🤖 AI Prijedlozi</span>
@@ -12491,8 +12579,15 @@
       const clearBtn = document.getElementById('tkaiClearBtn');
       const statusEl = document.getElementById('tkaiScanStatus');
       const msgCountEl = document.getElementById('tkaiMsgCount');
+      const giftGalleryEl = document.getElementById('tkaiGiftGallery');
+      const giftCountEl = document.getElementById('tkaiGiftCount');
+      const giftToggleBtn = document.getElementById('tkaiGiftToggle');
+      const splitterEl = document.getElementById('tkaiColSplitter');
+      const mainEl = panel.querySelector('.tkai-main');
+      const chatColEl = panel.querySelector('.tkai-chat-col');
       const toneEl = document.getElementById('tkaiTone');
-      const langEl = document.getElementById('tkaiLang');
+      const readLangEl = document.getElementById('tkaiReadLang');
+      const replyLangEl = document.getElementById('tkaiReplyLang');
       const autoTranslateEl = document.getElementById('tkaiAutoTranslate');
       const countEl = document.getElementById('tkaiCount');
       const contextEl = document.getElementById('tkaiContext');
@@ -12505,24 +12600,36 @@
         try {
           const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
           if (toneEl && saved.tone) toneEl.value = saved.tone;
-          if (langEl && saved.lang) langEl.value = saved.lang;
+          if (readLangEl && (saved.readLang || saved.lang)) readLangEl.value = saved.readLang || saved.lang;
+          if (replyLangEl && (saved.replyLang || saved.lang)) replyLangEl.value = saved.replyLang || saved.lang;
           if (countEl && saved.count) countEl.value = saved.count;
           if (contextEl && saved.context) contextEl.value = saved.context;
           if (customPromptEl && saved.customPrompt) customPromptEl.value = saved.customPrompt;
           if (autoTranslateEl) autoTranslateEl.checked = saved.autoTranslate !== false;
           if (typeof saved.holdL === 'boolean') holdLActive = saved.holdL;
+          if (giftGalleryEl && saved.giftCollapsed) giftGalleryEl.classList.add('collapsed');
+          if (saved.chatColWidth && panel?.style) {
+            panel.style.setProperty('--tkai-chat-col-width', saved.chatColWidth);
+          }
         } catch (e) { }
+        if (giftToggleBtn) {
+          giftToggleBtn.textContent = giftGalleryEl?.classList.contains('collapsed') ? 'Prikaži' : 'Sakrij';
+        }
       }
       function saveCfg() {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify({
             tone: toneEl?.value,
-            lang: langEl?.value,
+            lang: replyLangEl?.value,
+            readLang: readLangEl?.value,
+            replyLang: replyLangEl?.value,
             autoTranslate: autoTranslateEl?.checked !== false,
             count: countEl?.value,
             context: contextEl?.value,
             customPrompt: customPromptEl?.value,
-            holdL: holdLActive === true
+            holdL: holdLActive === true,
+            giftCollapsed: !!giftGalleryEl?.classList.contains('collapsed'),
+            chatColWidth: panel?.style?.getPropertyValue('--tkai-chat-col-width') || ''
           }));
         } catch (e) { }
       }
@@ -12636,20 +12743,44 @@
         await startHoldL();
         if (holdLActive) showToast('⌨️ L Hold uključen (Ctrl+Shift+L)');
       }
+      function renderGiftGallery() {
+        if (!giftGalleryEl) return;
+        const giftEvents = collectedMessages
+          .filter(message => message && (message.type === 'gift' || message.type === 'subscriber' || /gift|rose|poklon|dar|sub|subscriber|pretplat/i.test(String(message.text || '').toLowerCase())))
+          .slice(-15)
+          .reverse();
+        if (!giftEvents.length) {
+          giftGalleryEl.innerHTML = '<div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>';
+          if (giftCountEl) giftCountEl.textContent = '';
+          return;
+        }
+        giftGalleryEl.innerHTML = '';
+        giftEvents.forEach((message) => {
+          const row = document.createElement('div');
+          const isSub = message.type === 'subscriber' || /sub|subscriber|pretplat/i.test(String(message.text || '').toLowerCase());
+          row.className = 'tkai-gift-item' + (isSub ? ' sub' : '');
+          const icon = isSub ? '⭐' : '🎁';
+          row.innerHTML = '<div class="g-user"><span>' + icon + '</span><span>' + escHtml(message.user) + '</span></div>'
+            + '<div>' + escHtml(message.text) + '</div>';
+          giftGalleryEl.appendChild(row);
+        });
+        if (giftCountEl) giftCountEl.textContent = giftEvents.length + ' prikaz';
+      }
       function renderMessages() {
         if (!messagesEl) return;
         if (!collectedMessages.length) {
           messagesEl.innerHTML = '<div class="tkai-empty">Nema poruka.<br>Klikni "Skeniranje ON" dok si<br>na TikTok Live.</div>';
           if (msgCountEl) msgCountEl.textContent = '';
+          renderGiftGallery();
           return;
         }
         messagesEl.innerHTML = '';
-        const targetLang = langEl?.value || 'hr';
-        const showTranslated = autoTranslateEl?.checked !== false && targetLang !== 'auto';
+        const readLang = readLangEl?.value || 'hr';
+        const showTranslated = autoTranslateEl?.checked !== false && readLang !== 'auto';
         collectedMessages.slice(-30).forEach((message) => {
           const div = document.createElement('div');
           div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
-          const translated = showTranslated && message.translatedLang === targetLang && message.translatedText
+          const translated = showTranslated && message.translatedLang === readLang && message.translatedText
             ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff">' + escHtml(message.translatedText) + '</div>'
             : '';
           const original = translated
@@ -12666,6 +12797,7 @@
         });
         messagesEl.scrollTop = messagesEl.scrollHeight;
         if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
+        renderGiftGallery();
       }
       function renderReplies(suggestions) {
         if (!repliesEl) return;
@@ -12706,9 +12838,9 @@
         const id = 'ctx:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
         collectedMessages.push({ user, text, id, ts: Date.now(), type: 'chat' });
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
-        const targetLang = langEl?.value || 'hr';
-        if (autoTranslateEl?.checked !== false && targetLang !== 'auto') {
-          await translateMessagesInPlace(collectedMessages, targetLang);
+        const readLang = readLangEl?.value || 'hr';
+        if (autoTranslateEl?.checked !== false && readLang !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, readLang);
         }
         if (panel && !panel.classList.contains('open')) panel.classList.add('open');
         renderMessages();
@@ -12756,7 +12888,8 @@
 
       function buildPrompt(messages) {
         const tone = toneEl?.value || 'friendly';
-        const lang = langEl?.value || 'hr';
+        const replyLang = replyLangEl?.value || 'hr';
+        const readLang = readLangEl?.value || 'hr';
         const count = parseInt(countEl?.value || '3', 10);
         const context = contextEl?.value?.trim() || '';
         const custom = customPromptEl?.value?.trim() || '';
@@ -12781,7 +12914,7 @@
           id: 'ISKLJUČIVO na indonesijskom jeziku',
           auto: 'na istom jeziku kao poruke u chatu',
         };
-        const useTranslated = autoTranslateEl?.checked !== false && lang !== 'auto';
+        const useTranslated = autoTranslateEl?.checked !== false && readLang !== 'auto';
         const chatLines = messages.map(message => {
           const msgText = useTranslated ? (message.translatedText || message.text) : message.text;
           return `${message.user}: ${msgText}`;
@@ -12790,7 +12923,7 @@
 
 KONTEKST STREAMERA: ${context || 'TikTok streamer koji želi angažirati svoju publiku'}
 TON: ${toneMap[tone] || toneMap.friendly}
-JEZIK: Odgovaraj ${langMap[lang] || langMap.hr}
+JEZIK: Odgovaraj ${langMap[replyLang] || langMap.hr}
 BROJ PRIJEDLOGA: Generiraj točno ${count} različita prijedloga odgovora.
 
 PORUKE IZ CHATA:
@@ -12902,7 +13035,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           
           const text = rawText.replace(user, '').replace(/^[:\s]+/, '').trim().slice(0, 300);
           if (text && text.length > 1) {
-            results.push({ user, text });
+            const low = text.toLowerCase();
+            const isGift = /gift|rose|coins?|diamond|galaxy|lion|sent\s+|poklon|dar/i.test(low) || giftEls.length > 0;
+            const isSubscriber = /sub|subscriber|subscribe|pretplat|member|joined\s+the\s+live|joined/i.test(low);
+            results.push({ user, text, type: isGift ? 'gift' : (isSubscriber ? 'subscriber' : 'chat') });
           }
         });
         return JSON.stringify(results);
@@ -12941,9 +13077,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
           });
           if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
-          const targetLang = langEl?.value || 'hr';
-          if (autoTranslateEl?.checked !== false && targetLang !== 'auto' && added > 0) {
-            await translateMessagesInPlace(collectedMessages, targetLang);
+          const readLang = readLangEl?.value || 'hr';
+          if (autoTranslateEl?.checked !== false && readLang !== 'auto' && added > 0) {
+            await translateMessagesInPlace(collectedMessages, readLang);
           }
           renderMessages();
           setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : (added ? '✅ Dodano ' + added : '✓ Sinkronizirano'));
@@ -12997,10 +13133,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           showToast('⚠️ Nema poruka za export.');
           return;
         }
-        const targetLang = langEl?.value || 'auto';
+        const targetLang = readLangEl?.value || 'auto';
+        const replyLang = replyLangEl?.value || 'hr';
         const payload = {
           exportedAt: new Date().toISOString(),
           targetLanguage: targetLang,
+          replyLanguage: replyLang,
           messageCount: collectedMessages.length,
           messages: collectedMessages.map(message => ({
             user: message.user,
@@ -13025,21 +13163,53 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }
 
       loadCfg();
-      [toneEl, langEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+      [toneEl, readLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
       contextEl?.addEventListener('input', saveCfg);
       customPromptEl?.addEventListener('input', saveCfg);
-      langEl?.addEventListener('change', async () => {
-        if (autoTranslateEl?.checked !== false && (langEl?.value || 'auto') !== 'auto') {
-          await translateMessagesInPlace(collectedMessages, langEl.value);
+      readLangEl?.addEventListener('change', async () => {
+        if (autoTranslateEl?.checked !== false && (readLangEl?.value || 'auto') !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, readLangEl.value);
           renderMessages();
-        }
-      });
-      autoTranslateEl?.addEventListener('change', async () => {
-        if (autoTranslateEl.checked && (langEl?.value || 'auto') !== 'auto') {
-          await translateMessagesInPlace(collectedMessages, langEl.value);
+          return;
         }
         renderMessages();
       });
+      autoTranslateEl?.addEventListener('change', async () => {
+        if (autoTranslateEl.checked && (readLangEl?.value || 'auto') !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, readLangEl.value);
+        }
+        renderMessages();
+      });
+      giftToggleBtn?.addEventListener('click', () => {
+        if (!giftGalleryEl) return;
+        giftGalleryEl.classList.toggle('collapsed');
+        giftToggleBtn.textContent = giftGalleryEl.classList.contains('collapsed') ? 'Prikaži' : 'Sakrij';
+        saveCfg();
+      });
+
+      (function initTkaiColumnResize() {
+        if (!splitterEl || !mainEl || !chatColEl) return;
+        let dragging = false;
+        splitterEl.addEventListener('mousedown', (event) => {
+          dragging = true;
+          event.preventDefault();
+        });
+        document.addEventListener('mousemove', (event) => {
+          if (!dragging) return;
+          const rect = mainEl.getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const min = 200;
+          const max = Math.max(min + 80, rect.width - 220);
+          const clamped = Math.max(min, Math.min(x, max));
+          const pct = (clamped / rect.width) * 100;
+          panel.style.setProperty('--tkai-chat-col-width', pct.toFixed(2) + '%');
+        });
+        document.addEventListener('mouseup', () => {
+          if (!dragging) return;
+          dragging = false;
+          saveCfg();
+        });
+      })();
 
       configToggle?.addEventListener('click', () => {
         const hidden = configInner?.style.display === 'none';
