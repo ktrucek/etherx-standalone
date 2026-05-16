@@ -33,10 +33,14 @@ if (process.platform !== 'darwin') {
     app.commandLine.appendSwitch('disable-gpu');
     app.commandLine.appendSwitch('disable-software-rasterizer');
   } else {
-    // Enable hardware acceleration on desktop
+    // Enable hardware acceleration and performance flags on desktop
     app.commandLine.appendSwitch('enable-gpu-rasterization');
     app.commandLine.appendSwitch('enable-zero-copy');
     app.commandLine.appendSwitch('ignore-gpu-blocklist');
+    app.commandLine.appendSwitch('enable-features', 'NetworkService,NetworkServiceInProcess,VaapiVideoDecoder,VaapiVideoEncoder,CanvasOopRasterization,WebUIDarkMode,WebContentsForceDark');
+    app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+    app.commandLine.appendSwitch('renderer-process-limit', '4');
+    app.commandLine.appendSwitch('process-per-site');
   }
 }
 // Prevent GPU sandbox from crashing the renderer (fixes launch-failed / exit 1003)
@@ -211,7 +215,18 @@ app.whenReady().then(async () => {
 
   // Init ad blocker
   try {
-    if (AdBlocker) { adBlocker = new AdBlocker(session.defaultSession); await adBlocker.init(); }
+    if (AdBlocker) {
+      const t0 = Date.now();
+      adBlocker = new AdBlocker(session.defaultSession);
+      await adBlocker.init();
+      const t1 = Date.now();
+      console.log(`[AdBlocker] Init time: ${t1 - t0}ms`);
+      // Allow disabling via env var
+      if (process.env.DISABLE_ADBLOCKER === '1') {
+        adBlocker = null;
+        console.log('[AdBlocker] Disabled by env');
+      }
+    }
   } catch (e) { console.error('❌ AdBlocker init failed:', e.message); adBlocker = null; }
 
   // Init security
