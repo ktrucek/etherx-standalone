@@ -8446,7 +8446,7 @@
                 </button>
               </div>
               <div style="font-size:10px;color:var(--text3);padding:4px 0">
-                Configure download links in <strong>Settings → Downloads</strong>
+                GitHub Releases — preuzimanje se temelji na trenutnoj verziji browsera
               </div>
             </div>
 
@@ -8481,7 +8481,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.169</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.170</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8715,6 +8715,53 @@
               </select>
             </div>
 
+            <!-- Translation model — dedicated setting -->
+            <div class="s-group" style="margin-bottom:0">
+              <div class="s-row" style="padding-bottom:0">
+                <div class="s-row-left">
+                  <div class="s-row-label">🌍 AI Model za prijevod</div>
+                  <div class="s-row-desc">Model koji se koristi u AI Inspector → Prijevod stranice. Ako je "Isti kao
+                    glavni", koristi se gore odabrani AI model.</div>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left" style="flex:0 0 auto">
+                  <div class="s-row-label" style="font-weight:400">Model</div>
+                </div>
+                <select class="s-select" id="settingsTranslateModel">
+                  <option value="__main__">Isti kao glavni AI model</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="claude-3-haiku">Claude 3 Haiku</option>
+                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                  <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Groq)</option>
+                  <option value="llama-3.1-8b-instant">Llama 3.1 8B (Groq)</option>
+                  <option value="mixtral-8x7b-32768">Mixtral 8x7B (Groq)</option>
+                  <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (OpenRouter)</option>
+                  <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash (OpenRouter)</option>
+                  <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash (OpenRouter)</option>
+                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
+                  <option value="llama3.1:8b">llama3.1:8b (Ollama)</option>
+                  <option value="mistral:7b-instruct">mistral:7b-instruct (Ollama)</option>
+                </select>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:400">Max znakova za prijevod</div>
+                  <div class="s-row-desc">Ograniči duljinu teksta koji se šalje AI-u (manji = brže i jeftinije)</div>
+                </div>
+                <select class="s-select" id="settingsTranslateMaxChars">
+                  <option value="1000">1 000 znakova (~brzo)</option>
+                  <option value="2000" selected>2 000 znakova (preporučeno)</option>
+                  <option value="4000">4 000 znakova</option>
+                  <option value="8000">8 000 znakova (~sporo)</option>
+                </select>
+              </div>
+            </div>
+
             <div class="s-row">
               <div class="s-row-left">
                 <div class="s-row-label">Temperatura (kreativnost)</div>
@@ -8793,137 +8840,137 @@
           </div>
         </div>
 
-      </div>
-    </div>
-
-    <!-- ── Downloads ─────────────────────────────────────────── -->
-    <!-- ── History ─────────────────────────────────────────── -->
-    <div class="s-tab-pane" id="stab-history">
-      <div class="s-group">
-        <div class="s-group-title">Čuvanje povijesti</div>
-        <div class="s-row">
-          <div class="s-row-left">
-            <div class="s-row-label">Koliko dugo čuvati povijest</div>
-            <div class="s-row-desc">Automatski obriši povijest stariju od zadanog broja dana.</div>
-          </div>
-          <select class="s-select" id="settingHistoryDays">
-            <option value="7">7 dana</option>
-            <option value="30">30 dana</option>
-            <option value="90">90 dana</option>
-            <option value="180">6 mjeseci</option>
-            <option value="365">1 godina</option>
-            <option value="-1">Zauvijek</option>
-          </select>
-        </div>
-      </div>
-      <div class="s-group">
-        <div class="s-group-title">Brisanje povijesti</div>
-        <div class="s-row">
-          <div class="s-row-left">
-            <div class="s-row-label">Obriši svu povijest</div>
-            <div class="s-row-desc">Trajno obriši sve podatke o posjećenim stranicama.</div>
-          </div>
-          <button class="s-btn s-btn-danger" id="btnClearAllHistory">Obriši sve</button>
-        </div>
-        <div class="s-row">
-          <div class="s-row-left">
-            <div class="s-row-label">Obriši povijest po razdoblju</div>
-            <div class="s-row-desc">Obriši povijest samo za određeno vremensko razdoblje.</div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <select class="s-select" id="selectHistoryPeriod">
-              <option value="1">Zadnji sat</option>
-              <option value="24">Zadnjih 24 sata</option>
-              <option value="168">Zadnjih 7 dana</option>
-              <option value="720">Zadnjih 30 dana</option>
-            </select>
-            <button class="s-btn" id="btnClearHistoryPeriod">Obriši</button>
-          </div>
-        </div>
-      </div>
-      <div class="s-group">
-        <div class="s-group-title">Pregled povijesti</div>
-        <div style="padding:0 0 8px">
-          <input type="text" id="histSearchInputIdx" placeholder="Pretraži povijest…"
-            style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box">
-        </div>
-        <div id="historyIdxList"
-          style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-          <div style="text-align:center;padding:24px;color:var(--text3);font-size:12px">Učitavanje…</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Updates ─────────────────────────────────────────── -->
-    <div class="s-tab-pane" id="stab-updates">
-      <!-- Current version card -->
-      <div
-        style="background:linear-gradient(135deg,rgba(102,126,234,.15),rgba(118,75,162,.10));border:1px solid rgba(102,126,234,.25);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div>
-          <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
-          <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.169</span></div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
-          </div>
-        </div>
-        <div id="updStatusBadge"
-          style="font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(39,201,63,.1);color:#27c93f;border:1px solid rgba(39,201,63,.25);white-space:nowrap">
-          ✓ Ažuran</div>
-      </div>
-
-      <div class="s-group">
-        <div class="s-group-title">Postavke ažuriranja</div>
-        <div class="s-row">
-          <div class="s-row-left">
-            <div class="s-row-label">Automatski provjeri nadogradnje</div>
-            <div class="s-row-desc">Provjeri za novu verziju pri pokretanju browsera.</div>
-          </div>
-          <label class="s-toggle"><input type="checkbox" id="settingAutoUpdate" data-setting="auto_update" checked><span
-              class="s-toggle-track"></span></label>
-        </div>
-        <div class="s-row">
-          <div class="s-row-left">
-            <div class="s-row-label">Provjeri dostupne nadogradnje</div>
-            <div class="s-row-desc">Provjeri za dostupnu nadogradnju.</div>
-          </div>
-          <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow"
-            style="min-width:110px">🔍 Provjeri sada</button>
-        </div>
-      </div>
-
-      <!-- Update result (hidden by default) -->
-      <div id="updResultBox"
-        style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel"
-              data-i18n="newVersionAvail">Nova verzija dostupna!
+        <!-- ── History ─────────────────────────────────────────── -->
+        <div class="s-tab-pane" id="stab-history">
+          <div class="s-group">
+            <div class="s-group-title">Čuvanje povijesti</div>
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Koliko dugo čuvati povijest</div>
+                <div class="s-row-desc">Automatski obriši povijest stariju od zadanog broja dana.</div>
+              </div>
+              <select class="s-select" id="settingHistoryDays">
+                <option value="7">7 dana</option>
+                <option value="30">30 dana</option>
+                <option value="90">90 dana</option>
+                <option value="180">6 mjeseci</option>
+                <option value="365">1 godina</option>
+                <option value="-1">Zauvijek</option>
+              </select>
             </div>
-            <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="updOneClickBtn" data-i18n="updateNow"
-              style="display:none;padding:8px 18px;background:linear-gradient(135deg,#27c93f,#1fa833);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .2s"
-              title="Preuzmi i instaliraj najnoviju verziju jednim klikom">⬆️ Ažuriraj sada</button>
+          <div class="s-group">
+            <div class="s-group-title">Brisanje povijesti</div>
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Obriši svu povijest</div>
+                <div class="s-row-desc">Trajno obriši sve podatke o posjećenim stranicama.</div>
+              </div>
+              <button class="s-btn s-btn-danger" id="btnClearAllHistory">Obriši sve</button>
+            </div>
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Obriši povijest po razdoblju</div>
+                <div class="s-row-desc">Obriši povijest samo za određeno vremensko razdoblje.</div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select class="s-select" id="selectHistoryPeriod">
+                  <option value="1">Zadnji sat</option>
+                  <option value="24">Zadnjih 24 sata</option>
+                  <option value="168">Zadnjih 7 dana</option>
+                  <option value="720">Zadnjih 30 dana</option>
+                </select>
+                <button class="s-btn" id="btnClearHistoryPeriod">Obriši</button>
+              </div>
+            </div>
           </div>
-        </div>
-        <!-- Progress bar (hidden) -->
-        <div id="updProgressWrap" style="display:none;margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px">
-            <span id="updProgressLabel">Preuzimanje...</span>
-            <span id="updProgressPct">0%</span>
-          </div>
-          <div style="width:100%;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
-            <div id="updProgressBar"
-              style="height:100%;width:0%;background:linear-gradient(90deg,#667eea,#27c93f);border-radius:3px;transition:width .2s">
+          <div class="s-group">
+            <div class="s-group-title">Pregled povijesti</div>
+            <div style="padding:0 0 8px">
+              <input type="text" id="histSearchInputIdx" placeholder="Pretraži povijest…"
+                style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box">
+            </div>
+            <div id="historyIdxList"
+              style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+              <div style="text-align:center;padding:24px;color:var(--text3);font-size:12px">Učitavanje…</div>
             </div>
           </div>
         </div>
-        <div id="updReleaseNotes"
-          style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">
-        </div>
-      </div>
 
+        <!-- ── Updates ─────────────────────────────────────────── -->
+        <div class="s-tab-pane" id="stab-updates">
+          <!-- Current version card -->
+          <div
+            style="background:linear-gradient(135deg,rgba(102,126,234,.15),rgba(118,75,162,.10));border:1px solid rgba(102,126,234,.25);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
+              <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
+                  id="helpVersionNum2">2.4.170</span></div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
+              </div>
+            </div>
+            <div id="updStatusBadge"
+              style="font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(39,201,63,.1);color:#27c93f;border:1px solid rgba(39,201,63,.25);white-space:nowrap">
+              ✓ Ažuran</div>
+          </div>
+
+          <div class="s-group">
+            <div class="s-group-title">Postavke ažuriranja</div>
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Automatski provjeri nadogradnje</div>
+                <div class="s-row-desc">Provjeri za novu verziju pri pokretanju browsera.</div>
+              </div>
+              <label class="s-toggle"><input type="checkbox" id="settingAutoUpdate" data-setting="auto_update"
+                  checked><span class="s-toggle-track"></span></label>
+            </div>
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Provjeri dostupne nadogradnje</div>
+                <div class="s-row-desc">Provjeri za dostupnu nadogradnju.</div>
+              </div>
+              <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow"
+                style="min-width:110px">🔍 Provjeri sada</button>
+            </div>
+          </div>
+
+          <!-- Update result (hidden by default) -->
+          <div id="updResultBox"
+            style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel"
+                  data-i18n="newVersionAvail">Nova verzija dostupna!
+                </div>
+                <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button id="updOneClickBtn" data-i18n="updateNow"
+                  style="display:none;padding:8px 18px;background:linear-gradient(135deg,#27c93f,#1fa833);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .2s"
+                  title="Preuzmi i instaliraj najnoviju verziju jednim klikom">⬆️ Ažuriraj sada</button>
+              </div>
+            </div>
+            <!-- Progress bar (hidden) -->
+            <div id="updProgressWrap" style="display:none;margin-bottom:10px">
+              <div
+                style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px">
+                <span id="updProgressLabel">Preuzimanje...</span>
+                <span id="updProgressPct">0%</span>
+              </div>
+              <div style="width:100%;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+                <div id="updProgressBar"
+                  style="height:100%;width:0%;background:linear-gradient(90deg,#667eea,#27c93f);border-radius:3px;transition:width .2s">
+                </div>
+              </div>
+            </div>
+            <div id="updReleaseNotes"
+              style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">
+            </div>
+          </div>
+
+        </div>
+
+      </div>
     </div>
 
   </div>
@@ -9197,25 +9244,86 @@
       <!-- Translate -->
       <div style="background:rgba(255,255,255,.05);border-radius:8px;padding:12px">
         <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">🌍 Prijevod stranice</div>
-        <div style="display:flex;gap:8px;align-items:center">
+        <!-- Language + Translate button -->
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
           <select id="aiInspectLang"
             style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:4px 8px;font-size:12px">
-            <option value="hr">Hrvatski</option>
-            <option value="en">English</option>
-            <option value="de">Deutsch</option>
-            <option value="fr">Français</option>
-            <option value="es">Español</option>
-            <option value="it">Italiano</option>
-            <option value="pt">Português</option>
-            <option value="ru">Русский</option>
-            <option value="zh">中文</option>
-            <option value="ja">日本語</option>
+            <optgroup label="── Popularni ──">
+              <option value="hr">🇭🇷 Hrvatski</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="id">🇮🇩 Bahasa Indonesia</option>
+              <option value="de">🇩🇪 Deutsch</option>
+              <option value="fr">🇫🇷 Français</option>
+              <option value="es">🇪🇸 Español</option>
+              <option value="pt">🇵🇹 Português</option>
+              <option value="it">🇮🇹 Italiano</option>
+              <option value="ru">🇷🇺 Русский</option>
+              <option value="zh">🇨🇳 中文 (简体)</option>
+              <option value="ja">🇯🇵 日本語</option>
+              <option value="ko">🇰🇷 한국어</option>
+              <option value="ar">🇸🇦 العربية</option>
+              <option value="hi">🇮🇳 हिन्दी</option>
+              <option value="tr">🇹🇷 Türkçe</option>
+              <option value="ms">🇲🇾 Bahasa Melayu</option>
+              <option value="vi">🇻🇳 Tiếng Việt</option>
+              <option value="th">🇹🇭 ภาษาไทย</option>
+            </optgroup>
+            <optgroup label="── Europa ──">
+              <option value="uk">🇺🇦 Українська</option>
+              <option value="nl">🇳🇱 Nederlands</option>
+              <option value="pl">🇵🇱 Polski</option>
+              <option value="sv">🇸🇪 Svenska</option>
+              <option value="da">🇩🇰 Dansk</option>
+              <option value="fi">🇫🇮 Suomi</option>
+              <option value="no">🇳🇴 Norsk</option>
+              <option value="cs">🇨🇿 Čeština</option>
+              <option value="sk">🇸🇰 Slovenčina</option>
+              <option value="sl">🇸🇮 Slovenščina</option>
+              <option value="hu">🇭🇺 Magyar</option>
+              <option value="ro">🇷🇴 Română</option>
+              <option value="bg">🇧🇬 Български</option>
+              <option value="sr">🇷🇸 Srpski</option>
+              <option value="bs">🇧🇦 Bosanski</option>
+              <option value="el">🇬🇷 Ελληνικά</option>
+              <option value="he">🇮🇱 עברית</option>
+            </optgroup>
+            <optgroup label="── Ostali ──">
+              <option value="bn">🇧🇩 বাংলা</option>
+              <option value="fa">🇮🇷 فارسی</option>
+              <option value="ur">🇵🇰 اردو</option>
+              <option value="sw">🇹🇿 Kiswahili</option>
+              <option value="tl">🇵🇭 Filipino</option>
+              <option value="zh-TW">🇹🇼 中文 (繁體)</option>
+            </optgroup>
           </select>
           <button id="aiInspectTranslate"
-            style="background:var(--accent);border:none;color:#fff;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;white-space:nowrap">Prevedi</button>
+            style="background:var(--accent);border:none;color:#fff;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">🌐
+            Prevedi</button>
         </div>
+        <!-- AI model for translation -->
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;color:var(--text3);white-space:nowrap">🤖 Model:</span>
+          <select id="aiTranslateModel"
+            style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+            <option value="__settings__">Iz postavki (Settings → AI)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="claude-3-haiku">Claude 3 Haiku</option>
+            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Groq)</option>
+            <option value="llama-3.1-8b-instant">Llama 3.1 8B (Groq)</option>
+            <option value="mixtral-8x7b-32768">Mixtral 8x7B (Groq)</option>
+            <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (OpenRouter)</option>
+            <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash (OpenRouter)</option>
+          </select>
+        </div>
+        <!-- Status / chars info -->
+        <div id="aiTranslateInfo" style="font-size:10px;color:var(--text3);margin-top:4px"></div>
         <div id="aiInspectTranslateResult"
-          style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.5;max-height:120px;overflow-y:auto">
+          style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap">
         </div>
       </div>
       <!-- Reading mode -->
@@ -13769,19 +13877,55 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       const tab = getActiveTab();
       if (!tab?.url) { showToast('❌ Nema aktivne stranice'); return; }
       const lang = document.getElementById('aiInspectLang')?.value || 'hr';
+      const langName = document.getElementById('aiInspectLang')?.selectedOptions?.[0]?.text || lang;
       const resultEl = document.getElementById('aiInspectTranslateResult');
-      resultEl.textContent = '⏳ Prevođenje...';
+      const infoEl = document.getElementById('aiTranslateInfo');
+      const btn = document.getElementById('aiInspectTranslate');
+
+      // Determine model to use
+      const panelModelSel = document.getElementById('aiTranslateModel')?.value || '__settings__';
+      const settingsModelSel = document.getElementById('settingsTranslateModel')?.value || '__main__';
+      let translateModel;
+      if (panelModelSel !== '__settings__') {
+        translateModel = panelModelSel;
+      } else if (settingsModelSel !== '__main__') {
+        translateModel = settingsModelSel;
+      } else {
+        translateModel = getSelectedAiModel();
+      }
+
+      // Max chars
+      const maxChars = parseInt(document.getElementById('settingsTranslateMaxChars')?.value || '2000', 10);
+
+      resultEl.textContent = '';
+      resultEl.style.display = 'none';
+      if (infoEl) infoEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = '⏳…';
+
       try {
         const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
         let text = tab.title || '';
-        if (wv && window.electronWebview && window.safeExecuteJS) {
-          text = await window.safeExecuteJS(wv, 'document.body?.innerText?.slice(0,2000)||""').catch(() => tab.title || '');
+        if (wv && window.safeExecuteJS) {
+          text = await window.safeExecuteJS(wv, 'document.body?.innerText?.slice(0,8000)||""').catch(() => tab.title || '');
         }
-        const result = await window.etherx?.ai?.translate?.(text, lang);
-        const translatedText = result?.translated ?? result?.translation ?? result?.text ?? (typeof result === 'string' ? result : '');
-        resultEl.textContent = translatedText || result?.note || '❌ AI prevoditelj nije konfiguriran';
+        const trimmed = text.slice(0, maxChars);
+        if (infoEl) infoEl.textContent = `📝 ${trimmed.length} znakova · 🤖 ${translateModel}`;
+
+        const prompt = `Prevedi sljedeći tekst na jezik: "${langName}" (${lang}). Vrati SAMO prijevod, bez objašnjenja, naslova ili uvodne rečenice.\n\n${trimmed}`;
+        const translated = await runAiTextRequest(prompt, {
+          model: translateModel,
+          maxOutputTokens: 2000,
+          systemPrompt: `Ti si profesionalni prevoditelj. Prevedi tekst precizno i prirodno na zadani jezik.`
+        });
+        resultEl.textContent = translated || '(prazan odgovor)';
+        resultEl.style.display = 'block';
       } catch (e) {
-        resultEl.textContent = '❌ ' + escHtml(e.message);
+        resultEl.textContent = '❌ ' + (e.message || String(e));
+        resultEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🌐 Prevedi';
       }
     });
 
@@ -17413,6 +17557,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       const savedProvider = cfg.aiProvider || inferAiProviderFromModel(cfg.aiModel);
       if (providerSel) providerSel.value = savedProvider;
       if (cfg.aiModel) modelSel.value = cfg.aiModel;
+      if (cfg.translateAiModel) { const el = document.getElementById('settingsTranslateModel'); if (el) el.value = cfg.translateAiModel; }
+      if (cfg.translateMaxChars) { const el = document.getElementById('settingsTranslateMaxChars'); if (el) el.value = cfg.translateMaxChars; }
       if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
       if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || 'http://localhost:11434/v1';
       getStoredApiKey('gemini').then(gk => {
@@ -17571,6 +17717,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || 'http://localhost:11434/v1');
         DB.saveSetting('aiProvider', p);
         DB.saveSetting('aiModel', modelSel.value);
+        DB.saveSetting('translateAiModel', document.getElementById('settingsTranslateModel')?.value || '__main__');
+        DB.saveSetting('translateMaxChars', document.getElementById('settingsTranslateMaxChars')?.value || '2000');
         DB.saveSetting('geminiApiKey', gKey);
         DB.saveSetting('openaiApiKey', oKey);
         DB.saveSetting('anthropicApiKey', aKey);
@@ -17960,7 +18108,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tabSearch: 'Search', tabSecurity: 'Security', tabPrivacy: 'Privacy', tabWebsites: 'Websites',
         tabProfiles: 'Profiles', tabExtensions: 'Extensions', tabAdvanced: 'Advanced',
         tabDeveloper: 'Developer', tabFlags: 'Feature Flags', tabMigration: 'Import Data',
-        tabAppearance: 'Appearance', tabLanguage: 'Language', tabUpdates: 'Updates', tabStorage: 'Storage', tabHelp: 'Help', tabAI: 'AI',
+        tabAppearance: 'Appearance', tabLanguage: 'Language', tabUpdates: 'Updates', tabStorage: 'Storage', tabHelp: 'Help', tabAI: 'AI', tabHistory: 'History',
         langInterfaceLabel: 'Interface Language',
         langInterfaceDesc: 'All menus, settings labels and UI text will switch to the selected language',
         langLabelLang: 'Language',
@@ -18032,7 +18180,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tabSearch: 'Pretraga', tabSecurity: 'Sigurnost', tabPrivacy: 'Privatnost', tabWebsites: 'Web-stranice',
         tabProfiles: 'Profili', tabExtensions: 'Proširenja', tabAdvanced: 'Napredno',
         tabDeveloper: 'Programer', tabFlags: 'Zastavice', tabMigration: 'Uvoz podataka',
-        tabAppearance: 'Izgled', tabLanguage: 'Jezik', tabUpdates: 'Ažuriranja', tabStorage: 'Pohrana', tabHelp: 'Pomoć', tabAI: 'AI',
+        tabAppearance: 'Izgled', tabLanguage: 'Jezik', tabUpdates: 'Ažuriranja', tabStorage: 'Pohrana', tabHelp: 'Pomoć', tabAI: 'AI', tabHistory: 'Povijest',
         langInterfaceLabel: 'Jezik sučelja',
         langInterfaceDesc: 'Svi izbornici, oznake postavki i tekst sučelja prebacit će se na odabrani jezik',
         langLabelLang: 'Jezik',
@@ -18202,7 +18350,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       tabSearch: 'search', tabSecurity: 'security', tabPrivacy: 'privacy', tabWebsites: 'websites',
       tabProfiles: 'profiles', tabExtensions: 'extensions', tabAdvanced: 'advanced',
       tabDeveloper: 'developer', tabFlags: 'flags', tabMigration: 'migration',
-      tabAppearance: 'appearance', tabLanguage: 'language', tabStorage: 'storage', tabHelp: 'help', tabAI: 'ai',
+      tabAppearance: 'appearance', tabLanguage: 'language', tabStorage: 'storage', tabHelp: 'help', tabAI: 'ai', tabHistory: 'history',
     };
 
     function applyLanguage(code) {
@@ -19126,13 +19274,27 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
       document.getElementById('dlBtn' + platform)?.addEventListener('click', () => {
         const s = DB.getSettings();
-        const links = s.download_links || {};
-        const url = links[platform.toLowerCase()];
-        if (!url) {
-          showToast('⚠️ Nema linka za ' + platform + '\n\nIdite na Postavke → Preuzimanja da dodate link');
+        const customUrl = (s.download_links || {})[platform.toLowerCase()];
+        if (customUrl) { window.open(customUrl, '_blank'); return; }
+        // Auto-generate GitHub release URL from current version
+        const ver = (document.getElementById('helpVersionNum')?.textContent || document.getElementById('helpVersionNum2')?.textContent || '').replace(/^v/, '').trim();
+        if (!ver || ver === '0.0.0') { showToast('⚠️ Verzija nije dostupna'); return; }
+        const base = `https://github.com/ktrucek/etherx-standalone/releases/download/v${ver}/`;
+        const files = {
+          Linux: `EtherX.Browser-${ver}.AppImage`,
+          Windows: `EtherX.Browser-${ver}-x64-Setup.exe`,
+          MacIntel: `EtherX.Browser-${ver}-x64-mac.zip`,
+          MacArm: `EtherX.Browser-${ver}-arm64.dmg`,
+          Android: null,
+          IOS: null,
+        };
+        const file = files[platform];
+        if (!file) {
+          window.open('https://github.com/ktrucek/etherx-standalone/releases', '_blank');
+          showToast('📱 Otvaram stranicu izdanja...');
           return;
         }
-        window.open(url, '_blank');
+        window.open(base + file, '_blank');
         showToast('📥 Preuzimanje za ' + platform + '...');
       });
     });

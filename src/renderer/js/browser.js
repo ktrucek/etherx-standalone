@@ -1,3 +1,20 @@
+// ── Google Login Block Detection ──
+document.addEventListener("DOMContentLoaded", () => {
+  // Detektiraj Google blokadu po frazama u DOM-u
+  const checkGoogleBlock = () => {
+    const bodyText = document.body?.innerText || "";
+    if (
+      bodyText.includes("This browser or app may not be secure") ||
+      bodyText.includes("ERR_BLOCKED_BY_RESPONSE") ||
+      bodyText.includes("Try using a different browser")
+    ) {
+      showToast(
+        "Google login nije podržan u ovom pregledniku. Otvorite prijavu u vanjskom browseru (Chrome/Firefox).",
+      );
+    }
+  };
+  setTimeout(checkGoogleBlock, 1200);
+});
 // ── Self-embed guard (DISABLED - caused more issues than it solved) ──
 // Previously this guard would break the browser when loaded in certain iframe contexts
 // If re-enabling, ensure it doesn't trigger in Electron webview or legitimate use cases
@@ -7172,6 +7189,11 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
 // ── TikTok Chat AI Assistant ──────────────────────────────────────────────────
 (function initTikTokChatAI() {
+  // Dodaj referencu na gumb za prijevod označenih poruka i prikaz broja odgovora
+  const translateSelectedBtn = document.getElementById(
+    "tkaiTranslateSelectedBtn",
+  );
+  const replyCountEl = document.getElementById("tkaiReplyCount");
   const panel = document.getElementById("tiktokAIPanel");
   if (!panel) return;
 
@@ -7370,14 +7392,20 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         '</div><div class="tkai-msg-text">' +
         escHtml(m.text) +
         "</div>";
-      div.title = "Klikni za odabir/deodabir";
+      div.title = "Klikni za odabir (samo jedna poruka)";
       div.addEventListener("click", () => {
-        if (selectedMsgIds.has(m.id)) selectedMsgIds.delete(m.id);
-        else selectedMsgIds.add(m.id);
-        div.classList.toggle("selected", selectedMsgIds.has(m.id));
+        // Dozvoli odabir samo jedne poruke
+        selectedMsgIds.clear();
+        selectedMsgIds.add(m.id);
+        // Osvježi prikaz selekcije
+        Array.from(messagesEl.children).forEach((el) =>
+          el.classList.remove("selected"),
+        );
+        div.classList.add("selected");
       });
       messagesEl.appendChild(div);
     });
+    messagesEl.scrollTop = messagesEl.scrollHeight;
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -7538,6 +7566,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     if (!suggestions || suggestions.length === 0) {
       repliesEl.innerHTML =
         '<div class="tkai-empty">AI nije generirao prijedloge.<br>Provjeri API ključ u Settings.</div>';
+      if (replyCountEl) replyCountEl.textContent = "0 prijedloga";
       return;
     }
     repliesEl.innerHTML = "";
@@ -7579,6 +7608,38 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       });
       repliesEl.appendChild(card);
     });
+    if (replyCountEl)
+      replyCountEl.textContent = `${suggestions.length} prijedloga`;
+    // Prijevod označene poruke
+    if (translateSelectedBtn) {
+      translateSelectedBtn.addEventListener("click", async () => {
+        if (selectedMsgIds.size !== 1) {
+          showToast("Odaberi jednu poruku za prijevod.");
+          return;
+        }
+        const msg = collectedMessages.find((m) => selectedMsgIds.has(m.id));
+        if (!msg) {
+          showToast("Poruka nije pronađena.");
+          return;
+        }
+        // Pozovi AI prijevod (koristi window.etherx.ai.translate ili fallback)
+        let translated = "";
+        try {
+          if (window.etherx?.ai?.translate) {
+            translated = await window.etherx.ai.translate(
+              msg.text,
+              langEl?.value || "hr",
+            );
+          } else {
+            // Fallback: samo prikaži tekst s oznakom jezika
+            translated = `[${langEl?.value || "hr"}] ${msg.text}`;
+          }
+        } catch (e) {
+          translated = "[Greška u prijevodu] " + msg.text;
+        }
+        showToast("Prijevod: " + translated);
+      });
+    }
   }
 
   // ── Toggle scan ──
