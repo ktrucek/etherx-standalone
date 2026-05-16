@@ -7245,7 +7245,12 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     const results = [];
     // TikTok Live chat selectors (multiple fallbacks for DOM changes)
     const selectors = [
+      '[data-e2e="chat-message-item"]',
       '[data-e2e="chat-room-message-item"]',
+      '[data-e2e="chat-list-item"]',
+      '[data-e2e="chat-item"]',
+      '[data-e2e="webcast-live-message-item"]',
+      '[data-e2e="live-chat-message"]',
       '.webcast-chatroom__message-list > .webcast-chatroom__message-item',
       '.css-1yn0y6n-DivChatItemContainer',
       '[class*="ChatItem"]',
