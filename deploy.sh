@@ -5,6 +5,7 @@
 #    ./deploy.sh              → auto-increment patch version
 #    ./deploy.sh 2.5.0        → set specific version
 #    ./deploy.sh --no-push    → commit locally, skip push
+#    ./deploy.sh --sync-browser-html → overwrite browser.html from src/index.html
 #
 #  What it does:
 #   1. Bump version in package.json and src/index.html
@@ -17,16 +18,19 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NO_PUSH=false
+SYNC_BROWSER_HTML=false
 
 # ── Parse args ────────────────────────────────────────────────────────────────
 REQUESTED_VERSION=""
 for arg in "$@"; do
   case "$arg" in
     --no-push)   NO_PUSH=true ;;
+    --sync-browser-html) SYNC_BROWSER_HTML=true ;;
     --help|-h)
-      echo "Usage: ./deploy.sh [VERSION] [--no-push]"
+      echo "Usage: ./deploy.sh [VERSION] [--no-push] [--sync-browser-html]"
       echo "  VERSION   e.g. 2.5.0  (default: auto-increment patch)"
       echo "  --no-push Skip git push (local only)"
+      echo "  --sync-browser-html Force sync: src/index.html -> src/renderer/browser.html"
       exit 0 ;;
     *)  REQUESTED_VERSION="$arg" ;;
   esac
@@ -172,18 +176,22 @@ except Exception as e:
 PYEOF
 fi
 
-# ── Keep browser.html in sync with src/index.html ────────────────────────────
+# ── Optional: keep browser.html in sync with src/index.html ──────────────────
 TARGET_BROWSER_HTML="src/renderer/browser.html"
-if [[ -f "$TARGET_BROWSER_HTML" ]]; then
-  info "Syncing $TARGET_BROWSER_HTML ← src/index.html"
-  cp -f "src/index.html" "$TARGET_BROWSER_HTML"
-  success "$TARGET_BROWSER_HTML synced from src/index.html"
-elif [[ -f "browser.html" ]]; then
-  warn "$TARGET_BROWSER_HTML not found; syncing legacy browser.html in repo root"
-  cp -f "src/index.html" "browser.html"
-  success "browser.html synced from src/index.html"
+if [[ "$SYNC_BROWSER_HTML" == true ]]; then
+  if [[ -f "$TARGET_BROWSER_HTML" ]]; then
+    info "Syncing $TARGET_BROWSER_HTML ← src/index.html"
+    cp -f "src/index.html" "$TARGET_BROWSER_HTML"
+    success "$TARGET_BROWSER_HTML synced from src/index.html"
+  elif [[ -f "browser.html" ]]; then
+    warn "$TARGET_BROWSER_HTML not found; syncing legacy browser.html in repo root"
+    cp -f "src/index.html" "browser.html"
+    success "browser.html synced from src/index.html"
+  else
+    warn "No browser.html target found (expected $TARGET_BROWSER_HTML or browser.html) — skipping sync"
+  fi
 else
-  warn "No browser.html target found (expected $TARGET_BROWSER_HTML or browser.html) — skipping sync"
+  info "Skipping browser.html sync (use --sync-browser-html to force sync from src/index.html)"
 fi
 
 # ── Git commit and tag ─────────────────────────────────────────────────────────
