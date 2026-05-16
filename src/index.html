@@ -4699,6 +4699,75 @@
       line-height: 1;
     }
 
+    .tkai-resize-handle {
+      position: absolute;
+      z-index: 1001;
+    }
+
+    .tkai-resize-n {
+      top: 0;
+      left: 10px;
+      right: 10px;
+      height: 5px;
+      cursor: n-resize;
+    }
+
+    .tkai-resize-s {
+      bottom: 0;
+      left: 10px;
+      right: 10px;
+      height: 5px;
+      cursor: s-resize;
+    }
+
+    .tkai-resize-e {
+      right: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 5px;
+      cursor: e-resize;
+    }
+
+    .tkai-resize-w {
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 5px;
+      cursor: w-resize;
+    }
+
+    .tkai-resize-ne {
+      top: 0;
+      right: 0;
+      width: 12px;
+      height: 12px;
+      cursor: ne-resize;
+    }
+
+    .tkai-resize-nw {
+      top: 0;
+      left: 0;
+      width: 12px;
+      height: 12px;
+      cursor: nw-resize;
+    }
+
+    .tkai-resize-se {
+      bottom: 0;
+      right: 0;
+      width: 12px;
+      height: 12px;
+      cursor: se-resize;
+    }
+
+    .tkai-resize-sw {
+      bottom: 0;
+      left: 0;
+      width: 12px;
+      height: 12px;
+      cursor: sw-resize;
+    }
+
     .tkai-body {
       display: flex;
       flex-direction: column;
@@ -8570,7 +8639,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.178</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.179</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8864,6 +8933,17 @@
                   <option value="8000">8 000 znakova (~sporo)</option>
                 </select>
               </div>
+              <div class="s-row" id="translateApiKeyRow" style="display:none">
+                <div class="s-row-left" style="flex:0 0 auto">
+                  <div class="s-row-label" style="font-weight:400">API ključ (prijevod)</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex:1">
+                  <input type="password" class="s-input" id="settingsTranslateApiKey"
+                    placeholder="API ključ za odabrani translate provider" style="flex:1">
+                  <button class="s-btn" style="min-width:32px;padding:4px 8px" title="Pokaži/sakrij ključ"
+                    onclick="(function(b){var i=document.getElementById('settingsTranslateApiKey');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)">👁</button>
+                </div>
+              </div>
             </div>
 
             <div class="s-row">
@@ -9009,7 +9089,7 @@
             <div>
               <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
               <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                  id="helpVersionNum2">2.4.178</span></div>
+                  id="helpVersionNum2">2.4.179</span></div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
               </div>
             </div>
@@ -9207,7 +9287,7 @@
       </div>
     </div>
   </div>
-  <div class="panel" id="tiktokAIPanel" style="width:520px">
+  <div class="panel" id="tiktokAIPanel" style="width:560px;height:640px">
     <div class="panel-header" id="tiktokAIPanelHeader" style="padding:8px 12px">
       <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
           title="Povuci za premještanje">⠿</span></span>
@@ -9220,9 +9300,9 @@
       <div class="tkai-config">
         <div class="tkai-config-title" id="tkaiConfigToggle">
           <span>AI postavke odgovora</span>
-          <span id="tkaiConfigArrow">▼</span>
+          <span id="tkaiConfigArrow">▶</span>
         </div>
-        <div class="tkai-config-inner" id="tkaiConfigInner">
+        <div class="tkai-config-inner" id="tkaiConfigInner" style="display:none">
           <div class="tkai-cfg-row">
             <span class="tkai-cfg-label">Ton / Stil:</span>
             <select class="tkai-cfg-select" id="tkaiTone">
@@ -13028,6 +13108,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }
 
       const scraperScript = `(function() {
+        try {
         const results = [];
         // Primary selectors — TikTok Live chat (updated for 2025 DOM)
         const primarySelectors = [
@@ -13155,6 +13236,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           }
         });
         return JSON.stringify(results);
+        } catch(e) { return JSON.stringify({__scraperError: String(e && e.message ? e.message : e)}); }
       })()`;
 
       async function scrapeTikTokChat() {
@@ -13174,8 +13256,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         try {
           const raw = await webview.executeJavaScript(scraperScript);
-          const messages = JSON.parse(raw || '[]');
-          if (!Array.isArray(messages) || !messages.length) {
+          const parsed = JSON.parse(raw || '[]');
+          if (!Array.isArray(parsed)) {
+            const errMsg = parsed && parsed.__scraperError ? parsed.__scraperError : JSON.stringify(parsed);
+            console.warn('[TikTokAI] script error:', errMsg);
+            setStatus('⚠️ Script greška: ' + errMsg.slice(0, 80));
+            return;
+          }
+          const messages = parsed;
+          if (!messages.length) {
             setStatus('📭 Nema poruka u chatu');
             return;
           }
@@ -13211,8 +13300,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           renderMessages();
           setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : (added ? '✅ Dodano ' + added : '✓ Sinkronizirano'));
         } catch (e) {
-          console.warn('[TikTokAI] scrape error:', e);
-          setStatus('⚠️ Greška pri skeniranju');
+          console.warn('[TikTokAI] scrape error:', e && e.message ? e.message : (JSON.stringify(e) || String(e)));
+          setStatus('⚠️ Greška: ' + (e && e.message ? e.message.slice(0, 80) : 'executeJavaScript failed'));
         }
       }
 
@@ -13453,6 +13542,60 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         });
 
         window.addEventListener('resize', clampPanelPosition);
+      })();
+
+      // ── Resizable panel (all 8 sides) ────────────────────────────────────────
+      (function makePanelResizable() {
+        if (!panel) return;
+        const TKAI_SIZE_KEY = 'ex_tkai_panel_size';
+        const MIN_W = 360, MIN_H = 340;
+        try {
+          const s = JSON.parse(localStorage.getItem(TKAI_SIZE_KEY) || 'null');
+          if (s && s.width) panel.style.width = s.width + 'px';
+          if (s && s.height) panel.style.height = s.height + 'px';
+        } catch (_) { }
+        function saveSize() {
+          try { localStorage.setItem(TKAI_SIZE_KEY, JSON.stringify({ width: panel.offsetWidth, height: panel.offsetHeight })); } catch (_) { }
+        }
+        ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
+          const h = document.createElement('div');
+          h.className = 'tkai-resize-handle tkai-resize-' + dir;
+          panel.appendChild(h);
+          h.addEventListener('mousedown', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            const sx = e.clientX, sy = e.clientY;
+            const rect = panel.getBoundingClientRect();
+            const sw = rect.width, sh = rect.height;
+            panel.style.right = 'auto'; panel.style.top = 'auto';
+            const sl = parseFloat(panel.style.left) || rect.left;
+            const sb = parseFloat(panel.style.bottom) || (window.innerHeight - rect.bottom);
+            panel.style.left = sl + 'px'; panel.style.bottom = sb + 'px';
+            const onMove = e2 => {
+              const dx = e2.clientX - sx, dy = e2.clientY - sy;
+              if (dir.includes('e')) panel.style.width = Math.max(MIN_W, sw + dx) + 'px';
+              if (dir.includes('s')) panel.style.height = Math.max(MIN_H, sh + dy) + 'px';
+              if (dir.includes('w')) {
+                const nw = Math.max(MIN_W, sw - dx);
+                panel.style.width = nw + 'px';
+                panel.style.left = (sl + sw - nw) + 'px';
+              }
+              if (dir === 'n' || dir === 'ne' || dir === 'nw') {
+                const nh = Math.max(MIN_H, sh - dy);
+                panel.style.height = nh + 'px';
+                panel.style.bottom = (sb + sh - nh) + 'px';
+              }
+            };
+            const onUp = () => {
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+              saveSize();
+              try { localStorage.setItem('ex_tkai_panel_pos', JSON.stringify({ left: parseFloat(panel.style.left) || 0, bottom: parseFloat(panel.style.bottom) || 10 })); } catch (_) { }
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          });
+        });
       })();
     })();
 
@@ -18069,6 +18212,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (cfg.translateAiProvider) { const el = document.getElementById('settingsTranslateProvider'); if (el) el.value = cfg.translateAiProvider; }
       if (cfg.translateAiModel) { const el = document.getElementById('settingsTranslateModel'); if (el) el.value = cfg.translateAiModel; }
       if (cfg.translateMaxChars) { const el = document.getElementById('settingsTranslateMaxChars'); if (el) el.value = cfg.translateMaxChars; }
+      if (cfg.translateAiApiKey) { const el = document.getElementById('settingsTranslateApiKey'); if (el) el.value = cfg.translateAiApiKey; }
+      (function syncTranslateKeyRow() {
+        const prov = cfg.translateAiProvider || '__main__';
+        const row = document.getElementById('translateApiKeyRow');
+        if (row) row.style.display = (prov !== '__main__' && prov !== 'ollama') ? '' : 'none';
+        const provSel = document.getElementById('settingsTranslateProvider');
+        if (provSel) provSel.addEventListener('change', () => {
+          if (row) row.style.display = (provSel.value !== '__main__' && provSel.value !== 'ollama') ? '' : 'none';
+        });
+      })();
       if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
       if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || 'http://localhost:11434/v1';
       getStoredApiKey('gemini').then(gk => {
@@ -18230,6 +18383,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         DB.saveSetting('translateAiProvider', document.getElementById('settingsTranslateProvider')?.value || '__main__');
         DB.saveSetting('translateAiModel', document.getElementById('settingsTranslateModel')?.value || '__main__');
         DB.saveSetting('translateMaxChars', document.getElementById('settingsTranslateMaxChars')?.value || '2000');
+        const trKey = document.getElementById('settingsTranslateApiKey')?.value?.trim() || '';
+        if (trKey) DB.saveSetting('translateAiApiKey', trKey);
         DB.saveSetting('geminiApiKey', gKey);
         DB.saveSetting('openaiApiKey', oKey);
         DB.saveSetting('anthropicApiKey', aKey);
