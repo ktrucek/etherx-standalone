@@ -8481,7 +8481,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.167</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.168</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8862,7 +8862,7 @@
         <div>
           <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
           <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-              id="helpVersionNum2">2.4.167</span></div>
+              id="helpVersionNum2">2.4.168</span></div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
           </div>
         </div>
@@ -9095,8 +9095,16 @@
               <option value="it">Italiano</option>
               <option value="es">Español</option>
               <option value="fr">Français</option>
+              <option value="id">Indonesian</option>
               <option value="auto">Auto</option>
             </select>
+          </div>
+          <div class="tkai-cfg-row" style="justify-content:space-between;align-items:center">
+            <span class="tkai-cfg-label">Auto-prevod poruka:</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer">
+              <input type="checkbox" id="tkaiAutoTranslate" checked>
+              Uključen
+            </label>
           </div>
           <div class="tkai-cfg-row">
             <span class="tkai-cfg-label">Br. odgovora:</span>
@@ -9145,6 +9153,9 @@
       <div class="tkai-footer">
         <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
         <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
+        <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Skini razgovor</button>
+        <button class="tkai-gen-btn" id="tkaiClearBtn"
+          style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
       </div>
     </div>
   </div>
@@ -11338,9 +11349,20 @@
     }
     function showFrame(tab) { ntp.style.display = 'none'; frame.style.removeProperty('display'); frame.classList.add('active'); document.getElementById('blockedOverlay').classList.remove('show'); }
     function shouldOpenGoogleExternally(rawUrl) {
-      // Google auth is now handled in-app via clean Chrome UA/header overrides
-      // from the main process. Keep navigation inside EtherX unless a future
-      // provider-specific failure requires an explicit external fallback again.
+      try {
+        const u = new URL(rawUrl);
+        const host = u.hostname.toLowerCase();
+        const path = u.pathname.toLowerCase();
+        const qs = (u.search || '').toLowerCase();
+
+        if (host === 'accounts.google.com' || host === 'consent.google.com') return true;
+
+        // OAuth endpoints often bounce through these Google paths and fail in embedded views.
+        if (host.endsWith('.google.com') && (path.includes('/o/oauth2') || path.includes('/signin') || path.includes('/servicelogin'))) return true;
+
+        // Keep this as fallback for Google's JS-driven sign-in flow parameters.
+        if (host.endsWith('.google.com') && (qs.includes('flowname=glifwebsignin') || qs.includes('flowentry=servicelogin'))) return true;
+      } catch (_) { }
       return false;
     }
 
@@ -12328,6 +12350,8 @@
       let collectedMessages = [];
       let selectedMsgIds = new Set();
       let isGenerating = false;
+      let isTranslating = false;
+      const translateCache = new Map();
       const STORAGE_KEY = 'ex_tkai_cfg';
 
       const messagesEl = document.getElementById('tkaiMessages');
@@ -12335,10 +12359,13 @@
       const toggleBtn = document.getElementById('tkaiBtnToggle');
       const genBtn = document.getElementById('tkaiGenBtn');
       const genAllBtn = document.getElementById('tkaiGenAllBtn');
+      const exportBtn = document.getElementById('tkaiExportBtn');
+      const clearBtn = document.getElementById('tkaiClearBtn');
       const statusEl = document.getElementById('tkaiScanStatus');
       const msgCountEl = document.getElementById('tkaiMsgCount');
       const toneEl = document.getElementById('tkaiTone');
       const langEl = document.getElementById('tkaiLang');
+      const autoTranslateEl = document.getElementById('tkaiAutoTranslate');
       const countEl = document.getElementById('tkaiCount');
       const contextEl = document.getElementById('tkaiContext');
       const customPromptEl = document.getElementById('tkaiCustomPrompt');
@@ -12354,6 +12381,7 @@
           if (countEl && saved.count) countEl.value = saved.count;
           if (contextEl && saved.context) contextEl.value = saved.context;
           if (customPromptEl && saved.customPrompt) customPromptEl.value = saved.customPrompt;
+          if (autoTranslateEl) autoTranslateEl.checked = saved.autoTranslate !== false;
         } catch (e) { }
       }
       function saveCfg() {
@@ -12361,6 +12389,7 @@
           localStorage.setItem(STORAGE_KEY, JSON.stringify({
             tone: toneEl?.value,
             lang: langEl?.value,
+            autoTranslate: autoTranslateEl?.checked !== false,
             count: countEl?.value,
             context: contextEl?.value,
             customPrompt: customPromptEl?.value
@@ -12393,10 +12422,18 @@
           return;
         }
         messagesEl.innerHTML = '';
+        const targetLang = langEl?.value || 'hr';
+        const showTranslated = autoTranslateEl?.checked !== false && targetLang !== 'auto';
         collectedMessages.slice(-30).forEach((message) => {
           const div = document.createElement('div');
           div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
-          div.innerHTML = '<div class="tkai-msg-user">' + escHtml(message.user) + '</div><div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
+          const translated = showTranslated && message.translatedLang === targetLang && message.translatedText
+            ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff">' + escHtml(message.translatedText) + '</div>'
+            : '';
+          const original = translated
+            ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65">' + escHtml(message.text) + '</div>'
+            : '<div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
+          div.innerHTML = '<div class="tkai-msg-user">' + escHtml(message.user) + '</div>' + original + translated;
           div.title = 'Klikni za odabir/deodabir';
           div.addEventListener('click', () => {
             if (selectedMsgIds.has(message.id)) selectedMsgIds.delete(message.id);
@@ -12440,6 +12477,45 @@
           repliesEl.appendChild(card);
         });
       }
+      async function translateViaGoogle(text, targetLang) {
+        const key = targetLang + '|' + text;
+        if (translateCache.has(key)) return translateCache.get(key);
+        try {
+          const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='
+            + encodeURIComponent(targetLang) + '&dt=t&q=' + encodeURIComponent(text);
+          const response = await fetch(url);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const data = await response.json();
+          const translated = Array.isArray(data?.[0])
+            ? data[0].map(part => part?.[0] || '').join('').trim()
+            : '';
+          if (!translated) throw new Error('Empty translation');
+          translateCache.set(key, translated);
+          return translated;
+        } catch (_) {
+          return text;
+        }
+      }
+
+      async function translateMessagesInPlace(messages, targetLang) {
+        if (!Array.isArray(messages) || !messages.length) return;
+        if (!targetLang || targetLang === 'auto' || isTranslating) return;
+        isTranslating = true;
+        try {
+          const candidates = messages
+            .filter(message => message && message.text)
+            .filter(message => message.translatedLang !== targetLang)
+            .slice(-20);
+          await Promise.all(candidates.map(async (message) => {
+            const translated = await translateViaGoogle(message.text, targetLang);
+            message.translatedText = translated;
+            message.translatedLang = targetLang;
+          }));
+        } finally {
+          isTranslating = false;
+        }
+      }
+
       function buildPrompt(messages) {
         const tone = toneEl?.value || 'friendly';
         const lang = langEl?.value || 'hr';
@@ -12464,9 +12540,14 @@
           it: 'ESCLUSIVAMENTE in italiano',
           es: 'EXCLUSIVAMENTE en español',
           fr: 'EXCLUSIVEMENT en français',
+          id: 'ISKLJUČIVO na indonesijskom jeziku',
           auto: 'na istom jeziku kao poruke u chatu',
         };
-        const chatLines = messages.map(message => `${message.user}: ${message.text}`).join('\n');
+        const useTranslated = autoTranslateEl?.checked !== false && lang !== 'auto';
+        const chatLines = messages.map(message => {
+          const msgText = useTranslated ? (message.translatedText || message.text) : message.text;
+          return `${message.user}: ${msgText}`;
+        }).join('\n');
         return `Ti si TikTok streamer AI asistent. Tvoj zadatak je generirati kratke, prirodne odgovore za TikTok chat.
 
 KONTEKST STREAMERA: ${context || 'TikTok streamer koji želi angažirati svoju publiku'}
@@ -12614,12 +12695,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           messages.forEach((message) => {
             const id = `${message.user}:${message.text}`;
             if (!existing.has(id)) {
-              collectedMessages.push({ ...message, id });
+              collectedMessages.push({ ...message, id, ts: Date.now() });
               existing.add(id);
               added += 1;
             }
           });
-          if (collectedMessages.length > 50) collectedMessages = collectedMessages.slice(-50);
+          if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
+          const targetLang = langEl?.value || 'hr';
+          if (autoTranslateEl?.checked !== false && targetLang !== 'auto' && added > 0) {
+            await translateMessagesInPlace(collectedMessages, targetLang);
+          }
           renderMessages();
           setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : (added ? '✅ Dodano ' + added : '✓ Sinkronizirano'));
         } catch (e) {
@@ -12657,10 +12742,64 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
       }
 
+      function clearConversation() {
+        collectedMessages = [];
+        selectedMsgIds.clear();
+        if (repliesEl) {
+          repliesEl.innerHTML = '<div class="tkai-empty">Razgovor očišćen.<br>Pokreni skeniranje za nove poruke.</div>';
+        }
+        renderMessages();
+        setStatus('🧹 Razgovor očišćen');
+      }
+
+      function exportConversation() {
+        if (!collectedMessages.length) {
+          showToast('⚠️ Nema poruka za export.');
+          return;
+        }
+        const targetLang = langEl?.value || 'auto';
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          targetLanguage: targetLang,
+          messageCount: collectedMessages.length,
+          messages: collectedMessages.map(message => ({
+            user: message.user,
+            text: message.text,
+            translatedText: message.translatedText || '',
+            translatedLang: message.translatedLang || '',
+            timestamp: message.ts || Date.now()
+          }))
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = 'tiktok-chat-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          a.remove();
+          URL.revokeObjectURL(href);
+        }, 0);
+        showToast('⬇️ Razgovor skinut.');
+      }
+
       loadCfg();
-      [toneEl, langEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+      [toneEl, langEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
       contextEl?.addEventListener('input', saveCfg);
       customPromptEl?.addEventListener('input', saveCfg);
+      langEl?.addEventListener('change', async () => {
+        if (autoTranslateEl?.checked !== false && (langEl?.value || 'auto') !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, langEl.value);
+          renderMessages();
+        }
+      });
+      autoTranslateEl?.addEventListener('change', async () => {
+        if (autoTranslateEl.checked && (langEl?.value || 'auto') !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, langEl.value);
+        }
+        renderMessages();
+      });
 
       configToggle?.addEventListener('click', () => {
         const hidden = configInner?.style.display === 'none';
@@ -12693,6 +12832,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         generateReplies(selected);
       });
       genAllBtn?.addEventListener('click', () => generateReplies(collectedMessages.slice(-15)));
+      exportBtn?.addEventListener('click', exportConversation);
+      clearBtn?.addEventListener('click', clearConversation);
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', stopScanning);
 
       // ── Draggable panel ──────────────────────────────────────────────────────
