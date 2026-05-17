@@ -7597,30 +7597,103 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     return prompt;
   }
 
-  // ── Call Gemini API ──
-  async function callGemini(prompt) {
-    const endpoint = await getGeminiEndpoint();
-    if (!endpoint) {
-      throw new Error(
-        "Gemini API ključ nije postavljen. Idi na Settings → AI → Gemini API Key.",
+  // ── Unified AI Call Function ──
+  async function callAI(prompt) {
+    const s = DB.getSettings();
+    const provider = s.aiProvider || "gemini";
+    const model = s.aiModel || "gemini-2.5-flash";
+
+    if (provider === "gemini") {
+      const endpoint = await getGeminiEndpoint();
+      if (!endpoint) throw new Error("Gemini API ključ nije postavljen.");
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.85, maxOutputTokens: 800 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok) throw new Error("Gemini error: " + res.status);
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    }
+
+    if (provider === "openrouter") {
+      const key = s.openrouterApiKey || s.openrouter_api_key;
+      if (!key) throw new Error("OpenRouter API ključ nije postavljen.");
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+          "HTTP-Referer": "https://etherx.io",
+          "X-Title": "EtherX Browser",
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.8,
+        }),
+        signal: AbortSignal.timeout(35000),
+      });
+      if (!res.ok) throw new Error("OpenRouter error: " + res.status);
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || "";
+    }
+
+    if (provider === "groq") {
+      const key = s.groqApiKey || s.groq_api_key;
+      if (!key) throw new Error("Groq API ključ nije postavljen.");
+      const res = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.8,
+          }),
+          signal: AbortSignal.timeout(25000),
+        },
       );
+      if (!res.ok) throw new Error("Groq error: " + res.status);
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || "";
     }
-    const res = await fetch(endpoint, {
+
+    // Fallback/Generic OpenAI compatible (OpenAI, Local, Ollama V1)
+    let baseUrl = "https://api.openai.com/v1";
+    let key = s.openaiApiKey || s.openai_api_key;
+
+    if (provider === "ollama")
+      baseUrl = s.ollamaBaseUrl || "http://localhost:11434/v1";
+    if (provider === "local") {
+      baseUrl = s.localAiBaseUrl || "http://127.0.0.1:11434/v1";
+      key = s.localAiKey || "";
+    }
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: key ? `Bearer ${key}` : undefined,
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.85, maxOutputTokens: 600 },
+        model: model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.8,
       }),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(40000),
     });
-    if (!res.ok) {
-      const err = await res.text().catch(() => "");
-      throw new Error("Gemini greška " + res.status + ": " + err.slice(0, 120));
-    }
+    if (!res.ok) throw new Error(`${provider} error: ${res.status}`);
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return text.trim();
+    return data?.choices?.[0]?.message?.content || "";
   }
 
   // ── Generate replies ──
@@ -7643,7 +7716,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
     try {
       const prompt = buildPrompt(msgs);
-      const raw = await callGemini(prompt);
+      const raw = await callAI(prompt);
       const lines = raw
         .split("\n")
         .map((l) => l.trim())
