@@ -7189,20 +7189,72 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
 // ── TikTok Chat AI Assistant ──────────────────────────────────────────────────
 (function initTikTokChatAI() {
-  // Dodaj referencu na gumb za prijevod označenih poruka i prikaz broja odgovora
-  const translateSelectedBtn = document.getElementById(
-    "tkaiTranslateSelectedBtn",
-  );
-  const replyCountEl = document.getElementById("tkaiReplyCount");
   const panel = document.getElementById("tiktokAIPanel");
   if (!panel) return;
+
+  function getTkaiSetting(key, def) {
+    const s = DB.getSettings();
+    return s[key] !== undefined ? s[key] : def;
+  }
 
   // ── State ──
   let scanActive = false;
   let scanInterval = null;
-  let autoScanActive = false; // New state for auto-scanning
-  let autoScanInterval = null; // New interval for auto-scanning check
+  let autoScanActive = getTkaiSetting("tkaiAutoScanActive", false);
+  let autoScanInterval = null;
   let collectedMessages = []; // { user, text, id, type, translatedText, translatedLang }
+  let isGenerating = false;
+  let selectedMsgIds = new Set();
+
+  function startScanning() {
+    if (scanActive) return;
+    const tab = getActiveTab();
+    const url = tab?.url || "";
+    if (!url.includes("tiktok.com")) {
+      showToast(
+        "⚠️ Otvori TikTok Live stranicu u browseru pa klikni Skeniranje ON",
+      );
+      return;
+    }
+    scanActive = true;
+    if (toggleBtn) {
+      toggleBtn.textContent = "⏹ Skeniranje OFF";
+      toggleBtn.className = "tkai-scan-btn stop";
+    }
+    setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
+    scrapeTikTokChat();
+    scanInterval = setInterval(scrapeTikTokChat, 4000);
+  }
+
+  function stopScanning() {
+    if (!scanActive) return;
+    scanActive = false;
+    if (scanInterval) clearInterval(scanInterval);
+    scanInterval = null;
+    if (toggleBtn) {
+      toggleBtn.textContent = "▶ Skeniranje ON";
+      toggleBtn.className = "tkai-scan-btn start";
+    }
+    setStatus("");
+  }
+
+  function initAutoScan() {
+    if (autoScanInterval) clearInterval(autoScanInterval);
+    autoScanInterval = setInterval(
+      () => {
+        const enabled = getTkaiSetting("tkaiAutoScanEnabled", false);
+        if (!enabled || scanActive) return;
+
+        const tab = getActiveTab();
+        if (tab?.url?.includes("tiktok.com") && tab?.url?.includes("/live")) {
+          console.log("[TikTokAI] Auto-starting scan...");
+          startScanning();
+        }
+      },
+      parseInt(getTkaiSetting("tkaiAutoScanInterval", "10")) * 1000,
+    );
+  }
+  initAutoScan();
 
   // ── DOM refs ──
   const messagesEl = document.getElementById("tkaiMessages");
@@ -7212,56 +7264,315 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const genAllBtn = document.getElementById("tkaiGenAllBtn");
   const statusEl = document.getElementById("tkaiScanStatus");
   const msgCountEl = document.getElementById("tkaiMsgCount");
-  const toneEl = document.getElementById("tkaiTone");
-  const langEl = document.getElementById("tkaiLang");
-  const countEl = document.getElementById("tkaiCount");
-  const contextEl = document.getElementById("tkaiContext");
-  const customPromptEl = document.getElementById("tkaiCustomPrompt");
-  const configToggle = document.getElementById("tkaiConfigToggle");
-  const configInner = document.getElementById("tkaiConfigInner");
-  const configArrow = document.getElementById("tkaiConfigArrow");
-
-  // ── Load saved settings ──
-  function loadCfg() {
-    try {
-      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      if (toneEl && s.tone) toneEl.value = s.tone;
-      if (langEl && s.lang) langEl.value = s.lang;
-      if (countEl && s.count) countEl.value = s.count;
-      if (contextEl && s.context) contextEl.value = s.context;
-      if (customPromptEl && s.customPrompt)
-        customPromptEl.value = s.customPrompt;
-      if (typeof s.autoScanActive === "boolean")
-        autoScanActive = s.autoScanActive; // Load autoScanActive
-    } catch (e) {}
-  }
-  function saveCfg() {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          tone: toneEl?.value,
-          lang: langEl?.value,
-          count: countEl?.value,
-          context: contextEl?.value,
-          customPrompt: customPromptEl?.value,
-          autoScanActive: autoScanActive, // New line
-        }),
-      );
-    } catch (e) {}
-  }
-  loadCfg();
-  [toneEl, langEl, countEl, contextEl, customPromptEl].forEach((el) =>
-    el?.addEventListener("change", saveCfg),
+  const translateSelectedBtn = document.getElementById(
+    "tkaiTranslateSelectedBtn",
   );
-  customPromptEl?.addEventListener("input", saveCfg);
-  contextEl?.addEventListener("input", saveCfg);
+  const replyCountEl = document.getElementById("tkaiReplyCount");
+  const giftToggleBtn = document.getElementById("tkaiGiftToggle");
+  const giftGalleryEl = document.getElementById("tkaiGiftGallery");
+  const exportBtn = document.getElementById("tkaiExportBtn");
+  const clearBtn = document.getElementById("tkaiClearBtn");
+  const holdLBtn = document.getElementById("tkaiHoldLBtn");
+  let holdLActive = false;
 
-  // ── Config toggle ──
-  configToggle?.addEventListener("click", () => {
-    const hidden = configInner?.style.display === "none";
-    if (configInner) configInner.style.display = hidden ? "" : "none";
-    if (configArrow) configArrow.textContent = hidden ? "▼" : "▶";
+  exportBtn?.addEventListener("click", () => {
+    if (collectedMessages.length === 0) {
+      showToast("Nema poruka za izvoz.");
+      return;
+    }
+    const text = collectedMessages
+      .map((m) => `[${m.type}] ${m.user}: ${m.text}`)
+      .join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tiktok_chat_${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("✅ Razgovor skinut");
+  });
+
+  clearBtn?.addEventListener("click", () => {
+    if (confirm("Očisti sve prikupljene poruke?")) {
+      collectedMessages = [];
+      selectedMsgIds.clear();
+      renderMessages();
+      updateGiftGallery();
+      showToast("🧹 Očišćeno");
+    }
+  });
+
+  holdLBtn?.addEventListener("click", () => {
+    holdLActive = !holdLActive;
+    holdLBtn.textContent = holdLActive ? "⌨️ L Hold ON" : "⌨️ L Hold OFF";
+    holdLBtn.classList.toggle("active", holdLActive);
+    showToast(holdLActive ? "L Hold aktiviran" : "L Hold deaktiviran");
+  });
+
+  giftToggleBtn?.addEventListener("click", () => {
+    if (giftGalleryEl) {
+      const hidden = giftGalleryEl.style.display === "none";
+      giftGalleryEl.style.display = hidden ? "" : "none";
+      giftToggleBtn.textContent = hidden ? "Sakrij" : "Prikaži";
+    }
+  });
+
+  // AI Live Chat Settings Buttons
+  const btnCustomCategories = document.getElementById(
+    "btnTkaiCustomCategories",
+  );
+  const btnGiftGallery = document.getElementById("btnTkaiGiftGallery");
+  const btnFanClubGallery = document.getElementById("btnTkaiFanClubGallery");
+  const btnAutoScan = document.getElementById("btnTkaiAutoScan");
+  const btnMsgTypes = document.getElementById("btnTkaiMsgTypes");
+  const btnTools = document.getElementById("btnTkaiTools");
+
+  btnCustomCategories?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Vlastite upute po kategorijama",
+      `
+      <div class="s-group">
+        <div class="s-row-desc" style="margin-bottom:12px;">Definiraj posebne upute za AI ovisno o vrsti poruke. Ako je prazno, koristi se glavni System Prompt.</div>
+        
+        <div style="margin-bottom:15px;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:5px;">💬 Za obične Chat poruke:</div>
+          <textarea class="s-input" data-setting="tkaiPromptChat" placeholder="Npr. Odgovaraj kratko i duhovito..." style="width:100%;height:60px;font-size:11px;"></textarea>
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:5px;">🎁 Za Gifts / Poklone:</div>
+          <textarea class="s-input" data-setting="tkaiPromptGift" placeholder="Npr. Zahvali se jako srdačno na poklonu..." style="width:100%;height:60px;font-size:11px;"></textarea>
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:5px;">⭐ Za nove Subscriptions:</div>
+          <textarea class="s-input" data-setting="tkaiPromptSub" placeholder="Npr. Dobrodošlica u fan club..." style="width:100%;height:60px;font-size:11px;"></textarea>
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:5px;">🎙️ Za Titlove (tvoj govor):</div>
+          <textarea class="s-input" data-setting="tkaiPromptCaption" placeholder="Npr. Iskoristi ovo da potvrdiš što sam rekao..." style="width:100%;height:60px;font-size:11px;"></textarea>
+        </div>
+      </div>
+    `,
+    );
+  });
+  btnGiftGallery?.addEventListener("click", () => {
+    showToast("Uskoro: Postavke Gift Galerije");
+  });
+  btnFanClubGallery?.addEventListener("click", () => {
+    showToast("Uskoro: Postavke Fan Club Galerije");
+  });
+  btnAutoScan?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Automatsko skeniranje",
+      `
+      <div class="s-group">
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Aktiviraj automatsko skeniranje</div>
+            <div class="s-row-desc">Pokreni skeniranje čim otvoriš TikTok Live</div>
+          </div>
+          <div class="toggle" data-setting="tkaiAutoScanEnabled"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Interval provjere (sekunde)</div>
+            <div class="s-row-desc">Koliko često provjeravati je li live otvoren</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiAutoScanInterval" min="5" max="300" value="10" style="width:70px">
+        </div>
+      </div>
+    `,
+    );
+  });
+
+  btnTools?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Alati i napredne opcije",
+      `
+      <div class="s-group">
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Debug Mode</div>
+            <div class="s-row-desc">Prikazuj dodatne informacije u konzoli</div>
+          </div>
+          <div class="toggle" data-setting="tkaiDebugMode"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Spremi povijest chata</div>
+            <div class="s-row-desc">Lokalno čuvanje zapisa chata za analizu</div>
+          </div>
+          <div class="toggle" data-setting="tkaiSaveHistory"></div>
+        </div>
+        <div class="s-row" style="margin-top:10px">
+          <button class="s-btn-sm" style="background:var(--red);color:#fff" onclick="if(confirm('Jeste li sigurni?')){ localStorage.clear(); location.reload(); }">Resetiraj sve TikTok postavke</button>
+        </div>
+      </div>
+    `,
+    );
+  });
+
+  function openTkaiSubPanel(title, html) {
+    const existing = document.querySelector(".tkai-sub-panel-overlay");
+    if (existing) existing.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = "tkai-sub-panel-overlay";
+    overlay.style.cssText =
+      "position:absolute;top:0;left:0;width:100%;height:100%;background:var(--bg);z-index:100;padding:20px;display:flex;flex-direction:column;border-radius:12px;box-shadow:0 0 20px rgba(0,0,0,0.5);border:1px solid var(--border);";
+    overlay.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:10px;">
+        <h3 style="margin:0;font-size:16px;color:var(--accent);">${title}</h3>
+        <button class="s-btn-sm" id="closeTkaiSubPanel" style="background:var(--bg3);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;color:var(--text);">✕ Zatvori</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding-right:10px;">${html}</div>
+    `;
+    const settingsBody = document.getElementById("settingsBody");
+    if (settingsBody) {
+      settingsBody.style.position = "relative";
+      settingsBody.appendChild(overlay);
+    } else {
+      document.body.appendChild(overlay);
+      overlay.style.position = "fixed";
+      overlay.style.top = "50%";
+      overlay.style.left = "50%";
+      overlay.style.transform = "translate(-50%, -50%)";
+      overlay.style.width = "400px";
+      overlay.style.height = "auto";
+      overlay.style.maxHeight = "80vh";
+    }
+
+    overlay.querySelector("#closeTkaiSubPanel").onclick = () =>
+      overlay.remove();
+
+    // Re-init toggles and inputs in the sub-panel
+    overlay.querySelectorAll("[data-setting]").forEach((el) => {
+      const k = el.dataset.setting;
+      const s = DB.getSettings();
+      if (el.classList.contains("toggle")) {
+        if (s[k] === true) el.classList.add("on");
+        else el.classList.remove("on");
+        el.onclick = () => {
+          el.classList.toggle("on");
+          DB.saveSetting(k, el.classList.contains("on"));
+          showSettingsAutoSaveIndicator();
+        };
+      } else if (el.tagName === "INPUT" || el.tagName === "SELECT") {
+        if (s[k] !== undefined) el.value = s[k];
+        el.onchange = () => {
+          DB.saveSetting(k, el.value);
+          showSettingsAutoSaveIndicator();
+        };
+        if (el.tagName === "INPUT")
+          el.oninput = () => {
+            DB.saveSetting(k, el.value);
+            showSettingsAutoSaveIndicator();
+          };
+      }
+    });
+  }
+
+  btnMsgTypes?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Vrste poruka za skeniranje",
+      `
+      <div class="s-group">
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Skeniraj chat poruke</div>
+            <div class="s-row-desc">Obične poruke gledatelja</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiScanChat"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Skeniraj Gifts / Poklone</div>
+            <div class="s-row-desc">Detektiraj kad netko pošalje gift</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiScanGifts"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Skeniraj Subscriptions</div>
+            <div class="s-row-desc">Nove pretplate i obnove</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiScanSubs"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Skeniraj titlove (Captions)</div>
+            <div class="s-row-desc">Što streamer govori (ako je dostupno)</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiScanCaptions"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Skeniraj ulaske (Join)</div>
+            <div class="s-row-desc">Kad netko uđe u live (može biti puno poruka)</div>
+          </div>
+          <div class="toggle" data-setting="tkaiScanJoins"></div>
+        </div>
+      </div>
+    `,
+    );
+  });
+
+  btnGiftGallery?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Postavke Gift Galerije",
+      `
+      <div class="s-group">
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Prikaži Gift Galeriju</div>
+            <div class="s-row-desc">Vizualni prikaz poklona ispod chata</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Zvučna obavijest za Gift</div>
+            <div class="s-row-desc">Reproduciraj zvuk kad stigne poklon</div>
+          </div>
+          <div class="toggle" data-setting="tkaiGiftSound"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Minimalna vrijednost (Coins)</div>
+            <div class="s-row-desc">Skeniraj samo gifte vrijednije od X coina</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiMinGiftCoins" min="0" value="0" style="width:70px">
+        </div>
+      </div>
+    `,
+    );
+  });
+
+  btnFanClubGallery?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Postavke Fan Club Galerije",
+      `
+      <div class="s-group">
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Prikaži Fan Club listu</div>
+            <div class="s-row-desc">Lista najaktivnijih fanova u sesiji</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiShowFanClub"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Istakni Super Fanove</div>
+            <div class="s-row-desc">Posebna boja i animacija za Super Fan poruke</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiHighlightSuperFans"></div>
+        </div>
+      </div>
+    `,
+    );
   });
 
   // ── TikTok chat scraper script (injected into webview) ──
@@ -7307,7 +7618,10 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       '[class*="webcast-subtitles"]',
       '[data-e2e="live-subtitle"]',
       '.webcast-chatroom__caption',
-      '.webcast-chatroom__subtitle'
+      '.webcast-chatroom__subtitle',
+      '.caption-content',
+      '.subtitle-content',
+      '[class*="CaptionContainer"]',
     ];
     let captions = [];
     for (const sel of captionSelectors) {
@@ -7397,6 +7711,44 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     return JSON.stringify(results);
   })()`;
 
+  function updateGiftGallery() {
+    if (!giftGalleryEl) return;
+    if (!getTkaiSetting("tkaiShowGiftGallery", true)) {
+      giftGalleryEl.style.display = "none";
+      if (giftToggleBtn) giftToggleBtn.textContent = "Prikaži";
+      return;
+    }
+
+    const gifts = collectedMessages.filter(
+      (m) => m.type === "gift" || m.type === "subscriber",
+    );
+    if (gifts.length === 0) {
+      giftGalleryEl.innerHTML =
+        '<div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>';
+      return;
+    }
+
+    giftGalleryEl.innerHTML = "";
+    gifts.slice(-15).forEach((g) => {
+      const item = document.createElement("div");
+      item.className = "tkai-msg gift-event";
+      item.style.borderLeft =
+        g.type === "gift" ? "3px solid #ff5f56" : "3px solid #667eea";
+      item.innerHTML = `
+        <div class="tkai-msg-user">
+          <span class="tk-badge ${g.type}">${g.type === "gift" ? "🎁" : "⭐"}</span>
+          <span class="u-name" style="color:var(--accent)">${escHtml(g.user)}</span>
+        </div>
+        <div class="tkai-msg-text" style="font-weight:600">${escHtml(g.text)}</div>
+      `;
+      giftGalleryEl.appendChild(item);
+    });
+    giftGalleryEl.scrollTop = giftGalleryEl.scrollHeight;
+
+    const countEl = document.getElementById("tkaiGiftCount");
+    if (countEl) countEl.textContent = gifts.length + " događaja";
+  }
+
   // ── Scrape chat from active tab ──
   async function scrapeTikTokChat() {
     if (!window.electronWebview) return;
@@ -7430,12 +7782,34 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         setStatus("📭 Nema poruka u chatu");
         return;
       }
+
+      // Filter by type from settings
+      const scanChat = getTkaiSetting("tkaiScanChat", true);
+      const scanGifts = getTkaiSetting("tkaiScanGifts", true);
+      const scanSubs = getTkaiSetting("tkaiScanSubs", true);
+      const scanCaptions = getTkaiSetting("tkaiScanCaptions", true);
+      const scanJoins = getTkaiSetting("tkaiScanJoins", false);
+
+      const filteredMsgs = msgs.filter((m) => {
+        if (m.type === "chat" && !scanChat) return false;
+        if (m.type === "gift" && !scanGifts) return false;
+        if (m.type === "subscriber" && !scanSubs) return false;
+        if (m.type === "caption" && !scanCaptions) return false;
+        if (m.type === "join" && !scanJoins) return false;
+        return true;
+      });
+
+      if (filteredMsgs.length === 0) {
+        setStatus("📭 Nema novih poruka (filter)");
+        return;
+      }
+
       // Merge with existing (avoid duplicates by text+user)
       const existing = new Set(
         collectedMessages.map((m) => m.user + ":" + m.text),
       );
       let added = 0;
-      msgs.forEach((m) => {
+      filteredMsgs.forEach((m) => {
         const key = m.user + ":" + m.text;
         if (!existing.has(key)) {
           collectedMessages.push(m);
@@ -7443,10 +7817,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           added++;
         }
       });
+
+      if (added === 0) return;
+
       // Keep last 50 messages
       if (collectedMessages.length > 50)
         collectedMessages = collectedMessages.slice(-50);
       renderMessages();
+      updateGiftGallery();
       setStatus(
         scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : "",
       );
@@ -7530,26 +7908,32 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
   // ── Build AI prompt ──
   function buildPrompt(msgs) {
-    const tone = toneEl?.value || "friendly";
-    const lang = langEl?.value || "hr";
-    const count = parseInt(countEl?.value || "3");
-    const ctx = contextEl?.value?.trim() || "";
-    const custom = customPromptEl?.value?.trim() || "";
+    const tone = getTkaiSetting("tkaiTone", "friendly");
+    const lang = getTkaiSetting("tkaiReplyLang", "hr");
+    const count = parseInt(getTkaiSetting("tkaiReplyCount", "3"));
+    const custom = getTkaiSetting("tkaiCustomPrompt", "").trim();
+
+    const specificPrompts = {
+      chat: getTkaiSetting("tkaiPromptChat", ""),
+      gift: getTkaiSetting("tkaiPromptGift", ""),
+      subscriber: getTkaiSetting("tkaiPromptSub", ""),
+      caption: getTkaiSetting("tkaiPromptCaption", ""),
+    };
+
+    // Find primary type (usually the most recent message we're replying to)
+    const primaryType = msgs[msgs.length - 1]?.type || "chat";
+    const specificPrompt = specificPrompts[primaryType] || "";
 
     const toneMap = {
       friendly: "prijateljski i topao",
       funny: "smiješan i zabavan, koristi humor",
-      hype: "energičan i nabijen hype-om, kao da slaviš s gledateljem",
-      engaging: "angažirajući, potiče interakciju i komentare",
-      formal: "formalan i profesionalan",
-      flirty: "koketno i šaljivo",
-      custom: custom || "prijateljski",
+      crypto: "kripto stručnjak (bullish)",
+      professional: "profesionalan i ozbiljan",
+      minimal: "minimalistički (samo bitno)",
     };
     const langMap = {
       hr: "ISKLJUČIVO na hrvatskom jeziku",
       en: "EXCLUSIVELY in English",
-      sr: "ISKLJUČIVO na srpskom jeziku",
-      bs: "ISKLJUČIVO na bosanskom jeziku",
       de: "AUSSCHLIESSLICH auf Deutsch",
       it: "ESCLUSIVAMENTE in italiano",
       es: "EXCLUSIVAMENTE en español",
@@ -7571,12 +7955,11 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
     let prompt = `Ti si TikTok streamer AI asistent. Tvoj zadatak je generirati kratke, prirodne odgovore za TikTok chat.
 
-VAŽNO: 
+VAŽNO:
 - Ako je korisnik "SUPER FAN" ili "FAN CLUB", budi posebno srdačan i zahvali mu se na podršci. 
 - Ako je poslao "GIFT", obavezno se zahvali na poklonu.
 - Ako vidiš poruke označene sa "[LIVE SUBTITLE/SCREEN TEXT]", to je ono što ti (streamer) trenutno govoriš ili što piše na ekranu. Iskoristi te informacije kao dodatni kontekst da bolje odgovoriš na pitanja iz chata.
 
-KONTEKST STREAMERA: ${ctx || "TikTok streamer koji želi angažirati svoju publiku"}
 TON: ${toneMap[tone] || toneMap.friendly}
 JEZIK: Odgovaraj ${langMap[lang] || langMap.hr}
 BROJ PRIJEDLOGA: Generiraj točno ${count} različita prijedloga odgovora.
@@ -7589,8 +7972,9 @@ PRAVILA:
 - Zvuči prirodno kao da streamer osobno piše
 - Ako ima pitanje u chatu — odgovori na njega
 - Možeš koristiti max 1-2 emojia po odgovoru
-- NE PIŠИ korisničko ime ili prefiks poput "Odgovor 1:"
-${custom ? "- POSEBNE UPUTE: " + custom : ""}
+- NE PIŠI korisničko ime ili prefiks poput "Odgovor 1:"
+${specificPrompt ? "- UPUTE ZA OVU VRSTU PORUKE: " + specificPrompt : ""}
+${custom ? "- OPĆE POSEBNE UPUTE: " + custom : ""}
 
 Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numeracije, bez objašnjenja.`;
 
@@ -7735,7 +8119,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
       const suggestions = (allLines.length >= 2 ? allLines : lines).slice(
         0,
-        parseInt(countEl?.value || "3"),
+        parseInt(getTkaiSetting("tkaiReplyCount", "3")),
       );
       renderReplies(suggestions, msgs);
     } catch (e) {
@@ -7823,11 +8207,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           if (window.etherx?.ai?.translate) {
             translated = await window.etherx.ai.translate(
               msg.text,
-              langEl?.value || "hr",
+              getTkaiSetting("tkaiReadLang", "hr"),
             );
           } else {
             // Fallback: samo prikaži tekst s oznakom jezika
-            translated = `[${langEl?.value || "hr"}] ${msg.text}`;
+            translated = `[${getTkaiSetting("tkaiReadLang", "hr")}] ${msg.text}`;
           }
         } catch (e) {
           translated = "[Greška u prijevodu] " + msg.text;
@@ -7839,31 +8223,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
   // ── Toggle scan ──
   toggleBtn?.addEventListener("click", () => {
-    if (scanActive) {
-      // Stop
-      scanActive = false;
-      clearInterval(scanInterval);
-      scanInterval = null;
-      toggleBtn.textContent = "▶ Skeniranje ON";
-      toggleBtn.className = "tkai-scan-btn start";
-      setStatus("");
-    } else {
-      // Start
-      const tab = getActiveTab();
-      const url = tab?.url || "";
-      if (!url.includes("tiktok.com")) {
-        showToast(
-          "⚠️ Otvori TikTok Live stranicu u browseru pa klikni Skeniranje ON",
-        );
-        return;
-      }
-      scanActive = true;
-      toggleBtn.textContent = "⏹ Skeniranje OFF";
-      toggleBtn.className = "tkai-scan-btn stop";
-      setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
-      scrapeTikTokChat();
-      scanInterval = setInterval(scrapeTikTokChat, 4000);
-    }
+    if (scanActive) stopScanning();
+    else startScanning();
   });
 
   // ── Generate for selected messages ──
@@ -7884,11 +8245,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   document
     .getElementById("closeTiktokAIPanel")
     ?.addEventListener("click", () => {
-      if (scanActive) {
-        scanActive = false;
-        clearInterval(scanInterval);
-        scanInterval = null;
-      }
+      stopScanning();
     });
 })();
 
@@ -10108,7 +10465,7 @@ function initSettingsPanel() {
         DB.saveSetting(k, el.value); // auto-save immediately
         showSettingsAutoSaveIndicator();
       });
-    } else if (el.tagName === "INPUT") {
+    } else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
       if (PENDING_SETTINGS[k] !== undefined) el.value = PENDING_SETTINGS[k];
       el.addEventListener("input", () => {
         PENDING_SETTINGS[k] = el.value;

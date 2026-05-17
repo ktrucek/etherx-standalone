@@ -6549,6 +6549,7 @@
           <button class="sit-btn" data-stab="storage"><span class="sit-icon">💾</span>Pohrana</button>
           <button class="sit-btn" data-stab="help"><span class="sit-icon">❓</span>Pomoć</button>
           <button class="sit-btn" data-stab="ai"><span class="sit-icon">🤖</span>AI</button>
+          <button class="sit-btn" data-stab="ai-live-chat"><span class="sit-icon">🎵</span>AI Live Chat</button>
         </div>
         <!-- Settings body -->
         <div class="settings-body" id="settingsBody">
@@ -8987,6 +8988,126 @@
           </div>
         </div>
 
+        <!-- AI Live Chat Settings -->
+        <div class="s-tab-pane" id="stab-ai-live-chat">
+          <div class="s-group">
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label" style="font-weight:600;font-size:14px">🎵 AI Live Chat Postavke</div>
+                <div class="s-row-desc">Konfiguracija za TikTok Chat AI i automatske odgovore</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="s-group">
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Ton odgovora</div>
+                <div class="s-row-desc">Stil kojim će AI odgovarati na poruke</div>
+              </div>
+              <select class="s-select" data-setting="tkaiTone">
+                <option value="friendly">Ljubazan i veseo</option>
+                <option value="funny">Duhovit i sarkastičan</option>
+                <option value="crypto">Kripto stručnjak (bullish)</option>
+                <option value="professional">Profesionalan i ozbiljan</option>
+                <option value="minimal">Minimalistički (samo bitno)</option>
+              </select>
+            </div>
+
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Broj prijedloga</div>
+                <div class="s-row-desc">Koliko različitih odgovora AI nudi</div>
+              </div>
+              <select class="s-select" data-setting="tkaiReplyCount">
+                <option value="1">1 odgovor</option>
+                <option value="2">2 odgovora</option>
+                <option value="3" selected>3 odgovora</option>
+              </select>
+            </div>
+
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Jezik odgovora</div>
+                <div class="s-row-desc">Jezik na kojem će AI pisati prijedloge</div>
+              </div>
+              <select class="s-select" data-setting="tkaiReplyLang">
+                <option value="auto">Automatski (prema chatu)</option>
+                <option value="hr">Hrvatski</option>
+                <option value="en">English</option>
+                <option value="de">Deutsch</option>
+              </select>
+            </div>
+
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Čitanje chata</div>
+                <div class="s-row-desc">Jezik na kojem AI čita i prevodi poruke chata</div>
+              </div>
+              <select class="s-select" data-setting="tkaiReadLang">
+                <option value="hr">Hrvatski</option>
+                <option value="en">English</option>
+                <option value="de">Deutsch</option>
+              </select>
+            </div>
+
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Kontekst (zadnjih poruka)</div>
+                <div class="s-row-desc">Koliko prethodnih poruka AI vidi za bolji kontekst</div>
+              </div>
+              <input type="number" class="s-input" data-setting="tkaiContextCount" min="0" max="50" value="10"
+                style="width:70px">
+            </div>
+
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Auto-prijevod na HR</div>
+                <div class="s-row-desc">Automatski prevedi strane poruke u chatu</div>
+              </div>
+              <div class="toggle" data-setting="tkaiAutoTranslate"></div>
+            </div>
+          </div>
+
+          <div class="s-group">
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label">Vlastite upute (System Prompt)</div>
+                <div class="s-row-desc">Dodatne upute za AI koje se uvijek primjenjuju</div>
+              </div>
+            </div>
+            <textarea class="s-input" data-setting="tkaiCustomPrompt"
+              placeholder="Npr. Ti si moderator kanala 'Ime', budi veseo..."
+              style="width:100%;height:80px;margin-top:8px;font-size:12px;resize:vertical"></textarea>
+          </div>
+
+          <div class="s-group" style="margin-top:16px">
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label" style="font-weight:600">Upravljanje galerijama i pravilima</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+              <button class="s-btn-sm" id="btnTkaiCustomCategories">Vlastite upute po kategorijama</button>
+              <button class="s-btn-sm" id="btnTkaiGiftGallery">Postavke Gift Galerije</button>
+              <button class="s-btn-sm" id="btnTkaiFanClubGallery">Postavke Fan Club Galerije</button>
+            </div>
+          </div>
+
+          <div class="s-group" style="margin-top:16px">
+            <div class="s-row">
+              <div class="s-row-left">
+                <div class="s-row-label" style="font-weight:600">Postavke skeniranja chata</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+              <button class="s-btn-sm" id="btnTkaiAutoScan">Automatsko skeniranje</button>
+              <button class="s-btn-sm" id="btnTkaiMsgTypes">Vrste poruka za skeniranje</button>
+              <button class="s-btn-sm" id="btnTkaiTools">Alati i ostalo</button>
+            </div>
+          </div>
+        </div>
+
         <!-- ── History ─────────────────────────────────────────── -->
         <div class="s-tab-pane" id="stab-history">
           <div class="s-group">
@@ -9260,83 +9381,7 @@
       </div>
     </div>
     <div class="tkai-body">
-      <div class="tkai-config">
-        <div class="tkai-config-title" id="tkaiConfigToggle">
-          <span>AI postavke odgovora</span>
-          <span id="tkaiConfigArrow">▼</span>
-        </div>
-        <div class="tkai-config-inner" id="tkaiConfigInner">
-          <div class="tkai-cfg-row">
-            <span class="tkai-cfg-label">Ton / Stil:</span>
-            <select class="tkai-cfg-select" id="tkaiTone">
-              <option value="friendly">Prijateljski</option>
-              <option value="funny">Smiješan</option>
-              <option value="hype">Hype</option>
-              <option value="engaging">Angažirajući</option>
-              <option value="formal">Formalni</option>
-              <option value="flirty">Koketni</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-          <div class="tkai-cfg-row">
-            <span class="tkai-cfg-label">Jezik čitanja:</span>
-            <select class="tkai-cfg-select" id="tkaiReadLang">
-              <option value="hr">Hrvatski</option>
-              <option value="en">English</option>
-              <option value="sr">Srpski</option>
-              <option value="bs">Bosanski</option>
-              <option value="de">Deutsch</option>
-              <option value="it">Italiano</option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="id">Indonesian</option>
-              <option value="auto">Auto</option>
-            </select>
-          </div>
-          <div class="tkai-cfg-row">
-            <span class="tkai-cfg-label">Jezik pisanja:</span>
-            <select class="tkai-cfg-select" id="tkaiReplyLang">
-              <option value="hr">Hrvatski</option>
-              <option value="en">English</option>
-              <option value="sr">Srpski</option>
-              <option value="bs">Bosanski</option>
-              <option value="de">Deutsch</option>
-              <option value="it">Italiano</option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="id">Indonesian</option>
-              <option value="auto">Auto</option>
-            </select>
-          </div>
-          <div class="tkai-cfg-row" style="justify-content:space-between;align-items:center">
-            <span class="tkai-cfg-label">Auto-prevod poruka:</span>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer">
-              <input type="checkbox" id="tkaiAutoTranslate" checked>
-              Uključen
-            </label>
-          </div>
-          <div class="tkai-cfg-row">
-            <span class="tkai-cfg-label">Br. odgovora:</span>
-            <select class="tkai-cfg-select" id="tkaiCount">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3" selected>3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-            </select>
-          </div>
-          <div class="tkai-cfg-row">
-            <span class="tkai-cfg-label">Kontekst:</span>
-            <input type="text" class="tkai-cfg-select" id="tkaiContext"
-              placeholder="Npr. crypto live stream, Q&A, gaming...">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <span class="tkai-cfg-label">Vlastite upute AI-u:</span>
-            <textarea class="tkai-cfg-textarea" id="tkaiCustomPrompt"
-              placeholder="Npr: Uvijek završi s emoji. Budi kratak. Postavi pitanje natrag gledatelju…"></textarea>
-          </div>
-        </div>
-      </div>
+      <!-- Removed tkai-config block, settings moved to Settings → AI → AI Live Chat -->
       <div class="tkai-main-wrap">
         <div class="tkai-main">
           <div class="tkai-chat-col">
