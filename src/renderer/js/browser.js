@@ -7300,35 +7300,98 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         if (found.length > 0) { items = Array.from(found); break; }
       }
     }
-    items.slice(-30).forEach(function(el, i) {
+    
+    // --- Scan for On-Screen Captions/Subtitles ---
+    const captionSelectors = [
+      '[class*="webcast-caption"]',
+      '[class*="webcast-subtitles"]',
+      '[data-e2e="live-subtitle"]',
+      '.webcast-chatroom__caption',
+      '.webcast-chatroom__subtitle'
+    ];
+    let captions = [];
+    for (const sel of captionSelectors) {
+      const found = document.querySelectorAll(sel);
+      if (found.length > 0) { 
+        Array.from(found).forEach(cap => {
+          const text = cap.textContent.trim();
+          if (text.length > 2) {
+            results.push({
+              user: 'SYSTEM (Titlovi)',
+              text: text,
+              id: 'cap_' + Date.now() + '_' + Math.random(),
+              type: 'caption',
+              isSuperFan: false,
+              isFanClub: false,
+              isModerator: false,
+              isPopular: false,
+              badgeText: ''
+            });
+          }
+        });
+      }
+    }
+
+    items.slice(-40).forEach(function(el, i) {
       // Try various selectors for username
       const userEl = el.querySelector('[data-e2e="user-name"], .user-name, [class*="Username"], [class*="user-name"], .owner-name, [class*="AuthorName"], strong');
       // Try various selectors for message text
       const textEl = el.querySelector('[data-e2e="message-text"], [class*="comment-text"], [class*="message-content"], [class*="CommentText"], [class*="chat-content"], p, span:last-child');
+      
       let text = '';
       if (textEl) {
-        // Filter out emojis that might be represented as [thumb] or similar
-        text = textEl.textContent.trim().replace(/\s*\[(thumb|image|emoji)\]\s*/gi, '');
+        text = textEl.textContent.trim().replace(/\\s*\\[(thumb|image|emoji)\\]\\s*/gi, '');
       } else {
+        // Fallback for system messages or gifts
         text = el.textContent.trim().slice(0, 200);
       }
+      
       const user = userEl ? userEl.textContent.trim() : ('Korisnik ' + (i + 1));
-      // Further clean up the text from common emoji/media placeholders
-      text = text.replace(/\s*\[(thumb|image|emoji|video|gif)\]\s*/gi, '').trim();
+      text = text.replace(/\\s*\\[(thumb|image|emoji|video|gif)\\]\\s*/gi, '').trim();
 
-      // Determine message type (gift, subscriber, or chat)
-      let messageType = 'chat'; // Default to chat message
+      // Detect Badges (Super Fan, Fan Club, etc.)
+      let isSuperFan = false;
+      let isFanClub = false;
+      let isModerator = false;
+      let badgeText = '';
+
+      const badgeContainer = el.querySelector('[class*="badge-container"], [class*="BadgeContainer"], .webcast-chatroom__message-item__badge-container');
+      if (badgeContainer) {
+        const badges = badgeContainer.querySelectorAll('img, span');
+        badges.forEach(b => {
+          const bContent = (b.alt || b.title || b.textContent || '').toLowerCase();
+          if (bContent.includes('super fan') || bContent.includes('superfan')) isSuperFan = true;
+          if (bContent.includes('fan club') || bContent.includes('team')) isFanClub = true;
+          if (bContent.includes('moderator')) isModerator = true;
+          if (b.tagName === 'SPAN' && b.textContent.length < 15) badgeText += b.textContent + ' ';
+        });
+      }
+
+      // Detect "Popular" or trending indicators
+      const isPopular = el.innerHTML.toLowerCase().includes('popular') || el.classList.contains('popular-message');
+
+      // Determine message type
+      let messageType = 'chat';
       if (el.querySelector('[data-e2e*="gift"], [class*="GiftMessage"], [class*="GiftEvent"]')) {
         messageType = 'gift';
       } else if (el.querySelector('[data-e2e*="subscribe"], [class*="SubscribeMessage"], [class*="SubscriptionEvent"]')) {
         messageType = 'subscriber';
       } else if (el.querySelector('[data-e2e*="join"], [class*="JoinMessage"], [class*="JoinEvent"]')) {
-        // Assuming a 'join' event type for new users entering the stream
         messageType = 'join';
       }
 
-      if (text && text.length > 1 && text !== user) {
-        results.push({ user: user.slice(0, 40), text: text.slice(0, 300), id: i + '_' + Date.now(), type: messageType });
+      if ((text && text.length > 0 && text !== user) || messageType !== 'chat') {
+        results.push({ 
+          user: user.slice(0, 40), 
+          text: text.slice(0, 300), 
+          id: i + '_' + Date.now(), 
+          type: messageType,
+          isSuperFan,
+          isFanClub,
+          isModerator,
+          isPopular,
+          badgeText: badgeText.trim()
+        });
       }
     });
     return JSON.stringify(results);
@@ -7404,22 +7467,44 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       return;
     }
     messagesEl.innerHTML = "";
-    collectedMessages.slice(-30).forEach((m) => {
+    collectedMessages.slice(-40).forEach((m) => {
       const div = document.createElement("div");
       div.className =
         "tkai-msg" + (selectedMsgIds.has(m.id) ? " selected" : "");
-      div.innerHTML =
-        '<div class="tkai-msg-user">' +
-        escHtml(m.user) +
-        '</div><div class="tkai-msg-text">' +
-        escHtml(m.text) +
-        "</div>";
-      div.title = "Klikni za odabir (samo jedna poruka)";
+      if (m.isPopular) div.classList.add("popular");
+      if (m.type === "caption") div.classList.add("caption");
+
+      let badgesHtml = "";
+      if (m.isSuperFan)
+        badgesHtml +=
+          '<span class="tk-badge superfan" title="Super Fan">💎</span>';
+      if (m.isFanClub)
+        badgesHtml +=
+          '<span class="tk-badge fanclub" title="Fan Club">💖</span>';
+      if (m.isModerator)
+        badgesHtml +=
+          '<span class="tk-badge moderator" title="Moderator">🛡️</span>';
+      if (m.type === "gift")
+        badgesHtml += '<span class="tk-badge gift" title="Gift">🎁</span>';
+      if (m.type === "subscriber")
+        badgesHtml += '<span class="tk-badge sub" title="Subscriber">⭐</span>';
+      if (m.type === "caption")
+        badgesHtml +=
+          '<span class="tk-badge caption" title="Subtitle">💬</span>';
+
+      div.innerHTML = `
+        <div class="tkai-msg-user">
+          ${badgesHtml}
+          <span class="u-name">${escHtml(m.user)}</span>
+          ${m.badgeText ? `<span class="u-badge-text">${escHtml(m.badgeText)}</span>` : ""}
+        </div>
+        <div class="tkai-msg-text">${escHtml(m.text)}</div>
+      `;
+
+      div.title = "Klikni za odabir jedne poruke";
       div.addEventListener("click", () => {
-        // Dozvoli odabir samo jedne poruke
         selectedMsgIds.clear();
         selectedMsgIds.add(m.id);
-        // Osvježi prikaz selekcije
         Array.from(messagesEl.children).forEach((el) =>
           el.classList.remove("selected"),
         );
@@ -7427,7 +7512,6 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       });
       messagesEl.appendChild(div);
     });
-    messagesEl.scrollTop = messagesEl.scrollHeight;
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -7473,8 +7557,24 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       auto: "na istom jeziku kao poruke u chatu",
     };
 
-    const chatLines = msgs.map((m) => `${m.user}: ${m.text}`).join("\n");
+    const chatLines = msgs
+      .map((m) => {
+        let status = "";
+        if (m.isSuperFan) status += "[SUPER FAN] ";
+        if (m.isFanClub) status += "[FAN CLUB] ";
+        if (m.isModerator) status += "[MODERATOR] ";
+        if (m.type === "gift") status += "[GIFT SENT] ";
+        if (m.type === "caption") status += "[LIVE SUBTITLE/SCREEN TEXT] ";
+        return `${status}${m.user}: ${m.text}`;
+      })
+      .join("\n");
+
     let prompt = `Ti si TikTok streamer AI asistent. Tvoj zadatak je generirati kratke, prirodne odgovore za TikTok chat.
+
+VAŽNO: 
+- Ako je korisnik "SUPER FAN" ili "FAN CLUB", budi posebno srdačan i zahvali mu se na podršci. 
+- Ako je poslao "GIFT", obavezno se zahvali na poklonu.
+- Ako vidiš poruke označene sa "[LIVE SUBTITLE/SCREEN TEXT]", to je ono što ti (streamer) trenutno govoriš ili što piše na ekranu. Iskoristi te informacije kao dodatni kontekst da bolje odgovoriš na pitanja iz chata.
 
 KONTEKST STREAMERA: ${ctx || "TikTok streamer koji želi angažirati svoju publiku"}
 TON: ${toneMap[tone] || toneMap.friendly}
