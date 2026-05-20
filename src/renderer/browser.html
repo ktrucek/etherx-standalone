@@ -9779,6 +9779,18 @@
             style="background:var(--accent);border:none;color:#fff;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">🌐
             Prevedi</button>
         </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 6px">
+          <button class="ai-lang-quick-btn" data-lang="hr"
+            style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:999px;color:var(--text);padding:2px 8px;font-size:10px;cursor:pointer">HR</button>
+          <button class="ai-lang-quick-btn" data-lang="en"
+            style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:999px;color:var(--text);padding:2px 8px;font-size:10px;cursor:pointer">EN</button>
+          <button class="ai-lang-quick-btn" data-lang="de"
+            style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:999px;color:var(--text);padding:2px 8px;font-size:10px;cursor:pointer">DE</button>
+          <button class="ai-lang-quick-btn" data-lang="es"
+            style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:999px;color:var(--text);padding:2px 8px;font-size:10px;cursor:pointer">ES</button>
+          <button class="ai-lang-quick-btn" data-lang="fr"
+            style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:999px;color:var(--text);padding:2px 8px;font-size:10px;cursor:pointer">FR</button>
+        </div>
         <!-- AI model for translation -->
         <div style="display:flex;gap:6px;align-items:center">
           <span style="font-size:11px;color:var(--text3);white-space:nowrap">🤖 Model:</span>
@@ -14753,6 +14765,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const langName = document.getElementById('aiInspectLang')?.selectedOptions?.[0]?.text || lang;
         runAiTranslate(text, lang, langName, aiTextOutputEl, document.getElementById('aiTranslateInfo'));
       }, 450);
+    });
+
+    document.querySelectorAll('.ai-lang-quick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const lang = btn.getAttribute('data-lang') || 'hr';
+        const langSelect = document.getElementById('aiInspectLang');
+        if (langSelect) langSelect.value = lang;
+        const langName = langSelect?.selectedOptions?.[0]?.text || lang;
+        const text = aiTextInputEl?.value || '';
+        if (text.trim()) {
+          runAiTranslate(text, lang, langName, aiTextOutputEl, document.getElementById('aiTranslateInfo'));
+          return;
+        }
+        showToast('🌍 Jezik prijevoda: ' + langName);
+      });
     });
 
     document.getElementById('aiInspectReaderBtn')?.addEventListener('click', () => {
