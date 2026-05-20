@@ -172,6 +172,7 @@ contextBridge.exposeInMainWorld('etherx', {
     getDeviceId: () => ipcRenderer.invoke('license:getDeviceId'),
     isAdminDevice: () => ipcRenderer.invoke('license:isAdminDevice'),
     debugAdminEnv: () => ipcRenderer.invoke('license:debugAdminEnv'),
+    getTkaiValidHashes: () => ipcRenderer.invoke('license:getTkaiValidHashes'),
   },
 
   // ── Cast / Share ──────────────────────────────────────────────────────────────

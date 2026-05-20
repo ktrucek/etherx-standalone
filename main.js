@@ -345,6 +345,21 @@ function _getAllowedAdminDeviceIds() {
     .filter(Boolean);
 }
 
+function _getTkaiRuntimeHashes() {
+  const envLocal = _readEnvLocalMap();
+  const raw =
+    process.env.ETHERX_TKAI_VALID_HASHES ||
+    process.env.ETHERX_TKAI_HASHES ||
+    envLocal.ETHERX_TKAI_VALID_HASHES ||
+    envLocal.ETHERX_TKAI_HASHES ||
+    "";
+
+  return String(raw || "")
+    .split(/[\n,;]+/)
+    .map((x) => x.trim().toLowerCase())
+    .filter((x) => /^[a-f0-9]{64}$/.test(x));
+}
+
 function _isAdminDeviceAllowed() {
   const allowed = _getAllowedAdminDeviceIds();
   if (!allowed.length) return { enabled: false, allowed: true, deviceId: _computeDeviceId() };
@@ -1299,6 +1314,7 @@ function setupIPC() {
   ipcMain.handle("license:getDeviceId", () => _computeDeviceId());
   ipcMain.handle("license:isAdminDevice", () => _isAdminDeviceAllowed());
   ipcMain.handle("license:debugAdminEnv", () => _getAdminEnvDebugInfo());
+  ipcMain.handle("license:getTkaiValidHashes", () => _getTkaiRuntimeHashes());
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   ipcMain.handle("db:saveTab", (_e, tab) => {
