@@ -9570,7 +9570,8 @@
           title="Povuci za premještanje">⠿</span></span>
       <div style="display:flex;align-items:center;gap:6px">
         <span id="tkaiScanStatus" style="font-size:10px;color:#ffe0ea"></span>
-        <span id="tkaiAutoSuggestBadge" style="font-size:10px;color:#cbd5ff;background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.35);padding:2px 6px;border-radius:999px;display:none"></span>
+        <span id="tkaiAutoSuggestBadge"
+          style="font-size:10px;color:#cbd5ff;background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.35);padding:2px 6px;border-radius:999px;display:none"></span>
         <button class="panel-close" id="closeTiktokAIPanel">×</button>
       </div>
     </div>
@@ -9582,7 +9583,8 @@
             <div class="tkai-col-header">
               <span>💬 TikTok Chat</span>
               <div style="display:flex;align-items:center;gap:6px">
-                <button id="tkaiFilterStarredBtn" class="tkai-gen-btn" style="font-size:9px;padding:2px 6px">⭐ Sve</button>
+                <button id="tkaiFilterStarredBtn" class="tkai-gen-btn" style="font-size:9px;padding:2px 6px">⭐
+                  Sve</button>
                 <span id="tkaiMsgCount" style="font-size:9px;color:var(--text3)"></span>
               </div>
             </div>
@@ -9646,7 +9648,8 @@
             <div class="tkai-insights-card">
               <div class="tkai-insights-title" title="Sažetak tema, pitanja i sentimenta">Insights<span>★</span></div>
               <ul class="tkai-insights-list" id="tkaiInsightsList"></ul>
-              <div class="tkai-insights-title" style="margin-top:8px" title="Trend pozitivnog/negativnog tona">Sentiment trend<span>↕</span></div>
+              <div class="tkai-insights-title" style="margin-top:8px" title="Trend pozitivnog/negativnog tona">Sentiment
+                trend<span>↕</span></div>
               <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
             </div>
             <div class="tkai-insights-card">
@@ -9801,6 +9804,12 @@
         <div id="aiInspectTranslateResult"
           style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap">
         </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin:12px 0 6px">📝 Klasični prijevod teksta
+        </div>
+        <textarea id="aiInspectTextInput" placeholder="Upiši tekst za prijevod..."
+          style="width:100%;min-height:70px;max-height:140px;resize:vertical;background:linear-gradient(135deg,#1d4ed8,#2563eb);border:1px solid rgba(110,168,255,.8);border-radius:6px;color:#f8fbff;padding:8px 10px;font-size:12px;line-height:1.4;box-shadow:0 6px 16px rgba(37,99,235,.15)"></textarea>
+        <textarea id="aiInspectTextOutput" readonly placeholder="Prijevod će se pojaviti ovdje..."
+          style="width:100%;min-height:70px;max-height:160px;resize:vertical;background:linear-gradient(135deg,#0f5ed6,#1a73e8);border:1px solid rgba(110,168,255,.8);border-radius:6px;color:#f8fbff;padding:8px 10px;font-size:12px;line-height:1.4;box-shadow:0 6px 16px rgba(37,99,235,.12);margin-top:8px"></textarea>
       </div>
       <!-- Reading mode -->
       <button id="aiInspectReaderBtn"
@@ -14626,16 +14635,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }
     });
 
-    document.getElementById('aiInspectTranslate')?.addEventListener('click', async () => {
-      const tab = getActiveTab();
-      if (!tab?.url) { showToast('❌ Nema aktivne stranice'); return; }
-      const lang = document.getElementById('aiInspectLang')?.value || 'hr';
-      const langName = document.getElementById('aiInspectLang')?.selectedOptions?.[0]?.text || lang;
-      const resultEl = document.getElementById('aiInspectTranslateResult');
-      const infoEl = document.getElementById('aiTranslateInfo');
-      const btn = document.getElementById('aiInspectTranslate');
+    const aiTextInputEl = document.getElementById('aiInspectTextInput');
+    const aiTextOutputEl = document.getElementById('aiInspectTextOutput');
+    let aiTranslateTypingTimer = null;
 
-      // Determine model to use
+    function resolveAiTranslateConfig() {
       const panelModelSel = document.getElementById('aiTranslateModel')?.value || '__settings__';
       const settingsModelSel = document.getElementById('settingsTranslateModel')?.value || '__main__';
       const settingsProviderSel = document.getElementById('settingsTranslateProvider')?.value || '__main__';
@@ -14653,25 +14657,44 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       } else {
         translateProvider = getSelectedAiProvider();
       }
-
-      // Max chars
       const maxChars = parseInt(document.getElementById('settingsTranslateMaxChars')?.value || '2000', 10);
+      return { translateModel, translateProvider, maxChars };
+    }
 
-      resultEl.textContent = '';
-      resultEl.style.display = 'none';
-      if (infoEl) infoEl.textContent = '';
-      btn.disabled = true;
-      btn.textContent = '⏳…';
+    function setTranslateResult(el, value) {
+      if (!el) return;
+      if ('value' in el) {
+        el.value = value;
+        return;
+      }
+      el.textContent = value;
+      el.style.display = 'block';
+    }
 
+    function clearTranslateResult(el) {
+      if (!el) return;
+      if ('value' in el) {
+        el.value = '';
+        return;
+      }
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+
+    async function runAiTranslate(text, lang, langName, resultEl, infoEl, btn) {
+      const { translateModel, translateProvider, maxChars } = resolveAiTranslateConfig();
+      const trimmed = String(text || '').slice(0, maxChars);
+      if (!trimmed) {
+        clearTranslateResult(resultEl);
+        if (infoEl) infoEl.textContent = '';
+        return;
+      }
+      if (infoEl) infoEl.textContent = `📝 ${trimmed.length} znakova · 🤖 ${translateProvider}/${translateModel}`;
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳…';
+      }
       try {
-        const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
-        let text = tab.title || '';
-        if (wv && window.safeExecuteJS) {
-          text = await window.safeExecuteJS(wv, 'document.body?.innerText?.slice(0,8000)||""').catch(() => tab.title || '');
-        }
-        const trimmed = text.slice(0, maxChars);
-        if (infoEl) infoEl.textContent = `📝 ${trimmed.length} znakova · 🤖 ${translateProvider}/${translateModel}`;
-
         const prompt = `Prevedi sljedeći tekst na jezik: "${langName}" (${lang}). Vrati SAMO prijevod, bez objašnjenja, naslova ili uvodne rečenice.\n\n${trimmed}`;
         const translated = await runAiTextRequest(prompt, {
           provider: translateProvider,
@@ -14679,15 +14702,57 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           maxOutputTokens: 2000,
           systemPrompt: `Ti si profesionalni prevoditelj. Prevedi tekst precizno i prirodno na zadani jezik.`
         });
-        resultEl.textContent = translated || '(prazan odgovor)';
-        resultEl.style.display = 'block';
+        setTranslateResult(resultEl, translated || '(prazan odgovor)');
       } catch (e) {
-        resultEl.textContent = '❌ ' + (e.message || String(e));
-        resultEl.style.display = 'block';
+        setTranslateResult(resultEl, '❌ ' + (e.message || String(e)));
       } finally {
-        btn.disabled = false;
-        btn.textContent = '🌐 Prevedi';
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🌐 Prevedi';
+        }
       }
+    }
+
+    document.getElementById('aiInspectTranslate')?.addEventListener('click', async () => {
+      const tab = getActiveTab();
+      if (!tab?.url) { showToast('❌ Nema aktivne stranice'); return; }
+      const lang = document.getElementById('aiInspectLang')?.value || 'hr';
+      const langName = document.getElementById('aiInspectLang')?.selectedOptions?.[0]?.text || lang;
+      const resultEl = document.getElementById('aiInspectTranslateResult');
+      const infoEl = document.getElementById('aiTranslateInfo');
+      const btn = document.getElementById('aiInspectTranslate');
+
+      const inputText = aiTextInputEl?.value || '';
+      if (inputText.trim()) {
+        await runAiTranslate(inputText, lang, langName, aiTextOutputEl, infoEl, btn);
+        return;
+      }
+
+      clearTranslateResult(resultEl);
+      try {
+        const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
+        let text = tab.title || '';
+        if (wv && window.safeExecuteJS) {
+          text = await window.safeExecuteJS(wv, 'document.body?.innerText?.slice(0,8000)||""').catch(() => tab.title || '');
+        }
+        await runAiTranslate(text, lang, langName, resultEl, infoEl, btn);
+      } catch (e) {
+        setTranslateResult(resultEl, '❌ ' + (e.message || String(e)));
+      }
+    });
+
+    aiTextInputEl?.addEventListener('input', () => {
+      if (aiTranslateTypingTimer) clearTimeout(aiTranslateTypingTimer);
+      const text = aiTextInputEl.value || '';
+      if (!text.trim()) {
+        clearTranslateResult(aiTextOutputEl);
+        return;
+      }
+      aiTranslateTypingTimer = setTimeout(() => {
+        const lang = document.getElementById('aiInspectLang')?.value || 'hr';
+        const langName = document.getElementById('aiInspectLang')?.selectedOptions?.[0]?.text || lang;
+        runAiTranslate(text, lang, langName, aiTextOutputEl, document.getElementById('aiTranslateInfo'));
+      }, 450);
     });
 
     document.getElementById('aiInspectReaderBtn')?.addEventListener('click', () => {

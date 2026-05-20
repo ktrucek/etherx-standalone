@@ -44,19 +44,28 @@ app.commandLine.appendSwitch(
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isHeadless =
   process.env.DISPLAY === undefined && process.platform === "linux";
+const forceDisableGpu = process.env.ETHERX_DISABLE_GPU === "1";
+
+if (forceDisableGpu) {
+  app.disableHardwareAcceleration();
+}
 
 if (process.platform !== "darwin") {
   app.commandLine.appendSwitch("no-sandbox");
   app.commandLine.appendSwitch("disable-dev-shm-usage");
 
   // Disable GPU only in CI/headless environments — on desktop keep GPU enabled for performance
-  if (isCI || isHeadless) {
+  if (isCI || isHeadless || forceDisableGpu) {
     app.commandLine.appendSwitch("disable-gpu");
-    app.commandLine.appendSwitch("disable-software-rasterizer");
+    if (isCI || isHeadless) {
+      app.commandLine.appendSwitch("disable-software-rasterizer");
+    }
   } else {
     // 🔥 PERFORMANCE: Maximum hardware acceleration on desktop
     app.commandLine.appendSwitch("enable-gpu-rasterization");
-    app.commandLine.appendSwitch("enable-zero-copy");
+    if (process.platform === "win32") {
+      app.commandLine.appendSwitch("enable-zero-copy");
+    }
     app.commandLine.appendSwitch("ignore-gpu-blocklist");
     app.commandLine.appendSwitch("enable-accelerated-2d-canvas");
     app.commandLine.appendSwitch("enable-accelerated-video-decode");
