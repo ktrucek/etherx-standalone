@@ -167,6 +167,12 @@ contextBridge.exposeInMainWorld('etherx', {
     getAvailableLanguages: () => ipcRenderer.invoke('i18n:getAvailableLanguages'),
   },
 
+  // ── License / Admin Lock ─────────────────────────────────────────────────────
+  license: {
+    getDeviceId: () => ipcRenderer.invoke('license:getDeviceId'),
+    isAdminDevice: () => ipcRenderer.invoke('license:isAdminDevice'),
+  },
+
   // ── Cast / Share ──────────────────────────────────────────────────────────────
   cast: { getDevices: () => ipcRenderer.invoke('cast:getDevices') },
   share: {

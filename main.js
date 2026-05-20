@@ -15,6 +15,7 @@ const {
 const path = require("path");
 const fs = require("fs");
 const https = require("https");
+const crypto = require("crypto");
 const { execFile } = require("child_process");
 let AdmZip;
 try {
@@ -192,6 +193,80 @@ let ai = null;
 const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
 let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
 const _downloadTrackedSessions = new Set();
+
+function _readEnvLocalMap() {
+  // Read optional local env overrides (dev/admin use). Missing file is fine.
+  const envPath = path.join(__dirname, ".env.local");
+  const out = {};
+  try {
+    if (!fs.existsSync(envPath)) return out;
+    const raw = fs.readFileSync(envPath, "utf8");
+    raw.split(/\r?\n/).forEach((line) => {
+      const t = String(line || "").trim();
+      if (!t || t.startsWith("#")) return;
+      const noExport = t.startsWith("export ") ? t.slice(7).trim() : t;
+      const eq = noExport.indexOf("=");
+      if (eq <= 0) return;
+      const k = noExport.slice(0, eq).trim();
+      let v = noExport.slice(eq + 1).trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+        v = v.slice(1, -1);
+      }
+      out[k] = v;
+    });
+  } catch (_) {
+    return out;
+  }
+  return out;
+}
+
+function _getOrCreateInstallId() {
+  const fp = path.join(app.getPath("userData"), "etherx_install_id");
+  try {
+    if (fs.existsSync(fp)) {
+      const cur = String(fs.readFileSync(fp, "utf8") || "").trim();
+      if (cur) return cur;
+    }
+    const id = crypto.randomUUID();
+    fs.writeFileSync(fp, id, "utf8");
+    return id;
+  } catch (_) {
+    // Worst-case fallback keeps app functional without crashing.
+    return `${os.hostname()}|${process.platform}|${process.arch}`;
+  }
+}
+
+function _computeDeviceId() {
+  const seed = [
+    _getOrCreateInstallId(),
+    os.hostname(),
+    process.platform,
+    process.arch,
+    app.getPath("userData"),
+  ].join("|");
+  return crypto.createHash("sha256").update(seed).digest("hex");
+}
+
+function _getAllowedAdminDeviceIds() {
+  const envLocal = _readEnvLocalMap();
+  const raw =
+    process.env.ETHERX_ADMIN_DEVICE_IDS ||
+    process.env.ETHERX_ADMIN_DEVICE_ID ||
+    envLocal.ETHERX_ADMIN_DEVICE_IDS ||
+    envLocal.ETHERX_ADMIN_DEVICE_ID ||
+    "";
+  return String(raw || "")
+    .split(",")
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function _isAdminDeviceAllowed() {
+  const allowed = _getAllowedAdminDeviceIds();
+  if (!allowed.length) return { enabled: false, allowed: true, deviceId: _computeDeviceId() };
+  const deviceId = _computeDeviceId().toLowerCase();
+  return { enabled: true, allowed: allowed.includes(deviceId), deviceId };
+}
 
 function broadcastToAllWindows(channel, payload) {
   BrowserWindow.getAllWindows().forEach((win) => {
@@ -1135,6 +1210,10 @@ function setupIPC() {
 
   const noDb = () => ({ ok: false, error: "Database not available" });
   const noAi = () => ({ ok: false, error: "AI not available" });
+
+  // ── License / admin lock helpers ─────────────────────────────────────────
+  ipcMain.handle("license:getDeviceId", () => _computeDeviceId());
+  ipcMain.handle("license:isAdminDevice", () => _isAdminDeviceAllowed());
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   ipcMain.handle("db:saveTab", (_e, tab) => {

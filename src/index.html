@@ -6377,7 +6377,7 @@
         spellcheck="false">
       <div id="urlAutocomplete" class="url-autocomplete" style="display:none"></div>
       <button class="go-btn" id="goBtn">→</button>
-      <button id="btnShield" class="web3-badge" title="EtherX Shield — zaštita privatnosti">🛡 Shield</button>
+      <button id="btnShield" class="web3-badge" title="EtherX Shield — privacy protection">🛡 Shield</button>
     </div>
     <span id="zoomIndicator">100%</span>
     <button class="nav-btn icon-btn" id="btnBookmarkPage" title="Dodaj u bookmarke (Ctrl+D)">🔖</button>
@@ -8831,7 +8831,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.199</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.200</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9240,388 +9240,443 @@
 
           <!-- AI Live Chat Settings -->
           <div class="s-tab-pane" id="stab-ai-live-chat">
-            <div class="s-group">
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600;font-size:14px">🎵 AI Live Chat Postavke</div>
-                  <div class="s-row-desc">Konfiguracija za TikTok Chat AI i automatske odgovore</div>
-                </div>
+
+            <!-- ── LICENSE GATE ─────────────────────────────────────── -->
+            <div id="tkaiLicenseGate"
+              style="display:none;text-align:center;padding:32px 20px;background:linear-gradient(135deg,rgba(102,126,234,.1),rgba(118,75,162,.08));border:1px solid rgba(102,126,234,.2);border-radius:12px;margin-bottom:16px">
+              <div style="font-size:32px;margin-bottom:10px">🔒</div>
+              <div style="font-size:16px;font-weight:700;margin-bottom:6px">AI Live Chat — Premium Feature</div>
+              <div
+                style="font-size:12px;color:var(--text3);margin-bottom:20px;max-width:340px;margin-left:auto;margin-right:auto">
+                This feature is part of the <b style="color:var(--accent)">EtherX AI Live Chat</b> plugin.<br>
+                Enter your activation code to unlock all features.
               </div>
+              <div
+                style="display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;max-width:420px;margin:0 auto">
+                <input id="tkaiLicenseInput" type="text" class="s-input"
+                  placeholder="EtherX_TiktokChatAI-XXXX-XXXX-XXXX"
+                  style="flex:1;min-width:200px;font-family:monospace;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;text-align:center"
+                  autocomplete="off" spellcheck="false">
+                <button id="tkaiLicenseActivateBtn"
+                  style="background:linear-gradient(135deg,rgba(102,126,234,.35),rgba(118,75,162,.3));border:1px solid var(--accent);border-radius:8px;padding:8px 18px;cursor:pointer;color:var(--accent);font-size:12px;font-weight:600;white-space:nowrap">
+                  🔑 Activate
+                </button>
+              </div>
+              <div style="margin-top:6px;font-size:10px;color:var(--text3)">Required prefix: <b
+                  style="color:var(--accent)">EtherX_TiktokChatAI</b></div>
+              <div id="tkaiLicenseMsg" style="margin-top:10px;font-size:11px;min-height:16px"></div>
+            </div>
+            <!-- ── ACTIVATED BADGE (shown when unlocked) ─────────────── -->
+            <div id="tkaiLicenseActive"
+              style="display:none;margin-bottom:12px;padding:8px 14px;background:rgba(39,201,63,.08);border:1px solid rgba(39,201,63,.25);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="font-size:12px;color:#27c93f">✅ AI Live Chat — <b>Activated</b></span>
+              <button id="tkaiLicenseRevokeBtn"
+                style="background:none;border:1px solid rgba(220,50,50,.35);border-radius:6px;padding:2px 10px;cursor:pointer;color:rgba(220,100,100,.8);font-size:10px">
+                Revoke
+              </button>
             </div>
 
-            <div class="s-group">
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Ton odgovora</div>
-                  <div class="s-row-desc">Stil kojim će AI odgovarati na poruke</div>
-                </div>
-                <select class="s-select" data-setting="tkaiTone">
-                  <option value="friendly">Ljubazan i veseo</option>
-                  <option value="funny">Duhovit i sarkastičan</option>
-                  <option value="crypto">Kripto stručnjak (bullish)</option>
-                  <option value="professional">Profesionalan i ozbiljan</option>
-                  <option value="minimal">Minimalistički (samo bitno)</option>
-                </select>
-              </div>
-
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Broj prijedloga</div>
-                  <div class="s-row-desc">Koliko različitih odgovora AI nudi</div>
-                </div>
-                <select class="s-select" data-setting="tkaiReplyCount">
-                  <option value="1">1 odgovor</option>
-                  <option value="2">2 odgovora</option>
-                  <option value="3" selected>3 odgovora</option>
-                </select>
-              </div>
-
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Jezik odgovora</div>
-                  <div class="s-row-desc">Jezik na kojem će AI pisati prijedloge</div>
-                </div>
-                <select class="s-select" data-setting="tkaiReplyLang">
-                  <option value="auto">Automatski (prema chatu)</option>
-                  <option value="hr">Hrvatski</option>
-                  <option value="en">English</option>
-                  <option value="de">Deutsch</option>
-                </select>
-              </div>
-
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Čitanje chata</div>
-                  <div class="s-row-desc">Jezik na kojem AI čita i prevodi poruke chata</div>
-                </div>
-                <select class="s-select" data-setting="tkaiReadLang">
-                  <option value="hr">Hrvatski</option>
-                  <option value="en">English</option>
-                  <option value="de">Deutsch</option>
-                </select>
-              </div>
-
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Kontekst (zadnjih poruka)</div>
-                  <div class="s-row-desc">Koliko prethodnih poruka AI vidi za bolji kontekst</div>
-                </div>
-                <input type="number" class="s-input" data-setting="tkaiContextCount" min="0" max="50" value="10"
-                  style="width:70px">
-              </div>
-
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Auto-prijevod na HR</div>
-                  <div class="s-row-desc">Automatski prevedi strane poruke u chatu</div>
-                </div>
-                <div class="toggle" data-setting="tkaiAutoTranslate"></div>
-              </div>
-            </div>
-
-            <div class="s-group">
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label">Vlastite upute (System Prompt)</div>
-                  <div class="s-row-desc">Dodatne upute za AI koje se uvijek primjenjuju</div>
-                </div>
-              </div>
-              <textarea class="s-input" data-setting="tkaiCustomPrompt"
-                placeholder="Npr. Ti si moderator kanala 'Ime', budi veseo..."
-                style="width:100%;height:80px;margin-top:8px;font-size:12px;resize:vertical"></textarea>
-            </div>
-
-            <div class="s-group" style="margin-top:16px">
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">Upravljanje galerijama i pravilima</div>
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiCustomCategories">Vlastite upute po
-                  kategorijama</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiGiftGallery">Postavke Gift Galerije</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiFanClubGallery">Postavke Fan Club
-                  Galerije</button>
-              </div>
-              <!-- drawer: custom category prompts -->
-              <div id="tkaiDrawerCustomCategories"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Vlastite upute po tipu poruke — AI
-                  koristi odgovarajuće pri generiranju.</div>
-                <div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--text2)">💬 Chat poruke</div>
-                <textarea data-setting="tkaiCatPromptChat" class="s-input"
-                  placeholder="Npr. Kratko i veselo odgovaraj na chat…"
-                  style="width:100%;height:55px;font-size:11px;resize:vertical;margin-bottom:8px"></textarea>
-                <div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--text2)">🎁 Gift poruke</div>
-                <textarea data-setting="tkaiCatPromptGift" class="s-input"
-                  placeholder="Npr. Zahvali se na poklonu i imenuj osobu…"
-                  style="width:100%;height:55px;font-size:11px;resize:vertical;margin-bottom:8px"></textarea>
-                <div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--text2)">⭐ Sub / Fan Club</div>
-                <textarea data-setting="tkaiCatPromptSub" class="s-input"
-                  placeholder="Npr. Dobrodošli novi pretplatnik! Budi topao…"
-                  style="width:100%;height:55px;font-size:11px;resize:vertical"></textarea>
-              </div>
-              <!-- drawer: gift gallery settings -->
-              <div id="tkaiDrawerGiftGallery"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+            <!-- ── ALL SETTINGS (gated behind activation) ─────────────── -->
+            <div id="tkaiSettingsContent">
+              <div class="s-group">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Min. coins za prikaz u galeriji</div>
-                    <div class="s-row-desc">Prikaži samo giftove s ≥ ovim brojem coina (0 = sve)</div>
+                    <div class="s-row-label" style="font-weight:600;font-size:14px">🎵 AI Live Chat Settings</div>
+                    <div class="s-row-desc">Configure TikTok Chat AI, auto-replies and live session analytics</div>
                   </div>
-                  <input type="number" class="s-input" data-setting="tkaiGiftMinCoins" min="0" value="0"
+                </div>
+              </div>
+
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Reply tone</div>
+                    <div class="s-row-desc">The style the AI uses when suggesting replies</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiTone">
+                    <option value="friendly">Friendly &amp; upbeat</option>
+                    <option value="funny">Witty &amp; sarcastic</option>
+                    <option value="crypto">Crypto expert (bullish)</option>
+                    <option value="professional">Professional &amp; formal</option>
+                    <option value="minimal">Minimalist (essentials only)</option>
+                  </select>
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Number of suggestions</div>
+                    <div class="s-row-desc">How many reply options the AI generates</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiReplyCount">
+                    <option value="1">1 reply</option>
+                    <option value="2">2 replies</option>
+                    <option value="3" selected>3 replies</option>
+                  </select>
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Reply language</div>
+                    <div class="s-row-desc">Language the AI writes its reply suggestions in</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiReplyLang">
+                    <option value="auto">Auto (match chat language)</option>
+                    <option value="hr">Croatian (Hrvatski)</option>
+                    <option value="en">English</option>
+                    <option value="de">German (Deutsch)</option>
+                    <option value="es">Spanish (Español)</option>
+                    <option value="fr">French (Français)</option>
+                    <option value="pt">Portuguese (Português)</option>
+                    <option value="it">Italian (Italiano)</option>
+                    <option value="tr">Turkish (Türkçe)</option>
+                    <option value="ar">Arabic (عربي)</option>
+                  </select>
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Chat reading language</div>
+                    <div class="s-row-desc">Language used when reading and translating incoming chat</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiReadLang">
+                    <option value="auto">Auto-detect</option>
+                    <option value="hr">Croatian</option>
+                    <option value="en">English</option>
+                    <option value="de">German</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="tr">Turkish</option>
+                  </select>
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Context window (messages)</div>
+                    <div class="s-row-desc">How many previous messages the AI sees for better context</div>
+                  </div>
+                  <input type="number" class="s-input" data-setting="tkaiContextCount" min="0" max="50" value="10"
                     style="width:70px">
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">Prikaži Gift Galeriju u panelu</div>
-                  </div>
-                  <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
-                </div>
-              </div>
-              <!-- drawer: fan club settings -->
-              <div id="tkaiDrawerFanClubGallery"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div class="s-row">
-                  <div class="s-row-left">
-                    <div class="s-row-label">Prikaži Sub / Fan Club kartice</div>
-                  </div>
-                  <div class="toggle on" data-setting="tkaiShowFanClub"></div>
-                </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">Zvučna obavijest na sub</div>
-                    <div class="s-row-desc">Kratki signal kada se detektira novi pretplatnik</div>
-                  </div>
-                  <div class="toggle" data-setting="tkaiSubSound"></div>
-                </div>
-              </div>
-            </div>
 
-            <div class="s-group" style="margin-top:16px">
-              <div class="s-row">
-                <div class="s-row-left">
-                  <div class="s-row-label" style="font-weight:600">Postavke skeniranja chata</div>
-                </div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAutoScan">⏱ Skeniranje</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiMsgTypes">📋 Vrste poruka</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAiModel">🤖 AI Model</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiFeatures">🎛 Što prikazati</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiTools">🔧 Alati</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiSessions">📁 Sesije &amp; Statistike</button>
-              </div>
-              <!-- drawer: auto scan -->
-              <div id="tkaiDrawerAutoScan"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Interval skeniranja</div>
-                    <div class="s-row-desc">Svake koliko sekundi skenirati chat (sporije = manje opterećenje)</div>
+                    <div class="s-row-label">Auto-translate to English</div>
+                    <div class="s-row-desc">Automatically translate foreign chat messages</div>
                   </div>
-                  <select class="s-select" data-setting="tkaiScanIntervalMs">
-                    <option value="2000">2 sek (brzo)</option>
-                    <option value="4000" selected>4 sek (preporučeno)</option>
-                    <option value="6000">6 sek</option>
-                    <option value="10000">10 sek (tiho)</option>
-                  </select>
-                </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">Auto-generiraj prijedloge</div>
-                    <div class="s-row-desc">Automatski generiraj AI prijedloge nakon N novih poruka (0 = isključeno)
-                    </div>
-                  </div>
-                  <input type="number" class="s-input" data-setting="tkaiAutoSuggestAfter" min="0" max="50" value="0"
-                    style="width:70px">
-                </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">Buffer poruka</div>
-                    <div class="s-row-desc">Koliko poruka pamtiti u memoriji (više = sporije, ali bolji insights)</div>
-                  </div>
-                  <select class="s-select" data-setting="tkaiMsgBuffer">
-                    <option value="80">80 poruka</option>
-                    <option value="150">150 poruka</option>
-                    <option value="300" selected>300 poruka (default)</option>
-                    <option value="500">500 poruka</option>
-                    <option value="1000">1000 poruka</option>
-                  </select>
+                  <div class="toggle" data-setting="tkaiAutoTranslate"></div>
                 </div>
               </div>
-              <!-- drawer: AI model override -->
-              <div id="tkaiDrawerAiModel"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Odaberi AI model koji TikTok Chat
-                  AI koristi za generiranje prijedloga. <b>Default</b> koristi globalni model iz Postavki → AI.</div>
+
+              <div class="s-group">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Model za TikTok Chat AI</div>
+                    <div class="s-row-label">Custom instructions (System Prompt)</div>
+                    <div class="s-row-desc">Additional instructions always applied to AI generation</div>
                   </div>
-                  <select class="s-select" data-setting="tkaiModelOverride" style="max-width:220px">
-                    <option value="">🌐 Globalni model (default)</option>
-                    <optgroup label="OpenAI">
-                      <option value="gpt-4o">gpt-4o</option>
-                      <option value="gpt-4o-mini">gpt-4o-mini ⚡ (brzi)</option>
-                      <option value="gpt-4-turbo">gpt-4-turbo</option>
-                      <option value="gpt-3.5-turbo">gpt-3.5-turbo (jeftini)</option>
-                    </optgroup>
-                    <optgroup label="Anthropic">
-                      <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
-                      <option value="claude-3-haiku">claude-3-haiku ⚡</option>
-                      <option value="claude-3-opus">claude-3-opus</option>
-                    </optgroup>
-                    <optgroup label="Google">
-                      <option value="gemini-2.0-flash">gemini-2.0-flash ⚡</option>
-                      <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                    </optgroup>
-                    <optgroup label="OpenRouter">
-                      <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
-                      <option value="deepseek/deepseek-r1">DeepSeek R1</option>
-                      <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
-                    </optgroup>
-                  </select>
                 </div>
-                <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo">
-                  Trenutni globalni model: <span id="tkaiGlobalModelName" style="color:var(--text2)">—</span>
-                </div>
-                <!-- Cardiff NLP HF token for sentiment analysis -->
-                <div style="border-top:1px solid rgba(255,255,255,.06);margin-top:14px;padding-top:12px">
-                  <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
-                    🤗 <b>Cardiff NLP sentiment</b> (twitter-roberta-base-sentiment-latest) — analiza sentimenta na
-                    temelju 154M tweeta.
-                    Unesi HuggingFace token za aktivaciju. Isti token se koristi ako je HuggingFace odabran kao AI
-                    provider.
-                    <a href="https://huggingface.co/settings/tokens" style="color:var(--accent)"
-                      onclick="navigateTo(this.href);return false">→ Dobavi besplatni token</a>
+                <textarea class="s-input" data-setting="tkaiCustomPrompt"
+                  placeholder="e.g. You are the moderator of channel 'Name', keep it fun and engaging..."
+                  style="width:100%;height:80px;margin-top:8px;font-size:12px;resize:vertical"></textarea>
+              </div>
+
+              <div class="s-group" style="margin-top:16px">
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label" style="font-weight:600">Galleries &amp; category rules</div>
                   </div>
-                  <div class="s-row" style="margin-top:4px">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiCustomCategories">Custom prompts by
+                    category</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiGiftGallery">Gift Gallery settings</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiFanClubGallery">Fan Club settings</button>
+                </div>
+                <!-- drawer: custom category prompts -->
+                <div id="tkaiDrawerCustomCategories"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Per-type custom instructions — AI
+                    uses the matching one when generating replies.</div>
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--text2)">💬 Chat messages
+                  </div>
+                  <textarea data-setting="tkaiCatPromptChat" class="s-input"
+                    placeholder="e.g. Keep it short and fun when replying to chat…"
+                    style="width:100%;height:55px;font-size:11px;resize:vertical;margin-bottom:8px"></textarea>
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--text2)">🎁 Gift messages
+                  </div>
+                  <textarea data-setting="tkaiCatPromptGift" class="s-input"
+                    placeholder="e.g. Thank the person by name for the gift…"
+                    style="width:100%;height:55px;font-size:11px;resize:vertical;margin-bottom:8px"></textarea>
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--text2)">⭐ Sub / Fan Club
+                  </div>
+                  <textarea data-setting="tkaiCatPromptSub" class="s-input"
+                    placeholder="e.g. Welcome the new subscriber warmly by name…"
+                    style="width:100%;height:55px;font-size:11px;resize:vertical"></textarea>
+                </div>
+                <!-- drawer: gift gallery settings -->
+                <div id="tkaiDrawerGiftGallery"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div class="s-row">
                     <div class="s-row-left">
-                      <div class="s-row-label">HuggingFace token</div>
-                      <div class="s-row-desc">Za Cardiff NLP sentiment u statistikama</div>
+                      <div class="s-row-label">Min. coins to show in gallery</div>
+                      <div class="s-row-desc">Only display gifts with ≥ this many coins (0 = all)</div>
                     </div>
-                    <div style="display:flex;gap:6px;align-items:center">
-                      <input type="password" class="s-input" id="tkaiHfTokenInput" placeholder="hf_..."
-                        style="width:200px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
-                        spellcheck="false">
-                      <button
-                        onclick="(function(b){var i=document.getElementById('tkaiHfTokenInput');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
-                        style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px">🙈</button>
-                      <button id="tkaiHfTokenSaveBtn"
-                        style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">💾
-                        Spremi</button>
+                    <input type="number" class="s-input" data-setting="tkaiGiftMinCoins" min="0" value="0"
+                      style="width:70px">
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Show Gift Gallery in panel</div>
                     </div>
+                    <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
+                  </div>
+                </div>
+                <!-- drawer: fan club settings -->
+                <div id="tkaiDrawerFanClubGallery"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div class="s-row">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Show Sub / Fan Club cards</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowFanClub"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Sound notification on new sub</div>
+                      <div class="s-row-desc">Play a short sound when a new subscriber is detected</div>
+                    </div>
+                    <div class="toggle" data-setting="tkaiSubSound"></div>
                   </div>
                 </div>
               </div>
-              <!-- drawer: feature toggles -->
-              <div id="tkaiDrawerFeatures"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Uključi ili isključi dijelove
-                  TikTok Chat AI panela.</div>
+
+              <div class="s-group" style="margin-top:16px">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">📊 Prikaži statistike (strip)</div>
+                    <div class="s-row-label" style="font-weight:600">Chat scan settings</div>
                   </div>
-                  <div class="toggle on" data-setting="tkaiShowStats"></div>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">💡 Prikaži Insights &amp; Engagement</div>
-                  </div>
-                  <div class="toggle on" data-setting="tkaiShowInsights"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAutoScan">⏱ Scanning</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiMsgTypes">📋 Message types</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAiModel">🤖 AI Model</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiFeatures">🎛 Što prikazati</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiTools">🔧 Alati</button>
+                  <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiSessions">📁 Sesije &amp; Statistike</button>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">🎁 Prikaži Gift Galeriju</div>
+                <!-- drawer: auto scan -->
+                <div id="tkaiDrawerAutoScan"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div class="s-row">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Scan interval</div>
+                      <div class="s-row-desc">How often to scan chat (slower = less resource use)</div>
+                    </div>
+                    <select class="s-select" data-setting="tkaiScanIntervalMs">
+                      <option value="2000">2 s (fast)</option>
+                      <option value="4000" selected>4 s (recommended)</option>
+                      <option value="6000">6 s</option>
+                      <option value="10000">10 s (quiet)</option>
+                    </select>
                   </div>
-                  <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Auto-generate suggestions</div>
+                      <div class="s-row-desc">Auto-generate AI replies after N new messages (0 = off)</div>
+                    </div>
+                    <input type="number" class="s-input" data-setting="tkaiAutoSuggestAfter" min="0" max="50" value="0"
+                      style="width:70px">
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Message buffer</div>
+                      <div class="s-row-desc">How many messages to keep in memory (more = richer insights, more RAM)
+                      </div>
+                    </div>
+                    <select class="s-select" data-setting="tkaiMsgBuffer">
+                      <option value="80">80 messages</option>
+                      <option value="150">150 messages</option>
+                      <option value="300" selected>300 messages (default)</option>
+                      <option value="500">500 messages</option>
+                      <option value="1000">1000 messages</option>
+                    </select>
+                  </div>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">👥 Prikaži Top Supportere</div>
+                <!-- drawer: AI model override -->
+                <div id="tkaiDrawerAiModel"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Choose the AI model TikTok Chat AI
+                    uses for generating replies. <b>Default</b> uses the global model from Settings → AI.</div>
+                  <div class="s-row">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Model for TikTok Chat AI</div>
+                    </div>
+                    <select class="s-select" data-setting="tkaiModelOverride" style="max-width:220px">
+                      <option value="">🌐 Global model (default)</option>
+                      <optgroup label="OpenAI">
+                        <option value="gpt-4o">gpt-4o</option>
+                        <option value="gpt-4o-mini">gpt-4o-mini ⚡ (brzi)</option>
+                        <option value="gpt-4-turbo">gpt-4-turbo</option>
+                        <option value="gpt-3.5-turbo">gpt-3.5-turbo (jeftini)</option>
+                      </optgroup>
+                      <optgroup label="Anthropic">
+                        <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
+                        <option value="claude-3-haiku">claude-3-haiku ⚡</option>
+                        <option value="claude-3-opus">claude-3-opus</option>
+                      </optgroup>
+                      <optgroup label="Google">
+                        <option value="gemini-2.0-flash">gemini-2.0-flash ⚡</option>
+                        <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                      </optgroup>
+                      <optgroup label="OpenRouter">
+                        <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                        <option value="deepseek/deepseek-r1">DeepSeek R1</option>
+                        <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
+                      </optgroup>
+                    </select>
                   </div>
-                  <div class="toggle on" data-setting="tkaiShowTopSupporters"></div>
+                  <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo">
+                    Current global model: <span id="tkaiGlobalModelName" style="color:var(--text2)">—</span>
+                  </div>
+                  <!-- Cardiff NLP HF token for sentiment analysis -->
+                  <div style="border-top:1px solid rgba(255,255,255,.06);margin-top:14px;padding-top:12px">
+                    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+                      🤗 <b>Cardiff NLP sentiment</b> (twitter-roberta-base-sentiment-latest) — sentiment analysis
+                      trained on 154M tweets.
+                      Enter your HuggingFace token to enable it. The same token is used if HuggingFace is selected as AI
+                      provider.
+                      <a href="https://huggingface.co/settings/tokens" style="color:var(--accent)"
+                        onclick="navigateTo(this.href);return false">→ Get a free token</a>
+                    </div>
+                    <div class="s-row" style="margin-top:4px">
+                      <div class="s-row-left">
+                        <div class="s-row-label">HuggingFace token</div>
+                        <div class="s-row-desc">For Cardiff NLP sentiment in session stats</div>
+                      </div>
+                      <div style="display:flex;gap:6px;align-items:center">
+                        <input type="password" class="s-input" id="tkaiHfTokenInput" placeholder="hf_..."
+                          style="width:200px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                          spellcheck="false">
+                        <button
+                          onclick="(function(b){var i=document.getElementById('tkaiHfTokenInput');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                          style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px">🙈</button>
+                        <button id="tkaiHfTokenSaveBtn"
+                          style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">💾
+                          Save</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">🔍 Prikaži Shadowban check</div>
+                <!-- drawer: feature toggles -->
+                <div id="tkaiDrawerFeatures"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Toggle sections of the TikTok Chat
+                    AI panel on or off.</div>
+                  <div class="s-row">
+                    <div class="s-row-left">
+                      <div class="s-row-label">📊 Show stats strip</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowStats"></div>
                   </div>
-                  <div class="toggle on" data-setting="tkaiShowShadowban"></div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">💡 Show Insights &amp; Engagement</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowInsights"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">🎁 Show Gift Gallery</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">👥 Show Top Supporters</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowTopSupporters"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">🔍 Show Shadowban check</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowShadowban"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">⭐ Show Spike events</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowSpikes"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">→ Show Recommendations</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowRecommendations"></div>
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">❓ Show Chat Questions</div>
+                    </div>
+                    <div class="toggle on" data-setting="tkaiShowQuestions"></div>
+                  </div>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">⭐ Prikaži Spike events</div>
-                  </div>
-                  <div class="toggle on" data-setting="tkaiShowSpikes"></div>
+                <!-- drawer: message type filter -->
+                <div id="tkaiDrawerMsgTypes"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Which message types to scan and
+                    display in the chat feed.</div>
+                  <label
+                    style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
+                    <input type="checkbox" data-setting="tkaiScanChat" checked> 💬 Chat messages
+                  </label>
+                  <label
+                    style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
+                    <input type="checkbox" data-setting="tkaiScanGifts" checked> 🎁 Gifts
+                  </label>
+                  <label
+                    style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
+                    <input type="checkbox" data-setting="tkaiScanSubs" checked> ⭐ Subscriptions / Fan Club
+                  </label>
+                  <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+                    <input type="checkbox" data-setting="tkaiScanJoins"> 👋 Join events
+                  </label>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">→ Prikaži Preporuke (Recommendations)</div>
+                <!-- drawer: tools -->
+                <div id="tkaiDrawerTools"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Quick tools for session management
+                    (same tools available directly in the TikTok Chat AI panel).</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <button class="s-btn-sm" id="btnTkaiToolsOpenPanel">🎵 Open TikTok AI panel</button>
+                    <button class="s-btn-sm" id="btnTkaiToolsExportJson">📦 Export JSON</button>
+                    <button class="s-btn-sm" id="btnTkaiToolsExportCsv">📄 Export CSV</button>
+                    <button class="s-btn-sm" id="btnTkaiToolsClear"
+                      style="background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑️ Clear session</button>
                   </div>
-                  <div class="toggle on" data-setting="tkaiShowRecommendations"></div>
                 </div>
-                <div class="s-row" style="margin-top:8px">
-                  <div class="s-row-left">
-                    <div class="s-row-label">❓ Prikaži Pitanja iz chata</div>
+                <!-- drawer: session history + merge + stats -->
+                <div id="tkaiDrawerSessions"
+                  style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                  <div
+                    style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap">
+                    <div style="font-size:11px;color:var(--text3)">Select sessions (□) then click merge</div>
+                    <div style="display:flex;gap:6px">
+                      <button class="s-btn-sm" id="btnTkaiSessionsMerge"
+                        style="font-size:10px;padding:2px 10px;background:rgba(102,126,234,.2);border-color:rgba(102,126,234,.5)">⛓
+                        Merge selected</button>
+                      <button class="s-btn-sm" id="btnTkaiSessionsClearAll"
+                        style="font-size:10px;padding:2px 8px;background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑
+                        Delete all</button>
+                    </div>
                   </div>
-                  <div class="toggle on" data-setting="tkaiShowQuestions"></div>
+                  <div id="tkaiSessionHistoryList" style="font-size:11px;max-height:260px;overflow-y:auto"></div>
+                  <div id="tkaiSessionMergeResult"
+                    style="display:none;margin-top:10px;padding:10px;background:rgba(102,126,234,.1);border:1px solid rgba(102,126,234,.3);border-radius:8px;font-size:11px">
+                  </div>
                 </div>
               </div>
-              <!-- drawer: message type filter -->
-              <div id="tkaiDrawerMsgTypes"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Koje vrste poruka skenirati i
-                  prikazati u chatu.</div>
-                <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                  <input type="checkbox" data-setting="tkaiScanChat" checked> 💬 Chat poruke
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                  <input type="checkbox" data-setting="tkaiScanGifts" checked> 🎁 Gift poruke
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                  <input type="checkbox" data-setting="tkaiScanSubs" checked> ⭐ Sub / Fan Club
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-                  <input type="checkbox" data-setting="tkaiScanJoins"> 👋 Join eventi
-                </label>
-              </div>
-              <!-- drawer: tools -->
-              <div id="tkaiDrawerTools"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Brzi alati za upravljanje sesijom
-                  (isti alati dostupni i direktno u TikTok Chat AI panelu).</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                  <button class="s-btn-sm" id="btnTkaiToolsOpenPanel">🎵 Otvori TikTok AI panel</button>
-                  <button class="s-btn-sm" id="btnTkaiToolsExportJson">📦 Export JSON</button>
-                  <button class="s-btn-sm" id="btnTkaiToolsExportCsv">📄 Export CSV</button>
-                  <button class="s-btn-sm" id="btnTkaiToolsClear"
-                    style="background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑️ Očisti sesiju</button>
-                </div>
-              </div>
-              <!-- drawer: session history + merge + stats -->
-              <div id="tkaiDrawerSessions"
-                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div
-                  style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap">
-                  <div style="font-size:11px;color:var(--text3)">Odaberi sesije (□) pa klikni spoji</div>
-                  <div style="display:flex;gap:6px">
-                    <button class="s-btn-sm" id="btnTkaiSessionsMerge"
-                      style="font-size:10px;padding:2px 10px;background:rgba(102,126,234,.2);border-color:rgba(102,126,234,.5)">⛓
-                      Spoji odabrane</button>
-                    <button class="s-btn-sm" id="btnTkaiSessionsClearAll"
-                      style="font-size:10px;padding:2px 8px;background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑
-                      Obriši sve</button>
-                  </div>
-                </div>
-                <div id="tkaiSessionHistoryList" style="font-size:11px;max-height:260px;overflow-y:auto"></div>
-                <div id="tkaiSessionMergeResult"
-                  style="display:none;margin-top:10px;padding:10px;background:rgba(102,126,234,.1);border:1px solid rgba(102,126,234,.3);border-radius:8px;font-size:11px">
-                </div>
-              </div>
-            </div>
+            </div><!-- /#tkaiSettingsContent -->
           </div>
 
           <!-- ── History ─────────────────────────────────────────── -->
@@ -9689,7 +9744,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.199</span></div>
+                    id="helpVersionNum2">2.4.200</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -9891,6 +9946,22 @@
     </div>
   </div>
   <div class="panel" id="tiktokAIPanel" style="width:520px">
+    <!-- Lock overlay — shown when not activated -->
+    <div id="tkaiPanelLockOverlay"
+      style="display:none;position:absolute;inset:0;z-index:99;background:rgba(10,10,18,.88);backdrop-filter:blur(4px);border-radius:inherit;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 24px">
+      <div style="font-size:40px;margin-bottom:12px">🔒</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">AI Live Chat — Premium Plugin</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px;max-width:300px">
+        Enter your activation code in<br>
+        <b style="color:var(--accent)">Settings → AI → AI Live Chat</b><br>
+        to unlock this feature.
+      </div>
+      <button
+        onclick="document.getElementById('btnSettings')?.click();setTimeout(()=>{document.querySelector('[data-stab=ai-live-chat]')?.click();document.getElementById('tkaiLicenseInput')?.focus();},150)"
+        style="background:linear-gradient(135deg,rgba(102,126,234,.35),rgba(118,75,162,.3));border:1px solid var(--accent);border-radius:8px;padding:9px 22px;cursor:pointer;color:var(--accent);font-size:12px;font-weight:600">
+        🔑 Enter Activation Code
+      </button>
+    </div>
     <div class="panel-header" id="tiktokAIPanelHeader" style="padding:8px 12px">
       <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
           title="Povuci za premještanje">⠿</span></span>
@@ -10221,14 +10292,14 @@
           <button class="shield-mode-btn" id="shieldModeDisable" data-mode="disable">⭕ Disable</button>
         </div>
         <div id="shieldModeDesc" style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4">Ads,
-          trackeri i telemetrija su blokirani.</div>
+          trackers and telemetry are blocked.</div>
       </div>
 
       <!-- Block Scripts -->
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Block Scripts</div>
-          <div class="s-row-desc">Blokira JavaScript na svim stranicama (može slomiti neke stranice)</div>
+          <div class="s-row-desc" id="shieldDescScripts">Blocks JavaScript on all pages (can break some sites)</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldBlockScripts"><span
             class="s-toggle-track"></span></label>
@@ -10238,7 +10309,8 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Block Fingerprint</div>
-          <div class="s-row-desc">Randomizira Canvas, WebGL i Audio API za anti-fingerprinting zaštitu</div>
+          <div class="s-row-desc" id="shieldDescFingerprint">Randomizes Canvas, WebGL and Audio API for
+            anti-fingerprinting protection</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldBlockFingerprint"><span
             class="s-toggle-track"></span></label>
@@ -10248,7 +10320,7 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Auto redirect AMP</div>
-          <div class="s-row-desc">Preusmjeri AMP stranice na originalne URL-ove</div>
+          <div class="s-row-desc" id="shieldDescAmp">Redirect AMP pages to the original URLs</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldRedirectAmp"><span
             class="s-toggle-track"></span></label>
@@ -10258,7 +10330,8 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Auto-redirect Tracking URLs</div>
-          <div class="s-row-desc">Ukloni utm_*, fbclid i sl. parametre iz URL-ova</div>
+          <div class="s-row-desc" id="shieldDescTracking">Remove utm_*, fbclid and similar tracking parameters from URLs
+          </div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldStripTracking"><span
             class="s-toggle-track"></span></label>
@@ -10268,7 +10341,7 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Block dangerous websites</div>
-          <div class="s-row-desc">Blokira malware, phishing i cryptojacking domene</div>
+          <div class="s-row-desc" id="shieldDescDanger">Blocks malware, phishing and cryptojacking domains</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldBlockDanger"><span
             class="s-toggle-track"></span></label>
@@ -10278,7 +10351,7 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Store Contact information</div>
-          <div class="s-row-desc">Spremi kontaktne podatke za autocomplete obrasce</div>
+          <div class="s-row-desc" id="shieldDescContacts">Store contact details for form autocomplete</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldStoreContacts"><span
             class="s-toggle-track"></span></label>
@@ -10288,7 +10361,7 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Allow universal links</div>
-          <div class="s-row-desc">Dopusti otvaranje linkova u vanjskim aplikacijama</div>
+          <div class="s-row-desc" id="shieldDescUniv">Allow opening links in external apps</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldAllowUnivLinks"><span
             class="s-toggle-track"></span></label>
@@ -10298,7 +10371,7 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Block 'switch to app' notice</div>
-          <div class="s-row-desc">Sakrij "Otvori u aplikaciji" smart-bannere</div>
+          <div class="s-row-desc" id="shieldDescAppNotice">Hide "Open in app" smart banners</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldBlockAppNotice"><span
             class="s-toggle-track"></span></label>
@@ -10308,7 +10381,7 @@
       <div class="s-row" style="margin:0;padding:8px 0;border-top:1px solid var(--border)">
         <div class="s-row-left">
           <div class="s-row-label">Block all cookies</div>
-          <div class="s-row-desc">Sprječava postavljanje svih kolačića</div>
+          <div class="s-row-desc" id="shieldDescCookies">Prevents setting all cookies</div>
         </div>
         <label class="s-toggle"><input type="checkbox" id="shieldBlockCookies"><span
             class="s-toggle-track"></span></label>
@@ -10318,21 +10391,21 @@
       <div style="border-top:1px solid var(--border);padding-top:10px">
         <!-- Totals row -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:11px;color:var(--text3)">⛔ Blokirano u sesiji</span>
+          <span style="font-size:11px;color:var(--text3)" id="shieldLblBlocked">⛔ Blocked this session</span>
           <span id="shieldBlockedCount"
             style="font-size:18px;font-weight:700;color:#27c93f;letter-spacing:-1px">0</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;color:var(--text3)">🛡 Malware domene</span>
+          <span style="font-size:11px;color:var(--text3)" id="shieldLblMalware">🛡 Malware domains</span>
           <span id="shieldMalwareCount" style="font-size:12px;font-weight:600;color:#ff5f56">~200</span>
         </div>
         <!-- Per-country breakdown -->
         <div
           style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">
-          Po zemljama</div>
+          By country</div>
         <div id="shieldCountryStats"
           style="display:flex;flex-direction:column;gap:3px;max-height:140px;overflow-y:auto">
-          <div style="font-size:11px;color:var(--text3);text-align:center;padding:6px 0">Nema podataka u ovoj sesiji
+          <div style="font-size:11px;color:var(--text3);text-align:center;padding:6px 0">No data in this session
           </div>
         </div>
       </div>
@@ -13581,6 +13654,191 @@
       const panel = document.getElementById('tiktokAIPanel');
       if (!panel) return;
 
+      // ══════════════════════════════════════════════════════════════
+      //  LICENSE ACTIVATION SYSTEM
+      //  Valid codes are stored as SHA-256 hashes of the normalized
+      //  code string (uppercased, spaces/dashes stripped).
+      //
+      //  To generate a hash for a new code, open DevTools and run:
+      //    _tkaiGenHash('YOURCODE').then(h => console.log(h))
+      //
+      //  Then add the returned hex string to TKAI_VALID_HASHES below.
+      // ══════════════════════════════════════════════════════════════
+      const TKAI_VALID_HASHES = [
+        // Add your license code hashes here — one per line
+        // Example (generated by _tkaiGenHash):
+        // 'a1b2c3d4e5f6...'
+      ];
+      const TKAI_LICENSE_KEY = 'ex_tkai_license';
+      const TKAI_REQUIRED_PREFIX = 'ETHERX_TIKTOKCHATAI';
+      const TKAI_REQUIRED_PREFIX_NORM = TKAI_REQUIRED_PREFIX.replace(/[\s\-_]/g, '');
+      let _tkaiAdminDevice = { enabled: false, allowed: true, deviceId: '' };
+
+      async function _tkaiRefreshAdminLock() {
+        try {
+          if (window.etherx?.license?.isAdminDevice) {
+            const st = await window.etherx.license.isAdminDevice();
+            if (st && typeof st === 'object') _tkaiAdminDevice = st;
+          }
+        } catch (_) {
+          _tkaiAdminDevice = { enabled: false, allowed: true, deviceId: '' };
+        }
+        return _tkaiAdminDevice;
+      }
+
+      // Normalize a raw code string before hashing
+      function _tkaiNormCode(raw) {
+        return String(raw || '').toUpperCase().replace(/[\s\-_]/g, '');
+      }
+      function _tkaiHasRequiredPrefix(raw) {
+        return _tkaiNormCode(raw).startsWith(TKAI_REQUIRED_PREFIX_NORM);
+      }
+      // Compute SHA-256 and return hex string
+      async function _tkaiHash(str) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+      }
+      // Public helper — call from DevTools to generate hashes for new codes
+      window._tkaiGenHash = async function (code) {
+        await _tkaiRefreshAdminLock();
+        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
+          throw new Error('This build is locked to administrator device only.');
+        }
+        if (!_tkaiHasRequiredPrefix(code)) {
+          throw new Error('Activation code must start with: EtherX_TiktokChatAI');
+        }
+        const h = await _tkaiHash(_tkaiNormCode(code));
+        console.log('%c[TikTok AI License] Hash for "' + code + '": ' + h, 'color:#a5b4fc;font-weight:bold');
+        return h;
+      };
+      // Public helper — generate ready-to-sell activation codes + hashes
+      // Usage examples:
+      //   _tkaiGenerateCodes()                            // 10 codes with fixed admin prefix
+      //   _tkaiGenerateCodes(25, 'CUSTOM_ADMIN_PREFIX')  // custom admin prefix, still starts with fixed required prefix
+      // Returns: [{ code, hash }, ...]
+      window._tkaiGenerateCodes = async function (count = 10, prefix = '') {
+        await _tkaiRefreshAdminLock();
+        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
+          throw new Error('This build is locked to administrator device only.');
+        }
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const makeSeg = (len = 4) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        const out = [];
+        const used = new Set();
+        const suffixPrefix = String(prefix || '').trim().toUpperCase();
+        const fixedPrefix = 'ETHERX_TIKTOKCHATAI';
+        while (out.length < count) {
+          const raw = `${makeSeg(4)}-${makeSeg(4)}-${makeSeg(4)}-${makeSeg(4)}`;
+          const code = suffixPrefix ? `${fixedPrefix}-${suffixPrefix}-${raw}` : `${fixedPrefix}-${raw}`;
+          if (used.has(code)) continue;
+          used.add(code);
+          const hash = await _tkaiHash(_tkaiNormCode(code));
+          out.push({ code, hash });
+        }
+        console.table(out);
+        console.log('%c[TikTok AI License] Add these hashes to TKAI_VALID_HASHES:', 'color:#67e8f9;font-weight:bold');
+        console.log(JSON.stringify(out.map(x => x.hash), null, 2));
+        return out;
+      };
+      // Returns true if the license is currently active
+      function tkaiIsActivated() {
+        const stored = localStorage.getItem(TKAI_LICENSE_KEY);
+        return stored && TKAI_VALID_HASHES.includes(stored);
+      }
+      // Verify code, save if valid, return true/false
+      async function tkaiActivate(code) {
+        await _tkaiRefreshAdminLock();
+        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) return false;
+        if (!_tkaiHasRequiredPrefix(code)) return false;
+        const hash = await _tkaiHash(_tkaiNormCode(code));
+        if (TKAI_VALID_HASHES.includes(hash)) {
+          localStorage.setItem(TKAI_LICENSE_KEY, hash);
+          return true;
+        }
+        return false;
+      }
+      function tkaiRevoke() {
+        localStorage.removeItem(TKAI_LICENSE_KEY);
+        applyTkaiLicenseGate();
+      }
+      // Show/hide the gate and settings content based on activation
+      function applyTkaiLicenseGate() {
+        const gateEl = document.getElementById('tkaiLicenseGate');
+        const activeEl = document.getElementById('tkaiLicenseActive');
+        const contentEl = document.getElementById('tkaiSettingsContent');
+        const btnNav = document.getElementById('btnTikTokAI');
+        const msgEl = document.getElementById('tkaiLicenseMsg');
+        const actBtn = document.getElementById('tkaiLicenseActivateBtn');
+        const activated = tkaiIsActivated();
+        if (gateEl) { gateEl.style.display = activated ? 'none' : ''; }
+        if (activeEl) { activeEl.style.display = activated ? 'flex' : 'none'; }
+        if (contentEl) { contentEl.style.display = activated ? '' : 'none'; }
+        if (btnNav) {
+          btnNav.title = activated ? 'TikTok Chat AI' : 'TikTok Chat AI — Not Activated';
+          btnNav.style.opacity = activated ? '' : '0.45';
+        }
+        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
+          if (msgEl) {
+            msgEl.textContent = '🔒 Admin lock active: this device is not allowed.';
+            msgEl.style.color = '#f87171';
+          }
+          if (actBtn) actBtn.disabled = true;
+        } else if (actBtn) {
+          actBtn.disabled = false;
+        }
+        // Sync the lock state on the panel itself (show overlay if not activated)
+        const panelLock = document.getElementById('tkaiPanelLockOverlay');
+        if (panelLock) panelLock.style.display = activated ? 'none' : 'flex';
+      }
+      // Wire up Activate button
+      document.getElementById('tkaiLicenseActivateBtn')?.addEventListener('click', async function () {
+        const input = document.getElementById('tkaiLicenseInput');
+        const msgEl = document.getElementById('tkaiLicenseMsg');
+        const code = input ? input.value.trim() : '';
+        await _tkaiRefreshAdminLock();
+        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
+          if (msgEl) {
+            msgEl.textContent = '🔒 Admin lock active: this device is not allowed.';
+            msgEl.style.color = '#f87171';
+          }
+          return;
+        }
+        if (!code) { if (msgEl) { msgEl.textContent = '⚠️ Please enter your activation code.'; msgEl.style.color = '#f87171'; } return; }
+        if (!_tkaiHasRequiredPrefix(code)) {
+          if (msgEl) {
+            msgEl.textContent = '❌ Code must start with: EtherX_TiktokChatAI';
+            msgEl.style.color = '#f87171';
+          }
+          return;
+        }
+        this.textContent = '⏳ Checking…'; this.disabled = true;
+        const ok = await tkaiActivate(code);
+        this.textContent = '🔑 Activate'; this.disabled = false;
+        if (ok) {
+          if (msgEl) { msgEl.textContent = '✅ Activated successfully!'; msgEl.style.color = '#4ade80'; }
+          applyTkaiLicenseGate();
+          showToast('✅ AI Live Chat activated!');
+        } else {
+          if (msgEl) { msgEl.textContent = '❌ Invalid code. Please check and try again.'; msgEl.style.color = '#f87171'; }
+        }
+      });
+      document.getElementById('tkaiLicenseInput')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') document.getElementById('tkaiLicenseActivateBtn')?.click();
+        this.value = this.value.toUpperCase();
+      });
+      document.getElementById('tkaiLicenseRevokeBtn')?.addEventListener('click', function () {
+        if (!confirm('Revoke the current activation? You will need to re-enter your code.')) return;
+        tkaiRevoke();
+        showToast('🔒 AI Live Chat deactivated.');
+      });
+      // Run gate check on settings tab open
+      document.querySelector('[data-stab="ai-live-chat"]')?.addEventListener('click', async () => {
+        await _tkaiRefreshAdminLock();
+        setTimeout(applyTkaiLicenseGate, 30);
+      });
+      _tkaiRefreshAdminLock().then(() => applyTkaiLicenseGate());
+      // ── END LICENSE SYSTEM ────────────────────────────────────────
+
       let newMsgsSinceAutoGen = 0;
       let scanActive = false;
       let scanInterval = null;
@@ -13731,7 +13989,26 @@
           if (!text) return;
           const lower = text.toLowerCase();
           const isQuestion = text.includes('?') ||
-            /^(kako|zasto|zato|sto|sta|kada|gdje|ko|tko|zar|jel|je li|who|what|why|when|where|how|can you|do you|is it|are you)\b/.test(lower);
+            // Croatian / Bosnian / Serbian
+            /^(kako|zasto|zato|sto|sta|kada|gdje|ko|tko|zar|jel|je li|može li|ima li|znaš li|može li)\b/.test(lower) ||
+            // English
+            /^(how|what|why|when|where|who|which|whose|whom|can you|do you|is it|are you|would you|could you|will you|have you|does it|did you|is there|are there|should i|can i|what if|what's|what are|how do|how can|how long|how much|how many|how often)\b/.test(lower) ||
+            // German
+            /^(wie|was|warum|wann|wo|wer|welch|kannst du|können sie|gibt es|ist es|haben sie)\b/.test(lower) ||
+            // Spanish
+            /^(cómo|como|qué|que|por qué|cuándo|dónde|quién|quienes|puedes|puede|hay|es cierto|sabes)\b/.test(lower) ||
+            // French
+            /^(comment|pourquoi|quand|où|qui|quel|quelle|est-ce que|est ce que|pouvez|peux tu|y a-t-il|sais tu)\b/.test(lower) ||
+            // Italian
+            /^(come|perché|quando|dove|chi|quale|puoi|può|c'è|ci sono|sai)\b/.test(lower) ||
+            // Portuguese
+            /^(como|por que|quando|onde|quem|qual|pode|você sabe|há|tem como)\b/.test(lower) ||
+            // Turkish
+            /^(nasıl|neden|ne zaman|nerede|kim|hangi|yapabilir misin|var mı|bilir misin)\b/.test(lower) ||
+            // Russian
+            /^(как|почему|зачем|когда|где|кто|какой|можешь|есть ли|знаешь)\b/.test(lower) ||
+            // Arabic question words (Unicode)
+            /^(كيف|لماذا|ماذا|متى|أين|من|هل|ما هو)\s/.test(lower);
           if (isQuestion && !existing.has(text)) {
             existing.add(text);
             collectedQuestions.push({ user: m.user || '', text, ts: m.ts || Date.now() });
@@ -15852,10 +16129,99 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
     // ── EtherX Shield Panel ────────────────────────────────────────────────────
     (function initShieldPanel() {
+      const SHIELD_I18N = {
+        en: {
+          modeAggressive: 'Aggressive: ads, trackers, scripts and fingerprinting are blocked.',
+          modeStandard: 'Standard: ads, trackers and telemetry are blocked.',
+          modeDisable: 'Disabled: no blocking - all sites work normally.',
+          descScripts: 'Blocks JavaScript on all pages (can break some sites)',
+          descFingerprint: 'Randomizes Canvas, WebGL and Audio API for anti-fingerprinting protection',
+          descAmp: 'Redirect AMP pages to the original URLs',
+          descTracking: 'Remove utm_*, fbclid and similar tracking parameters from URLs',
+          descDanger: 'Blocks malware, phishing and cryptojacking domains',
+          descContacts: 'Store contact details for form autocomplete',
+          descUniv: 'Allow opening links in external apps',
+          descAppNotice: 'Hide "Open in app" smart banners',
+          descCookies: 'Prevents setting all cookies',
+          lblBlocked: '⛔ Blocked this session',
+          lblMalware: '🛡 Malware domains',
+          noData: 'No data in this session',
+          toastModeDisable: '⭕ Shield: blocking disabled',
+          toastModeAggressive: '🔒 Shield: aggressive protection active',
+          toastModeStandard: '🛡 Shield: standard protection active',
+          toastScriptsOn: '⛔ Scripts blocked (applies on next load)',
+          toastScriptsOff: '✅ Scripts allowed',
+          toastFpOn: '🕵️ Fingerprint protection enabled',
+          toastFpOff: '⭕ Fingerprint protection disabled',
+          toastAmpOn: '🔗 AMP redirection enabled',
+          toastAmpOff: '⭕ AMP redirection disabled',
+          toastTrackOn: '🔗 Tracking parameter removal enabled',
+          toastTrackOff: '⭕ Tracking parameter removal disabled',
+          toastDangerOn: '🛡 Dangerous website blocking enabled',
+          toastDangerOff: '⭕ Dangerous website blocking disabled',
+          toastContactsOn: '📋 Contact storage enabled',
+          toastContactsOff: '⭕ Contact storage disabled',
+          toastUnivOn: '🔗 Universal links allowed',
+          toastUnivOff: '⭕ Universal links blocked',
+          toastAppNoticeOn: '🚫 "Open in app" banners hidden',
+          toastAppNoticeOff: '⭕ App banners visible',
+          toastCookiesOn: '🍪 Cookies blocked (applies on next load)',
+          toastCookiesOff: '✅ Cookies allowed',
+        },
+        hr: {
+          modeAggressive: 'Agresivno: ads, trackeri, skripte i fingerprinting su blokirani.',
+          modeStandard: 'Standardno: ads, trackeri i telemetrija su blokirani.',
+          modeDisable: 'Onemogućeno: nema blokiranja - sve stranice rade normalno.',
+          descScripts: 'Blokira JavaScript na svim stranicama (može slomiti neke stranice)',
+          descFingerprint: 'Randomizira Canvas, WebGL i Audio API za anti-fingerprinting zaštitu',
+          descAmp: 'Preusmjeri AMP stranice na originalne URL-ove',
+          descTracking: 'Ukloni utm_*, fbclid i slične parametre iz URL-ova',
+          descDanger: 'Blokira malware, phishing i cryptojacking domene',
+          descContacts: 'Spremi kontaktne podatke za autocomplete obrasce',
+          descUniv: 'Dopusti otvaranje linkova u vanjskim aplikacijama',
+          descAppNotice: 'Sakrij "Otvori u aplikaciji" smart-bannere',
+          descCookies: 'Sprječava postavljanje svih kolačića',
+          lblBlocked: '⛔ Blokirano u sesiji',
+          lblMalware: '🛡 Malware domene',
+          noData: 'Nema podataka u ovoj sesiji',
+          toastModeDisable: '⭕ Shield: blokade isključene',
+          toastModeAggressive: '🔒 Shield: agresivna zaštita aktivna',
+          toastModeStandard: '🛡 Shield: standardna zaštita aktivna',
+          toastScriptsOn: '⛔ Skripte blokirane (vrijedi od sljedećeg učitavanja)',
+          toastScriptsOff: '✅ Skripte dozvoljene',
+          toastFpOn: '🕵️ Fingerprint zaštita uključena',
+          toastFpOff: '⭕ Fingerprint zaštita isključena',
+          toastAmpOn: '🔗 AMP preusmjeravanje uključeno',
+          toastAmpOff: '⭕ AMP preusmjeravanje isključeno',
+          toastTrackOn: '🔗 Uklanjanje tracking parametara uključeno',
+          toastTrackOff: '⭕ Uklanjanje tracking parametara isključeno',
+          toastDangerOn: '🛡 Blokada opasnih stranica uključena',
+          toastDangerOff: '⭕ Blokada opasnih stranica isključena',
+          toastContactsOn: '📋 Pohrana kontakata uključena',
+          toastContactsOff: '⭕ Pohrana kontakata isključena',
+          toastUnivOn: '🔗 Universal linkovi dozvoljeni',
+          toastUnivOff: '⭕ Universal linkovi blokirani',
+          toastAppNoticeOn: '🚫 "Otvori u aplikaciji" banneri skriveni',
+          toastAppNoticeOff: '⭕ App banneri vidljivi',
+          toastCookiesOn: '🍪 Kolačići blokirani (vrijedi od sljedećeg učitavanja)',
+          toastCookiesOff: '✅ Kolačići dozvoljeni',
+        }
+      };
+
+      function shieldLang() {
+        return (DB.getSettings().uiLanguage || 'en').toLowerCase();
+      }
+
+      function tShield(key) {
+        const code = shieldLang();
+        const pack = SHIELD_I18N[code] || SHIELD_I18N.en;
+        return pack[key] || SHIELD_I18N.en[key] || key;
+      }
+
       const SHIELD_MODE_DESCS = {
-        aggressive: 'Agresivno: ads, trackeri, skripte i fingerprinting su blokirani.',
-        standard: 'Standardno: ads, trackeri i telemetrija su blokirani.',
-        disable: 'Onemogućeno: nema blokiranja — sve stranice rade normalno.',
+        aggressive: () => tShield('modeAggressive'),
+        standard: () => tShield('modeStandard'),
+        disable: () => tShield('modeDisable'),
       };
 
       // ── Per-country session tracking ─────────────────────────────────────────
@@ -15865,23 +16231,23 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
       // TLD → country name + flag map (covers most ad/tracker origins)
       const TLD_COUNTRY = {
-        'ru': ['Rusija', '🇷🇺'], 'cn': ['Kina', '🇨🇳'], 'us': ['SAD', '🇺🇸'],
-        'de': ['Njemačka', '🇩🇪'], 'fr': ['Francuska', '🇫🇷'], 'gb': ['UK', '🇬🇧'],
-        'nl': ['Nizozemska', '🇳🇱'], 'pl': ['Poljska', '🇵🇱'], 'ua': ['Ukrajina', '🇺🇦'],
-        'br': ['Brazil', '🇧🇷'], 'in': ['Indija', '🇮🇳'], 'jp': ['Japan', '🇯🇵'],
-        'kr': ['Koreja', '🇰🇷'], 'au': ['Australija', '🇦🇺'], 'ca': ['Kanada', '🇨🇦'],
-        'it': ['Italija', '🇮🇹'], 'es': ['Španija', '🇪🇸'], 'se': ['Švedska', '🇸🇪'],
-        'no': ['Norveška', '🇳🇴'], 'fi': ['Finska', '🇫🇮'], 'cz': ['Češka', '🇨🇿'],
-        'ro': ['Rumunija', '🇷🇴'], 'hu': ['Mađarska', '🇭🇺'], 'tr': ['Turska', '🇹🇷'],
-        'mx': ['Meksiko', '🇲🇽'], 'ar': ['Argentina', '🇦🇷'], 'za': ['J. Afrika', '🇿🇦'],
-        'io': ['BIOT', '🇮🇴'], 'co': ['Kolumbija', '🇨🇴'], 'tv': ['Tuvalu', '🇹🇻'],
-        'ly': ['Libija', '🇱🇾'], 'be': ['Belgija', '🇧🇪'], 'ch': ['Švicarska', '🇨🇭'],
-        'at': ['Austrija', '🇦🇹'], 'sg': ['Singapur', '🇸🇬'], 'hk': ['Hong Kong', '🇭🇰'],
-        'ba': ['BiH', '🇧🇦'], 'hr': ['Hrvatska', '🇭🇷'], 'rs': ['Srbija', '🇷🇸'],
-        'si': ['Slovenija', '🇸🇮'], 'sk': ['Slovačka', '🇸🇰'], 'me': ['Crna Gora', '🇲🇪'],
-        'mk': ['S. Makedonija', '🇲🇰'], 'al': ['Albanija', '🇦🇱'], 'pt': ['Portugal', '🇵🇹'],
-        'gr': ['Grčka', '🇬🇷'], 'dk': ['Danska', '🇩🇰'], 'ie': ['Irska', '🇮🇪'],
-        'nz': ['N. Zeland', '🇳🇿'], 'il': ['Izrael', '🇮🇱'],
+        'ru': ['Russia', '🇷🇺'], 'cn': ['China', '🇨🇳'], 'us': ['USA', '🇺🇸'],
+        'de': ['Germany', '🇩🇪'], 'fr': ['France', '🇫🇷'], 'gb': ['UK', '🇬🇧'],
+        'nl': ['Netherlands', '🇳🇱'], 'pl': ['Poland', '🇵🇱'], 'ua': ['Ukraine', '🇺🇦'],
+        'br': ['Brazil', '🇧🇷'], 'in': ['India', '🇮🇳'], 'jp': ['Japan', '🇯🇵'],
+        'kr': ['Korea', '🇰🇷'], 'au': ['Australia', '🇦🇺'], 'ca': ['Canada', '🇨🇦'],
+        'it': ['Italy', '🇮🇹'], 'es': ['Spain', '🇪🇸'], 'se': ['Sweden', '🇸🇪'],
+        'no': ['Norway', '🇳🇴'], 'fi': ['Finland', '🇫🇮'], 'cz': ['Czechia', '🇨🇿'],
+        'ro': ['Romania', '🇷🇴'], 'hu': ['Hungary', '🇭🇺'], 'tr': ['Turkey', '🇹🇷'],
+        'mx': ['Mexico', '🇲🇽'], 'ar': ['Argentina', '🇦🇷'], 'za': ['South Africa', '🇿🇦'],
+        'io': ['BIOT', '🇮🇴'], 'co': ['Colombia', '🇨🇴'], 'tv': ['Tuvalu', '🇹🇻'],
+        'ly': ['Libya', '🇱🇾'], 'be': ['Belgium', '🇧🇪'], 'ch': ['Switzerland', '🇨🇭'],
+        'at': ['Austria', '🇦🇹'], 'sg': ['Singapore', '🇸🇬'], 'hk': ['Hong Kong', '🇭🇰'],
+        'ba': ['Bosnia and Herzegovina', '🇧🇦'], 'hr': ['Croatia', '🇭🇷'], 'rs': ['Serbia', '🇷🇸'],
+        'si': ['Slovenia', '🇸🇮'], 'sk': ['Slovakia', '🇸🇰'], 'me': ['Montenegro', '🇲🇪'],
+        'mk': ['North Macedonia', '🇲🇰'], 'al': ['Albania', '🇦🇱'], 'pt': ['Portugal', '🇵🇹'],
+        'gr': ['Greece', '🇬🇷'], 'dk': ['Denmark', '🇩🇰'], 'ie': ['Ireland', '🇮🇪'],
+        'nz': ['New Zealand', '🇳🇿'], 'il': ['Israel', '🇮🇱'],
       };
 
       // Well-known global ad/tracker domains → assign to US (no TLD hint)
@@ -15918,7 +16284,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (!el) return;
         const entries = Object.entries(_countryCounts).sort((a, b) => b[1] - a[1]);
         if (!entries.length) {
-          el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:6px 0">Nema podataka u ovoj sesiji</div>';
+          el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:6px 0">' + escHtml(tShield('noData')) + '</div>';
           return;
         }
         const max = entries[0][1];
@@ -15984,8 +16350,23 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const mode = s.shieldMode || 'standard';
         document.querySelectorAll('.shield-mode-btn').forEach(b =>
           b.classList.toggle('active', b.dataset.mode === mode));
+        const setText = (id, key) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = tShield(key);
+        };
+        setText('shieldDescScripts', 'descScripts');
+        setText('shieldDescFingerprint', 'descFingerprint');
+        setText('shieldDescAmp', 'descAmp');
+        setText('shieldDescTracking', 'descTracking');
+        setText('shieldDescDanger', 'descDanger');
+        setText('shieldDescContacts', 'descContacts');
+        setText('shieldDescUniv', 'descUniv');
+        setText('shieldDescAppNotice', 'descAppNotice');
+        setText('shieldDescCookies', 'descCookies');
+        setText('shieldLblBlocked', 'lblBlocked');
+        setText('shieldLblMalware', 'lblMalware');
         const descEl = document.getElementById('shieldModeDesc');
-        if (descEl) descEl.textContent = SHIELD_MODE_DESCS[mode] || '';
+        if (descEl) descEl.textContent = (SHIELD_MODE_DESCS[mode] ? SHIELD_MODE_DESCS[mode]() : '');
         const bsChk = document.getElementById('shieldBlockScripts');
         const bfChk = document.getElementById('shieldBlockFingerprint');
         if (bsChk) bsChk.checked = !!s.blockScriptsEnabled;
@@ -16024,7 +16405,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           document.querySelectorAll('.shield-mode-btn').forEach(b =>
             b.classList.toggle('active', b.dataset.mode === mode));
           const descEl = document.getElementById('shieldModeDesc');
-          if (descEl) descEl.textContent = SHIELD_MODE_DESCS[mode] || '';
+          if (descEl) descEl.textContent = (SHIELD_MODE_DESCS[mode] ? SHIELD_MODE_DESCS[mode]() : '');
 
           const isEnabled = mode !== 'disable';
           if (window.etherx?.adblock) window.etherx.adblock.toggle(isEnabled);
@@ -16037,9 +16418,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (bfChk) { bfChk.checked = true; _injectFingerprintProtection(); }
           }
 
-          showToast(mode === 'disable' ? '⭕ Shield: blokade isključene' :
-            mode === 'aggressive' ? '🔒 Shield: agresivna zaštita aktivna' :
-              '🛡 Shield: standardna zaštita aktivna');
+          showToast(mode === 'disable' ? tShield('toastModeDisable') :
+            mode === 'aggressive' ? tShield('toastModeAggressive') :
+              tShield('toastModeStandard'));
         });
       });
 
@@ -16047,26 +16428,26 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       document.getElementById('shieldBlockScripts').addEventListener('change', function () {
         DB.saveSetting('blockScriptsEnabled', this.checked);
         if (window.etherx?.shield?.setBlockScripts) window.etherx.shield.setBlockScripts(this.checked);
-        showToast(this.checked ? '⛔ Skripte blokirane (vrijedi od sljedećeg učitavanja)' : '✅ Skripte dozvoljene');
+        showToast(this.checked ? tShield('toastScriptsOn') : tShield('toastScriptsOff'));
       });
 
       // Block Fingerprint toggle
       document.getElementById('shieldBlockFingerprint').addEventListener('change', function () {
         DB.saveSetting('blockFingerprintEnabled', this.checked);
         if (this.checked) _injectFingerprintProtection();
-        showToast(this.checked ? '🕵️ Fingerprint zaštita uključena' : '⭕ Fingerprint zaštita isključena');
+        showToast(this.checked ? tShield('toastFpOn') : tShield('toastFpOff'));
       });
 
       // Auto redirect AMP
       document.getElementById('shieldRedirectAmp')?.addEventListener('change', function () {
         DB.saveSetting('shieldRedirectAmp', this.checked);
-        showToast(this.checked ? '🔗 AMP preusmjeravanje uključeno' : '⭕ AMP preusmjeravanje isključeno');
+        showToast(this.checked ? tShield('toastAmpOn') : tShield('toastAmpOff'));
       });
 
       // Auto-redirect Tracking URLs
       document.getElementById('shieldStripTracking')?.addEventListener('change', function () {
         DB.saveSetting('shieldStripTracking', this.checked);
-        showToast(this.checked ? '🔗 Uklanjanje tracking parametara uključeno' : '⭕ Uklanjanje tracking parametara isključeno');
+        showToast(this.checked ? tShield('toastTrackOn') : tShield('toastTrackOff'));
       });
 
       // Block dangerous websites (synced with malwareBlockEnabled)
@@ -16076,19 +16457,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (typeof setMalwareBlock === 'function') setMalwareBlock(this.checked).catch?.(() => { });
         const mirrorChk = document.getElementById('settingMalwareBlock');
         if (mirrorChk) mirrorChk.checked = this.checked;
-        showToast(this.checked ? '🛡 Blokada opasnih stranica uključena' : '⭕ Blokada opasnih stranica isključena');
+        showToast(this.checked ? tShield('toastDangerOn') : tShield('toastDangerOff'));
       });
 
       // Store Contact information
       document.getElementById('shieldStoreContacts')?.addEventListener('change', function () {
         DB.saveSetting('shieldStoreContacts', this.checked);
-        showToast(this.checked ? '📋 Pohrana kontakata uključena' : '⭕ Pohrana kontakata isključena');
+        showToast(this.checked ? tShield('toastContactsOn') : tShield('toastContactsOff'));
       });
 
       // Allow universal links
       document.getElementById('shieldAllowUnivLinks')?.addEventListener('change', function () {
         DB.saveSetting('shieldAllowUnivLinks', this.checked);
-        showToast(this.checked ? '🔗 Universal linkovi dozvoljeni' : '⭕ Universal linkovi blokirani');
+        showToast(this.checked ? tShield('toastUnivOn') : tShield('toastUnivOff'));
       });
 
       // Block 'switch to app' notice
@@ -16106,7 +16487,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             })()`).catch(() => { });
           }
         }
-        showToast(this.checked ? '🚫 "Otvori u aplikaciji" banneri skriveni' : '⭕ App banneri vidljivi');
+        showToast(this.checked ? tShield('toastAppNoticeOn') : tShield('toastAppNoticeOff'));
       });
 
       // Block all cookies
@@ -16127,8 +16508,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             })()`).catch(() => { });
           }
         }
-        showToast(this.checked ? '🍪 Kolačići blokirani (vrijedi od sljedećeg učitavanja)' : '✅ Kolačići dozvoljeni');
+        showToast(this.checked ? tShield('toastCookiesOn') : tShield('toastCookiesOff'));
       });
+
+      // Refresh Shield copy when interface language changes
+      document.getElementById('langSelect')?.addEventListener('change', () => setTimeout(_refreshShield, 0));
 
       function _injectFingerprintProtection() {
         if (!window.electronWebview) return;
