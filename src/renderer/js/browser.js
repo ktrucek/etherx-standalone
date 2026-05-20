@@ -196,9 +196,9 @@ const DB = {
   getUser: () =>
     JSON.parse(
       localStorage.getItem("ex_user") ||
-        '{"name":"","email":"","avatar":"👤","bio":"","createdAt":' +
-          Date.now() +
-          "}",
+      '{"name":"","email":"","avatar":"👤","bio":"","createdAt":' +
+      Date.now() +
+      "}",
     ),
   saveUser(u) {
     localStorage.setItem(
@@ -382,7 +382,7 @@ function createTabFrame(tabId, partition) {
   // Inject contextmenu listener into loaded page so right-click events bubble
   wv.addEventListener("dom-ready", () => {
     tabFrameReady.set(tabId, true);
-    wv.insertCSS("*{-webkit-user-select: text !important;}").catch(() => {});
+    wv.insertCSS("*{-webkit-user-select: text !important;}").catch(() => { });
   });
 
   contentArea.appendChild(wv);
@@ -578,7 +578,7 @@ function saveSessionTabs() {
     ) {
       windowId = window.electronAPI.windowId() || "main";
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const session = STATE.tabs.map((t) => ({
     url: t.url,
@@ -1224,7 +1224,7 @@ frame.addEventListener("load", () => {
           });
         });
     } // end if activeWv
-  } catch (e) {}
+  } catch (e) { }
   consoleLog("success", "✓ Loaded: " + (tab.url || "—"));
 });
 window.addEventListener("message", (e) => {
@@ -1335,7 +1335,7 @@ function setZoom(val) {
     if (wv && typeof wv.setZoomFactor === "function") {
       try {
         wv.setZoomFactor(s);
-      } catch (e) {}
+      } catch (e) { }
     }
   } else {
     if (s === 1) {
@@ -1374,7 +1374,7 @@ function closeFind() {
     if (wv && typeof wv.stopFindInPage === "function") {
       try {
         wv.stopFindInPage("clearSelection");
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 }
@@ -1398,12 +1398,12 @@ document.getElementById("findInput").addEventListener("input", () => {
             : "Not found";
           wv.removeEventListener("found-in-page", handler);
         });
-      } catch (e) {}
+      } catch (e) { }
     }
   } else {
     try {
       frame.contentWindow.find(q);
-    } catch (e) {}
+    } catch (e) { }
   }
 });
 document.getElementById("findPrev").addEventListener("click", () => {
@@ -1414,12 +1414,12 @@ document.getElementById("findPrev").addEventListener("click", () => {
     if (wv && typeof wv.findInPage === "function") {
       try {
         wv.findInPage(q, { forward: false, findNext: true });
-      } catch (e) {}
+      } catch (e) { }
     }
   } else {
     try {
       frame.contentWindow.find(q, false, true);
-    } catch (e) {}
+    } catch (e) { }
   }
 });
 document.getElementById("findNext").addEventListener("click", () => {
@@ -1430,12 +1430,12 @@ document.getElementById("findNext").addEventListener("click", () => {
     if (wv && typeof wv.findInPage === "function") {
       try {
         wv.findInPage(q, { forward: true, findNext: true });
-      } catch (e) {}
+      } catch (e) { }
     }
   } else {
     try {
       frame.contentWindow.find(q);
-    } catch (e) {}
+    } catch (e) { }
   }
 });
 let readerFontSize = 18;
@@ -1594,7 +1594,7 @@ document
   .addEventListener("click", toggleTabOverview);
 document.getElementById("mi-fullscreen").addEventListener("click", () => {
   if (!document.fullscreenElement)
-    document.documentElement.requestFullscreen().catch(() => {});
+    document.documentElement.requestFullscreen().catch(() => { });
   else document.exitFullscreen();
 });
 document.addEventListener("fullscreenchange", () =>
@@ -1735,7 +1735,7 @@ async function summarizeCurrentPage() {
   cachedEl.textContent = "";
   try {
     titleEl.textContent = new URL(url).hostname;
-  } catch (e) {}
+  } catch (e) { }
 
   // Check memory cache
   const cacheKey = _md5Hash(url);
@@ -2422,7 +2422,7 @@ function consoleLog(type, msg, src) {
     consoleLog(
       "error",
       "Unhandled Promise Rejection: " +
-        (e.reason?.message || e.reason || "Unknown"),
+      (e.reason?.message || e.reason || "Unknown"),
       "Promise",
     );
   });
@@ -2546,7 +2546,7 @@ function applyConsoleFilter() {
     const lvl = type === "success" ? "log" : type;
     el.style.display =
       dtLevelFilter[lvl] !== false &&
-      (!dtTextFilter || msg.includes(dtTextFilter))
+        (!dtTextFilter || msg.includes(dtTextFilter))
         ? ""
         : "none";
   });
@@ -2608,9 +2608,9 @@ function inspectMouseMove(e) {
   const tag = target.tagName.toLowerCase();
   const cls = target.className
     ? "." +
-      (typeof target.className === "string"
-        ? target.className.trim().split(/\s+/).join(".")
-        : "")
+    (typeof target.className === "string"
+      ? target.className.trim().split(/\s+/).join(".")
+      : "")
     : "";
   const computed = window.getComputedStyle(target);
   const font =
@@ -3044,14 +3044,14 @@ function renderAppTab(type) {
       window.electronWebview && window.etherx?.ai?.getCachedSummaries
         ? window.etherx.ai.getCachedSummaries(100)
         : Promise.resolve(
-            Object.entries(_summaryCache || {}).map(([hash, v]) => ({
-              url_hash: hash,
-              url: "",
-              summary: v.summary || "",
-              model: "gemini-2.5-flash",
-              created_at: "",
-            })),
-          );
+          Object.entries(_summaryCache || {}).map(([hash, v]) => ({
+            url_hash: hash,
+            url: "",
+            summary: v.summary || "",
+            model: "gemini-2.5-flash",
+            created_at: "",
+          })),
+        );
     fetchCache.then((rows) => {
       if (!rows || !rows.length) {
         c.innerHTML = _sqliteEmpty("ai_cache");
@@ -3131,16 +3131,16 @@ function renderAppTab(type) {
           <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
       (notes.length
         ? '<table class="app-table"><thead><tr><th>#</th><th>Title</th><th>Content</th><th>Date</th><th style="width:70px"></th></tr></thead><tbody>' +
-          notes
-            .map((n, i) => {
-              const dt = new Date(n.ts).toLocaleDateString("hr-HR");
-              const body =
-                (n.content || "").slice(0, 60) +
-                ((n.content || "").length > 60 ? "…" : "");
-              return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent);font-weight:600">${escHtml(n.title || "Untitled")}</td><td style="color:#ccc">${escHtml(body)}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="_editNote(${n.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 4px">✏️</button> <button onclick="DB.deleteNote(${n.id});renderAppTab('sqlite-notes')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
-            })
-            .join("") +
-          "</tbody></table>"
+        notes
+          .map((n, i) => {
+            const dt = new Date(n.ts).toLocaleDateString("hr-HR");
+            const body =
+              (n.content || "").slice(0, 60) +
+              ((n.content || "").length > 60 ? "…" : "");
+            return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent);font-weight:600">${escHtml(n.title || "Untitled")}</td><td style="color:#ccc">${escHtml(body)}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="_editNote(${n.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 4px">✏️</button> <button onclick="DB.deleteNote(${n.id});renderAppTab('sqlite-notes')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
+          })
+          .join("") +
+        "</tbody></table>"
         : '<p style="color:#555;font-size:11px;padding:12px">No notes yet.</p>') +
       `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
             <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
@@ -3328,8 +3328,8 @@ function _restoreSession(id) {
   if (
     !confirm(
       "Restore session with " +
-        sess.tabs.length +
-        " tabs? This will open them as new tabs.",
+      sess.tabs.length +
+      " tabs? This will open them as new tabs.",
     )
   )
     return;
@@ -3355,7 +3355,7 @@ function collectPerfMetrics() {
         if (el) el.textContent = p.startTime.toFixed(0) + "ms";
       }
     });
-  } catch (e) {}
+  } catch (e) { }
 }
 document
   .getElementById("mi-new-tab")
@@ -3514,9 +3514,9 @@ document.getElementById("mi-translation").addEventListener("click", () => {
   if (lang) {
     navigateTo(
       "https://translate.google.com/translate?sl=auto&tl=" +
-        lang +
-        "&u=" +
-        encodeURIComponent(t.url),
+      lang +
+      "&u=" +
+      encodeURIComponent(t.url),
     );
   }
 });
@@ -4128,8 +4128,8 @@ document.getElementById("mi-timeline").addEventListener("click", () => {
   document
     .getElementById("mi-timeline")
     .querySelector("span:not(.icon)").textContent = timelineRunning
-    ? "Stop Timeline Recording"
-    : "Start Timeline Recording";
+      ? "Stop Timeline Recording"
+      : "Start Timeline Recording";
   if (timelineRunning) {
     document.getElementById("mi-timeline").querySelector(".icon").textContent =
       "⏹️";
@@ -4155,8 +4155,8 @@ document.getElementById("mi-elem-select").addEventListener("click", () => {
   document
     .getElementById("mi-elem-select")
     .querySelector("span:not(.icon)").textContent = elemSelecting
-    ? "Stop Element Selection"
-    : "Start Element Selection";
+      ? "Stop Element Selection"
+      : "Start Element Selection";
   showToast(
     elemSelecting
       ? "🔲 Click an element to inspect it"
@@ -4177,10 +4177,10 @@ document.getElementById("mi-elem-select").addEventListener("click", () => {
       consoleLog(
         "info",
         "🔲 Selected: &lt;" +
-          e.target.tagName.toLowerCase() +
-          ' class="' +
-          e.target.className +
-          '"&gt;',
+        e.target.tagName.toLowerCase() +
+        ' class="' +
+        e.target.className +
+        '"&gt;',
       );
       document.removeEventListener("click", handler, true);
     };
@@ -4226,12 +4226,12 @@ document
   );
 document.getElementById("mi-win-zoom").addEventListener("click", () => {
   if (!document.fullscreenElement)
-    document.documentElement.requestFullscreen().catch(() => {});
+    document.documentElement.requestFullscreen().catch(() => { });
   else document.exitFullscreen();
 });
 document.getElementById("mi-win-fill").addEventListener("click", () => {
   if (!document.fullscreenElement)
-    document.documentElement.requestFullscreen().catch(() => {});
+    document.documentElement.requestFullscreen().catch(() => { });
   else document.exitFullscreen();
 });
 document
@@ -4353,7 +4353,7 @@ function _removeDarkModeFromFrame() {
       const st = doc.getElementById(DARK_MODE_STYLE_ID);
       if (st) st.remove();
     }
-  } catch (e) {}
+  } catch (e) { }
   fr.style.filter = "";
 }
 
@@ -4492,10 +4492,10 @@ function renderQuickLinks() {
     links =
       bm.length > 0
         ? bm.map((b) => ({
-            url: b.url,
-            label: (b.title || b.url).slice(0, 10),
-            icon: "\u2B50",
-          }))
+          url: b.url,
+          label: (b.title || b.url).slice(0, 10),
+          icon: "\u2B50",
+        }))
         : DEFAULT_QUICKLINKS;
   }
   ql.innerHTML = "";
@@ -4516,7 +4516,7 @@ function addRecentSite(url, title) {
   try {
     const h = new URL(url).hostname;
     title = title || h;
-  } catch (e) {}
+  } catch (e) { }
   r.unshift({ url, title: title || url, ts: Date.now() });
   localStorage.setItem("ex_recent", JSON.stringify(r.slice(0, 20)));
 }
@@ -4536,7 +4536,7 @@ function getSiteFavicon(url) {
       "opensea.io": "\uD83C\uDF0A",
     };
     for (const k in map) if (h.includes(k)) return map[k];
-  } catch (e) {}
+  } catch (e) { }
   return "\uD83C\uDF10";
 }
 function renderRecentSites() {
@@ -4744,7 +4744,7 @@ function collectMemoryMetrics() {
     ext = fmt(performance.memory.usedJSHeapSize * 0.08);
     pct = Math.round(
       (performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit) *
-        100,
+      100,
     );
   }
   document.getElementById("memUsed").textContent = used;
@@ -5576,12 +5576,12 @@ document.getElementById("urlInput").addEventListener("focus", () => {
     const t = getActiveTab();
     const host = t?.url
       ? (() => {
-          try {
-            return new URL(t.url).hostname.replace("www.", "");
-          } catch (e2) {
-            return "";
-          }
-        })()
+        try {
+          return new URL(t.url).hostname.replace("www.", "");
+        } catch (e2) {
+          return "";
+        }
+      })()
       : "";
     const pwds = JSON.parse(localStorage.getItem("ex_passwords") || "[]")
       .filter(
@@ -6033,7 +6033,7 @@ document.getElementById("ctx-share").addEventListener("click", () => {
   const url = _ctxTargetUrl || getActiveTab()?.url;
   const title = getActiveTab()?.title || url;
   if (navigator.share && url) {
-    navigator.share({ title, url }).catch(() => {});
+    navigator.share({ title, url }).catch(() => { });
   } else if (url) {
     navigator.clipboard
       .writeText(url)
@@ -6202,12 +6202,12 @@ document.addEventListener("keydown", (e) => {
     const tab = getActiveTab();
     const host = tab?.url
       ? (() => {
-          try {
-            return new URL(tab.url).hostname;
-          } catch (e2) {
-            return "";
-          }
-        })()
+        try {
+          return new URL(tab.url).hostname;
+        } catch (e2) {
+          return "";
+        }
+      })()
       : "";
     document.cookie.split(";").forEach((c) => {
       const name = c.trim().split("=")[0];
@@ -7843,10 +7843,10 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     const supporters = Number(session?.giftStats?.supporters || 0);
     const topSupporters = Array.isArray(session?.giftStats?.leaders)
       ? session.giftStats.leaders
-          .map((row) => row.user)
-          .filter(Boolean)
-          .slice(0, 3)
-          .join(", ")
+        .map((row) => row.user)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ")
       : "";
     return {
       durationMin,
@@ -8442,9 +8442,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         lastViewerSampleValue = viewerSamples[viewerSamples.length - 1] || 0;
         topSupporters = Array.isArray(session.giftStats?.leaders)
           ? session.giftStats.leaders.map((row) => ({
-              user: String(row.user || "").slice(0, 40),
-              coins: Number(row.coins || 0),
-            }))
+            user: String(row.user || "").slice(0, 40),
+            coins: Number(row.coins || 0),
+          }))
           : [];
         filterStarredOnly = getTkaiSetting("tkaiFilterStarredOnly", false);
         renderMessages();
@@ -9486,10 +9486,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         let translated = "";
         try {
           if (window.etherx?.ai?.translate) {
-            translated = await window.etherx.ai.translate(
+            const result = await window.etherx.ai.translate(
               msg.text,
               getTkaiSetting("tkaiReadLang", "hr"),
             );
+            if (result?.ok && result.translated) {
+              translated = result.translated;
+            } else {
+              translated = "[Greška] " + (result?.error || "Prazan odgovor");
+            }
           } else {
             // Fallback: samo prikaži tekst s oznakom jezika
             translated = `[${getTkaiSetting("tkaiReadLang", "hr")}] ${msg.text}`;
@@ -10090,7 +10095,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   const origNewTab = window.__origNewTab || null;
   document
     .getElementById("maxTabsSlider")
-    ?.addEventListener("change", () => {});
+    ?.addEventListener("change", () => { });
 })();
 
 // ── Language Engine ──
@@ -10805,7 +10810,7 @@ document.getElementById("cttReset").addEventListener("click", () => {
     ) {
       windowId = window.electronAPI.windowId() || "main";
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const saved =
     localStorage.getItem("ex_session_tabs_" + windowId) ||
@@ -10875,9 +10880,9 @@ function openShareSheet() {
       fn: () => {
         window.open(
           "mailto:?subject=" +
-            encodeURIComponent(title) +
-            "&body=" +
-            encodeURIComponent(url),
+          encodeURIComponent(title) +
+          "&body=" +
+          encodeURIComponent(url),
         );
         closeShareSheet();
       },
@@ -10898,9 +10903,9 @@ function openShareSheet() {
       fn: () => {
         window.open(
           "https://twitter.com/intent/tweet?text=" +
-            encodeURIComponent(title) +
-            "&url=" +
-            encodeURIComponent(url),
+          encodeURIComponent(title) +
+          "&url=" +
+          encodeURIComponent(url),
         );
         closeShareSheet();
       },
@@ -10911,9 +10916,9 @@ function openShareSheet() {
       fn: () => {
         window.open(
           "https://www.linkedin.com/shareArticle?url=" +
-            encodeURIComponent(url) +
-            "&title=" +
-            encodeURIComponent(title),
+          encodeURIComponent(url) +
+          "&title=" +
+          encodeURIComponent(title),
         );
         closeShareSheet();
       },
@@ -10924,7 +10929,7 @@ function openShareSheet() {
       fn: () => {
         window.open(
           "https://www.facebook.com/sharer/sharer.php?u=" +
-            encodeURIComponent(url),
+          encodeURIComponent(url),
         );
         closeShareSheet();
       },
@@ -10935,9 +10940,9 @@ function openShareSheet() {
       fn: () => {
         window.open(
           "https://t.me/share/url?url=" +
-            encodeURIComponent(url) +
-            "&text=" +
-            encodeURIComponent(title),
+          encodeURIComponent(url) +
+          "&text=" +
+          encodeURIComponent(title),
         );
         closeShareSheet();
       },
@@ -10949,7 +10954,7 @@ function openShareSheet() {
         closeShareSheet();
         navigateTo(
           "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" +
-            encodeURIComponent(url),
+          encodeURIComponent(url),
         );
       },
     },
@@ -10974,7 +10979,7 @@ function openShareSheet() {
       label: "AirDrop",
       fn: () => {
         if (navigator.share) {
-          navigator.share({ title, url }).catch(() => {});
+          navigator.share({ title, url }).catch(() => { });
         } else {
           showToast("AirDrop/Web Share not available in this browser");
         }
@@ -11596,10 +11601,10 @@ function _clearStore(storeId) {
   if (
     !confirm(
       "Clear all data in " +
-        (def?.label || key) +
-        " (" +
-        key +
-        ")?\nThis cannot be undone.",
+      (def?.label || key) +
+      " (" +
+      key +
+      ")?\nThis cannot be undone.",
     )
   )
     return;
@@ -11700,8 +11705,8 @@ document.querySelectorAll('.sit-btn[data-stab="downloads"]').forEach((btn) => {
         if (!url) {
           showToast(
             "⚠️ No download link configured for " +
-              platform +
-              "\n\nGo to Settings → Downloads to add links",
+            platform +
+            "\n\nGo to Settings → Downloads to add links",
           );
           return;
         }
@@ -12235,7 +12240,7 @@ document.getElementById("urlIcon").addEventListener("click", () => {
     const u = new URL(url);
     siteDomain = u.hostname;
     isHttps = u.protocol === "https:";
-  } catch (e) {}
+  } catch (e) { }
   _sipCurrentDomain = siteDomain;
   document.getElementById("sipSite").textContent =
     "When visiting " + siteDomain + ":";
@@ -12334,11 +12339,11 @@ document.getElementById("sipClearData")?.addEventListener("click", () => {
   let domain = "—";
   try {
     domain = new URL(t?.url || "").hostname;
-  } catch (e) {}
+  } catch (e) { }
   window.customConfirm(
     "Clear all cookies and site data for:\n" +
-      domain +
-      "\n\nThis will sign you out of the site.",
+    domain +
+    "\n\nThis will sign you out of the site.",
     (ok) => {
       if (!ok) return;
       const h = DB.getHistory().filter((x) => {
@@ -12474,10 +12479,10 @@ document.getElementById("ctx-add-to-group").addEventListener("click", () => {
   const names = STATE.groups.map((g, i) => `${i + 1}. ${g.name}`).join(" | ");
   window.customPrompt(
     "Add to group. Options: " +
-      names +
-      " (enter number 1-" +
-      STATE.groups.length +
-      "):",
+    names +
+    " (enter number 1-" +
+    STATE.groups.length +
+    "):",
     "",
     (n) => {
       if (!n) return;
@@ -12591,7 +12596,7 @@ document.getElementById("mi-download-app")?.addEventListener("click", () => {
 
 // PWA Service Worker
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js").catch(() => {});
+  navigator.serviceWorker.register("/sw.js").catch(() => { });
 }
 
 // ── Cookie Consent Banner ──────────────────────────────────────────────────
@@ -12629,8 +12634,8 @@ if ("serviceWorker" in navigator) {
     if (window.etherx?.app) {
       window.etherx.app
         .getVersion()
-        .then(() => {})
-        .catch(() => {});
+        .then(() => { })
+        .catch(() => { });
     }
     if (window.electronAPI?.close) {
       window.electronAPI.close();
@@ -12639,7 +12644,7 @@ if ("serviceWorker" in navigator) {
     if (typeof require !== "undefined") {
       try {
         require("electron").remote?.getCurrentWindow().close();
-      } catch (e) {}
+      } catch (e) { }
     }
     window.close();
   });
@@ -12667,7 +12672,7 @@ if ("serviceWorker" in navigator) {
     _origAddHistory(entry); // keep localStorage as cache
     etherx.history
       .add({ url: entry.url, title: entry.title || entry.url })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   // Bookmarks
@@ -12676,7 +12681,7 @@ if ("serviceWorker" in navigator) {
     _origAddBm(entry);
     etherx.bookmarks
       .add({ url: entry.url, title: entry.title || entry.url })
-      .catch(() => {});
+      .catch(() => { });
   };
   const _origRemoveBm = DB.removeBookmark.bind(DB);
   DB.removeBookmark = function (url) {
@@ -12685,9 +12690,9 @@ if ("serviceWorker" in navigator) {
       .getAll()
       .then((bms) => {
         const found = bms.find((b) => b.url === url);
-        if (found) etherx.bookmarks.delete(found.id).catch(() => {});
+        if (found) etherx.bookmarks.delete(found.id).catch(() => { });
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   // Settings save
@@ -12695,7 +12700,7 @@ if ("serviceWorker" in navigator) {
   DB.saveSetting = function (k, v) {
     _origSaveSetting(k, v);
     const settings = DB.getSettings();
-    etherx.settings.save(settings).catch(() => {});
+    etherx.settings.save(settings).catch(() => { });
   };
 
   // ── AI phishing detection on navigate ─────────────────────────────────────
@@ -12754,7 +12759,7 @@ if ("serviceWorker" in navigator) {
           showToast("⚠️ Phishing warning: " + reasons);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }
 
   // Override navigateTo for phishing check
@@ -12773,7 +12778,7 @@ if ("serviceWorker" in navigator) {
     // Replace in global scope the best way we can
     try {
       window.navigateTo = patchedNav;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   // ── Auto-update check on startup (silent background check) ──────────────
@@ -13012,12 +13017,12 @@ if ("serviceWorker" in navigator) {
           challenge: rnd(32),
           allowCredentials: credId
             ? [
-                {
-                  id: b64uToArray(credId),
-                  type: "public-key",
-                  transports: ["internal"],
-                },
-              ]
+              {
+                id: b64uToArray(credId),
+                type: "public-key",
+                transports: ["internal"],
+              },
+            ]
             : [],
           userVerification: "required",
           timeout: 60000,
@@ -13512,7 +13517,7 @@ if ("serviceWorker" in navigator) {
         let hostname = "";
         try {
           hostname = new URL(t?.url || "").hostname;
-        } catch (e) {}
+        } catch (e) { }
 
         showLocationConsentFor(hostname).then((decision) => {
           if (decision === "deny") {

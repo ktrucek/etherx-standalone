@@ -262,10 +262,10 @@ class AIManager {
       const titleMatch = clean.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
       const title = titleMatch
         ? titleMatch[1]
-            .replace(/&amp;/g, "&")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .trim()
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .trim()
         : "";
 
       // Try to find main content
@@ -419,10 +419,10 @@ class AIManager {
     const pageText = extracted.ok
       ? (extracted.text || "").slice(0, 8000) // Gemini 2.0 Flash has large context window
       : (htmlContent || "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 8000);
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 8000);
 
     if (!pageText || pageText.length < 100) {
       return { ok: false, error: "Not enough page content to summarize" };
@@ -637,17 +637,33 @@ class AIManager {
     });
   }
 
-  // ─── Translation (fallback, WebLLM handles full AI translation) ─────────────
+  // ─── Translation via Gemini ───────────────────────────────────────────────
 
-  async translate(text, targetLang) {
-    // Primary: WebLLM in renderer handles this
-    // Fallback here just returns the text with a notice
-    return {
-      ok: true,
-      translated: text,
-      note: "AI translation runs via WebLLM in renderer. Enable AI in Settings for full translation.",
-      targetLang,
+  async translate(text, targetLang, geminiKey) {
+    if (!text || !text.trim()) return { ok: false, error: 'No text provided' };
+
+    if (!geminiKey) {
+      return {
+        ok: false,
+        error: 'Gemini API key not configured. Add it in Settings → AI.',
+      };
+    }
+
+    const langNames = {
+      hr: 'Croatian', en: 'English', de: 'German', fr: 'French',
+      es: 'Spanish', it: 'Italian', pt: 'Portuguese', ru: 'Russian',
+      zh: 'Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic',
+      auto: 'Croatian',
     };
+    const targetName = langNames[targetLang] || targetLang || 'Croatian';
+    const prompt = `Translate the following text to ${targetName}. Return ONLY the translated text, nothing else, no explanations, no quotes:\n\n${text.trim()}`;
+
+    try {
+      const translated = await this._geminiRequest(geminiKey, prompt);
+      return { ok: true, translated, targetLang };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   }
 }
 

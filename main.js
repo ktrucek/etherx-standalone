@@ -33,9 +33,9 @@ const maxMem = Math.min(Math.floor(totalMem * 0.25) * 1024, 4096);
 app.commandLine.appendSwitch(
   "js-flags",
   `--max-old-space-size=${maxMem} ` + // Heap limit
-    "--optimize-for-size " + // Memory over speed
-    "--gc-interval=100 " + // More frequent GC
-    "--expose-gc", // Allow manual GC
+  "--optimize-for-size " + // Memory over speed
+  "--gc-interval=100 " + // More frequent GC
+  "--expose-gc", // Allow manual GC
 );
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ function broadcastToAllWindows(channel, payload) {
   BrowserWindow.getAllWindows().forEach((win) => {
     try {
       if (!win.isDestroyed()) win.webContents.send(channel, payload);
-    } catch (_) {}
+    } catch (_) { }
   });
 }
 
@@ -238,7 +238,7 @@ function setupDownloadTracking(ses) {
       };
       try {
         if (db) db.addDownload(finalPayload);
-      } catch (_) {}
+      } catch (_) { }
       broadcastToAllWindows("download-update", finalPayload);
     });
   });
@@ -349,7 +349,7 @@ app.whenReady().then(async () => {
   setupDownloadTracking(session.defaultSession);
   try {
     setupDownloadTracking(session.fromPartition("persist:etherx"));
-  } catch (_) {}
+  } catch (_) { }
 
   // Apply ad blocker to the webview session (persist:etherx) as well
   try {
@@ -489,7 +489,7 @@ app.on("before-quit", () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents
         .executeJavaScript("saveSessionTabs(true)")
-        .catch(() => {});
+        .catch(() => { });
     }
   } catch (e) {
     /* window already destroyed */
@@ -507,7 +507,7 @@ function createWindow() {
       const saved = db.getWindowBounds();
       if (saved) bounds = saved;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   mainWindow = new BrowserWindow({
     x: bounds.x,
@@ -562,7 +562,7 @@ function createWindow() {
       if (mainWindow && !mainWindow.isDestroyed() && db) {
         db.saveWindowBounds(mainWindow.getBounds());
       }
-    } catch (_) {}
+    } catch (_) { }
   };
   mainWindow.on("resize", saveBounds);
   mainWindow.on("move", saveBounds);
@@ -573,7 +573,7 @@ function createWindow() {
   mainWindow.webContents.on("did-attach-webview", (_event, wvContents) => {
     try {
       wvContents.setBackgroundColor("#0d0d1a");
-    } catch (_) {}
+    } catch (_) { }
   });
 
   // Strip Electron/x.x and EtherX/x.x tokens from every outgoing request.
@@ -1034,7 +1034,7 @@ function createWindow() {
     mainWindow.webContents.on("did-finish-load", () => {
       mainWindow?.webContents.insertCSS(
         ".title-bar { padding-left: 78px !important; }" +
-          ".win-btns { display: none !important; }", // hide custom buttons on macOS (OS provides them)
+        ".win-btns { display: none !important; }", // hide custom buttons on macOS (OS provides them)
       );
     });
   }
@@ -1097,7 +1097,7 @@ function createWindow() {
             .executeJavaScript(
               `STATE.isPrivate=true;document.getElementById('privateIndicator').style.display='';document.title='EtherX (Private)';`,
             )
-            .catch(() => {});
+            .catch(() => { });
         });
       },
     },
@@ -1108,7 +1108,7 @@ function createWindow() {
       click: () => {
         mainWindow?.webContents
           .executeJavaScript("createTab()")
-          .catch(() => {});
+          .catch(() => { });
       },
     },
     { type: "separator" },
@@ -1117,7 +1117,7 @@ function createWindow() {
       click: () => {
         mainWindow?.webContents
           .executeJavaScript(`document.getElementById('btnSettings').click()`)
-          .catch(() => {});
+          .catch(() => { });
       },
     },
   ]);
@@ -1209,11 +1209,11 @@ function setupIPC() {
   ipcMain.handle("passwords:save", (_e, site, username, encryptedPayload) =>
     PasswordManager
       ? PasswordManager.save(
-          app.getPath("userData"),
-          site,
-          username,
-          encryptedPayload,
-        )
+        app.getPath("userData"),
+        site,
+        username,
+        encryptedPayload,
+      )
       : noDb(),
   );
   ipcMain.handle("passwords:get", (_e, site) =>
@@ -1275,9 +1275,13 @@ function setupIPC() {
   ipcMain.handle("ai:groupTabs", (_e, tabs) =>
     ai ? ai.groupTabs(tabs) : noAi(),
   );
-  ipcMain.handle("ai:translate", (_e, text, targetLang) =>
-    ai ? ai.translate(text, targetLang) : noAi(),
-  );
+  ipcMain.handle("ai:translate", async (_e, text, targetLang) => {
+    if (!ai) return noAi();
+    const settings = db ? db.getSettings() : {};
+    const geminiKey =
+      settings.gemini_api_key || process.env.GEMINI_API_KEY || "";
+    return ai.translate(text, targetLang, geminiKey);
+  });
   ipcMain.handle("ai:detectBotUA", (_e, ua) =>
     ai ? ai.detectBotUA(ua) : { isBot: false, isIAB: false, reasons: [] },
   );
@@ -1487,7 +1491,7 @@ function setupIPC() {
               res.pipe(file);
               file.on("finish", () => file.close(resolve));
               file.on("error", (err) => {
-                fs.unlink(dest, () => {});
+                fs.unlink(dest, () => { });
                 reject(err);
               });
             })
@@ -1694,7 +1698,7 @@ function setupIPC() {
       win.webContents.on("did-finish-load", () => {
         win.webContents
           .executeJavaScript(`navigateTo(${JSON.stringify(url)})`)
-          .catch(() => {});
+          .catch(() => { });
       });
     }
     return { ok: true };
@@ -1726,7 +1730,7 @@ function setupIPC() {
         document.title = 'EtherX (Private)';
       `,
         )
-        .catch(() => {});
+        .catch(() => { });
     });
     return { ok: true };
   });
@@ -1752,7 +1756,7 @@ function setupIPC() {
       win.webContents.on("did-finish-load", () => {
         win.webContents
           .executeJavaScript(`navigateTo(${JSON.stringify(url)})`)
-          .catch(() => {});
+          .catch(() => { });
       });
     }
     return { ok: true };
@@ -1810,11 +1814,11 @@ function setupIPC() {
       const img = await mainWindow.webContents.capturePage(
         rect
           ? {
-              x: Math.round(rect.x),
-              y: Math.round(rect.y),
-              width: Math.round(rect.width),
-              height: Math.round(rect.height),
-            }
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          }
           : undefined,
       );
       return { ok: true, dataUrl: img.toDataURL() };
@@ -2192,7 +2196,7 @@ app.on("web-contents-created", (_event, contents) => {
         contents.undo();
         event.preventDefault();
       }
-    } catch (_) {}
+    } catch (_) { }
   });
 
   // Handle new windows (popups, target="_blank", window.open) — route them as new tabs inside EtherX
@@ -2240,7 +2244,7 @@ app.on("web-contents-created", (_event, contents) => {
         if (isGoogleOAuthPopup) {
           // Google aggressively blocks embedded OAuth/login windows. Route only
           // Google auth popups to the system browser to guarantee sign-in.
-          shell.openExternal(details.url).catch(() => {});
+          shell.openExternal(details.url).catch(() => { });
           return { action: "deny" };
         }
 
@@ -2277,7 +2281,7 @@ app.on("web-contents-created", (_event, contents) => {
         }
         return { action: "deny" };
       }
-    } catch (_) {}
+    } catch (_) { }
 
     return { action: "deny" };
   });

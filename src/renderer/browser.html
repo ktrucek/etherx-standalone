@@ -3725,7 +3725,7 @@
     }
 
     .tab-overview {
-      position: absolute;
+      position: fixed;
       inset: 0;
       background: rgba(10, 10, 20, .95);
       z-index: 500;
@@ -9178,257 +9178,258 @@
               <div class="toggle on" id="toggleAiSearch" data-setting="aiSmartSearchEnabled"></div>
             </div>
           </div>
-        </div>
 
-        <!-- AI Live Chat Settings -->
-        <div class="s-tab-pane" id="stab-ai-live-chat">
-          <div class="s-group">
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label" style="font-weight:600;font-size:14px">🎵 AI Live Chat Postavke</div>
-                <div class="s-row-desc">Konfiguracija za TikTok Chat AI i automatske odgovore</div>
+          <!-- AI Live Chat Settings -->
+          <div class="s-tab-pane" id="stab-ai-live-chat">
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600;font-size:14px">🎵 AI Live Chat Postavke</div>
+                  <div class="s-row-desc">Konfiguracija za TikTok Chat AI i automatske odgovore</div>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div class="s-group">
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Ton odgovora</div>
-                <div class="s-row-desc">Stil kojim će AI odgovarati na poruke</div>
-              </div>
-              <select class="s-select" data-setting="tkaiTone">
-                <option value="friendly">Ljubazan i veseo</option>
-                <option value="funny">Duhovit i sarkastičan</option>
-                <option value="crypto">Kripto stručnjak (bullish)</option>
-                <option value="professional">Profesionalan i ozbiljan</option>
-                <option value="minimal">Minimalistički (samo bitno)</option>
-              </select>
             </div>
 
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Broj prijedloga</div>
-                <div class="s-row-desc">Koliko različitih odgovora AI nudi</div>
-              </div>
-              <select class="s-select" data-setting="tkaiReplyCount">
-                <option value="1">1 odgovor</option>
-                <option value="2">2 odgovora</option>
-                <option value="3" selected>3 odgovora</option>
-              </select>
-            </div>
-
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Jezik odgovora</div>
-                <div class="s-row-desc">Jezik na kojem će AI pisati prijedloge</div>
-              </div>
-              <select class="s-select" data-setting="tkaiReplyLang">
-                <option value="auto">Automatski (prema chatu)</option>
-                <option value="hr">Hrvatski</option>
-                <option value="en">English</option>
-                <option value="de">Deutsch</option>
-              </select>
-            </div>
-
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Čitanje chata</div>
-                <div class="s-row-desc">Jezik na kojem AI čita i prevodi poruke chata</div>
-              </div>
-              <select class="s-select" data-setting="tkaiReadLang">
-                <option value="hr">Hrvatski</option>
-                <option value="en">English</option>
-                <option value="de">Deutsch</option>
-              </select>
-            </div>
-
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Kontekst (zadnjih poruka)</div>
-                <div class="s-row-desc">Koliko prethodnih poruka AI vidi za bolji kontekst</div>
-              </div>
-              <input type="number" class="s-input" data-setting="tkaiContextCount" min="0" max="50" value="10"
-                style="width:70px">
-            </div>
-
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Auto-prijevod na HR</div>
-                <div class="s-row-desc">Automatski prevedi strane poruke u chatu</div>
-              </div>
-              <div class="toggle" data-setting="tkaiAutoTranslate"></div>
-            </div>
-          </div>
-
-          <div class="s-group">
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Vlastite upute (System Prompt)</div>
-                <div class="s-row-desc">Dodatne upute za AI koje se uvijek primjenjuju</div>
-              </div>
-            </div>
-            <textarea class="s-input" data-setting="tkaiCustomPrompt"
-              placeholder="Npr. Ti si moderator kanala 'Ime', budi veseo..."
-              style="width:100%;height:80px;margin-top:8px;font-size:12px;resize:vertical"></textarea>
-          </div>
-
-          <div class="s-group" style="margin-top:16px">
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label" style="font-weight:600">Upravljanje galerijama i pravilima</div>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-              <button class="s-btn-sm" id="btnTkaiCustomCategories">Vlastite upute po kategorijama</button>
-              <button class="s-btn-sm" id="btnTkaiGiftGallery">Postavke Gift Galerije</button>
-              <button class="s-btn-sm" id="btnTkaiFanClubGallery">Postavke Fan Club Galerije</button>
-            </div>
-          </div>
-
-          <div class="s-group" style="margin-top:16px">
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label" style="font-weight:600">Postavke skeniranja chata</div>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-              <button class="s-btn-sm" id="btnTkaiAutoScan">Automatsko skeniranje</button>
-              <button class="s-btn-sm" id="btnTkaiMsgTypes">Vrste poruka za skeniranje</button>
-              <button class="s-btn-sm" id="btnTkaiTools">Alati i ostalo</button>
-              <button class="s-btn-sm" id="btnTkaiSessions">Session History</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── History ─────────────────────────────────────────── -->
-        <div class="s-tab-pane" id="stab-history">
-          <div class="s-group">
-            <div class="s-group-title">Čuvanje povijesti</div>
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Koliko dugo čuvati povijest</div>
-                <div class="s-row-desc">Automatski obriši povijest stariju od zadanog broja dana.</div>
-              </div>
-              <select class="s-select" id="settingHistoryDays">
-                <option value="7">7 dana</option>
-                <option value="30">30 dana</option>
-                <option value="90">90 dana</option>
-                <option value="180">6 mjeseci</option>
-                <option value="365">1 godina</option>
-                <option value="-1">Zauvijek</option>
-              </select>
-            </div>
-          </div>
-          <div class="s-group">
-            <div class="s-group-title">Brisanje povijesti</div>
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Obriši svu povijest</div>
-                <div class="s-row-desc">Trajno obriši sve podatke o posjećenim stranicama.</div>
-              </div>
-              <button class="s-btn s-btn-danger" id="btnClearAllHistory">Obriši sve</button>
-            </div>
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Obriši povijest po razdoblju</div>
-                <div class="s-row-desc">Obriši povijest samo za određeno vremensko razdoblje.</div>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center">
-                <select class="s-select" id="selectHistoryPeriod">
-                  <option value="1">Zadnji sat</option>
-                  <option value="24">Zadnjih 24 sata</option>
-                  <option value="168">Zadnjih 7 dana</option>
-                  <option value="720">Zadnjih 30 dana</option>
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Ton odgovora</div>
+                  <div class="s-row-desc">Stil kojim će AI odgovarati na poruke</div>
+                </div>
+                <select class="s-select" data-setting="tkaiTone">
+                  <option value="friendly">Ljubazan i veseo</option>
+                  <option value="funny">Duhovit i sarkastičan</option>
+                  <option value="crypto">Kripto stručnjak (bullish)</option>
+                  <option value="professional">Profesionalan i ozbiljan</option>
+                  <option value="minimal">Minimalistički (samo bitno)</option>
                 </select>
-                <button class="s-btn" id="btnClearHistoryPeriod">Obriši</button>
               </div>
-            </div>
-          </div>
-          <div class="s-group">
-            <div class="s-group-title">Pregled povijesti</div>
-            <div style="padding:0 0 8px">
-              <input type="text" id="histSearchInputIdx" placeholder="Pretraži povijest…"
-                style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box">
-            </div>
-            <div id="historyIdxList"
-              style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
-              <div style="text-align:center;padding:24px;color:var(--text3);font-size:12px">Učitavanje…</div>
-            </div>
-          </div>
-        </div>
 
-        <!-- ── Updates ─────────────────────────────────────────── -->
-        <div class="s-tab-pane" id="stab-updates">
-          <!-- Current version card -->
-          <div
-            style="background:linear-gradient(135deg,rgba(102,126,234,.15),rgba(118,75,162,.10));border:1px solid rgba(102,126,234,.25);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-            <div>
-              <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
-              <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                  id="helpVersionNum2">2.4.173</span></div>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Broj prijedloga</div>
+                  <div class="s-row-desc">Koliko različitih odgovora AI nudi</div>
+                </div>
+                <select class="s-select" data-setting="tkaiReplyCount">
+                  <option value="1">1 odgovor</option>
+                  <option value="2">2 odgovora</option>
+                  <option value="3" selected>3 odgovora</option>
+                </select>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Jezik odgovora</div>
+                  <div class="s-row-desc">Jezik na kojem će AI pisati prijedloge</div>
+                </div>
+                <select class="s-select" data-setting="tkaiReplyLang">
+                  <option value="auto">Automatski (prema chatu)</option>
+                  <option value="hr">Hrvatski</option>
+                  <option value="en">English</option>
+                  <option value="de">Deutsch</option>
+                </select>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Čitanje chata</div>
+                  <div class="s-row-desc">Jezik na kojem AI čita i prevodi poruke chata</div>
+                </div>
+                <select class="s-select" data-setting="tkaiReadLang">
+                  <option value="hr">Hrvatski</option>
+                  <option value="en">English</option>
+                  <option value="de">Deutsch</option>
+                </select>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Kontekst (zadnjih poruka)</div>
+                  <div class="s-row-desc">Koliko prethodnih poruka AI vidi za bolji kontekst</div>
+                </div>
+                <input type="number" class="s-input" data-setting="tkaiContextCount" min="0" max="50" value="10"
+                  style="width:70px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Auto-prijevod na HR</div>
+                  <div class="s-row-desc">Automatski prevedi strane poruke u chatu</div>
+                </div>
+                <div class="toggle" data-setting="tkaiAutoTranslate"></div>
               </div>
             </div>
-            <div id="updStatusBadge"
-              style="font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(39,201,63,.1);color:#27c93f;border:1px solid rgba(39,201,63,.25);white-space:nowrap">
-              ✓ Ažuran</div>
+
+            <div class="s-group">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Vlastite upute (System Prompt)</div>
+                  <div class="s-row-desc">Dodatne upute za AI koje se uvijek primjenjuju</div>
+                </div>
+              </div>
+              <textarea class="s-input" data-setting="tkaiCustomPrompt"
+                placeholder="Npr. Ti si moderator kanala 'Ime', budi veseo..."
+                style="width:100%;height:80px;margin-top:8px;font-size:12px;resize:vertical"></textarea>
+            </div>
+
+            <div class="s-group" style="margin-top:16px">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">Upravljanje galerijama i pravilima</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                <button class="s-btn-sm" id="btnTkaiCustomCategories">Vlastite upute po kategorijama</button>
+                <button class="s-btn-sm" id="btnTkaiGiftGallery">Postavke Gift Galerije</button>
+                <button class="s-btn-sm" id="btnTkaiFanClubGallery">Postavke Fan Club Galerije</button>
+              </div>
+            </div>
+
+            <div class="s-group" style="margin-top:16px">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">Postavke skeniranja chata</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                <button class="s-btn-sm" id="btnTkaiAutoScan">Automatsko skeniranje</button>
+                <button class="s-btn-sm" id="btnTkaiMsgTypes">Vrste poruka za skeniranje</button>
+                <button class="s-btn-sm" id="btnTkaiTools">Alati i ostalo</button>
+                <button class="s-btn-sm" id="btnTkaiSessions">Session History</button>
+              </div>
+            </div>
           </div>
 
-          <div class="s-group">
-            <div class="s-group-title">Postavke ažuriranja</div>
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Automatski provjeri nadogradnje</div>
-                <div class="s-row-desc">Provjeri za novu verziju pri pokretanju browsera.</div>
+          <!-- ── History ─────────────────────────────────────────── -->
+          <div class="s-tab-pane" id="stab-history">
+            <div class="s-group">
+              <div class="s-group-title">Čuvanje povijesti</div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Koliko dugo čuvati povijest</div>
+                  <div class="s-row-desc">Automatski obriši povijest stariju od zadanog broja dana.</div>
+                </div>
+                <select class="s-select" id="settingHistoryDays">
+                  <option value="7">7 dana</option>
+                  <option value="30">30 dana</option>
+                  <option value="90">90 dana</option>
+                  <option value="180">6 mjeseci</option>
+                  <option value="365">1 godina</option>
+                  <option value="-1">Zauvijek</option>
+                </select>
               </div>
-              <label class="s-toggle"><input type="checkbox" id="settingAutoUpdate" data-setting="auto_update"
-                  checked><span class="s-toggle-track"></span></label>
             </div>
-            <div class="s-row">
-              <div class="s-row-left">
-                <div class="s-row-label">Provjeri dostupne nadogradnje</div>
-                <div class="s-row-desc">Provjeri za dostupnu nadogradnju.</div>
+            <div class="s-group">
+              <div class="s-group-title">Brisanje povijesti</div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Obriši svu povijest</div>
+                  <div class="s-row-desc">Trajno obriši sve podatke o posjećenim stranicama.</div>
+                </div>
+                <button class="s-btn s-btn-danger" id="btnClearAllHistory">Obriši sve</button>
               </div>
-              <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow"
-                style="min-width:110px">🔍 Provjeri sada</button>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Obriši povijest po razdoblju</div>
+                  <div class="s-row-desc">Obriši povijest samo za određeno vremensko razdoblje.</div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <select class="s-select" id="selectHistoryPeriod">
+                    <option value="1">Zadnji sat</option>
+                    <option value="24">Zadnjih 24 sata</option>
+                    <option value="168">Zadnjih 7 dana</option>
+                    <option value="720">Zadnjih 30 dana</option>
+                  </select>
+                  <button class="s-btn" id="btnClearHistoryPeriod">Obriši</button>
+                </div>
+              </div>
+            </div>
+            <div class="s-group">
+              <div class="s-group-title">Pregled povijesti</div>
+              <div style="padding:0 0 8px">
+                <input type="text" id="histSearchInputIdx" placeholder="Pretraži povijest…"
+                  style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none;box-sizing:border-box">
+              </div>
+              <div id="historyIdxList"
+                style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+                <div style="text-align:center;padding:24px;color:var(--text3);font-size:12px">Učitavanje…</div>
+              </div>
             </div>
           </div>
 
-          <!-- Update result (hidden by default) -->
-          <div id="updResultBox"
-            style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;max-width:920px;margin:0 auto 16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <!-- ── Updates ─────────────────────────────────────────── -->
+          <div class="s-tab-pane" id="stab-updates">
+            <!-- Current version card -->
+            <div
+              style="background:linear-gradient(135deg,rgba(102,126,234,.15),rgba(118,75,162,.10));border:1px solid rgba(102,126,234,.25);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
               <div>
-                <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel"
-                  data-i18n="newVersionAvail">Nova verzija dostupna!
-                </div>
-                <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <button id="updOneClickBtn" data-i18n="updateNow"
-                  style="display:none;padding:8px 18px;background:linear-gradient(135deg,#27c93f,#1fa833);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .2s"
-                  title="Preuzmi i instaliraj najnoviju verziju jednim klikom">⬆️ Ažuriraj sada</button>
-              </div>
-            </div>
-            <!-- Progress bar (hidden) -->
-            <div id="updProgressWrap" style="display:none;margin-bottom:10px">
-              <div
-                style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px">
-                <span id="updProgressLabel">Preuzimanje...</span>
-                <span id="updProgressPct">0%</span>
-              </div>
-              <div style="width:100%;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
-                <div id="updProgressBar"
-                  style="height:100%;width:0%;background:linear-gradient(90deg,#667eea,#27c93f);border-radius:3px;transition:width .2s">
+                <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
+                <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
+                    id="helpVersionNum2">2.4.173</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
+              <div id="updStatusBadge"
+                style="font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(39,201,63,.1);color:#27c93f;border:1px solid rgba(39,201,63,.25);white-space:nowrap">
+                ✓ Ažuran</div>
             </div>
-            <div id="updReleaseNotes"
-              style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">
-            </div>
-          </div>
 
+            <div class="s-group">
+              <div class="s-group-title">Postavke ažuriranja</div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Automatski provjeri nadogradnje</div>
+                  <div class="s-row-desc">Provjeri za novu verziju pri pokretanju browsera.</div>
+                </div>
+                <label class="s-toggle"><input type="checkbox" id="settingAutoUpdate" data-setting="auto_update"
+                    checked><span class="s-toggle-track"></span></label>
+              </div>
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Provjeri dostupne nadogradnje</div>
+                  <div class="s-row-desc">Provjeri za dostupnu nadogradnju.</div>
+                </div>
+                <button class="s-btn s-btn-primary" id="btnCheckUpdates" data-i18n="checkUpdatesNow"
+                  style="min-width:110px">🔍 Provjeri sada</button>
+              </div>
+            </div>
+
+            <!-- Update result (hidden by default) -->
+            <div id="updResultBox"
+              style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;max-width:920px;margin:0 auto 16px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:var(--accent)" id="updNewVerLabel"
+                    data-i18n="newVersionAvail">Nova verzija dostupna!
+                  </div>
+                  <div style="font-size:12px;color:var(--text3);margin-top:2px" id="updNewVerNum"></div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button id="updOneClickBtn" data-i18n="updateNow"
+                    style="display:none;padding:8px 18px;background:linear-gradient(135deg,#27c93f,#1fa833);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .2s"
+                    title="Preuzmi i instaliraj najnoviju verziju jednim klikom">⬆️ Ažuriraj sada</button>
+                </div>
+              </div>
+              <!-- Progress bar (hidden) -->
+              <div id="updProgressWrap" style="display:none;margin-bottom:10px">
+                <div
+                  style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px">
+                  <span id="updProgressLabel">Preuzimanje...</span>
+                  <span id="updProgressPct">0%</span>
+                </div>
+                <div style="width:100%;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+                  <div id="updProgressBar"
+                    style="height:100%;width:0%;background:linear-gradient(90deg,#667eea,#27c93f);border-radius:3px;transition:width .2s">
+                  </div>
+                </div>
+              </div>
+              <div id="updReleaseNotes"
+                style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;max-height:140px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">
+              </div>
+            </div>
+
+          </div>
+          <!-- end settingsBody -->
         </div>
 
       </div>
@@ -11316,7 +11317,9 @@
         id.startsWith('setting') ||
         id.startsWith('btnClear') ||
         id.startsWith('save') ||
-        id.startsWith('mi-')
+        id.startsWith('mi-') ||
+        id.startsWith('stab-') ||
+        id === 'favBar'
       ) return false;
       return true;
     }
@@ -15208,6 +15211,40 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.getElementById('netFilter')?.addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
       document.querySelectorAll('#networkLog tr').forEach(tr => { tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+    });
+
+    // ── Performance tab controls
+    const _perfMetricIds = ['perfFcp', 'perfLcp', 'perfTbt', 'perfCls', 'perfTti', 'perfLoad', 'perfMemory', 'perfDomCount'];
+    function _collectPerfMetrics() {
+      try {
+        const nav = performance.getEntriesByType('navigation')[0];
+        if (nav) {
+          const load = document.getElementById('perfLoad'); if (load) load.textContent = nav.loadEventEnd.toFixed(0) + 'ms';
+          const tti = document.getElementById('perfTti'); if (tti) tti.textContent = nav.domInteractive.toFixed(0) + 'ms';
+          const dom = document.getElementById('perfDomCount'); if (dom) dom.textContent = document.querySelectorAll('*').length;
+        }
+        const mem = performance.memory;
+        if (mem) { const el = document.getElementById('perfMemory'); if (el) el.textContent = (mem.usedJSHeapSize / 1048576).toFixed(1) + 'MB'; }
+        const paints = performance.getEntriesByType('paint');
+        paints.forEach(p => {
+          if (p.name === 'first-contentful-paint') { const el = document.getElementById('perfFcp'); if (el) el.textContent = p.startTime.toFixed(0) + 'ms'; }
+        });
+      } catch (e) { }
+      const t = document.getElementById('perfTime'); if (t) t.textContent = new Date().toLocaleTimeString();
+    }
+    document.getElementById('perfRecord')?.addEventListener('click', function () {
+      this.style.color = '#27c93f';
+      _collectPerfMetrics();
+      setTimeout(() => { this.style.color = ''; }, 2000);
+    });
+    document.getElementById('perfReload')?.addEventListener('click', () => {
+      const frame = document.getElementById('browseFrame') || document.getElementById('browseFrameWeb');
+      if (frame) { try { if (frame.reload) frame.reload(); else frame.src = frame.src; } catch (e) { } }
+      setTimeout(_collectPerfMetrics, 3000);
+    });
+    document.getElementById('perfClear')?.addEventListener('click', () => {
+      _perfMetricIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
+      const t = document.getElementById('perfTime'); if (t) t.textContent = '—';
     });
 
     // ── Application tab
