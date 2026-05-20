@@ -5044,6 +5044,10 @@
       gap: 8px;
     }
 
+    .tkai-insights-row>.tkai-insights-card:only-child {
+      grid-column: 1 / -1;
+    }
+
     .tkai-insights-card {
       background: var(--bg2);
       border: 1px solid var(--border);
@@ -8836,7 +8840,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.206</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.207</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9286,8 +9290,10 @@
               <div class="s-group">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label" style="font-weight:600;font-size:14px">🎵 AI Live Chat Settings</div>
-                    <div class="s-row-desc">Configure TikTok Chat AI, auto-replies and live session analytics</div>
+                    <div class="s-row-label" style="font-weight:600;font-size:14px" data-i18n="tkaiSettingsTitle">🎵 AI
+                      Live Chat Settings</div>
+                    <div class="s-row-desc" data-i18n="tkaiSettingsDesc">Configure TikTok Chat AI, auto-replies and live
+                      session analytics</div>
                   </div>
                 </div>
               </div>
@@ -9295,34 +9301,36 @@
               <div class="s-group">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Reply tone</div>
-                    <div class="s-row-desc">The style the AI uses when suggesting replies</div>
+                    <div class="s-row-label" data-i18n="tkaiReplyToneLabel">Reply tone</div>
+                    <div class="s-row-desc" data-i18n="tkaiReplyToneDesc">The style the AI uses when suggesting replies
+                    </div>
                   </div>
                   <select class="s-select" data-setting="tkaiTone">
-                    <option value="friendly">Friendly &amp; upbeat</option>
-                    <option value="funny">Witty &amp; sarcastic</option>
-                    <option value="crypto">Crypto expert (bullish)</option>
-                    <option value="professional">Professional &amp; formal</option>
-                    <option value="minimal">Minimalist (essentials only)</option>
+                    <option value="friendly" data-i18n="tkaiToneFriendly">Friendly &amp; upbeat</option>
+                    <option value="funny" data-i18n="tkaiToneFunny">Witty &amp; sarcastic</option>
+                    <option value="crypto" data-i18n="tkaiToneCrypto">Crypto expert (bullish)</option>
+                    <option value="professional" data-i18n="tkaiToneProfessional">Professional &amp; formal</option>
+                    <option value="minimal" data-i18n="tkaiToneMinimal">Minimalist (essentials only)</option>
                   </select>
                 </div>
 
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Number of suggestions</div>
-                    <div class="s-row-desc">How many reply options the AI generates</div>
+                    <div class="s-row-label" data-i18n="tkaiReplyCountLabel">Number of suggestions</div>
+                    <div class="s-row-desc" data-i18n="tkaiReplyCountDesc">How many reply options the AI generates</div>
                   </div>
                   <select class="s-select" data-setting="tkaiReplyCount">
-                    <option value="1">1 reply</option>
-                    <option value="2">2 replies</option>
-                    <option value="3" selected>3 replies</option>
+                    <option value="1" data-i18n="tkaiOneReply">1 reply</option>
+                    <option value="2" data-i18n="tkaiTwoReplies">2 replies</option>
+                    <option value="3" selected data-i18n="tkaiThreeReplies">3 replies</option>
                   </select>
                 </div>
 
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Reply language</div>
-                    <div class="s-row-desc">Language the AI writes its reply suggestions in</div>
+                    <div class="s-row-label" data-i18n="tkaiReplyLangLabel">Reply language</div>
+                    <div class="s-row-desc" data-i18n="tkaiReplyLangDesc">Language the AI writes its reply suggestions
+                      in</div>
                   </div>
                   <select class="s-select" data-setting="tkaiReplyLang">
                     <option value="auto">Auto (match chat language)</option>
@@ -9340,8 +9348,9 @@
 
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Chat reading language</div>
-                    <div class="s-row-desc">Language used when reading and translating incoming chat</div>
+                    <div class="s-row-label" data-i18n="tkaiReadLangLabel">Chat reading language</div>
+                    <div class="s-row-desc" data-i18n="tkaiReadLangDesc">Language used when reading and translating
+                      incoming chat</div>
                   </div>
                   <select class="s-select" data-setting="tkaiReadLang">
                     <option value="auto">Auto-detect</option>
@@ -9357,8 +9366,9 @@
 
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Context window (messages)</div>
-                    <div class="s-row-desc">How many previous messages the AI sees for better context</div>
+                    <div class="s-row-label" data-i18n="tkaiContextWindowLabel">Context window (messages)</div>
+                    <div class="s-row-desc" data-i18n="tkaiContextWindowDesc">How many previous messages the AI sees for
+                      better context</div>
                   </div>
                   <input type="number" class="s-input" data-setting="tkaiContextCount" min="0" max="50" value="10"
                     style="width:70px">
@@ -9366,8 +9376,9 @@
 
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Auto-translate to English</div>
-                    <div class="s-row-desc">Automatically translate foreign chat messages</div>
+                    <div class="s-row-label" data-i18n="tkaiAutoTranslateLabel">Auto-translate to English</div>
+                    <div class="s-row-desc" data-i18n="tkaiAutoTranslateDesc">Automatically translate foreign chat
+                      messages</div>
                   </div>
                   <div class="toggle" data-setting="tkaiAutoTranslate"></div>
                 </div>
@@ -9376,11 +9387,13 @@
               <div class="s-group">
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label">Custom instructions (System Prompt)</div>
-                    <div class="s-row-desc">Additional instructions always applied to AI generation</div>
+                    <div class="s-row-label" data-i18n="tkaiCustomInstructionsLabel">Custom instructions (System Prompt)
+                    </div>
+                    <div class="s-row-desc" data-i18n="tkaiCustomInstructionsDesc">Additional instructions always
+                      applied to AI generation</div>
                   </div>
                 </div>
-                <textarea class="s-input" data-setting="tkaiCustomPrompt"
+                <textarea class="s-input" data-setting="tkaiCustomPrompt" data-i18n="tkaiCustomPromptPlaceholder"
                   placeholder="e.g. You are the moderator of channel 'Name', keep it fun and engaging..."
                   style="width:100%;height:80px;margin-top:8px;font-size:12px;resize:vertical"></textarea>
               </div>
@@ -9510,14 +9523,15 @@
                 <!-- drawer: AI model override -->
                 <div id="tkaiDrawerAiModel"
                   style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                  <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Choose the AI model TikTok Chat AI
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:10px" data-i18n="tkaiDrawerAiModelDesc">
+                    Choose the AI model TikTok Chat AI
                     uses for generating replies. <b>Default</b> uses the global model from Settings → AI.</div>
                   <div class="s-row" style="margin-bottom:8px">
                     <div class="s-row-left">
-                      <div class="s-row-label">Provider for TikTok Chat AI</div>
+                      <div class="s-row-label" data-i18n="tkaiProviderOverrideLabel">Provider for TikTok Chat AI</div>
                     </div>
                     <select class="s-select" data-setting="tkaiProviderOverride" style="max-width:220px">
-                      <option value="">🌐 Global provider (default)</option>
+                      <option value="" data-i18n="tkaiGlobalProviderDefault">🌐 Global provider (default)</option>
                       <option value="openai">OpenAI</option>
                       <option value="gemini">Google Gemini</option>
                       <option value="anthropic">Anthropic</option>
@@ -9530,10 +9544,10 @@
                   </div>
                   <div class="s-row">
                     <div class="s-row-left">
-                      <div class="s-row-label">Model for TikTok Chat AI</div>
+                      <div class="s-row-label" data-i18n="tkaiModelOverrideLabel">Model for TikTok Chat AI</div>
                     </div>
                     <select class="s-select" data-setting="tkaiModelOverride" style="max-width:220px">
-                      <option value="">🌐 Global model (default)</option>
+                      <option value="" data-i18n="tkaiGlobalModelDefault">🌐 Global model (default)</option>
                       <optgroup label="OpenAI">
                         <option value="gpt-4o">gpt-4o</option>
                         <option value="gpt-4o-mini">gpt-4o-mini ⚡ (brzi)</option>
@@ -9550,10 +9564,21 @@
                         <option value="gemini-1.5-pro">gemini-1.5-pro</option>
                       </optgroup>
                       <optgroup label="HuggingFace Router">
+                        <option value="meta-llama/Llama-3.3-70B-Instruct">Llama 3.3 70B Instruct</option>
                         <option value="meta-llama/Llama-3.1-8B-Instruct">Llama 3.1 8B Instruct</option>
+                        <option value="meta-llama/Llama-3.1-70B-Instruct">Llama 3.1 70B Instruct</option>
+                        <option value="meta-llama/Llama-3.2-3B-Instruct">Llama 3.2 3B Instruct</option>
+                        <option value="meta-llama/Llama-3.2-1B-Instruct">Llama 3.2 1B Instruct</option>
                         <option value="Qwen/Qwen2.5-72B-Instruct">Qwen 2.5 72B Instruct</option>
+                        <option value="Qwen/Qwen2.5-32B-Instruct">Qwen 2.5 32B Instruct</option>
+                        <option value="Qwen/Qwen2.5-14B-Instruct">Qwen 2.5 14B Instruct</option>
+                        <option value="Qwen/Qwen2.5-7B-Instruct">Qwen 2.5 7B Instruct</option>
                         <option value="mistralai/Mixtral-8x7B-Instruct-v0.1">Mixtral 8x7B Instruct</option>
+                        <option value="mistralai/Mistral-7B-Instruct-v0.3">Mistral 7B Instruct v0.3</option>
+                        <option value="google/gemma-2-9b-it">Gemma 2 9B IT</option>
+                        <option value="google/gemma-2-27b-it">Gemma 2 27B IT</option>
                         <option value="deepseek-ai/DeepSeek-R1">DeepSeek R1</option>
+                        <option value="deepseek-ai/DeepSeek-V3">DeepSeek V3</option>
                       </optgroup>
                       <optgroup label="OpenRouter">
                         <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
@@ -9562,7 +9587,8 @@
                       </optgroup>
                     </select>
                   </div>
-                  <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo">
+                  <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo"
+                    data-i18n="tkaiCurrentGlobalModelInfo">
                     Current global model: <span id="tkaiGlobalModelName" style="color:var(--text2)">—</span>
                   </div>
                   <!-- Cardiff NLP HF token for sentiment analysis -->
@@ -9577,8 +9603,9 @@
                     </div>
                     <div class="s-row" style="margin-top:4px">
                       <div class="s-row-left">
-                        <div class="s-row-label">HuggingFace token</div>
-                        <div class="s-row-desc">For Cardiff NLP sentiment in session stats</div>
+                        <div class="s-row-label" data-i18n="tkaiHfTokenLabel">HuggingFace token</div>
+                        <div class="s-row-desc" data-i18n="tkaiHfTokenDesc">For Cardiff NLP sentiment in session stats
+                        </div>
                       </div>
                       <div style="display:flex;gap:6px;align-items:center">
                         <input type="password" class="s-input" id="tkaiHfTokenInput" placeholder="hf_..."
@@ -9771,7 +9798,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.206</span></div>
+                    id="helpVersionNum2">2.4.207</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -21119,6 +21146,41 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         labelDefaultBrowser: 'Default Browser',
         descDefaultBrowser: 'Set EtherX as your default browser for opening web links.',
         btnSetDefault: '🌐 Set as Default',
+        tkaiSettingsTitle: '🎵 AI Live Chat Settings',
+        tkaiSettingsDesc: 'Configure TikTok Chat AI, auto-replies and live session analytics',
+        tkaiReplyToneLabel: 'Reply tone',
+        tkaiReplyToneDesc: 'The style the AI uses when suggesting replies',
+        tkaiToneFriendly: 'Friendly & upbeat',
+        tkaiToneFunny: 'Witty & sarcastic',
+        tkaiToneCrypto: 'Crypto expert (bullish)',
+        tkaiToneProfessional: 'Professional & formal',
+        tkaiToneMinimal: 'Minimalist (essentials only)',
+        tkaiReplyCountLabel: 'Number of suggestions',
+        tkaiReplyCountDesc: 'How many reply options the AI generates',
+        tkaiOneReply: '1 reply',
+        tkaiTwoReplies: '2 replies',
+        tkaiThreeReplies: '3 replies',
+        tkaiReplyLangLabel: 'Reply language',
+        tkaiReplyLangDesc: 'Language the AI writes its reply suggestions in',
+        tkaiAutoMatchChatLang: 'Auto (match chat language)',
+        tkaiReadLangLabel: 'Chat reading language',
+        tkaiReadLangDesc: 'Language used when reading and translating incoming chat',
+        tkaiAutoDetectLang: 'Auto-detect',
+        tkaiContextWindowLabel: 'Context window (messages)',
+        tkaiContextWindowDesc: 'How many previous messages the AI sees for better context',
+        tkaiAutoTranslateLabel: 'Auto-translate to English',
+        tkaiAutoTranslateDesc: 'Automatically translate foreign chat messages',
+        tkaiCustomInstructionsLabel: 'Custom instructions (System Prompt)',
+        tkaiCustomInstructionsDesc: 'Additional instructions always applied to AI generation',
+        tkaiCustomPromptPlaceholder: "e.g. You are the moderator of channel 'Name', keep it fun and engaging...",
+        tkaiDrawerAiModelDesc: 'Choose the AI model TikTok Chat AI uses for generating replies. Default uses the global model from Settings -> AI.',
+        tkaiProviderOverrideLabel: 'Provider for TikTok Chat AI',
+        tkaiGlobalProviderDefault: '🌐 Global provider (default)',
+        tkaiModelOverrideLabel: 'Model for TikTok Chat AI',
+        tkaiGlobalModelDefault: '🌐 Global model (default)',
+        tkaiCurrentGlobalModelInfo: 'Current global model:',
+        tkaiHfTokenLabel: 'HuggingFace token',
+        tkaiHfTokenDesc: 'For Cardiff NLP sentiment in session stats',
       },
       hr: {
         name: 'Hrvatski', flag: '🇭🇷',
@@ -21191,6 +21253,41 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         labelDefaultBrowser: 'Zadani preglednik',
         descDefaultBrowser: 'Postavi EtherX kao zadani preglednik za otvaranje web linkova.',
         btnSetDefault: '🌐 Postavi kao zadani',
+        tkaiSettingsTitle: '🎵 AI Live Chat postavke',
+        tkaiSettingsDesc: 'Konfiguriraj TikTok Chat AI, auto-odgovore i analitiku live sesije',
+        tkaiReplyToneLabel: 'Ton odgovora',
+        tkaiReplyToneDesc: 'Stil koji AI koristi pri predlaganju odgovora',
+        tkaiToneFriendly: 'Prijateljski i vedro',
+        tkaiToneFunny: 'Duhovito i sarkastično',
+        tkaiToneCrypto: 'Crypto stručnjak (bullish)',
+        tkaiToneProfessional: 'Profesionalno i formalno',
+        tkaiToneMinimal: 'Minimalistički (samo bitno)',
+        tkaiReplyCountLabel: 'Broj prijedloga',
+        tkaiReplyCountDesc: 'Koliko opcija odgovora AI generira',
+        tkaiOneReply: '1 odgovor',
+        tkaiTwoReplies: '2 odgovora',
+        tkaiThreeReplies: '3 odgovora',
+        tkaiReplyLangLabel: 'Jezik odgovora',
+        tkaiReplyLangDesc: 'Jezik na kojem AI piše prijedloge odgovora',
+        tkaiAutoMatchChatLang: 'Auto (prati jezik chata)',
+        tkaiReadLangLabel: 'Jezik čitanja chata',
+        tkaiReadLangDesc: 'Jezik koji se koristi za čitanje i prijevod dolaznog chata',
+        tkaiAutoDetectLang: 'Auto-detekcija',
+        tkaiContextWindowLabel: 'Kontekstni prozor (poruke)',
+        tkaiContextWindowDesc: 'Koliko prethodnih poruka AI vidi za bolji kontekst',
+        tkaiAutoTranslateLabel: 'Auto-prijevod na engleski',
+        tkaiAutoTranslateDesc: 'Automatski prevedi strane poruke iz chata',
+        tkaiCustomInstructionsLabel: 'Prilagođene upute (System Prompt)',
+        tkaiCustomInstructionsDesc: 'Dodatne upute koje se uvijek primjenjuju pri AI generiranju',
+        tkaiCustomPromptPlaceholder: "npr. Ti si moderator kanala 'Naziv', budi zabavan i angažiran...",
+        tkaiDrawerAiModelDesc: 'Odaberi AI model koji TikTok Chat AI koristi za generiranje odgovora. Zadano koristi globalni model iz Postavke -> AI.',
+        tkaiProviderOverrideLabel: 'Provider za TikTok Chat AI',
+        tkaiGlobalProviderDefault: '🌐 Globalni provider (zadano)',
+        tkaiModelOverrideLabel: 'Model za TikTok Chat AI',
+        tkaiGlobalModelDefault: '🌐 Globalni model (zadano)',
+        tkaiCurrentGlobalModelInfo: 'Trenutni globalni model:',
+        tkaiHfTokenLabel: 'HuggingFace token',
+        tkaiHfTokenDesc: 'Za Cardiff NLP sentiment u statistikama sesije',
       },
       de: {
         name: 'Deutsch', flag: '🇩🇪',
@@ -21353,6 +21450,27 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       tabAppearance: 'appearance', tabLanguage: 'language', tabStorage: 'storage', tabHelp: 'help', tabAI: 'ai', tabHistory: 'history',
     };
 
+    function syncTkaiLanguageSelects(langPack = LANGS.en) {
+      const replySel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyLang"]');
+      const readSel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReadLang"]');
+      if (!replySel || !readSel) return;
+
+      const settings = DB.getSettings();
+      const prevReply = replySel.value || settings.tkaiReplyLang || 'auto';
+      const prevRead = readSel.value || settings.tkaiReadLang || 'auto';
+
+      const langOptions = Object.entries(LANGS).map(([code, data]) => {
+        const name = (data && data.name) ? data.name : code.toUpperCase();
+        return `<option value="${code}">${name}</option>`;
+      }).join('');
+
+      replySel.innerHTML = `<option value="auto">${langPack.tkaiAutoMatchChatLang || LANGS.en.tkaiAutoMatchChatLang || 'Auto (match chat language)'}</option>${langOptions}`;
+      readSel.innerHTML = `<option value="auto">${langPack.tkaiAutoDetectLang || LANGS.en.tkaiAutoDetectLang || 'Auto-detect'}</option>${langOptions}`;
+
+      replySel.value = LANGS[prevReply] || prevReply === 'auto' ? prevReply : 'auto';
+      readSel.value = LANGS[prevRead] || prevRead === 'auto' ? prevRead : 'auto';
+    }
+
     function applyLanguage(code) {
       const lang = { ...LANGS.en, ...(LANGS[code] || {}) };
       // Helper: replace the visible label text of an element, preserving child spans
@@ -21393,6 +21511,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (lang[key]) {
           if (el.tagName === 'INPUT' && (el.type === 'button' || el.type === 'submit')) el.value = lang[key];
           else if (el.tagName === 'INPUT' && el.placeholder) el.placeholder = lang[key];
+          else if (el.tagName === 'TEXTAREA' && Object.prototype.hasOwnProperty.call(el, 'placeholder')) el.placeholder = lang[key];
           else if (el.tagName === 'OPTION') el.textContent = lang[key];
           else setLabel(el, lang[key]);
         }
@@ -21406,6 +21525,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         });
       const prevDesc = document.getElementById('langPreviewDesc');
       if (prevDesc) prevDesc.textContent = lang.preview || '';
+      syncTkaiLanguageSelects(lang);
       // Persist
       DB.saveSetting('uiLanguage', code);
     }
