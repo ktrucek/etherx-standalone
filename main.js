@@ -203,6 +203,16 @@ function _readEnvLocalMap() {
     const fp = path.join(basePath, ".env.local");
     if (!envPaths.includes(fp)) envPaths.push(fp);
   };
+  const addEnvPathUpward = (startPath, maxDepth = 8) => {
+    if (!startPath) return;
+    let cur = path.resolve(startPath);
+    for (let i = 0; i < maxDepth; i += 1) {
+      addEnvPath(cur);
+      const parent = path.dirname(cur);
+      if (!parent || parent === cur) break;
+      cur = parent;
+    }
+  };
 
   // Static/runtime-safe locations first.
   addEnvPath(__dirname);
@@ -219,6 +229,14 @@ function _readEnvLocalMap() {
   } catch (_) { }
   try {
     addEnvPath(app.getPath("userData"));
+  } catch (_) { }
+
+  // Walk upward from likely runtime anchors to catch repo-root .env.local.
+  addEnvPathUpward(process.cwd());
+  addEnvPathUpward(__dirname);
+  addEnvPathUpward(path.dirname(process.execPath));
+  try {
+    addEnvPathUpward(app.getAppPath());
   } catch (_) { }
 
   const out = {};
@@ -242,6 +260,46 @@ function _readEnvLocalMap() {
     } catch (_) { }
   });
   return out;
+}
+
+function _getAdminEnvDebugInfo() {
+  const envLocal = _readEnvLocalMap();
+  const processRaw =
+    process.env.ETHERX_ADMIN_DEVICE_IDS || process.env.ETHERX_ADMIN_DEVICE_ID || "";
+  const fileRaw =
+    envLocal.ETHERX_ADMIN_DEVICE_IDS || envLocal.ETHERX_ADMIN_DEVICE_ID || "";
+  const effectiveRaw = processRaw || fileRaw || "";
+
+  const parseIds = (raw) =>
+    String(raw || "")
+      .split(",")
+      .map((x) => x.trim().toLowerCase())
+      .filter(Boolean);
+
+  return {
+    cwd: process.cwd(),
+    dirname: __dirname,
+    execDir: path.dirname(process.execPath),
+    appPath: (() => {
+      try {
+        return app.getAppPath();
+      } catch (_) {
+        return null;
+      }
+    })(),
+    userData: (() => {
+      try {
+        return app.getPath("userData");
+      } catch (_) {
+        return null;
+      }
+    })(),
+    hasProcessEnv: !!processRaw,
+    hasFileEnv: !!fileRaw,
+    allowedIdsCount: parseIds(effectiveRaw).length,
+    allowedIdsSample: parseIds(effectiveRaw).slice(0, 3),
+    deviceId: _computeDeviceId().toLowerCase(),
+  };
 }
 
 function _getOrCreateInstallId() {
@@ -1238,6 +1296,7 @@ function setupIPC() {
   // ── License / admin lock helpers ─────────────────────────────────────────
   ipcMain.handle("license:getDeviceId", () => _computeDeviceId());
   ipcMain.handle("license:isAdminDevice", () => _isAdminDeviceAllowed());
+  ipcMain.handle("license:debugAdminEnv", () => _getAdminEnvDebugInfo());
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   ipcMain.handle("db:saveTab", (_e, tab) => {

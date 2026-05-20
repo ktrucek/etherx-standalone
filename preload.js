@@ -171,6 +171,7 @@ contextBridge.exposeInMainWorld('etherx', {
   license: {
     getDeviceId: () => ipcRenderer.invoke('license:getDeviceId'),
     isAdminDevice: () => ipcRenderer.invoke('license:isAdminDevice'),
+    debugAdminEnv: () => ipcRenderer.invoke('license:debugAdminEnv'),
   },
 
   // ── Cast / Share ──────────────────────────────────────────────────────────────
