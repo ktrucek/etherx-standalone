@@ -1,11 +1,12 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.205",
+  "version": "2.4.206",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --no-sandbox --inspect=5858",
+    "tkai:env": "node scripts/tkai-hashes-to-env.js",
     "dist:linux": "electron-builder --linux",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac"
@@ -108,5 +109,5 @@
     "ws": ">=8.20.1",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-05-20T23:28:45Z"
+  "buildTime": "2026-05-20T23:31:38Z"
 }
