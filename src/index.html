@@ -8416,6 +8416,11 @@
                   <option value="it">🇮🇹 Italiano</option>
                   <option value="fr">🇫🇷 Français</option>
                   <option value="es">🇪🇸 Español</option>
+                  <option value="id">🇮🇩 Bahasa Indonesia</option>
+                  <option value="pt">🇵🇹 Português</option>
+                  <option value="ru">🇷🇺 Русский</option>
+                  <option value="tr">🇹🇷 Türkçe</option>
+                  <option value="pl">🇵🇱 Polski</option>
                 </select>
               </div>
               <div class="s-row">
@@ -8831,7 +8836,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.201</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.202</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9766,7 +9771,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.201</span></div>
+                    id="helpVersionNum2">2.4.202</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -21250,6 +21255,45 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tabProfiles: 'Perfiles', tabExtensions: 'Extensiones', tabAdvanced: 'Avanzado',
         tabDeveloper: 'Desarrollador', tabFlags: 'Funciones', tabMigration: 'Importar datos',
         tabAppearance: 'Apariencia', tabLanguage: 'Idioma',
+      },
+      id: {
+        name: 'Bahasa Indonesia', flag: '🇮🇩',
+        preview: 'Bahasa saat ini: Bahasa Indonesia',
+        'lp-file': 'Berkas', 'lp-edit': 'Edit', 'lp-view': 'Tampilan', 'lp-history': 'Riwayat', 'lp-bookmarks': 'Bookmark',
+        'lp-settings': 'Pengaturan', 'lp-general': 'Umum', 'lp-appearance': 'Tampilan', 'lp-language': 'Bahasa',
+        'lp-newTab': 'Tab Baru', 'lp-closeTab': 'Tutup Tab', 'lp-bookmarkPage': 'Simpan Bookmark',
+        menuFile: 'Berkas', menuEdit: 'Edit', menuView: 'Tampilan', menuHistory: 'Riwayat', menuBookmarks: 'Bookmark',
+        menuDevelop: 'Pengembang', menuWindow: 'Jendela', menuHelp: 'Bantuan',
+        miNewTab: 'Tab Baru', miNewPrivate: 'Jendela Privat Baru', miOpenLocation: 'Buka Lokasi…',
+        miCloseTab: 'Tutup Tab', miPrint: 'Cetak…', miUndo: 'Batalkan', miRedo: 'Ulangi',
+        miCopy: 'Salin', miPaste: 'Tempel', miSelectAll: 'Pilih Semua', miFind: 'Cari di Halaman',
+        miZoomIn: 'Perbesar', miZoomOut: 'Perkecil', miZoomReset: 'Ukuran Asli',
+        miFullscreen: 'Layar Penuh', miCustomiseToolbar: 'Sesuaikan Toolbar…',
+        miBack: 'Kembali', miForward: 'Maju', miReload: 'Muat Ulang Halaman', miHardReload: 'Muat Ulang Paksa',
+        miStop: 'Berhenti', miBookmarkAll: 'Bookmark Semua Tab', miShowBookmarks: 'Tampilkan Bookmark',
+        miShowHistory: 'Tampilkan Riwayat', miShowDownloads: 'Tampilkan Unduhan',
+        miAbout: 'Tentang EtherX Browser', settingsTitle: 'Pengaturan',
+        tabGeneral: 'Umum', tabTabs: 'Tab', tabAutofill: 'Isi Otomatis', tabPasswords: 'Kata Sandi',
+        tabSearch: 'Pencarian', tabSecurity: 'Keamanan', tabPrivacy: 'Privasi', tabWebsites: 'Situs Web',
+        tabProfiles: 'Profil', tabExtensions: 'Ekstensi', tabAdvanced: 'Lanjutan',
+        tabDeveloper: 'Pengembang', tabFlags: 'Fitur', tabMigration: 'Impor Data',
+        tabAppearance: 'Tampilan', tabLanguage: 'Bahasa',
+      },
+      pt: {
+        name: 'Português', flag: '🇵🇹',
+        preview: 'Idioma atual: Português',
+      },
+      ru: {
+        name: 'Русский', flag: '🇷🇺',
+        preview: 'Текущий язык: Русский',
+      },
+      tr: {
+        name: 'Türkçe', flag: '🇹🇷',
+        preview: 'Geçerli dil: Türkçe',
+      },
+      pl: {
+        name: 'Polski', flag: '🇵🇱',
+        preview: 'Aktualny język: Polski',
       }
     };
 
@@ -21282,7 +21326,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     };
 
     function applyLanguage(code) {
-      const lang = LANGS[code] || LANGS.en;
+      const lang = { ...LANGS.en, ...(LANGS[code] || {}) };
       // Helper: replace the visible label text of an element, preserving child spans
       function setLabel(el, text) {
         // Remove existing text nodes only (keep child elements like .icon, .sc, .sit-icon)
@@ -21341,9 +21385,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     (function initLanguage() {
       const sel = document.getElementById('langSelect');
       if (!sel) return;
+      // Keep language list in sync with LANGS map.
+      sel.innerHTML = Object.entries(LANGS)
+        .map(([code, data]) => `<option value="${code}">${data.flag || '🌐'} ${data.name || code}</option>`)
+        .join('');
       const saved = DB.getSettings().uiLanguage || 'en';
-      sel.value = saved;
-      applyLanguage(saved);
+      const initial = LANGS[saved] ? saved : 'en';
+      sel.value = initial;
+      applyLanguage(initial);
       sel.addEventListener('change', () => { applyLanguage(sel.value); showToast(LANGS[sel.value]?.flag + ' ' + LANGS[sel.value]?.name + ' applied'); });
       // Download button (simulates caching — stores flag in settings)
       document.getElementById('langDownloadBtn')?.addEventListener('click', () => {

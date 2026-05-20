@@ -1526,7 +1526,7 @@ const LANGUAGE_NAMES = {
   hr: 'Hrvatski', en: 'English', de: 'Deutsch', fr: 'Français',
   es: 'Español', it: 'Italiano', pt: 'Português', ru: 'Русский',
   bs: 'Bosanski', sr: 'Srpski', sl: 'Slovenščina', tr: 'Türkçe', pl: 'Polski',
-  zh: '中文', ja: '日本語', ko: '한국어', ar: 'العربية',
+  id: 'Bahasa Indonesia', zh: '中文', ja: '日本語', ko: '한국어', ar: 'العربية',
 };
 
 let _instance = null;
@@ -1542,7 +1542,7 @@ class I18nManager {
   }
 
   setLanguage(lang) {
-    if (STRINGS[lang]) this._lang = lang;
+    if (LANGUAGE_NAMES[lang]) this._lang = lang;
     else this._lang = 'en';
   }
 

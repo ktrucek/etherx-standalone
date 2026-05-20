@@ -197,15 +197,34 @@ const _downloadTrackedSessions = new Set();
 function _readEnvLocalMap() {
   // Read optional local env overrides (dev/admin use) from common locations.
   // This supports both dev runs and packaged runs started from different folders.
-  const envPaths = [
-    path.join(__dirname, ".env.local"),
-    path.join(process.cwd(), ".env.local"),
-    path.join(app.getAppPath(), ".env.local"),
-  ];
-  const out = {};
+  const envPaths = [];
+  const addEnvPath = (basePath) => {
+    if (!basePath) return;
+    const fp = path.join(basePath, ".env.local");
+    if (!envPaths.includes(fp)) envPaths.push(fp);
+  };
+
+  // Static/runtime-safe locations first.
+  addEnvPath(__dirname);
+  addEnvPath(process.cwd());
+  addEnvPath(path.dirname(process.execPath));
+  if (process.resourcesPath) addEnvPath(process.resourcesPath);
+
+  // Electron-dependent locations can throw when app state is not fully ready.
   try {
-    envPaths.forEach((envPath) => {
-      if (!fs.existsSync(envPath)) return;
+    addEnvPath(app.getAppPath());
+  } catch (_) { }
+  try {
+    addEnvPath(path.dirname(app.getAppPath()));
+  } catch (_) { }
+  try {
+    addEnvPath(app.getPath("userData"));
+  } catch (_) { }
+
+  const out = {};
+  envPaths.forEach((envPath) => {
+    try {
+      if (!envPath || !fs.existsSync(envPath)) return;
       const raw = fs.readFileSync(envPath, "utf8");
       raw.split(/\r?\n/).forEach((line) => {
         const t = String(line || "").trim();
@@ -220,10 +239,8 @@ function _readEnvLocalMap() {
         }
         out[k] = v;
       });
-    });
-  } catch (_) {
-    return out;
-  }
+    } catch (_) { }
+  });
   return out;
 }
 
