@@ -8829,7 +8829,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.196</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.197</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9521,7 +9521,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.196</span></div>
+                    id="helpVersionNum2">2.4.197</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -13348,6 +13348,12 @@
           const n = parseInt(String(direct[1]).replace(/[^\d]/g, ''), 10);
           if (Number.isFinite(n)) return n;
         }
+        // "sent Rose x15" ili "sent × 3" — gift quantity (1 gift ≈ poklonski event, vraćamo 1 po komadu)
+        const xqty = t.match(/[×x]\s*(\d+)/i);
+        if (xqty) {
+          const qty = parseInt(xqty[1], 10);
+          if (Number.isFinite(qty) && qty > 0) return qty; // caller množi s gift coin vrijednošću ako zna
+        }
         return 0;
       }
       function trackViewerSample(value) {
@@ -13608,15 +13614,26 @@
       }
       function buildRecommendations(insights) {
         const recs = [];
+        const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         if (topSupporters?.length) {
           const top = topSupporters[0]?.user;
-          if (top) recs.push('Zahvali se top supporteru: ' + top + '.');
+          if (top) recs.push('🏆 Zahvali se top supporteru: ' + top + '.');
         }
-        if (insights.spikes.some((s) => s.type === 'viewers' && s.delta > 0)) recs.push('Pozdravi nove gledatelje zbog skoka viewera.');
-        if (insights.spikes.some((s) => s.type === 'gifts')) recs.push('Pohvali giftove i potakni nove poklone.');
-        if (insights.questions.length) recs.push('Odgovori na top pitanje iz chata.');
-        if (!recs.length) recs.push('Nastavi s dobrim tempom i ukljuci publiku.');
-        return recs.slice(0, 3);
+        if (insights.spikes.some((s) => s.type === 'viewers' && s.delta > 0)) recs.push('👋 Pozdravi nove gledatelje — viewer spike!');
+        if (insights.spikes.some((s) => s.type === 'viewers' && s.delta < 0)) recs.push('⚠️ Pad viewera — pojačaj interakciju s publikom.');
+        if (insights.spikes.some((s) => s.type === 'gifts')) recs.push('🎁 Pohvali giftove i potakni nove poklone.');
+        if (insights.questions.length) recs.push('❓ Odgovori na pitanje: "' + insights.questions[0] + '"');
+        if (insights.sentiment === 'pozitivan') recs.push('😊 Publika je pozitivna — iskoristi momentum.');
+        if (insights.sentiment === 'negativan') recs.push('😟 Negativan sentiment — pokušaj razveseliti publiku.');
+        if (liveViewerCount > 0 && peakViewerCount > 0 && liveViewerCount < peakViewerCount * 0.7) {
+          recs.push('📉 Trenutno ' + formatNum(liveViewerCount) + ' / peak ' + formatNum(peakViewerCount) + ' — razmotri drugačiji sadržaj.');
+        }
+        if (collectedMessages.length > 0 && elapsedMin > 0) {
+          const msgsPerMin = Math.round(collectedMessages.length / Math.max(1, elapsedMin));
+          if (msgsPerMin < 2) recs.push('💬 Malo poruka (' + msgsPerMin + '/min) — postavi pitanje publici.');
+        }
+        if (!recs.length) recs.push(scanActive ? '✅ Sve izgleda dobro — nastavi s dobrim tempom!' : '▶ Klikni "Skeniranje ON" za preporuke.');
+        return recs.slice(0, 4);
       }
       function updateInsightsUI() {
         if (!insightsListEl || !engagementBarsEl || !spikeListEl || !recommendationsEl) return;
@@ -13692,19 +13709,109 @@
       spikeViewersBtn?.addEventListener('click', () => { spikeFilter = 'viewers'; updateSpikeFilterButtons(); updateInsightsUI(); });
       spikeGiftsBtn?.addEventListener('click', () => { spikeFilter = 'gifts'; updateSpikeFilterButtons(); updateInsightsUI(); });
 
-      // ── Chat expand toggle ────────────────────────────────────────────────
+      // ── Chat pop-out floating window ─────────────────────────────────────
       const expandChatBtn = document.getElementById('tkaiExpandChatBtn');
-      const mainWrap = panel?.querySelector('.tkai-main');
-      const replyCol = panel?.querySelector('.tkai-reply-col');
-      const splitter = panel?.querySelector('.tkai-splitter');
-      let chatExpanded = false;
+      let chatPopout = null;
+      let chatPopoutMirrorTimer = null;
+
+      function openChatPopout() {
+        if (chatPopout && document.body.contains(chatPopout)) {
+          chatPopout.style.display = '';
+          expandChatBtn.textContent = '⤡ Zatvori';
+          expandChatBtn.style.background = 'rgba(102,126,234,.35)';
+          startChatMirror();
+          return;
+        }
+        chatPopout = document.createElement('div');
+        chatPopout.id = 'tkaiChatPopout';
+        chatPopout.style.cssText = 'position:fixed;z-index:99999;top:60px;right:20px;width:380px;height:580px;' +
+          'background:var(--surface,#1a1a2e);border:1px solid var(--border,rgba(255,255,255,.12));' +
+          'border-radius:12px;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.6);' +
+          'resize:both;overflow:hidden;min-width:280px;min-height:200px;';
+        chatPopout.innerHTML =
+          '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;' +
+          'background:linear-gradient(135deg,#667eea,#764ba2);cursor:move;user-select:none;border-radius:12px 12px 0 0" id="tkaiPopoutHeader">' +
+          '<span style="font-size:12px;font-weight:700;color:#fff">💬 TikTok Chat</span>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+          '<span id="tkaiPopoutMsgCount" style="font-size:10px;color:rgba(255,255,255,.7)"></span>' +
+          '<button id="tkaiPopoutClearFilter" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Sve</button>' +
+          '<button id="tkaiPopoutClose" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:14px;padding:0 6px;border-radius:4px;cursor:pointer">×</button>' +
+          '</div></div>' +
+          '<div id="tkaiPopoutMessages" style="flex:1;overflow-y:auto;padding:6px 8px;font-size:12px;display:flex;flex-direction:column;gap:3px"></div>';
+        document.body.appendChild(chatPopout);
+
+        // Draggable
+        const hdr = chatPopout.querySelector('#tkaiPopoutHeader');
+        let pdragging = false, pox = 0, poy = 0;
+        hdr.addEventListener('mousedown', e => {
+          pdragging = true;
+          pox = e.clientX - chatPopout.getBoundingClientRect().left;
+          poy = e.clientY - chatPopout.getBoundingClientRect().top;
+          e.preventDefault();
+        });
+        document.addEventListener('mousemove', e => {
+          if (!pdragging) return;
+          chatPopout.style.left = (e.clientX - pox) + 'px';
+          chatPopout.style.top = (e.clientY - poy) + 'px';
+          chatPopout.style.right = 'auto';
+        });
+        document.addEventListener('mouseup', () => { pdragging = false; });
+
+        chatPopout.querySelector('#tkaiPopoutClose').addEventListener('click', closeChatPopout);
+        chatPopout.querySelector('#tkaiPopoutClearFilter').addEventListener('click', () => {
+          mirrorToPopout(collectedMessages);
+        });
+
+        expandChatBtn.textContent = '⤡ Zatvori';
+        expandChatBtn.style.background = 'rgba(102,126,234,.35)';
+        startChatMirror();
+      }
+
+      function closeChatPopout() {
+        if (chatPopoutMirrorTimer) { clearInterval(chatPopoutMirrorTimer); chatPopoutMirrorTimer = null; }
+        if (chatPopout) { chatPopout.remove(); chatPopout = null; }
+        if (expandChatBtn) { expandChatBtn.textContent = '⤢ Proširi'; expandChatBtn.style.background = ''; }
+      }
+
+      function mirrorToPopout(messages) {
+        const container = document.getElementById('tkaiPopoutMessages');
+        const countEl = document.getElementById('tkaiPopoutMsgCount');
+        if (!container) return;
+        const msgs = messages || collectedMessages;
+        if (countEl) countEl.textContent = msgs.length + ' poruka';
+        // Only re-render if count changed
+        const prev = container.dataset.lastCount;
+        if (prev === String(msgs.length)) return;
+        container.dataset.lastCount = String(msgs.length);
+        const wasBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
+        container.innerHTML = '';
+        msgs.slice(-150).forEach(m => {
+          const row = document.createElement('div');
+          row.style.cssText = 'padding:3px 6px;border-radius:6px;line-height:1.4;' +
+            (m.type === 'gift' ? 'background:rgba(255,215,0,.1);border-left:2px solid #ffd700;' :
+              m.type === 'subscriber' ? 'background:rgba(74,222,128,.08);border-left:2px solid #4ade80;' :
+                'background:rgba(255,255,255,.04);');
+          const icon = m.type === 'gift' ? '🎁 ' : m.type === 'subscriber' ? '⭐ ' : '';
+          row.innerHTML = '<span style="color:#a5b4fc;font-weight:600">' + (m.user || '?') + '</span>' +
+            '<span style="color:rgba(255,255,255,.35);margin:0 4px">·</span>' +
+            '<span style="color:var(--text,#e2e8f0)">' + icon + (m.translatedText || m.text || '') + '</span>' +
+            (m.coins ? '<span style="color:#ffd700;font-size:10px;margin-left:4px">🪙' + m.coins + '</span>' : '');
+          container.appendChild(row);
+        });
+        if (wasBottom) container.scrollTop = container.scrollHeight;
+      }
+
+      function startChatMirror() {
+        if (chatPopoutMirrorTimer) clearInterval(chatPopoutMirrorTimer);
+        mirrorToPopout(collectedMessages);
+        chatPopoutMirrorTimer = setInterval(() => {
+          if (!chatPopout || !document.body.contains(chatPopout)) { clearInterval(chatPopoutMirrorTimer); return; }
+          mirrorToPopout(collectedMessages);
+        }, 1500);
+      }
+
       expandChatBtn?.addEventListener('click', () => {
-        chatExpanded = !chatExpanded;
-        if (replyCol) replyCol.style.display = chatExpanded ? 'none' : '';
-        if (splitter) splitter.style.display = chatExpanded ? 'none' : '';
-        if (mainWrap) mainWrap.style.gridTemplateColumns = chatExpanded ? '1fr' : '';
-        expandChatBtn.textContent = chatExpanded ? '⤡ Smanji' : '⤢ Proširi';
-        expandChatBtn.style.background = chatExpanded ? 'rgba(102,126,234,.35)' : '';
+        if (chatPopout && document.body.contains(chatPopout)) { closeChatPopout(); } else { openChatPopout(); }
       });
 
       // ── Shadowban check ──────────────────────────────────────────────────
@@ -13712,60 +13819,79 @@
         const resultEl = document.getElementById('tkaiShadowbanResult');
         const tab = getActiveTab();
         if (!tab?.url || !tab.url.includes('tiktok.com')) {
-          if (resultEl) resultEl.textContent = '⚠️ Otvori TikTok stranicu u browseru.';
+          if (resultEl) resultEl.textContent = '⚠️ Otvori TikTok Live stranicu u browseru.';
           return;
         }
-        // Extract @username from tiktok.com/@username/live or tiktok.com/@username
-        const match = tab.url.match(/@([\w.]+)/);
-        if (!match) {
-          if (resultEl) resultEl.textContent = '⚠️ Ne mogu pronaći @username u URL-u.';
-          return;
+        const urlMatch = tab.url.match(/@([\w.]+)/);
+        const username = urlMatch ? urlMatch[1] : null;
+        if (resultEl) resultEl.innerHTML = '⏳ Analiziram live…';
+
+        // Analyse local data first (no scraping needed)
+        const lines = [];
+        const chatMsgs = collectedMessages.filter(m => m.type === 'chat' || !m.type);
+        const giftMsgs = collectedMessages.filter(m => m.type === 'gift' || m.type === 'subscriber');
+        const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
+
+        // Own account checks from collected data
+        if (collectedMessages.length === 0 && scanActive) {
+          lines.push('🔴 Nema podataka — scraper ne dobiva poruke. Moguć shadowban ili TikTok DOM promjena.');
+        } else if (chatMsgs.length === 0 && giftMsgs.length > 0 && elapsedMin > 2) {
+          lines.push('🟡 Ima giftova ali NEMA chat poruka (' + elapsedMin + ' min) — moguć comment shadowban.');
+        } else if (chatMsgs.length > 0) {
+          const msgsPerMin = Math.round(chatMsgs.length / Math.max(1, elapsedMin));
+          lines.push('🟢 Chat radi: ' + chatMsgs.length + ' poruka (' + msgsPerMin + '/min).');
         }
-        const username = match[1];
-        if (resultEl) resultEl.innerHTML = '⏳ Provjeravam <b>@' + username + '</b>…';
-        // Run scraper to check if live stream is getting comments/engagement
-        // (No comments arriving = potential shadowban indicator on live)
+        if (liveViewerCount > 0 && liveViewerCount < 10 && elapsedMin > 5) {
+          lines.push('🔴 Samo ' + liveViewerCount + ' viewera — moguć reach shadowban.');
+        } else if (liveViewerCount > 0) {
+          lines.push('👁 Viewers: ' + formatNum(liveViewerCount) + ' (peak: ' + formatNum(peakViewerCount) + ')');
+        }
+
+        // Chat user analysis — look for suspicious patterns
+        const uniqueUsers = new Set(collectedMessages.map(m => m.user).filter(Boolean));
+        if (uniqueUsers.size > 0) {
+          // Flag bots: users sending 10+ messages rapidly
+          const userMsgCounts = {};
+          collectedMessages.forEach(m => { if (m.user) userMsgCounts[m.user] = (userMsgCounts[m.user] || 0) + 1; });
+          const heavyUsers = Object.entries(userMsgCounts).filter(([, c]) => c >= 8).map(([u]) => u);
+          if (heavyUsers.length > 0) lines.push('🤖 Moguć bot: ' + heavyUsers.slice(0, 3).join(', ') + ' (' + heavyUsers.length + ' korisnika šalje 8+ poruka)');
+          lines.push('👥 Jedinstveni korisnici u chatu: ' + uniqueUsers.size);
+        }
+
+        // Try webview scrape for more signals
         const shadowbanScript = `(function(){
           try {
-            const noComments = document.querySelector('[data-e2e="comment-list"]')?.childElementCount === 0;
-            const viewerEl = Array.from(document.querySelectorAll('*')).find(e => /\\d+\\s*(viewers?|watching)/i.test(e.textContent) && e.textContent.length < 30);
-            const viewers = viewerEl ? viewerEl.textContent.trim() : null;
-            const liveIndicator = !!document.querySelector('[data-e2e="live-header"], [class*="liveHeader"], [class*="LiveHeader"]');
-            return JSON.stringify({ noComments, viewers, liveIndicator, url: location.href });
+            const commentList = document.querySelector('[data-e2e="comment-list"], [data-e2e="chat-message-list"], [class*="ChatContainer"]');
+            const commentCount = commentList ? commentList.childElementCount : -1;
+            const liveIndicator = !!document.querySelector('[data-e2e="live-header"],[class*="liveHeader"],[class*="LiveHeader"],[class*="LiveRoom"]');
+            const restrictBanner = Array.from(document.querySelectorAll('*')).some(el => /restricted|shadowban|limited|shadow ban/i.test(el.textContent) && el.textContent.length < 200);
+            return JSON.stringify({ commentCount, liveIndicator, restrictBanner });
           } catch(e) { return JSON.stringify({ error: String(e.message) }); }
         })()`;
         try {
           const webview = document.getElementById('browseFrame');
-          if (!webview || !webview.executeJavaScript) throw new Error('no webview');
-          const raw = await webview.executeJavaScript(shadowbanScript);
-          const data = JSON.parse(raw);
-          if (data.error) throw new Error(data.error);
-          let status = '';
-          if (!data.liveIndicator) {
-            status = '⚠️ Nije TikTok Live stranica.';
-          } else if (data.noComments && liveViewerCount < 5) {
-            status = '🔴 Moguć shadowban — 0 komentara, malo viewera. Provjeri: ';
-          } else if (data.noComments) {
-            status = '🟡 Nema komentara — moguć comment shadowban. Provjeri: ';
-          } else {
-            status = '🟢 Komentari stižu, izgledaju OK. Provjeri detaljno: ';
+          if (webview && webview.executeJavaScript) {
+            const raw = await webview.executeJavaScript(shadowbanScript);
+            const data = JSON.parse(raw || '{}');
+            if (!data.error) {
+              if (data.restrictBanner) lines.unshift('🔴 PAŽNJA: TikTok prikazuje restrict/shadowban poruku!');
+              if (data.commentCount === 0 && chatMsgs.length === 0) lines.push('🔴 DOM potvrđuje: 0 komentara u live chatu.');
+              if (!data.liveIndicator) lines.push('⚠️ TikTok Live stranica nije detektirana.');
+            }
           }
-          // Also open external checker
-          const checkerUrl = 'https://www.tiktok.com/search/user?q=' + encodeURIComponent(username);
-          if (resultEl) resultEl.innerHTML = status + '<a href="#" id="tkaiSbLink" style="color:#a5b4fc;text-decoration:underline">TikTok Search @' + username + '</a>';
-          document.getElementById('tkaiSbLink')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            navigateTo('https://www.tiktok.com/search/user?q=' + encodeURIComponent(username));
-          });
-        } catch (_) {
-          // Fallback: just open TikTok search
-          const url = 'https://www.tiktok.com/search/user?q=' + encodeURIComponent(username);
-          if (resultEl) resultEl.innerHTML = '<a href="#" id="tkaiSbLink2" style="color:#a5b4fc;text-decoration:underline">Pretraži @' + username + ' na TikToku</a>';
-          document.getElementById('tkaiSbLink2')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            navigateTo('https://www.tiktok.com/search/user?q=' + encodeURIComponent(username));
-          });
+        } catch (_) { }
+
+        // Build result HTML
+        if (lines.length === 0) lines.push(scanActive ? '✅ Nema znakova shadowbana.' : '▶ Pokreni skeniranje za detaljnu analizu.');
+        let html = lines.map(l => '<div style="margin:2px 0">' + l + '</div>').join('');
+        if (username) {
+          html += '<div style="margin-top:4px"><a href="#" id="tkaiSbSearchLink" style="color:#a5b4fc;font-size:10px">🔍 TikTok Search @' + username + '</a></div>';
         }
+        if (resultEl) resultEl.innerHTML = html;
+        document.getElementById('tkaiSbSearchLink')?.addEventListener('click', e => {
+          e.preventDefault();
+          if (username) navigateTo('https://www.tiktok.com/search/user?q=' + encodeURIComponent(username));
+        });
       });
       function updateSessionStatsUI() {
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
@@ -14131,6 +14257,40 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             } catch(_) {}
           }
         }
+        // --- Dodatno: skupi gift poruke iz chata koje su možda u posebnim elementima ---
+        // TikTok prikazuje poklone kao: "[user] sent [gift-icon] x3" ili "[user] sent a gift"
+        const giftItemSelectors = [
+          '[data-e2e="gift-item"]',
+          '[data-e2e="gift-message"]',
+          '[data-e2e="chat-gift-item"]',
+          '[class*="GiftItem"]',
+          '[class*="gift-item"]',
+          '[class*="GiftMessage"]',
+          '[class*="gift-message"]',
+          '[class*="PanelGift"]',
+          '[class*="panel-gift"]',
+          '[class*="GiftPanel"]',
+          '[class*="GiftEntry"]',
+          '[class*="gift-entry"]'
+        ];
+        const giftItemSet = new Set(items);
+        for (const gsel of giftItemSelectors) {
+          try {
+            document.querySelectorAll(gsel).forEach(function(g) { giftItemSet.add(g); });
+          } catch(_) {}
+        }
+        // Scan plain chat text for "sent" pattern in existing items' siblings/parents
+        // (TikTok puts gift rows directly in the same list as chat rows)
+        try {
+          const allChatRows = document.querySelectorAll(
+            '[class*="MessageItem"],[class*="ChatRow"],[class*="ChatItem"],[class*="chatItem"],[class*="comment-item"]'
+          );
+          allChatRows.forEach(function(row) {
+            const txt = (row.textContent || '').toLowerCase();
+            if (/\bsent\b/.test(txt)) giftItemSet.add(row);
+          });
+        } catch(_) {}
+        if (giftItemSet.size > items.length) items = Array.from(giftItemSet);
         items.slice(-45).forEach((el, index) => {
           const userEl = el.querySelector(
             '[data-e2e="chat-message-user-name"],'
@@ -14200,7 +14360,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           const text = cleaned.slice(0, 380);
           if (text && text.length > 1) {
             const low = text.toLowerCase();
-            const isGift = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|sent\s+|gave\s+|poklon|dar|🎁|🌹|×\d|x\d+/i.test(low) || giftEls.length > 0;
+            // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
+            const hasSent = /\bsent\b|\bgave\b/i.test(low);
+            const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
+            const isGift = hasSent || hasGiftWord || giftEls.length > 0;
             const isSubscriber = /sub|subscriber|subscribe|pretplat|member|joined\s+the\s+live|joined/i.test(low);
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
             results.push({ user, text, mid, type: isGift ? 'gift' : (isSubscriber ? 'subscriber' : 'chat') });
@@ -14238,10 +14401,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           }
           const meta = parsed.find(m => m && m.type === '_meta');
           const messages = parsed.filter(m => m && m.type !== '_meta');
-          if (!messages.length) {
-            setStatus('📭 Nema poruka u chatu');
-            return;
-          }
+          // Always process meta (viewer count) regardless of chat messages
           if (meta) {
             const v = Number(meta.viewerCount || 0);
             if (Number.isFinite(v) && v > 0) {
@@ -14249,6 +14409,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               peakViewerCount = Math.max(peakViewerCount, v);
               trackViewerSample(v);
             }
+          }
+          if (!messages.length) {
+            updateSessionStatsUI();
+            setStatus('📭 Nema novih poruka');
+            return;
           }
           const existing = new Set(collectedMessages.map(message => message.id));
           const existingCounts = new Map();
@@ -14479,9 +14644,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       exportBtn?.addEventListener('click', exportConversation);
       exportCsvBtn?.addEventListener('click', exportCsvConversation);
       clearBtn?.addEventListener('click', clearConversation);
+
+      // ── Gift gallery Sakrij/Prikaži ──────────────────────────────────────
+      let giftGalleryVisible = true;
+      giftToggleBtn?.addEventListener('click', () => {
+        giftGalleryVisible = !giftGalleryVisible;
+        const galleryEl = document.getElementById('tkaiGiftGallery');
+        if (galleryEl) galleryEl.style.display = giftGalleryVisible ? '' : 'none';
+        giftToggleBtn.textContent = giftGalleryVisible ? 'Sakrij' : 'Prikaži';
+      });
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', stopScanning);
       document.addEventListener('keydown', onTikTokHoldLShortcut);
       updateHoldLButton();
+      updateInsightsUI();
       if (holdLActive) startHoldL().catch(() => { });
 
       // ── Draggable panel ──────────────────────────────────────────────────────
