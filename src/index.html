@@ -8831,7 +8831,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.200</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.201</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9507,6 +9507,22 @@
                   style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
                   <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Choose the AI model TikTok Chat AI
                     uses for generating replies. <b>Default</b> uses the global model from Settings → AI.</div>
+                  <div class="s-row" style="margin-bottom:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Provider for TikTok Chat AI</div>
+                    </div>
+                    <select class="s-select" data-setting="tkaiProviderOverride" style="max-width:220px">
+                      <option value="">🌐 Global provider (default)</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Google Gemini</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="huggingface">HuggingFace Router</option>
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="groq">Groq</option>
+                      <option value="local">Local OpenAI-compatible</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                  </div>
                   <div class="s-row">
                     <div class="s-row-left">
                       <div class="s-row-label">Model for TikTok Chat AI</div>
@@ -9528,6 +9544,12 @@
                         <option value="gemini-2.0-flash">gemini-2.0-flash ⚡</option>
                         <option value="gemini-1.5-pro">gemini-1.5-pro</option>
                       </optgroup>
+                      <optgroup label="HuggingFace Router">
+                        <option value="meta-llama/Llama-3.1-8B-Instruct">Llama 3.1 8B Instruct</option>
+                        <option value="Qwen/Qwen2.5-72B-Instruct">Qwen 2.5 72B Instruct</option>
+                        <option value="mistralai/Mixtral-8x7B-Instruct-v0.1">Mixtral 8x7B Instruct</option>
+                        <option value="deepseek-ai/DeepSeek-R1">DeepSeek R1</option>
+                      </optgroup>
                       <optgroup label="OpenRouter">
                         <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
                         <option value="deepseek/deepseek-r1">DeepSeek R1</option>
@@ -9543,8 +9565,8 @@
                     <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
                       🤗 <b>Cardiff NLP sentiment</b> (twitter-roberta-base-sentiment-latest) — sentiment analysis
                       trained on 154M tweets.
-                      Enter your HuggingFace token to enable it. The same token is used if HuggingFace is selected as AI
-                      provider.
+                      Enter your HuggingFace token to enable it. The same token is also used when TikTok Chat AI uses
+                      HuggingFace provider override here (no need to change global AI provider).
                       <a href="https://huggingface.co/settings/tokens" style="color:var(--accent)"
                         onclick="navigateTo(this.href);return false">→ Get a free token</a>
                     </div>
@@ -9744,7 +9766,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.200</span></div>
+                    id="helpVersionNum2">2.4.201</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -15242,10 +15264,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (genAllBtn) genAllBtn.disabled = true;
         if (repliesEl) repliesEl.innerHTML = '<div class="tkai-status"><span class="tkai-scanning-dot"></span>AI generira odgovore…</div>';
         try {
+          const _tkaiProviderOverride = DB.getSettings().tkaiProviderOverride || '';
           const _tkaiModelOverride = DB.getSettings().tkaiModelOverride || '';
           const raw = await runAiTextRequest(buildPrompt(messages), {
             temperature: 0.85,
             maxOutputTokens: 600,
+            ...(_tkaiProviderOverride ? { provider: _tkaiProviderOverride } : {}),
             ...(_tkaiModelOverride ? { model: _tkaiModelOverride } : {})
           });
           const suggestions = raw.split('\n')

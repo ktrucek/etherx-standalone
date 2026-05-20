@@ -195,24 +195,31 @@ let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
 const _downloadTrackedSessions = new Set();
 
 function _readEnvLocalMap() {
-  // Read optional local env overrides (dev/admin use). Missing file is fine.
-  const envPath = path.join(__dirname, ".env.local");
+  // Read optional local env overrides (dev/admin use) from common locations.
+  // This supports both dev runs and packaged runs started from different folders.
+  const envPaths = [
+    path.join(__dirname, ".env.local"),
+    path.join(process.cwd(), ".env.local"),
+    path.join(app.getAppPath(), ".env.local"),
+  ];
   const out = {};
   try {
-    if (!fs.existsSync(envPath)) return out;
-    const raw = fs.readFileSync(envPath, "utf8");
-    raw.split(/\r?\n/).forEach((line) => {
-      const t = String(line || "").trim();
-      if (!t || t.startsWith("#")) return;
-      const noExport = t.startsWith("export ") ? t.slice(7).trim() : t;
-      const eq = noExport.indexOf("=");
-      if (eq <= 0) return;
-      const k = noExport.slice(0, eq).trim();
-      let v = noExport.slice(eq + 1).trim();
-      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-        v = v.slice(1, -1);
-      }
-      out[k] = v;
+    envPaths.forEach((envPath) => {
+      if (!fs.existsSync(envPath)) return;
+      const raw = fs.readFileSync(envPath, "utf8");
+      raw.split(/\r?\n/).forEach((line) => {
+        const t = String(line || "").trim();
+        if (!t || t.startsWith("#")) return;
+        const noExport = t.startsWith("export ") ? t.slice(7).trim() : t;
+        const eq = noExport.indexOf("=");
+        if (eq <= 0) return;
+        const k = noExport.slice(0, eq).trim();
+        let v = noExport.slice(eq + 1).trim();
+        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+          v = v.slice(1, -1);
+        }
+        out[k] = v;
+      });
     });
   } catch (_) {
     return out;
