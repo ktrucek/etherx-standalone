@@ -4946,6 +4946,8 @@
     .tkai-stats-strip {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
+      /* second row auto for extra cards */
+      grid-auto-rows: auto;
       gap: 6px;
       padding: 8px;
       border-top: 1px solid var(--border);
@@ -8829,7 +8831,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.197</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.198</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9381,10 +9383,12 @@
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAutoScan">Automatsko skeniranje</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiMsgTypes">Vrste poruka za skeniranje</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiTools">Alati i ostalo</button>
-                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiSessions">Session History</button>
+                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAutoScan">⏱ Skeniranje</button>
+                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiMsgTypes">📋 Vrste poruka</button>
+                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAiModel">🤖 AI Model</button>
+                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiFeatures">🎛 Što prikazati</button>
+                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiTools">🔧 Alati</button>
+                <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiSessions">📁 Sesije &amp; Statistike</button>
               </div>
               <!-- drawer: auto scan -->
               <div id="tkaiDrawerAutoScan"
@@ -9409,6 +9413,104 @@
                   </div>
                   <input type="number" class="s-input" data-setting="tkaiAutoSuggestAfter" min="0" max="50" value="0"
                     style="width:70px">
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Buffer poruka</div>
+                    <div class="s-row-desc">Koliko poruka pamtiti u memoriji (više = sporije, ali bolji insights)</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiMsgBuffer">
+                    <option value="80">80 poruka</option>
+                    <option value="150">150 poruka</option>
+                    <option value="300" selected>300 poruka (default)</option>
+                    <option value="500">500 poruka</option>
+                    <option value="1000">1000 poruka</option>
+                  </select>
+                </div>
+              </div>
+              <!-- drawer: AI model override -->
+              <div id="tkaiDrawerAiModel"
+                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Odaberi AI model koji TikTok Chat
+                  AI koristi za generiranje prijedloga. <b>Default</b> koristi globalni model iz Postavki → AI.</div>
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Model za TikTok Chat AI</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiModelOverride" style="max-width:220px">
+                    <option value="">🌐 Globalni model (default)</option>
+                    <optgroup label="OpenAI">
+                      <option value="gpt-4o">gpt-4o</option>
+                      <option value="gpt-4o-mini">gpt-4o-mini ⚡ (brzi)</option>
+                      <option value="gpt-4-turbo">gpt-4-turbo</option>
+                      <option value="gpt-3.5-turbo">gpt-3.5-turbo (jeftini)</option>
+                    </optgroup>
+                    <optgroup label="Anthropic">
+                      <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
+                      <option value="claude-3-haiku">claude-3-haiku ⚡</option>
+                      <option value="claude-3-opus">claude-3-opus</option>
+                    </optgroup>
+                    <optgroup label="Google">
+                      <option value="gemini-2.0-flash">gemini-2.0-flash ⚡</option>
+                      <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                    </optgroup>
+                    <optgroup label="OpenRouter">
+                      <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+                      <option value="deepseek/deepseek-r1">DeepSeek R1</option>
+                      <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo">
+                  Trenutni globalni model: <span id="tkaiGlobalModelName" style="color:var(--text2)">—</span>
+                </div>
+              </div>
+              <!-- drawer: feature toggles -->
+              <div id="tkaiDrawerFeatures"
+                style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Uključi ili isključi dijelove
+                  TikTok Chat AI panela.</div>
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">📊 Prikaži statistike (strip)</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowStats"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">💡 Prikaži Insights &amp; Engagement</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowInsights"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">🎁 Prikaži Gift Galeriju</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">👥 Prikaži Top Supportere</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowTopSupporters"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">🔍 Prikaži Shadowban check</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowShadowban"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">⭐ Prikaži Spike events</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowSpikes"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">→ Prikaži Preporuke (Recommendations)</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowRecommendations"></div>
                 </div>
               </div>
               <!-- drawer: message type filter -->
@@ -9442,16 +9544,25 @@
                     style="background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑️ Očisti sesiju</button>
                 </div>
               </div>
-              <!-- drawer: session history -->
+              <!-- drawer: session history + merge + stats -->
               <div id="tkaiDrawerSessions"
                 style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                  <div style="font-size:11px;color:var(--text3)">Zadnjih 10 spremljenih sesija</div>
-                  <button class="s-btn-sm" id="btnTkaiSessionsClearAll"
-                    style="font-size:10px;padding:2px 8px;background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">Obriši
-                    sve</button>
+                <div
+                  style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap">
+                  <div style="font-size:11px;color:var(--text3)">Odaberi sesije (□) pa klikni spoji</div>
+                  <div style="display:flex;gap:6px">
+                    <button class="s-btn-sm" id="btnTkaiSessionsMerge"
+                      style="font-size:10px;padding:2px 10px;background:rgba(102,126,234,.2);border-color:rgba(102,126,234,.5)">⛓
+                      Spoji odabrane</button>
+                    <button class="s-btn-sm" id="btnTkaiSessionsClearAll"
+                      style="font-size:10px;padding:2px 8px;background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑
+                      Obriši sve</button>
+                  </div>
                 </div>
-                <div id="tkaiSessionHistoryList" style="font-size:11px;max-height:200px;overflow-y:auto"></div>
+                <div id="tkaiSessionHistoryList" style="font-size:11px;max-height:260px;overflow-y:auto"></div>
+                <div id="tkaiSessionMergeResult"
+                  style="display:none;margin-top:10px;padding:10px;background:rgba(102,126,234,.1);border:1px solid rgba(102,126,234,.3);border-radius:8px;font-size:11px">
+                </div>
               </div>
             </div>
           </div>
@@ -9521,7 +9632,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.197</span></div>
+                    id="helpVersionNum2">2.4.198</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -9777,7 +9888,7 @@
         <div class="tkai-gift-gallery" id="tkaiGiftGallery">
           <div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>
         </div>
-        <div class="tkai-stats-strip">
+        <div class="tkai-stats-strip" id="tkaiStatsStrip">
           <div class="tkai-stat-card">
             <div class="tkai-stat-label">Session</div>
             <div class="tkai-stat-value" id="tkaiSessionInfo">0m</div>
@@ -9799,6 +9910,26 @@
             <div class="tkai-stat-value" id="tkaiViewerTrendLabel">-</div>
             <div class="tkai-spark" id="tkaiViewerSpark"></div>
           </div>
+          <div class="tkai-stat-card">
+            <div class="tkai-stat-label">Msgs/min ⚡</div>
+            <div class="tkai-stat-value" id="tkaiMsgsPerMin">-</div>
+          </div>
+          <div class="tkai-stat-card">
+            <div class="tkai-stat-label">Jedinstveni 👥</div>
+            <div class="tkai-stat-value" id="tkaiUniqueUsers">0</div>
+          </div>
+          <div class="tkai-stat-card">
+            <div class="tkai-stat-label">Ukupno gift 🎁</div>
+            <div class="tkai-stat-value" id="tkaiGiftCount">0</div>
+          </div>
+          <div class="tkai-stat-card">
+            <div class="tkai-stat-label">Pitanja ❓</div>
+            <div class="tkai-stat-value" id="tkaiQuestionCount">0</div>
+          </div>
+          <div class="tkai-stat-card">
+            <div class="tkai-stat-label">Sentiment 😊</div>
+            <div class="tkai-stat-value" id="tkaiSentimentBadge">-</div>
+          </div>
         </div>
         <div class="tkai-top-supporters" id="tkaiTopSupporters">
           <div class="tkai-empty" style="padding:6px">Top podržavatelji pojavit će se ovdje.</div>
@@ -9818,8 +9949,7 @@
             </div>
           </div>
           <div class="tkai-insights-row">
-            <div class="tkai-insights-card">
-              <div class="tkai-insights-title" title="Skokovi viewera ili giftova">Spike events<span>⚡</span></div>
+            <div class="tkai-insights-card" id="tkaiSpikesCard">
               <div class="tkai-insights-actions">
                 <button class="tkai-insights-btn" id="tkaiSpikeAll">All</button>
                 <button class="tkai-insights-btn" id="tkaiSpikeViewers">Viewers</button>
@@ -9827,13 +9957,12 @@
               </div>
               <ul class="tkai-insights-list" id="tkaiSpikeList"></ul>
             </div>
-            <div class="tkai-insights-card">
-              <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span></div>
+            <div class="tkai-insights-card" id="tkaiRecommendationsCard">
               <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
             </div>
           </div>
           <div class="tkai-insights-row">
-            <div class="tkai-insights-card" style="flex:1">
+            <div class="tkai-insights-card" style="flex:1" id="tkaiShadowbanCard">
               <div class="tkai-insights-title" title="Provjeri je li TikTok account u shadowbanu">Shadowban
                 check<span>🔍</span></div>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0">
@@ -9851,8 +9980,9 @@
         <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
         <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
         <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
-        <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Skini razgovor</button>
+        <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Chat JSON</button>
         <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
+        <button class="tkai-gen-btn" id="tkaiExportStatsBtn" style="font-size:11px">📊 Statistike</button>
         <button class="tkai-gen-btn" id="tkaiClearBtn"
           style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
       </div>
@@ -11757,24 +11887,17 @@
     (function initTkaiSettingsDrawers() {
       const ALL_DRAWERS = [
         'tkaiDrawerCustomCategories', 'tkaiDrawerGiftGallery', 'tkaiDrawerFanClubGallery',
-        'tkaiDrawerAutoScan', 'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions'
+        'tkaiDrawerAutoScan', 'tkaiDrawerAiModel', 'tkaiDrawerFeatures',
+        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions'
       ];
-      function openDrawer(drawerId) {
-        ALL_DRAWERS.forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.style.display = id === drawerId ? '' : 'none';
-        });
-        // Mark active button
-        document.querySelectorAll('.tkai-settings-toggle').forEach(b => b.classList.remove('active'));
-        const activeBtn = document.querySelector('[id^="btnTkai"][data-drawer="' + drawerId + '"]');
-        if (activeBtn) activeBtn.classList.add('active');
-      }
       // Wire button → drawer, toggling off if already open
       const MAP = {
         btnTkaiCustomCategories: 'tkaiDrawerCustomCategories',
         btnTkaiGiftGallery: 'tkaiDrawerGiftGallery',
         btnTkaiFanClubGallery: 'tkaiDrawerFanClubGallery',
         btnTkaiAutoScan: 'tkaiDrawerAutoScan',
+        btnTkaiAiModel: 'tkaiDrawerAiModel',
+        btnTkaiFeatures: 'tkaiDrawerFeatures',
         btnTkaiMsgTypes: 'tkaiDrawerMsgTypes',
         btnTkaiTools: 'tkaiDrawerTools',
         btnTkaiSessions: 'tkaiDrawerSessions',
@@ -11790,6 +11913,10 @@
           document.querySelectorAll('.tkai-settings-toggle').forEach(b => b.classList.remove('active'));
           if (!isOpen) { if (drawer) drawer.style.display = ''; btn.classList.add('active'); }
           if (drawerId === 'tkaiDrawerSessions' && !isOpen) renderTkaiSessionHistory();
+          if (drawerId === 'tkaiDrawerAiModel' && !isOpen) {
+            const gname = document.getElementById('tkaiGlobalModelName');
+            if (gname) gname.textContent = (typeof getSelectedAiModel === 'function' ? getSelectedAiModel() : '—') || '—';
+          }
         });
       });
 
@@ -11809,48 +11936,148 @@
         document.getElementById('tkaiClearBtn')?.click();
       });
 
-      // Session history
+      // Session history + merge + stats
       function renderTkaiSessionHistory() {
         const listEl = document.getElementById('tkaiSessionHistoryList');
         if (!listEl) return;
         try {
           const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-          if (!sessions.length) {
+          const recent = sessions.slice(-10).reverse();
+          if (!recent.length) {
             listEl.innerHTML = '<div style="color:var(--text3);padding:8px 0">Nema spremljenih sesija.<br>Sesije se automatski spremi nakon zaustavljanja skeniranja.</div>';
             return;
           }
-          listEl.innerHTML = sessions.slice(-10).reverse().map((s, i) => {
+          // Compute per-session stats
+          listEl.innerHTML = recent.map((s, i) => {
             const date = new Date(s.savedAt || s.exportedAt || Date.now()).toLocaleString('hr-HR');
             const count = s.messageCount || (s.messages && s.messages.length) || 0;
-            const dur = s.sessionMinutes ? s.sessionMinutes + ' min' : '';
-            const coins = s.totalCoins ? ' • ' + s.totalCoins + ' 🪙' : '';
-            return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
-              + '<div><div style="font-weight:600;font-size:11px">' + date + '</div>'
-              + '<div style="color:var(--text3);margin-top:2px;font-size:10px">' + count + ' poruka' + (dur ? ' • ' + dur : '') + coins + '</div></div>'
-              + '<button class="s-btn-sm" data-si="' + i + '" style="font-size:10px;padding:2px 8px">⬇️ Skini</button>'
+            const dur = s.sessionMinutes ? s.sessionMinutes + ' min' : '—';
+            const coins = s.totalCoins || 0;
+            const viewers = s.peakViewers || s.viewerCount || 0;
+            const gifts = (s.messages || []).filter(m => m.type === 'gift').length;
+            return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
+              + '<div style="display:flex;align-items:center;gap:6px">'
+              + '<input type="checkbox" class="tkai-session-chk" data-si="' + i + '" style="accent-color:#667eea;cursor:pointer">'
+              + '<div style="flex:1;min-width:0">'
+              + '<div style="font-weight:600;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + date + '</div>'
+              + '<div style="color:var(--text3);margin-top:2px;font-size:10px;display:flex;gap:8px;flex-wrap:wrap">'
+              + '<span>💬 ' + count + ' por.</span>'
+              + '<span>⏱ ' + dur + '</span>'
+              + (viewers ? '<span>👁 ' + viewers + '</span>' : '')
+              + (coins ? '<span>🪙 ' + coins + '</span>' : '')
+              + (gifts ? '<span>🎁 ' + gifts + '</span>' : '')
+              + '</div></div>'
+              + '<div style="display:flex;gap:4px">'
+              + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Statistike" style="font-size:10px;padding:2px 6px">📊</button>'
+              + '<button class="s-btn-sm tkai-btn-sess-dl" data-si="' + i + '" title="Skini JSON" style="font-size:10px;padding:2px 6px">⬇️</button>'
+              + '</div>'
+              + '</div>'
+              + '<div class="tkai-sess-stats-block" data-si="' + i + '" style="display:none;margin-top:6px;padding:6px;background:rgba(255,255,255,.04);border-radius:6px;font-size:10px;color:var(--text3)"></div>'
               + '</div>';
           }).join('');
-          listEl.querySelectorAll('[data-si]').forEach(btn => {
+
+          // Download button
+          listEl.querySelectorAll('.tkai-btn-sess-dl').forEach(btn => {
             btn.addEventListener('click', () => {
               const sess = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
               const item = sess.slice(-10).reverse()[+btn.dataset.si];
               if (!item) return;
               const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
-              const a = document.createElement('a');
-              a.href = URL.createObjectURL(blob);
-              a.download = 'tkai-session-' + (item.savedAt || '').replace(/[:.]/g, '-') + '.json';
-              a.click();
+              const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+              a.download = 'tkai-session-' + (item.savedAt || '').replace(/[:.]/g, '-') + '.json'; a.click();
               setTimeout(() => URL.revokeObjectURL(a.href), 0);
+            });
+          });
+
+          // Inline stats button
+          listEl.querySelectorAll('.tkai-btn-sess-stats').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const block = listEl.querySelector('.tkai-sess-stats-block[data-si="' + btn.dataset.si + '"]');
+              if (!block) return;
+              if (block.style.display !== 'none') { block.style.display = 'none'; return; }
+              const sess = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+              const s = sess.slice(-10).reverse()[+btn.dataset.si];
+              if (!s) return;
+              const msgs = s.messages || [];
+              const gifts = msgs.filter(m => m.type === 'gift');
+              const users = [...new Set(msgs.map(m => m.user).filter(Boolean))];
+              const topU = Object.entries(msgs.reduce((a, m) => { if (m.user) a[m.user] = (a[m.user] || 0) + 1; return a; }, {}))
+                .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u, c]) => u + ' (' + c + ')').join(', ');
+              const qs = msgs.filter(m => m.text && m.text.includes('?')).length;
+              block.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+                + '<span>💬 Poruke: <b style="color:var(--text2)">' + msgs.length + '</b></span>'
+                + '<span>👤 Jedinstveni: <b style="color:var(--text2)">' + users.length + '</b></span>'
+                + '<span>🎁 Giftovi: <b style="color:var(--text2)">' + gifts.length + '</b></span>'
+                + '<span>🪙 Coini: <b style="color:var(--text2)">' + (s.totalCoins || 0) + '</b></span>'
+                + '<span>❓ Pitanja: <b style="color:var(--text2)">' + qs + '</b></span>'
+                + '<span>⏱ Trajanje: <b style="color:var(--text2)">' + (s.sessionMinutes || '—') + ' min</b></span>'
+                + '</div>'
+                + (topU ? '<div style="margin-top:4px">🏆 Top: ' + topU + '</div>' : '');
+              block.style.display = '';
             });
           });
         } catch (e) {
           listEl.innerHTML = '<div style="color:var(--text3)">Greška pri učitavanju sesija.</div>';
         }
       }
+
       document.getElementById('btnTkaiSessionsClearAll')?.addEventListener('click', () => {
         if (!confirm('Obriši sve spremljene sesije?')) return;
         localStorage.removeItem('ex_tkai_sessions');
+        const mergeResult = document.getElementById('tkaiSessionMergeResult');
+        if (mergeResult) mergeResult.style.display = 'none';
         renderTkaiSessionHistory();
+      });
+
+      document.getElementById('btnTkaiSessionsMerge')?.addEventListener('click', () => {
+        const listEl = document.getElementById('tkaiSessionHistoryList');
+        if (!listEl) return;
+        const checked = [...listEl.querySelectorAll('.tkai-session-chk:checked')].map(c => +c.dataset.si);
+        if (checked.length < 2) { showToast('Odaberi najmanje 2 sesije za spajanje'); return; }
+        try {
+          const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+          const recent = sessions.slice(-10).reverse();
+          const selected = checked.map(i => recent[i]).filter(Boolean);
+          // Merge messages, deduplicate by timestamp+user+text
+          const seen = new Set();
+          const merged = [];
+          selected.forEach(s => (s.messages || []).forEach(m => {
+            const key = (m.ts || '') + '|' + (m.user || '') + '|' + (m.text || '').slice(0, 30);
+            if (!seen.has(key)) { seen.add(key); merged.push(m); }
+          }));
+          merged.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+          const totalCoins = selected.reduce((s, x) => s + (x.totalCoins || 0), 0);
+          const peakViewers = Math.max(...selected.map(s => s.peakViewers || s.viewerCount || 0));
+          const uniqueUsers = new Set(merged.map(m => m.user).filter(Boolean)).size;
+          const gifts = merged.filter(m => m.type === 'gift').length;
+          const totalMinutes = selected.reduce((s, x) => s + (x.sessionMinutes || 0), 0);
+          const mergedSession = {
+            savedAt: new Date().toISOString(),
+            mergedFrom: selected.length,
+            messageCount: merged.length,
+            messages: merged,
+            totalCoins, peakViewers, sessionMinutes: totalMinutes
+          };
+
+          const blob = new Blob([JSON.stringify(mergedSession, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+          a.download = 'tkai-merged-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json'; a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 0);
+
+          const resultEl = document.getElementById('tkaiSessionMergeResult');
+          if (resultEl) {
+            resultEl.style.display = '';
+            resultEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px">✅ Spojene ' + selected.length + ' sesije — preuzeto</div>'
+              + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+              + '<span>💬 Ukupno poruka: <b>' + merged.length + '</b></span>'
+              + '<span>👤 Jedinstveni: <b>' + uniqueUsers + '</b></span>'
+              + '<span>🎁 Giftovi: <b>' + gifts + '</b></span>'
+              + '<span>🪙 Coini: <b>' + totalCoins + '</b></span>'
+              + '<span>⏱ Trajanje: <b>' + totalMinutes + ' min</b></span>'
+              + '<span>👁 Peak viewers: <b>' + (peakViewers || '—') + '</b></span>'
+              + '</div>';
+          }
+        } catch (e) { showToast('Greška pri spajanju: ' + e.message); }
       });
     })();
     // ─────────────────────────────────────────────────────────────────────────
@@ -13415,6 +13642,7 @@
           toggleBtn.className = 'tkai-scan-btn start';
         }
         setStatus('');
+        showToast('⏹ Skeniranje zaustavljeno');
       }
       async function sendLKeyEvent(type) {
         const webview = getActiveTikTokWebview();
@@ -13519,7 +13747,7 @@
         });
         const leaders = Array.from(byUser.values())
           .sort((a, b) => b.coins - a.coins || b.events - a.events)
-          .slice(0, 3);
+          .slice(0, 5);
         return { gifts, totalCoins, supportersCount: byUser.size, leaders };
       }
       function updateTopSupportersUI(list, supportersCount) {
@@ -13530,14 +13758,14 @@
           return;
         }
         topSupportersEl.innerHTML = '';
-        list.slice(0, 3).forEach((row, i) => {
+        list.slice(0, 5).forEach((row, i) => {
           const item = document.createElement('div');
           item.className = 'tkai-top-row';
           item.innerHTML = '<span class="name">#' + (i + 1) + ' ' + escHtml(row.user || 'Unknown') + '</span>'
             + '<span class="coins">' + formatNum(row.coins || 0) + ' 🪙</span>';
           topSupportersEl.appendChild(item);
         });
-        const others = Math.max(0, (supportersCount || 0) - list.slice(0, 3).length);
+        const others = Math.max(0, (supportersCount || 0) - list.slice(0, 5).length);
         if (others > 0) {
           const otherRow = document.createElement('div');
           otherRow.className = 'tkai-top-row';
@@ -13740,22 +13968,30 @@
           '<div id="tkaiPopoutMessages" style="flex:1;overflow-y:auto;padding:6px 8px;font-size:12px;display:flex;flex-direction:column;gap:3px"></div>';
         document.body.appendChild(chatPopout);
 
-        // Draggable
+        // Draggable — smooth, clamped to viewport, never goes above toolbar
         const hdr = chatPopout.querySelector('#tkaiPopoutHeader');
         let pdragging = false, pox = 0, poy = 0;
-        hdr.addEventListener('mousedown', e => {
+        hdr.addEventListener('pointerdown', e => {
           pdragging = true;
           pox = e.clientX - chatPopout.getBoundingClientRect().left;
           poy = e.clientY - chatPopout.getBoundingClientRect().top;
+          hdr.setPointerCapture(e.pointerId);
           e.preventDefault();
         });
-        document.addEventListener('mousemove', e => {
+        hdr.addEventListener('pointermove', e => {
           if (!pdragging) return;
-          chatPopout.style.left = (e.clientX - pox) + 'px';
-          chatPopout.style.top = (e.clientY - poy) + 'px';
+          const minTop = 48; // below toolbar
+          const maxTop = window.innerHeight - 60;
+          const maxLeft = window.innerWidth - 80;
+          const newLeft = Math.max(0, Math.min(maxLeft, e.clientX - pox));
+          const newTop = Math.max(minTop, Math.min(maxTop, e.clientY - poy));
+          chatPopout.style.left = newLeft + 'px';
+          chatPopout.style.top = newTop + 'px';
           chatPopout.style.right = 'auto';
+          chatPopout.style.bottom = 'auto';
         });
-        document.addEventListener('mouseup', () => { pdragging = false; });
+        hdr.addEventListener('pointerup', () => { pdragging = false; });
+        hdr.addEventListener('pointercancel', () => { pdragging = false; });
 
         chatPopout.querySelector('#tkaiPopoutClose').addEventListener('click', closeChatPopout);
         chatPopout.querySelector('#tkaiPopoutClearFilter').addEventListener('click', () => {
@@ -13901,6 +14137,25 @@
           ? formatNum(liveViewerCount) + ' (peak ' + formatNum(peakViewerCount) + ')'
           : '-';
         if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
+        // ── Nove statistike ──────────────────────────────────────────────
+        const msgsPerMin = elapsedMin > 0 ? (collectedMessages.length / elapsedMin).toFixed(1) : '-';
+        const msgsPerMinEl = document.getElementById('tkaiMsgsPerMin');
+        if (msgsPerMinEl) msgsPerMinEl.textContent = msgsPerMin;
+        const uniqueUsers = new Set(collectedMessages.map(m => m.user).filter(Boolean)).size;
+        const uniqueUsersEl = document.getElementById('tkaiUniqueUsers');
+        if (uniqueUsersEl) uniqueUsersEl.textContent = formatNum(uniqueUsers);
+        const giftCountEl2 = document.getElementById('tkaiGiftCount');
+        if (giftCountEl2) giftCountEl2.textContent = formatNum(giftStats.gifts.length);
+        const questionCount = collectedMessages.filter(m => /\?/.test(m.text || '')).length;
+        const questionCountEl = document.getElementById('tkaiQuestionCount');
+        if (questionCountEl) questionCountEl.textContent = formatNum(questionCount);
+        const sentimentBadgeEl = document.getElementById('tkaiSentimentBadge');
+        if (sentimentBadgeEl) {
+          const ins = computeInsightsSnapshot();
+          sentimentBadgeEl.textContent = ins.sentiment === 'pozitivan' ? '😊 +' : ins.sentiment === 'negativan' ? '😟 -' : '😐 ~';
+          sentimentBadgeEl.style.color = ins.sentiment === 'pozitivan' ? '#4ade80' : ins.sentiment === 'negativan' ? '#f87171' : '';
+        }
+        // ────────────────────────────────────────────────────────────────
         updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
         renderViewerSparkline();
         updateInsightsUI();
@@ -14329,15 +14584,33 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           );
           const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
           const derivedUser = (() => {
+            // 1) Explicit userEl text
             const direct = userEl ? userEl.textContent.trim() : '';
-            if (direct) return direct;
-            const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username') || '';
+            if (direct && direct.length > 0) return direct;
+            // 2) data-* attributes on element
+            const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username')
+              || el.getAttribute('data-author') || el.getAttribute('data-nick') || '';
             if (attrName) return attrName.trim();
-            const match = fallbackText.match(/^\s*([^:\-\n]{2,40}?)(?:\s*[:\-]|\s+sent\b|\s+joined\b)/i);
-            if (match && match[1]) return match[1].trim();
+            // 3) aria-label often contains "username: message"
+            const aria = el.getAttribute('aria-label') || '';
+            if (aria) {
+              const am = aria.match(/^([^:,\n]{2,40})(?::|,)/); 
+              if (am && am[1]) return am[1].trim();
+            }
+            // 4) Look for a child element with data-e2e containing "user" or "name"
+            const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
+            if (nameByE2e) { const t = nameByE2e.textContent.trim(); if (t) return t; }
+            // 5) First <strong> or <b> is usually the username in TikTok chat
+            const boldEl = el.querySelector('strong, b');
+            if (boldEl) { const t = boldEl.textContent.trim(); if (t && t.length <= 60) return t; }
+            // 6) Regex on full text: "Username: message" or "Username sent gift"
+            const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
+            if (colMatch && colMatch[1]) return colMatch[1].trim();
+            const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined)\b/i);
+            if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
             return '';
           })();
-          const user = (derivedUser || 'Chat user').slice(0, 60);
+          const user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
           const textBase = textEl ? textEl.textContent.trim() : '';
           let rawText = (textBase || el.textContent || '').trim().slice(0, 420);
           
@@ -14366,7 +14639,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isGift = hasSent || hasGiftWord || giftEls.length > 0;
             const isSubscriber = /sub|subscriber|subscribe|pretplat|member|joined\s+the\s+live|joined/i.test(low);
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-            results.push({ user, text, mid, type: isGift ? 'gift' : (isSubscriber ? 'subscriber' : 'chat') });
+            results.push({ user: user || 'unknown', text, mid, type: isGift ? 'gift' : (isSubscriber ? 'subscriber' : 'chat') });
           }
         });
         const viewerCount = getViewerCount();
@@ -14439,7 +14712,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               added += 1;
             }
           });
-          if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
+          const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 300;
+          if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
           if (!sessionStartedAt) sessionStartedAt = Date.now();
           const readLang = readLangEl?.value || 'hr';
           if (autoTranslateEl?.checked !== false && readLang !== 'auto' && added > 0) {
@@ -14477,9 +14751,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (genAllBtn) genAllBtn.disabled = true;
         if (repliesEl) repliesEl.innerHTML = '<div class="tkai-status"><span class="tkai-scanning-dot"></span>AI generira odgovore…</div>';
         try {
+          const _tkaiModelOverride = DB.getSettings().tkaiModelOverride || '';
           const raw = await runAiTextRequest(buildPrompt(messages), {
             temperature: 0.85,
-            maxOutputTokens: 600
+            maxOutputTokens: 600,
+            ...(_tkaiModelOverride ? { model: _tkaiModelOverride } : {})
           });
           const suggestions = raw.split('\n')
             .map(line => line.replace(/^[\d]+[\.)]\s*/, '').replace(/^[-*]\s*/, '').trim())
@@ -14618,6 +14894,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         toggleBtn.textContent = '⏹ Skeniranje OFF';
         toggleBtn.className = 'tkai-scan-btn stop';
         setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
+        showToast('▶ Skeniranje uključeno');
         scrapeTikTokChat();
         const _scanMs = Number(DB.getSettings().tkaiScanIntervalMs) || 4000;
         scanInterval = setInterval(scrapeTikTokChat, _scanMs);
@@ -14643,7 +14920,64 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       });
       exportBtn?.addEventListener('click', exportConversation);
       exportCsvBtn?.addEventListener('click', exportCsvConversation);
+      document.getElementById('tkaiExportStatsBtn')?.addEventListener('click', () => {
+        const insights = computeInsightsSnapshot();
+        const giftStats = computeGiftStats();
+        const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
+        const totalMsgs = collectedMessages.length;
+        const engPerMin = elapsedMin > 0 ? (totalMsgs / elapsedMin).toFixed(2) : '0';
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          sessionMinutes: elapsedMin,
+          viewers: liveViewerCount,
+          peakViewers: peakViewerCount,
+          totalMessages: totalMsgs,
+          engagementPerMin: parseFloat(engPerMin),
+          giftCoins: giftStats.totalCoins,
+          supportersCount: giftStats.supportersCount,
+          topSupporters: giftStats.leaders.slice(0, 5).map(r => ({ user: r.user, coins: r.coins, gifts: r.events })),
+          sentiment: insights.sentiment,
+          topTopics: insights.topTopics.slice(0, 10),
+          topQuestions: insights.questions,
+          spikes: insights.spikes,
+          engagementPerMinuteChart: insights.engagement,
+          sentimentTrendChart: insights.sentimentTrend,
+          recommendations: buildRecommendations(insights)
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'tiktok-stats-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+        document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); }, 500);
+        showToast('📊 Statistike preuzete');
+      });
       clearBtn?.addEventListener('click', clearConversation);
+
+      // ── Apply feature toggles from settings ──────────────────────────────
+      function applyTkaiFeatureToggles() {
+        const s = DB.getSettings();
+        const vis = (id, settingKey, def = true) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const on = s[settingKey] !== undefined ? s[settingKey] !== false && s[settingKey] !== 'false' : def;
+          el.style.display = on ? '' : 'none';
+        };
+        vis('tkaiStatsStrip', 'tkaiShowStats');
+        vis('tkaiInsights', 'tkaiShowInsights');
+        vis('tkaiGiftGallery', 'tkaiShowGiftGallery');
+        vis('tkaiTopSupporters', 'tkaiShowTopSupporters');
+        vis('tkaiShadowbanCard', 'tkaiShowShadowban');
+        vis('tkaiSpikesCard', 'tkaiShowSpikes');
+        vis('tkaiRecommendationsCard', 'tkaiShowRecommendations');
+      }
+      // Apply on panel open
+      document.getElementById('btnTikTokAI')?.addEventListener('click', () => setTimeout(applyTkaiFeatureToggles, 50));
+      // Re-apply whenever a tkai feature toggle is clicked in settings
+      document.getElementById('settingsPanel')?.addEventListener('click', e => {
+        const t = e.target.closest('.toggle[data-setting]');
+        if (t && t.dataset.setting && t.dataset.setting.startsWith('tkaiShow')) setTimeout(applyTkaiFeatureToggles, 30);
+      });
+      applyTkaiFeatureToggles();
 
       // ── Gift gallery Sakrij/Prikaži ──────────────────────────────────────
       let giftGalleryVisible = true;
