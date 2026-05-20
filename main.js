@@ -218,6 +218,8 @@ function _readEnvLocalMap() {
   addEnvPath(__dirname);
   addEnvPath(process.cwd());
   addEnvPath(path.dirname(process.execPath));
+  addEnvPath(os.homedir());
+  addEnvPath(path.join(os.homedir(), ".etherx"));
   if (process.resourcesPath) addEnvPath(process.resourcesPath);
 
   // Electron-dependent locations can throw when app state is not fully ready.
