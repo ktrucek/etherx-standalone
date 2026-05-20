@@ -8831,7 +8831,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.198</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.199</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -8895,6 +8895,7 @@
                   <option value="anthropic">Anthropic (Claude)</option>
                   <option value="groq">⚡ Groq (ultra-brzo)</option>
                   <option value="openrouter">OpenRouter (200+ modela)</option>
+                  <option value="huggingface">🤗 HuggingFace Router (besplatno)</option>
                   <option value="ollama">Ollama (lokalno)</option>
                   <option value="local">Local / OpenAI-compatible</option>
                 </select>
@@ -8998,6 +8999,28 @@
                     style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
                     title="Prikaži/sakrij ključ">🙈</button>
                   <button id="aiFetchModelsOpenrouterBtn" title="Dohvati dostupne modele"
+                    style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
+                    Modeli</button>
+                </div>
+              </div>
+              <!-- HuggingFace Router -->
+              <div class="s-row" id="aiKeyRowHuggingface" style="display:none">
+                <div class="s-row-left">
+                  <div class="s-row-label">HuggingFace Token</div>
+                  <div class="s-row-desc">Dobavi token na <a href="https://huggingface.co/settings/tokens"
+                      style="color:var(--accent)"
+                      onclick="navigateTo(this.href);return false">huggingface.co/settings/tokens</a>
+                    — besplatni pristup Llama, Qwen, Gemma, Mistral i više.</div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="password" class="s-input" id="settingsHfToken" placeholder="hf_..."
+                    style="width:220px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                    spellcheck="false">
+                  <button
+                    onclick="(function(b){var i=document.getElementById('settingsHfToken');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'\uD83D\uDE48':'\uD83D\uDC41'})(this)"
+                    style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px"
+                    title="Prikaži/sakrij ključ">🙈</button>
+                  <button id="aiFetchModelsHfBtn" title="Dohvati dostupne modele"
                     style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">⬇
                     Modeli</button>
                 </div>
@@ -9464,6 +9487,34 @@
                 <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo">
                   Trenutni globalni model: <span id="tkaiGlobalModelName" style="color:var(--text2)">—</span>
                 </div>
+                <!-- Cardiff NLP HF token for sentiment analysis -->
+                <div style="border-top:1px solid rgba(255,255,255,.06);margin-top:14px;padding-top:12px">
+                  <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+                    🤗 <b>Cardiff NLP sentiment</b> (twitter-roberta-base-sentiment-latest) — analiza sentimenta na
+                    temelju 154M tweeta.
+                    Unesi HuggingFace token za aktivaciju. Isti token se koristi ako je HuggingFace odabran kao AI
+                    provider.
+                    <a href="https://huggingface.co/settings/tokens" style="color:var(--accent)"
+                      onclick="navigateTo(this.href);return false">→ Dobavi besplatni token</a>
+                  </div>
+                  <div class="s-row" style="margin-top:4px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">HuggingFace token</div>
+                      <div class="s-row-desc">Za Cardiff NLP sentiment u statistikama</div>
+                    </div>
+                    <div style="display:flex;gap:6px;align-items:center">
+                      <input type="password" class="s-input" id="tkaiHfTokenInput" placeholder="hf_..."
+                        style="width:200px;font-family:monospace;letter-spacing:0.5px" autocomplete="off"
+                        spellcheck="false">
+                      <button
+                        onclick="(function(b){var i=document.getElementById('tkaiHfTokenInput');i.type=i.type==='text'?'password':'text';b.textContent=i.type==='text'?'🙈':'👁'})(this)"
+                        style="background:rgba(255,255,255,.08);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:13px">🙈</button>
+                      <button id="tkaiHfTokenSaveBtn"
+                        style="background:rgba(102,126,234,.18);border:1px solid var(--accent);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--accent);font-size:11px;white-space:nowrap">💾
+                        Spremi</button>
+                    </div>
+                  </div>
+                </div>
               </div>
               <!-- drawer: feature toggles -->
               <div id="tkaiDrawerFeatures"
@@ -9511,6 +9562,12 @@
                     <div class="s-row-label">→ Prikaži Preporuke (Recommendations)</div>
                   </div>
                   <div class="toggle on" data-setting="tkaiShowRecommendations"></div>
+                </div>
+                <div class="s-row" style="margin-top:8px">
+                  <div class="s-row-left">
+                    <div class="s-row-label">❓ Prikaži Pitanja iz chata</div>
+                  </div>
+                  <div class="toggle on" data-setting="tkaiShowQuestions"></div>
                 </div>
               </div>
               <!-- drawer: message type filter -->
@@ -9632,7 +9689,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.198</span></div>
+                    id="helpVersionNum2">2.4.199</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -9971,6 +10028,15 @@
                   shadowban</button>
                 <span id="tkaiShadowbanResult" style="font-size:10px;color:var(--text3)">Otvori TikTok Live pa
                   klikni.</span>
+              </div>
+            </div>
+          </div>
+          <div class="tkai-insights-row">
+            <div class="tkai-insights-card" style="flex:1" id="tkaiQuestionsCard">
+              <div class="tkai-insights-title" title="Sva pitanja iz chata ove sesije">Pitanja iz chata ❓<span
+                  style="color:#a5b4fc">{{ collectedQuestions.length }}</span></div>
+              <div id="tkaiQuestionsList" style="max-height:140px;overflow-y:auto;margin-top:4px">
+                <div style="color:var(--text3);font-size:10px;padding:2px 0">Nema detektiranih pitanja.</div>
               </div>
             </div>
           </div>
@@ -11936,6 +12002,23 @@
         document.getElementById('tkaiClearBtn')?.click();
       });
 
+      // HF token for Cardiff NLP — load saved token + wire save button
+      (function initTkaiHfToken() {
+        const s = DB.getSettings();
+        const saved = s.hfApiKey || s.hf_api_key || '';
+        const inp = document.getElementById('tkaiHfTokenInput');
+        if (inp && saved) inp.value = saved;
+        document.getElementById('tkaiHfTokenSaveBtn')?.addEventListener('click', () => {
+          const val = document.getElementById('tkaiHfTokenInput')?.value.trim() || '';
+          DB.saveSetting('hfApiKey', val);
+          DB.saveSetting('hf_api_key', val);
+          // also sync to global HF token field if visible
+          const globalEl = document.getElementById('settingsHfToken');
+          if (globalEl) globalEl.value = val;
+          showToast('✅ HuggingFace token spremljen' + (val ? '' : ' (obrisan)'));
+        });
+      })();
+
       // Session history + merge + stats
       function renderTkaiSessionHistory() {
         const listEl = document.getElementById('tkaiSessionHistoryList');
@@ -12003,7 +12086,21 @@
               const users = [...new Set(msgs.map(m => m.user).filter(Boolean))];
               const topU = Object.entries(msgs.reduce((a, m) => { if (m.user) a[m.user] = (a[m.user] || 0) + 1; return a; }, {}))
                 .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u, c]) => u + ' (' + c + ')').join(', ');
-              const qs = msgs.filter(m => m.text && m.text.includes('?')).length;
+              // Use saved questions array if available, otherwise count '?' messages
+              const savedQs = Array.isArray(s.questions) ? s.questions : [];
+              const qs = savedQs.length || msgs.filter(m => m.text && m.text.includes('?')).length;
+              const questionsHtml = savedQs.length
+                ? '<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,.08);padding-top:6px">'
+                + '<div style="color:var(--text2);font-size:10px;margin-bottom:3px">❓ Pitanja iz sesije:</div>'
+                + '<div style="max-height:100px;overflow-y:auto">'
+                + savedQs.slice(0, 20).map(q =>
+                  '<div style="font-size:10px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)">'
+                  + (q.user ? '<b style="color:#a5b4fc">' + escHtml(String(q.user).slice(0, 20)) + '</b>: ' : '')
+                  + escHtml(String(q.text || '').slice(0, 100))
+                  + '</div>'
+                ).join('')
+                + '</div></div>'
+                : '';
               block.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
                 + '<span>💬 Poruke: <b style="color:var(--text2)">' + msgs.length + '</b></span>'
                 + '<span>👤 Jedinstveni: <b style="color:var(--text2)">' + users.length + '</b></span>'
@@ -12012,7 +12109,8 @@
                 + '<span>❓ Pitanja: <b style="color:var(--text2)">' + qs + '</b></span>'
                 + '<span>⏱ Trajanje: <b style="color:var(--text2)">' + (s.sessionMinutes || '—') + ' min</b></span>'
                 + '</div>'
-                + (topU ? '<div style="margin-top:4px">🏆 Top: ' + topU + '</div>' : '');
+                + (topU ? '<div style="margin-top:4px">🏆 Top: ' + topU + '</div>' : '')
+                + questionsHtml;
               block.style.display = '';
             });
           });
@@ -13152,6 +13250,7 @@
         localAiBaseUrl: localBaseUrl,
         groqApiKey: document.getElementById('settingsGroqKey')?.value?.trim() || settings.groqApiKey || settings.groq_api_key || '',
         openrouterApiKey: document.getElementById('settingsOpenrouterKey')?.value?.trim() || settings.openrouterApiKey || settings.openrouter_api_key || '',
+        hfApiKey: document.getElementById('settingsHfToken')?.value?.trim() || settings.hfApiKey || settings.hf_api_key || '',
         ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || 'http://localhost:11434/v1'),
       };
     }
@@ -13235,6 +13334,27 @@
             'HTTP-Referer': 'https://etherx.io',
             'X-Title': 'EtherX Browser'
           },
+          body: JSON.stringify({
+            model,
+            messages: [
+              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+              { role: 'user', content: prompt }
+            ],
+            temperature,
+            max_tokens: maxOutputTokens
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        return (data.choices?.[0]?.message?.content || '').trim();
+      }
+
+      if (provider === 'huggingface') {
+        const apiKey = opts.apiKey || runtime.hfApiKey;
+        if (!apiKey) throw new Error('HuggingFace token nije postavljen.');
+        const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
           body: JSON.stringify({
             model,
             messages: [
@@ -13475,6 +13595,12 @@
       let liveViewerCount = 0;
       let peakViewerCount = 0;
       let topSupporters = [];
+      // Cardiff NLP sentiment cache
+      let _cardiffSentiment = null;   // { label: 'positive'|'neutral'|'negative', score: 0.0..1.0 } | null
+      let _cardiffSentimentAt = 0;
+      let _cardiffRefreshing = false;
+      // Questions detected during this session
+      let collectedQuestions = []; // [{ user, text, ts }]
       let viewerSamples = [];
       let viewerSamplePoints = [];
       let lastViewerSampleAt = 0;
@@ -13595,6 +13721,39 @@
         if (viewerSamplePoints.length > 200) viewerSamplePoints = viewerSamplePoints.slice(-200);
         lastViewerSampleAt = now;
         lastViewerSampleValue = v;
+      }
+      // Extract questions from new messages and accumulate in collectedQuestions
+      function extractAndTrackQuestions(messages) {
+        if (!Array.isArray(messages)) return;
+        const existing = new Set(collectedQuestions.map(q => q.text));
+        messages.forEach(m => {
+          const text = String(m.text || '').trim();
+          if (!text) return;
+          const lower = text.toLowerCase();
+          const isQuestion = text.includes('?') ||
+            /^(kako|zasto|zato|sto|sta|kada|gdje|ko|tko|zar|jel|je li|who|what|why|when|where|how|can you|do you|is it|are you)\b/.test(lower);
+          if (isQuestion && !existing.has(text)) {
+            existing.add(text);
+            collectedQuestions.push({ user: m.user || '', text, ts: m.ts || Date.now() });
+          }
+        });
+      }
+      function renderQuestionsUI() {
+        const el = document.getElementById('tkaiQuestionsList');
+        if (!el) return;
+        if (!collectedQuestions.length) {
+          el.innerHTML = '<div style="color:var(--text3);font-size:10px;padding:2px 0">Nema detektiranih pitanja.</div>';
+          return;
+        }
+        const items = collectedQuestions.slice().reverse().slice(0, 30); // newest first, max 30
+        el.innerHTML = items.map(q => {
+          const time = new Date(q.ts).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+          return '<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">'
+            + '<span style="color:var(--text3);font-size:9px">' + time + ' </span>'
+            + (q.user ? '<b style="color:#a5b4fc;font-size:10px">' + escHtml(q.user) + '</b>: ' : '')
+            + '<span style="font-size:10.5px">' + escHtml(q.text.slice(0, 120)) + '</span>'
+            + '</div>';
+        }).join('');
       }
       function renderViewerSparkline() {
         if (!viewerSparkEl) return;
@@ -13840,6 +13999,46 @@
         if (nowWindow >= Math.max(3, prevWindow * 2)) spikes.push({ type: 'gifts', delta: nowWindow - prevWindow, ts: now });
         return { topTopics, questions: questions.slice(0, 3), sentiment, engagement, sentimentTrend, spikes };
       }
+
+      // ── Cardiff NLP async sentiment ──────────────────────────────────────────
+      async function refreshCardiffSentiment() {
+        if (_cardiffRefreshing) return;
+        const s = DB.getSettings();
+        const hfToken = s.hfApiKey || s.hf_api_key || '';
+        if (!hfToken) return; // no token → fall back to keyword scoring
+        if (!collectedMessages.length) return;
+        // throttle: once every 30 seconds
+        if (Date.now() - _cardiffSentimentAt < 30000) return;
+        _cardiffRefreshing = true;
+        try {
+          const texts = collectedMessages.slice(-30).map(m => String(m.text || '')).filter(Boolean);
+          if (!texts.length) return;
+          // Batch: join as single string (max 512 chars) for the inference API
+          const input = texts.join(' ').slice(0, 512);
+          const resp = await fetch('https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-sentiment-latest', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + hfToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inputs: input })
+          });
+          if (!resp.ok) return;
+          const data = await resp.json().catch(() => null);
+          // Response: [[{label, score}, ...]] for batched or [{label, score}, ...] for single
+          let scores = Array.isArray(data) ? (Array.isArray(data[0]) ? data[0] : data) : null;
+          if (scores && scores.length) {
+            const top = scores.slice().sort((a, b) => b.score - a.score)[0];
+            // Cardiff labels: 'positive', 'neutral', 'negative' (or 'LABEL_0/1/2')
+            let label = String(top.label || '').toLowerCase();
+            if (label === 'label_0') label = 'negative';
+            else if (label === 'label_1') label = 'neutral';
+            else if (label === 'label_2') label = 'positive';
+            _cardiffSentiment = { label, score: top.score };
+            _cardiffSentimentAt = Date.now();
+          }
+        } catch (_) { /* fail silently, keyword fallback active */ }
+        finally { _cardiffRefreshing = false; }
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       function buildRecommendations(insights) {
         const recs = [];
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
@@ -14146,14 +14345,27 @@
         if (uniqueUsersEl) uniqueUsersEl.textContent = formatNum(uniqueUsers);
         const giftCountEl2 = document.getElementById('tkaiGiftCount');
         if (giftCountEl2) giftCountEl2.textContent = formatNum(giftStats.gifts.length);
-        const questionCount = collectedMessages.filter(m => /\?/.test(m.text || '')).length;
+        // Use the running collectedQuestions count (all unique questions this session)
         const questionCountEl = document.getElementById('tkaiQuestionCount');
-        if (questionCountEl) questionCountEl.textContent = formatNum(questionCount);
+        if (questionCountEl) questionCountEl.textContent = formatNum(collectedQuestions.length);
+        renderQuestionsUI();
         const sentimentBadgeEl = document.getElementById('tkaiSentimentBadge');
         if (sentimentBadgeEl) {
-          const ins = computeInsightsSnapshot();
-          sentimentBadgeEl.textContent = ins.sentiment === 'pozitivan' ? '😊 +' : ins.sentiment === 'negativan' ? '😟 -' : '😐 ~';
-          sentimentBadgeEl.style.color = ins.sentiment === 'pozitivan' ? '#4ade80' : ins.sentiment === 'negativan' ? '#f87171' : '';
+          // Prefer Cardiff NLP result (async); fall back to keyword scoring
+          const sentLabel = _cardiffSentiment ? _cardiffSentiment.label : computeInsightsSnapshot().sentiment;
+          const isCardiff = !!_cardiffSentiment;
+          const scoreStr = isCardiff ? ' ' + Math.round(_cardiffSentiment.score * 100) + '%' : '';
+          const indicator = isCardiff ? ' 🤗' : '';
+          if (sentLabel === 'positive') {
+            sentimentBadgeEl.textContent = '😊 +' + scoreStr + indicator;
+            sentimentBadgeEl.style.color = '#4ade80';
+          } else if (sentLabel === 'negative') {
+            sentimentBadgeEl.textContent = '😟 -' + scoreStr + indicator;
+            sentimentBadgeEl.style.color = '#f87171';
+          } else {
+            sentimentBadgeEl.textContent = '😐 ~' + scoreStr + indicator;
+            sentimentBadgeEl.style.color = '';
+          }
         }
         // ────────────────────────────────────────────────────────────────
         updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
@@ -14284,6 +14496,7 @@
         const user = source || 'Manual';
         const id = 'ctx:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
         collectedMessages.push({ user, text, id, ts: Date.now(), type: 'chat' });
+        extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
         const readLang = readLangEl?.value || 'hr';
         if (autoTranslateEl?.checked !== false && readLang !== 'auto') {
@@ -14715,6 +14928,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 300;
           if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
           if (!sessionStartedAt) sessionStartedAt = Date.now();
+          if (added > 0) extractAndTrackQuestions(collectedMessages.slice(-added));
           const readLang = readLangEl?.value || 'hr';
           if (autoTranslateEl?.checked !== false && readLang !== 'auto' && added > 0) {
             await translateMessagesInPlace(collectedMessages, readLang);
@@ -14773,6 +14987,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
       function clearConversation() {
         collectedMessages = [];
+        collectedQuestions = [];
         selectedMsgIds.clear();
         if (repliesEl) {
           repliesEl.innerHTML = '<div class="tkai-empty">Razgovor očišćen.<br>Pokreni skeniranje za nove poruke.</div>';
@@ -14847,6 +15062,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
             peakViewers: peakViewerCount,
             totalCoins: giftStats.totalCoins,
+            questions: collectedQuestions.slice(),
             messages: collectedMessages.slice()
           });
           if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
@@ -14898,7 +15114,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         scrapeTikTokChat();
         const _scanMs = Number(DB.getSettings().tkaiScanIntervalMs) || 4000;
         scanInterval = setInterval(scrapeTikTokChat, _scanMs);
-        statsTimerInterval = setInterval(function () { if (scanActive) updateSessionStatsUI(); }, 10000);
+        statsTimerInterval = setInterval(function () {
+          if (scanActive) {
+            updateSessionStatsUI();
+            refreshCardiffSentiment(); // async, throttled to every 30s
+          }
+        }, 10000);
         updateSessionStatsUI();
       });
 
@@ -14969,6 +15190,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         vis('tkaiShadowbanCard', 'tkaiShowShadowban');
         vis('tkaiSpikesCard', 'tkaiShowSpikes');
         vis('tkaiRecommendationsCard', 'tkaiShowRecommendations');
+        vis('tkaiQuestionsCard', 'tkaiShowQuestions');
       }
       // Apply on panel open
       document.getElementById('btnTikTokAI')?.addEventListener('click', () => setTimeout(applyTkaiFeatureToggles, 50));
@@ -19791,6 +20013,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (provider === 'anthropic') return s.anthropicApiKey || s.anthropic_api_key || '';
         if (provider === 'groq') return s.groqApiKey || s.groq_api_key || '';
         if (provider === 'openrouter') return s.openrouterApiKey || s.openrouter_api_key || '';
+        if (provider === 'huggingface') return s.hfApiKey || s.hf_api_key || '';
         return '';
       }
       function currentProvider() {
@@ -19804,6 +20027,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (p === 'anthropic') return anthropicKeyEl?.value.trim() || await getStoredApiKey('anthropic');
         if (p === 'groq') return groqKeyEl?.value.trim() || await getStoredApiKey('groq');
         if (p === 'openrouter') return openrouterKeyEl?.value.trim() || await getStoredApiKey('openrouter');
+        if (p === 'huggingface') return document.getElementById('settingsHfToken')?.value.trim() || await getStoredApiKey('huggingface');
         if (p === 'ollama') return 'ollama';
         return '';
       }
@@ -19846,13 +20070,17 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 if (grk && groqKeyEl) groqKeyEl.value = grk;
                 getStoredApiKey('openrouter').then(ork => {
                   if (ork && openrouterKeyEl) openrouterKeyEl.value = ork;
-                  if (cfg.aiTemperature !== undefined && tempSlider) {
-                    tempSlider.value = cfg.aiTemperature;
-                    if (tempVal) tempVal.textContent = cfg.aiTemperature;
-                  }
-                  const hasKey = gk || ok_ || lk || ak || grk || ork;
-                  if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || GEMINI_DEFAULT_MODEL) + '</strong>');
-                  else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+                  getStoredApiKey('huggingface').then(hfk => {
+                    const hfEl = document.getElementById('settingsHfToken');
+                    if (hfk && hfEl) hfEl.value = hfk;
+                    if (cfg.aiTemperature !== undefined && tempSlider) {
+                      tempSlider.value = cfg.aiTemperature;
+                      if (tempVal) tempVal.textContent = cfg.aiTemperature;
+                    }
+                    const hasKey = gk || ok_ || lk || ak || grk || ork || hfk;
+                    if (hasKey) showBanner(true, 'API ključ je konfiguriran. Model: <strong>' + (cfg.aiModel || GEMINI_DEFAULT_MODEL) + '</strong>');
+                    else showBanner(false, 'API ključ nije postavljen. Unesi ključ i klikni Spremi.');
+                  });
                 });
               });
             });
@@ -19869,6 +20097,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         document.getElementById('aiKeyRowGroq')?.style && (document.getElementById('aiKeyRowGroq').style.display = p === 'groq' ? '' : 'none');
         document.getElementById('aiKeyRowOpenrouter')?.style && (document.getElementById('aiKeyRowOpenrouter').style.display = p === 'openrouter' ? '' : 'none');
         document.getElementById('aiKeyRowOllama')?.style && (document.getElementById('aiKeyRowOllama').style.display = p === 'ollama' ? '' : 'none');
+        document.getElementById('aiKeyRowHuggingface')?.style && (document.getElementById('aiKeyRowHuggingface').style.display = p === 'huggingface' ? '' : 'none');
         const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'];
         const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
         const localModels = ['llama3.1:8b', 'qwen2.5:7b-instruct', 'mistral:7b-instruct'];
@@ -19876,8 +20105,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'qwen-qwq-32b'];
         const openrouterModels = ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash-preview', 'anthropic/claude-3.5-sonnet', 'deepseek/deepseek-r1', 'openai/gpt-4o'];
         const ollamaModels = ['llama3.1:8b', 'llama3.2:latest', 'mistral:7b-instruct', 'qwen2.5:7b'];
+        const hfModels = ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3', 'google/gemma-3-27b-it', 'deepseek-ai/DeepSeek-R1'];
         const defaults = p === 'openai' ? openaiModels : p === 'local' ? localModels : p === 'anthropic' ? claudeModels
-          : p === 'groq' ? groqModels : p === 'openrouter' ? openrouterModels : p === 'ollama' ? ollamaModels : geminiModels;
+          : p === 'groq' ? groqModels : p === 'openrouter' ? openrouterModels : p === 'ollama' ? ollamaModels
+            : p === 'huggingface' ? hfModels : geminiModels;
         if (!modelSel.dataset['populated_' + p]) {
           const prev = modelSel.value;
           modelSel.innerHTML = defaults.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -19890,7 +20121,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       if (tempSlider && tempVal) tempSlider.addEventListener('input', () => { tempVal.textContent = tempSlider.value; });
 
       async function fetchModels(provider, key) {
-        const btnId = { gemini: 'aiFetchModelsBtn', openai: 'aiFetchModelsOpenaiBtn', local: 'aiFetchModelsLocalBtn', groq: 'aiFetchModelsGroqBtn', openrouter: 'aiFetchModelsOpenrouterBtn', ollama: 'aiFetchModelsOllamaBtn' }[provider];
+        const btnId = { gemini: 'aiFetchModelsBtn', openai: 'aiFetchModelsOpenaiBtn', local: 'aiFetchModelsLocalBtn', groq: 'aiFetchModelsGroqBtn', openrouter: 'aiFetchModelsOpenrouterBtn', ollama: 'aiFetchModelsOllamaBtn', huggingface: 'aiFetchModelsHfBtn' }[provider];
         const fetchBtn = document.getElementById(btnId || '');
         if (fetchBtn) { fetchBtn.disabled = true; fetchBtn.textContent = '⏳'; }
         const modelDesc = document.getElementById('aiModelDesc');
@@ -19927,6 +20158,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const baseUrl = normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || 'http://localhost:11434/v1');
             const r = await fetch(baseUrl + '/models').catch(() => null);
             if (!r || !r.ok) throw new Error('Ollama nije dostupan na ' + baseUrl);
+            const d = await r.json();
+            models = (d.data || []).map(m => m.id).filter(Boolean).sort();
+          } else if (provider === 'huggingface') {
+            const r = await fetch('https://router.huggingface.co/v1/models', { headers: { Authorization: 'Bearer ' + key } });
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' — provjeri HF token');
             const d = await r.json();
             models = (d.data || []).map(m => m.id).filter(Boolean).sort();
           }
@@ -19976,6 +20212,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
       document.getElementById('aiFetchModelsOllamaBtn')?.addEventListener('click', () => {
         fetchModels('ollama', '');
       });
+      document.getElementById('aiFetchModelsHfBtn')?.addEventListener('click', () => {
+        const k = document.getElementById('settingsHfToken')?.value.trim();
+        if (!k) { showBanner(false, 'Unesi HuggingFace token prije dohvata modela.'); return; }
+        fetchModels('huggingface', k);
+      });
 
       const saveBtn = document.getElementById('saveAiSettings');
       if (saveBtn) saveBtn.addEventListener('click', () => {
@@ -20010,6 +20251,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         DB.saveSetting('openrouterApiKey', orKey);
         DB.saveSetting('openrouter_api_key', orKey);
         DB.saveSetting('ollamaBaseUrl', olBaseUrl);
+        const hfKey = document.getElementById('settingsHfToken')?.value.trim() || '';
+        DB.saveSetting('hfApiKey', hfKey);
+        DB.saveSetting('hf_api_key', hfKey);
         if (tempSlider) DB.saveSetting('aiTemperature', Number(tempSlider.value));
         if (window.etherx?.db?.settings?.save) {
           window.etherx.db.settings.save(DB.getSettings()).catch(() => { });
