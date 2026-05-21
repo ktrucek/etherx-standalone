@@ -226,6 +226,11 @@ contextBridge.exposeInMainWorld('etherx', {
     openPath: (fullPath) => ipcRenderer.invoke('shell:openPath', fullPath),
   },
 
+  // ── SongRec (local song recognition CLI) ───────────────────────────────────
+  songrec: {
+    recognize: (options) => ipcRenderer.invoke('songrec:recognize', options),
+  },
+
   // ── App ───────────────────────────────────────────────────────────────────────
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),

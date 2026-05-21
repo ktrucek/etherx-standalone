@@ -4673,6 +4673,8 @@
 
     /* TikTok AI Panel — free-floating, draggable */
     #tiktokAIPanel {
+      --tkai-ui-scale: 1;
+      --tkai-font-scale: 1;
       position: fixed;
       bottom: 10px;
       right: 0;
@@ -4708,6 +4710,8 @@
       display: flex;
       flex-direction: column;
       height: 100%;
+      zoom: var(--tkai-ui-scale);
+      font-size: calc(12px * var(--tkai-font-scale));
       overflow-x: hidden;
       overflow-y: auto;
       overscroll-behavior: contain;
@@ -5029,6 +5033,42 @@
       padding: 7px 8px;
       border-top: 1px solid var(--border);
       background: rgba(255, 255, 255, .02);
+    }
+
+    .tkai-user-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 7px 8px;
+      border-top: 1px solid var(--border);
+      background: rgba(255, 255, 255, .015);
+    }
+
+    .tkai-user-summary-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tkai-user-pill {
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text2);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+
+    .tkai-join-mention {
+      color: #93c5fd;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .tkai-join-mention:hover {
+      text-decoration: underline;
     }
 
     .tkai-top-row {
@@ -9433,6 +9473,33 @@
                 <input type="color" class="s-input" data-setting="tkaiBtnColorInsights" value="#2dd4bf"
                   style="width:56px;height:32px;padding:3px">
               </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Boja Recommendations popouta</div>
+                  <div class="s-row-desc">Pozadina izdvojenog AI recommendations prozora</div>
+                </div>
+                <input type="color" class="s-input" data-setting="tkaiRecPopBgColor" value="#1f2937"
+                  style="width:56px;height:32px;padding:3px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">UI Scale (%)</div>
+                  <div class="s-row-desc">Skaliranje cijelog TikTok AI panela</div>
+                </div>
+                <input type="number" class="s-input" data-setting="tkaiUiScale" min="80" max="140" value="100"
+                  style="width:70px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Font Scale (%)</div>
+                  <div class="s-row-desc">Skaliranje fontova unutar TikTok AI panela</div>
+                </div>
+                <input type="number" class="s-input" data-setting="tkaiFontScale" min="85" max="170" value="100"
+                  style="width:70px">
+              </div>
             </div>
 
             <div class="s-group">
@@ -9820,6 +9887,13 @@
         <div class="tkai-top-supporters" id="tkaiTopSupporters">
           <div class="tkai-empty" style="padding:6px">Top podržavatelji pojavit će se ovdje.</div>
         </div>
+        <div class="tkai-user-summary" id="tkaiUserSummary">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="font-size:10px;font-weight:700;color:var(--text2)">👥 User summary</div>
+            <div id="tkaiUserSummaryMeta" style="font-size:10px;color:var(--text3)">0 korisnika</div>
+          </div>
+          <div id="tkaiUserSummaryList" class="tkai-user-summary-list"></div>
+        </div>
         <div class="tkai-insights" id="tkaiInsights">
           <div class="tkai-insights-row">
             <div class="tkai-insights-card">
@@ -9859,6 +9933,17 @@
                 feed<span>👋</span></div>
               <ul class="tkai-insights-list" id="tkaiJoinLevelList"></ul>
             </div>
+            <div class="tkai-insights-card" id="tkaiShadowbanCard">
+              <div class="tkai-insights-title" title="Per-user pregled aktivnosti i potencijalnih botova">Shadow
+                users<span>🛡</span></div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <select id="tkaiShadowbanUserFilter" class="s-select" style="flex:1;font-size:11px;min-height:26px">
+                  <option value="__all__">Svi korisnici</option>
+                </select>
+                <span id="tkaiShadowbanUserCount" style="font-size:10px;color:var(--text3)">0 prikazano</span>
+              </div>
+              <div id="tkaiShadowbanUserStats" class="tkai-insights-list" style="max-height:112px;overflow:auto"></div>
+            </div>
           </div>
           <div class="tkai-insights-row">
             <div class="tkai-insights-card" id="tkaiPieCard">
@@ -9885,6 +9970,7 @@
         <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
         <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Skini razgovor</button>
         <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
+        <button class="tkai-gen-btn" id="tkaiExportStatsBtn" style="font-size:11px">📊 Stats</button>
         <button class="tkai-gen-btn" id="tkaiClearBtn"
           style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
       </div>

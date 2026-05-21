@@ -7302,6 +7302,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const coinTotalEl = document.getElementById("tkaiCoinTotal");
   const supporterCountEl = document.getElementById("tkaiSupporterCount");
   const topSupportersEl = document.getElementById("tkaiTopSupporters");
+  const userSummaryEl = document.getElementById("tkaiUserSummary");
+  const userSummaryMetaEl = document.getElementById("tkaiUserSummaryMeta");
+  const userSummaryListEl = document.getElementById("tkaiUserSummaryList");
   const viewerTrendLabelEl = document.getElementById("tkaiViewerTrendLabel");
   const viewerSparkEl = document.getElementById("tkaiViewerSpark");
   const autoSuggestBadgeEl = document.getElementById("tkaiAutoSuggestBadge");
@@ -7320,6 +7323,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const pieSummaryEl = document.getElementById("tkaiPieSummary");
   const songListEl = document.getElementById("tkaiSongList");
   const joinLevelListEl = document.getElementById("tkaiJoinLevelList");
+  const shadowbanUserFilterEl = document.getElementById("tkaiShadowbanUserFilter");
+  const shadowbanUserCountEl = document.getElementById("tkaiShadowbanUserCount");
+  const shadowbanUserStatsEl = document.getElementById("tkaiShadowbanUserStats");
   const spikeAllBtn = document.getElementById("tkaiSpikeAll");
   const spikeViewersBtn = document.getElementById("tkaiSpikeViewers");
   const spikeGiftsBtn = document.getElementById("tkaiSpikeGifts");
@@ -7329,11 +7335,180 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let spikeFilter = "all";
   let recommendationsPopoutEl = null;
   let recommendationsPopoutBodyEl = null;
+  let lastShadowbanUserStats = [];
 
   function formatNum(v) {
     const n = Number(v || 0);
     if (!Number.isFinite(n)) return "0";
     return n.toLocaleString("hr-HR");
+  }
+
+  function getUserColor(name) {
+    const input = String(name || "").trim().toLowerCase();
+    let h = 0;
+    for (let i = 0; i < input.length; i += 1) h = (h * 31 + input.charCodeAt(i)) >>> 0;
+    const hue = h % 360;
+    return `hsl(${hue} 78% 72%)`;
+  }
+
+  function buildUserStats(messages, limit) {
+    const scanLimit = Math.max(30, Math.min(1000, Number(limit || 200)));
+    const base = (Array.isArray(messages) ? messages : collectedMessages).slice(
+      -scanLimit,
+    );
+    const map = new Map();
+    base.forEach((m) => {
+      const user = String(m?.user || "").trim();
+      if (!user) return;
+      if (!map.has(user)) {
+        map.set(user, {
+          user,
+          total: 0,
+          chat: 0,
+          gifts: 0,
+          joins: 0,
+          lastTs: 0,
+          texts: new Map(),
+        });
+      }
+      const row = map.get(user);
+      row.total += 1;
+      if (m.type === "gift" || m.type === "subscriber") row.gifts += 1;
+      else if (m.type === "join") row.joins += 1;
+      else row.chat += 1;
+      const txt = String(m.text || "").trim().toLowerCase();
+      if (txt) row.texts.set(txt, (row.texts.get(txt) || 0) + 1);
+      row.lastTs = Math.max(row.lastTs, Number(m.ts || 0));
+    });
+    return Array.from(map.values())
+      .map((r) => ({
+        user: r.user,
+        total: r.total,
+        chat: r.chat,
+        gifts: r.gifts,
+        joins: r.joins,
+        lastTs: r.lastTs,
+        repeatMax: Math.max(0, ...Array.from(r.texts.values())),
+      }))
+      .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
+  }
+
+  function buildDailyStats(messages, limit) {
+    const scanLimit = Math.max(30, Math.min(2000, Number(limit || 200)));
+    const base = (Array.isArray(messages) ? messages : collectedMessages).slice(
+      -scanLimit,
+    );
+    const map = new Map();
+    base.forEach((m) => {
+      const d = new Date(Number(m.ts || Date.now()));
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+        2,
+        "0",
+      )}-${String(d.getDate()).padStart(2, "0")}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          day: key,
+          total: 0,
+          chat: 0,
+          gifts: 0,
+          joins: 0,
+          users: new Set(),
+        });
+      }
+      const row = map.get(key);
+      row.total += 1;
+      if (m.type === "gift" || m.type === "subscriber") row.gifts += 1;
+      else if (m.type === "join") row.joins += 1;
+      else row.chat += 1;
+      if (m.user) row.users.add(String(m.user));
+    });
+    return Array.from(map.values())
+      .map((r) => ({
+        day: r.day,
+        total: r.total,
+        chat: r.chat,
+        gifts: r.gifts,
+        joins: r.joins,
+        users: r.users.size,
+      }))
+      .sort((a, b) => String(b.day).localeCompare(String(a.day)));
+  }
+
+  function applyTkaiPanelScale() {
+    const panel = document.getElementById("tiktokAIPanel");
+    if (!panel) return;
+    const uiScale = Math.max(80, Math.min(140, Number(getTkaiSetting("tkaiUiScale", 100))));
+    const fontScale = Math.max(85, Math.min(170, Number(getTkaiSetting("tkaiFontScale", 100))));
+    panel.style.setProperty("--tkai-ui-scale", String(uiScale / 100));
+    panel.style.setProperty("--tkai-font-scale", String(fontScale / 100));
+  }
+
+  function renderUserSummary() {
+    if (!userSummaryListEl || !userSummaryMetaEl) return;
+    const limit = Number(getTkaiSetting("tkaiUserScanLimit", 200));
+    const users = buildUserStats(collectedMessages, limit);
+    userSummaryMetaEl.textContent = `${formatNum(users.length)} korisnika • scan ${formatNum(limit)} poruka`;
+    userSummaryListEl.innerHTML = "";
+    users.slice(0, 18).forEach((u) => {
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "tkai-user-pill";
+      pill.style.borderColor = getUserColor(u.user);
+      pill.style.color = getUserColor(u.user);
+      pill.textContent = `@${u.user} (${u.total})`;
+      pill.title = "Klik za copy @mention";
+      pill.addEventListener("click", () => {
+        navigator.clipboard
+          .writeText("@" + u.user + " ")
+          .then(() => showToast("📋 Kopirano @" + u.user))
+          .catch(() => { });
+      });
+      userSummaryListEl.appendChild(pill);
+    });
+  }
+
+  function renderShadowbanUserStats() {
+    if (!shadowbanUserStatsEl || !shadowbanUserFilterEl) return;
+    const selected = shadowbanUserFilterEl.value || "__all__";
+    const rows =
+      selected === "__all__"
+        ? lastShadowbanUserStats
+        : lastShadowbanUserStats.filter((r) => r.user === selected);
+    shadowbanUserStatsEl.innerHTML = rows.length
+      ? rows
+        .map((r) => {
+          const botHint =
+            r.repeatMax >= 4 || (r.total >= 10 && r.chat >= 8)
+              ? " • moguci bot"
+              : "";
+          return `<div style="margin:2px 0;color:${getUserColor(r.user)}">@${escHtml(r.user)}: ${formatNum(r.total)} msg (${formatNum(r.chat)} chat, ${formatNum(r.gifts)} gift, ${formatNum(r.joins)} join)${botHint}</div>`;
+        })
+        .join("")
+      : '<div style="color:var(--text3)">Nema podataka za korisnika.</div>';
+    if (shadowbanUserCountEl) {
+      shadowbanUserCountEl.textContent = `${formatNum(rows.length)} prikazano`;
+    }
+  }
+
+  function refreshShadowbanUserFilterOptions() {
+    if (!shadowbanUserFilterEl) return;
+    const current = shadowbanUserFilterEl.value || "__all__";
+    shadowbanUserFilterEl.innerHTML = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "__all__";
+    allOpt.textContent = "Svi korisnici";
+    shadowbanUserFilterEl.appendChild(allOpt);
+    lastShadowbanUserStats.forEach((r) => {
+      const opt = document.createElement("option");
+      opt.value = r.user;
+      opt.textContent = `@${r.user} (${formatNum(r.total)})`;
+      shadowbanUserFilterEl.appendChild(opt);
+    });
+    shadowbanUserFilterEl.value = lastShadowbanUserStats.some(
+      (r) => r.user === current,
+    )
+      ? current
+      : "__all__";
   }
 
   function extractJoinLevel(message) {
@@ -7910,6 +8085,10 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       uniqueSongs.push(s);
     });
 
+    const joinMinLevel = Math.max(
+      0,
+      Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+    );
     const joinLevels = messages
       .filter((m) => m.type === "join")
       .map((m) => ({
@@ -7917,6 +8096,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         level: extractJoinLevel(m),
         ts: Number(m.ts || now),
       }))
+      .filter((j) => !joinMinLevel || !j.level || Number(j.level) >= joinMinLevel)
       .filter((j) => j.user)
       .slice(-32);
 
@@ -7959,7 +8139,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       },
       pieBreakdown,
       songs: uniqueSongs.slice(0, 8),
-      joinLevels: joinLevels.slice(-8).reverse(),
+      joinLevels: joinLevels
+        .slice(-8)
+        .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
       joinBuckets,
       spikeDebug: {
         sensitivity: spikeSensitivity,
@@ -8211,13 +8393,18 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       joinLevelListEl.innerHTML = "";
       const joins = Array.isArray(insights.joinLevels) ? insights.joinLevels : [];
       const buckets = insights.joinBuckets || {};
+      const joinMinLevel = Math.max(
+        0,
+        Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+      );
       const summary = document.createElement("li");
       summary.textContent =
-        `Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
+        `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
       joinLevelListEl.appendChild(summary);
       if (!joins.length) {
         const li = document.createElement("li");
-        li.textContent = "Nema join eventova (uključi Join scan u postavkama).";
+        li.textContent =
+          "Nema join eventova za odabrani minimum levela (provjeri Join scan i min level).";
         joinLevelListEl.appendChild(li);
       } else {
         joins.forEach((j) => {
@@ -8226,11 +8413,32 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
             hour: "2-digit",
             minute: "2-digit",
           });
-          li.textContent = `${j.user} • lvl ${j.level ? formatNum(j.level) : "?"} @ ${when}`;
+          const mention = document.createElement("a");
+          mention.href = "#";
+          mention.className = "tkai-join-mention";
+          mention.textContent = "@" + String(j.user || "").replace(/^@+/, "");
+          mention.title = "Klikni za copy @mention";
+          mention.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            const value =
+              "@" + String(j.user || "").replace(/^@+/, "") + " ";
+            navigator.clipboard
+              .writeText(value)
+              .then(() => showToast("📋 Kopirano: " + value.trim()))
+              .catch(() => { });
+          });
+          li.appendChild(mention);
+          li.appendChild(
+            document.createTextNode(
+              ` • lvl ${j.level ? formatNum(j.level) : "?"} @ ${when}`,
+            ),
+          );
           joinLevelListEl.appendChild(li);
         });
       }
     }
+
+    renderUserSummary();
   }
 
   function updateSpikeFilterButtons() {
@@ -8258,10 +8466,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
   function openRecommendationsPopout() {
     if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) return;
+    const recBg = normalizeTkaiHexColor(
+      getTkaiSetting("tkaiRecPopBgColor", "#1f2937"),
+      "#1f2937",
+    );
     const wrap = document.createElement("div");
     wrap.style.cssText =
       "position:fixed;z-index:99998;top:86px;right:16px;width:360px;max-height:55vh;overflow:auto;" +
-      "background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;" +
+      `background:${recBg};border:1px solid var(--border);border-radius:10px;padding:10px;` +
       "box-shadow:0 16px 40px rgba(0,0,0,.45);";
     wrap.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
@@ -8393,7 +8605,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     return '"' + raw.replace(/"/g, '""') + '"';
   }
 
-  function buildCsv(rows) {
+  function buildCsv(rows, extras = {}) {
     const headers = [
       "id",
       "user",
@@ -8424,6 +8636,44 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       ].map(toCsvValue);
       lines.push(vals.join(","));
     });
+
+    if (Array.isArray(extras.mergedUsers) && extras.mergedUsers.length) {
+      lines.push("");
+      lines.push("MERGED_USERS");
+      lines.push(["user", "total", "chat", "gifts", "joins", "repeatMax", "lastTs"].join(","));
+      extras.mergedUsers.forEach((u) => {
+        lines.push(
+          [
+            toCsvValue(u.user),
+            Number(u.total || 0),
+            Number(u.chat || 0),
+            Number(u.gifts || 0),
+            Number(u.joins || 0),
+            Number(u.repeatMax || 0),
+            toCsvValue(new Date(Number(u.lastTs || Date.now())).toISOString()),
+          ].join(","),
+        );
+      });
+    }
+
+    if (Array.isArray(extras.dailyStats) && extras.dailyStats.length) {
+      lines.push("");
+      lines.push("DAILY_STATS");
+      lines.push(["day", "total", "chat", "gifts", "joins", "users"].join(","));
+      extras.dailyStats.forEach((d) => {
+        lines.push(
+          [
+            toCsvValue(d.day),
+            Number(d.total || 0),
+            Number(d.chat || 0),
+            Number(d.gifts || 0),
+            Number(d.joins || 0),
+            Number(d.users || 0),
+          ].join(","),
+        );
+      });
+    }
+
     return lines.join("\n");
   }
 
@@ -8474,12 +8724,24 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       : 0;
     const giftStats = computeGiftStats();
     if (sessionInfoEl) sessionInfoEl.textContent = elapsedMin + "m";
-    if (viewerCountEl)
-      viewerCountEl.textContent =
-        liveViewerCount > 0
-          ? formatNum(liveViewerCount) + " (peak " + formatNum(peakViewerCount) + ")"
-          : "-";
+    if (viewerCountEl) {
+      if (liveViewerCount > 0) {
+        viewerCountEl.textContent =
+          formatNum(liveViewerCount) + " (peak " + formatNum(peakViewerCount) + ")";
+      } else if (peakViewerCount > 0) {
+        viewerCountEl.textContent = "peak " + formatNum(peakViewerCount);
+      } else {
+        viewerCountEl.textContent = "0";
+      }
+    }
     if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
+    lastShadowbanUserStats = buildUserStats(
+      collectedMessages,
+      getTkaiSetting("tkaiUserScanLimit", 200),
+    );
+    refreshShadowbanUserFilterOptions();
+    renderShadowbanUserStats();
+    renderUserSummary();
     updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
     renderViewerSparkline();
     updateInsightsUI();
@@ -8542,6 +8804,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     archiveSession("manual");
     const giftStats = computeGiftStats();
     const report = buildSessionReport();
+    const userLimit = Number(getTkaiSetting("tkaiUserScanLimit", 200));
     const exportMessages = getExportMessages();
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -8551,12 +8814,15 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       viewers: { live: liveViewerCount, peak: peakViewerCount },
       report,
       insights: computeInsightsSnapshot(),
+      joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
       giftStats: {
         totalEvents: giftStats.gifts.length,
         totalCoins: giftStats.totalCoins,
         supporters: giftStats.supportersCount,
         leaders: giftStats.leaders,
       },
+      mergedUsers: buildUserStats(collectedMessages, userLimit),
+      dailyStats: buildDailyStats(collectedMessages, userLimit),
       messages: exportMessages,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -8577,7 +8843,11 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       return;
     }
     const exportMessages = getExportMessages();
-    const csv = buildCsv(exportMessages);
+    const userLimit = Number(getTkaiSetting("tkaiUserScanLimit", 200));
+    const csv = buildCsv(exportMessages, {
+      mergedUsers: buildUserStats(collectedMessages, userLimit),
+      dailyStats: buildDailyStats(collectedMessages, userLimit),
+    });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -8586,6 +8856,60 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     a.click();
     URL.revokeObjectURL(url);
     showToast("✅ CSV skinut");
+  });
+
+  document.getElementById("tkaiExportStatsBtn")?.addEventListener("click", () => {
+    const insights = computeInsightsSnapshot();
+    const giftStats = computeGiftStats();
+    const elapsedMin = sessionStartedAt
+      ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000))
+      : 0;
+    const totalMsgs = collectedMessages.length;
+    const engPerMin = elapsedMin > 0 ? (totalMsgs / elapsedMin).toFixed(2) : "0";
+    const userLimit = Number(getTkaiSetting("tkaiUserScanLimit", 200));
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      sessionMinutes: elapsedMin,
+      viewers: liveViewerCount,
+      peakViewers: peakViewerCount,
+      totalMessages: totalMsgs,
+      engagementPerMin: parseFloat(engPerMin),
+      giftCoins: giftStats.totalCoins,
+      supportersCount: giftStats.supportersCount,
+      topSupporters: giftStats.leaders
+        .slice(0, 5)
+        .map((r) => ({ user: r.user, coins: r.coins, gifts: r.events })),
+      sentiment: insights.sentiment,
+      sentimentCounts: insights.sentimentCounts,
+      topTopics: insights.topTopics.slice(0, 10),
+      topQuestions: insights.questions,
+      spikes: insights.spikes,
+      engagementPerMinuteChart: insights.engagement,
+      engagementAvgPerMin: insights.engagementAvgPerMin,
+      engagementPeak: insights.engagementPeak,
+      sentimentTrendChart: insights.sentimentTrend,
+      pieBreakdown: insights.pieBreakdown,
+      songs: insights.songs,
+      recommendations: buildRecommendations(insights),
+      joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+      perUser: buildUserStats(collectedMessages, userLimit),
+      perDay: buildDailyStats(collectedMessages, userLimit),
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download =
+      "tiktok-stats-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    }, 500);
+    showToast("📊 Statistike preuzete");
   });
 
   clearBtn?.addEventListener("click", () => {
@@ -8795,6 +9119,27 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
             <div class="s-row-desc">Sigurnosni limit za JSON/CSV export</div>
           </div>
           <input type="number" class="s-input" data-setting="tkaiMaxExportMessages" min="100" max="2000" value="300" style="width:90px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Boja Recommendations popouta</div>
+            <div class="s-row-desc">Pozadina izdvojenog AI recommendations prozora</div>
+          </div>
+          <input type="color" class="s-input" data-setting="tkaiRecPopBgColor" value="#1f2937" style="width:56px;height:32px;padding:3px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">UI Scale (%)</div>
+            <div class="s-row-desc">Skaliranje cijelog TikTok AI panela</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiUiScale" min="80" max="140" value="100" style="width:70px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Font Scale (%)</div>
+            <div class="s-row-desc">Skaliranje fontova unutar TikTok AI panela</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiFontScale" min="85" max="170" value="100" style="width:70px">
         </div>
         <div class="s-row" style="margin-top:10px">
           <button class="s-btn-sm" style="background:var(--red);color:#fff" onclick="if(confirm('Jeste li sigurni?')){ localStorage.clear(); location.reload(); }">Resetiraj sve TikTok postavke</button>
@@ -9069,6 +9414,20 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
             <div class="s-row-desc">Kad netko uđe u live (može biti puno poruka)</div>
           </div>
           <div class="toggle" data-setting="tkaiScanJoins"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Min join level</div>
+            <div class="s-row-desc">Prikaži join feed od ovog levela (0 = svi)</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiJoinMinLevel" min="0" max="99" value="32" style="width:70px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Scan limit korisnika</div>
+            <div class="s-row-desc">Koliko poruka uzeti za merged user statistiku</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiUserScanLimit" min="30" max="1000" value="200" style="width:80px">
         </div>
       </div>
     `,
@@ -9784,7 +10143,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       div.innerHTML = `
         <div class="tkai-msg-user">
           ${badgesHtml}
-          <span class="u-name">${escHtml(m.user)}</span>
+          <span class="u-name" style="color:${getUserColor(m.user)}">${escHtml(m.user)}</span>
           ${m.badgeText ? `<span class="u-badge-text">${escHtml(m.badgeText)}</span>` : ""}
         </div>
         <div class="tkai-msg-text">${escHtml(m.text)}</div>
@@ -10176,6 +10535,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     };
     vis("tkaiGiftGallery", "tkaiShowGiftGallery", true);
     vis("tkaiTopSupporters", "tkaiShowTopSupporters", true);
+    vis("tkaiUserSummary", "tkaiShowTopSupporters", true);
+    vis("tkaiShadowbanCard", "tkaiShowShadowban", true);
     vis("tkaiSpikesCard", "tkaiShowSpikes", true);
     vis("tkaiRecommendationsCard", "tkaiShowRecommendations", true);
     vis("tkaiJoinsCard", "tkaiScanJoins", false);
@@ -10225,6 +10586,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         btn.style.borderColor = "rgba(255,255,255,.22)";
         btn.style.color = "#fff";
       });
+
+    applyTkaiPanelScale();
   }
 
   btnTikTokAI?.addEventListener("click", () => {
@@ -10248,7 +10611,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   document.getElementById("settingsPanel")?.addEventListener("input", (e) => {
     const t = e.target.closest("[data-setting]");
     if (!t?.dataset?.setting) return;
-    if (t.dataset.setting.startsWith("tkaiBtnColor")) {
+    if (
+      t.dataset.setting.startsWith("tkaiBtnColor") ||
+      t.dataset.setting === "tkaiUiScale" ||
+      t.dataset.setting === "tkaiFontScale"
+    ) {
       setTimeout(applyTkaiButtonTheme, 10);
     }
   });
@@ -10280,6 +10647,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     DB.saveSetting("tkaiFilterStarredOnly", filterStarredOnly);
     updateFilterStarredButton();
     renderMessages();
+  });
+
+  shadowbanUserFilterEl?.addEventListener("change", () => {
+    renderShadowbanUserStats();
   });
 
   document

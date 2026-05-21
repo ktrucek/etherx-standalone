@@ -2240,6 +2240,63 @@ function setupIPC() {
     require("electron").app.getPath("downloads"),
   );
 
+  // ── SongRec helpers (local song recognition CLI) ──────────────────────────
+  ipcMain.handle("songrec:recognize", async (_e, options) => {
+    const cfg = options || {};
+    const command = String(cfg.command || "songrec").trim() || "songrec";
+    const timeoutMs = Math.max(
+      2000,
+      Math.min(25000, Number(cfg.timeoutMs || 12000) || 12000),
+    );
+
+    return new Promise((resolve) => {
+      execFile(
+        command,
+        ["recognize"],
+        {
+          windowsHide: true,
+          timeout: timeoutMs,
+          maxBuffer: 1024 * 1024,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            if (error.code === "ENOENT") {
+              resolve({
+                ok: false,
+                error:
+                  "SongRec nije pronađen. Instaliraj SongRec ili upiši punu putanju u Postavke → AI Live Chat.",
+              });
+              return;
+            }
+            if (error.killed || error.signal === "SIGTERM") {
+              resolve({
+                ok: false,
+                error:
+                  "SongRec timeout. Povećaj timeout u Postavke → AI Live Chat ili pusti čistiji audio.",
+              });
+              return;
+            }
+            resolve({
+              ok: false,
+              error:
+                String(stderr || stdout || error.message || "SongRec failed").trim() ||
+                "SongRec failed",
+            });
+            return;
+          }
+
+          const raw = String(stdout || "").trim();
+          const lines = raw
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+          const title = lines.length ? lines[lines.length - 1] : "";
+          resolve({ ok: true, title, raw });
+        },
+      );
+    });
+  });
+
   // ── Screenshot Region (returns base64) ─────────────────────────────────────
   ipcMain.handle("app:captureRegion", async (_e, rect) => {
     try {

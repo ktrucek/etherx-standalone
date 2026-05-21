@@ -4683,6 +4683,9 @@
       border-radius: 10px 0 0 10px;
       box-shadow: -6px 6px 32px rgba(0, 0, 0, .55);
       z-index: 9999;
+      --tkai-ui-scale: 1;
+      --tkai-font-scale: 1;
+      zoom: var(--tkai-ui-scale);
     }
 
     #tiktokAIPanel .panel-header {
@@ -4777,6 +4780,7 @@
       overflow-y: auto;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+      font-size: calc(12px * var(--tkai-font-scale));
       background: var(--bg)
     }
 
@@ -5030,6 +5034,46 @@
       border-radius: 6px;
       padding: 5px 7px;
       gap: 8px;
+    }
+
+    .tkai-user-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 7px 8px;
+      border-top: 1px solid var(--border);
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .tkai-user-summary-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 86px;
+      overflow-y: auto;
+    }
+
+    .tkai-user-pill {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border2);
+      background: var(--bg2);
+      color: var(--text2);
+      cursor: pointer;
+    }
+
+    .tkai-join-mention {
+      color: #93c5fd;
+      text-decoration: none;
+      font-weight: 700;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+
+    .tkai-join-mention:hover {
+      color: #bfdbfe;
+      text-decoration: underline;
     }
 
     .tkai-top-row .name {
@@ -9072,7 +9116,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.220</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.221</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9670,6 +9714,33 @@
                   <input type="color" class="s-input" data-setting="tkaiBtnColorInsights" value="#2dd4bf"
                     style="width:56px;height:32px;padding:3px">
                 </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Boja Recommendations popout</div>
+                    <div class="s-row-desc">Pozadina skočnog prozora AI preporuka</div>
+                  </div>
+                  <input type="color" class="s-input" data-setting="tkaiRecPopBgColor" value="#1f2937"
+                    style="width:56px;height:32px;padding:3px">
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">UI veličina panela</div>
+                    <div class="s-row-desc">Povećaj/smanji cijeli TikTok Chat AI sadržaj</div>
+                  </div>
+                  <input type="number" class="s-input" data-setting="tkaiUiScale" min="80" max="140" value="100"
+                    style="width:72px">%
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
+                    <div class="s-row-label">Veličina teksta</div>
+                    <div class="s-row-desc">Globalna veličina teksta u TikTok Chat AI</div>
+                  </div>
+                  <input type="number" class="s-input" data-setting="tkaiFontScale" min="85" max="170" value="100"
+                    style="width:72px">%
+                </div>
               </div>
 
               <div class="s-group">
@@ -9818,6 +9889,22 @@
                       <option value="high">High</option>
                     </select>
                   </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">Join level minimum</div>
+                      <div class="s-row-desc">Prikaži i pamti join feed od ovog levela (0 = svi)</div>
+                    </div>
+                    <input type="number" class="s-input" data-setting="tkaiJoinMinLevel" min="0" max="99" value="32"
+                      style="width:70px">
+                  </div>
+                  <div class="s-row" style="margin-top:8px">
+                    <div class="s-row-left">
+                      <div class="s-row-label">User scan limit</div>
+                      <div class="s-row-desc">Koliko zadnjih poruka koristiti za korisničke statistike</div>
+                    </div>
+                    <input type="number" class="s-input" data-setting="tkaiUserScanLimit" min="30" max="1000"
+                      value="200" style="width:70px">
+                  </div>
                 </div>
                 <!-- drawer: AI model override -->
                 <div id="tkaiDrawerAiModel"
@@ -9889,6 +9976,15 @@
                   <div style="font-size:10px;color:var(--text3);margin-top:8px" id="tkaiModelCurrentInfo"
                     data-i18n="tkaiCurrentGlobalModelInfo">
                     Current global model: <span id="tkaiGlobalModelName" style="color:var(--text2)">—</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+                    <button class="s-btn-sm" id="btnTkaiAiModelRunTest"
+                      style="background:rgba(102,126,234,.18);border-color:rgba(102,126,234,.42)">🧪 Test TikTok Chat
+                      stack</button>
+                    <span id="tkaiAiModelTestStatus" style="font-size:10px;color:var(--text3)">Test: idle</span>
+                  </div>
+                  <div id="tkaiAiModelTestResult"
+                    style="display:none;margin-top:8px;padding:8px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.03);font-size:10px;color:var(--text3)">
                   </div>
                   <!-- Cardiff NLP HF token for sentiment analysis -->
                   <div style="border-top:1px solid rgba(255,255,255,.06);margin-top:14px;padding-top:12px">
@@ -10014,6 +10110,38 @@
                   <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
                     <input type="checkbox" data-setting="tkaiScanJoins"> 👋 Join events
                   </label>
+                  <div style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
+                    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Per-type AI instructions (optional)
+                    </div>
+                    <div class="s-row" style="margin-bottom:8px">
+                      <div class="s-row-left">
+                        <div class="s-row-label">💬 Chat message prompt</div>
+                      </div>
+                      <input type="text" class="s-input" data-setting="tkaiPromptChat"
+                        placeholder="Npr. odgovori kratko i prirodno" style="width:56%">
+                    </div>
+                    <div class="s-row" style="margin-bottom:8px">
+                      <div class="s-row-left">
+                        <div class="s-row-label">🎁 Gift prompt</div>
+                      </div>
+                      <input type="text" class="s-input" data-setting="tkaiPromptGift"
+                        placeholder="Npr. zahvali se toplije za gift" style="width:56%">
+                    </div>
+                    <div class="s-row" style="margin-bottom:8px">
+                      <div class="s-row-left">
+                        <div class="s-row-label">⭐ Subscribe prompt</div>
+                      </div>
+                      <input type="text" class="s-input" data-setting="tkaiPromptSub"
+                        placeholder="Npr. dobrodošlica fan club članu" style="width:56%">
+                    </div>
+                    <div class="s-row">
+                      <div class="s-row-left">
+                        <div class="s-row-label">🎙️ Captions prompt</div>
+                      </div>
+                      <input type="text" class="s-input" data-setting="tkaiPromptCaption"
+                        placeholder="Npr. koristi CC kontekst u odgovoru" style="width:56%">
+                    </div>
+                  </div>
                 </div>
                 <!-- drawer: tools -->
                 <div id="tkaiDrawerTools"
@@ -10022,10 +10150,21 @@
                     (same tools available directly in the TikTok Chat AI panel).</div>
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
                     <button class="s-btn-sm" id="btnTkaiToolsOpenPanel">🎵 Open TikTok AI panel</button>
+                    <button class="s-btn-sm" id="btnTkaiToolsOpenLive">🖥 Open Live dashboard</button>
                     <button class="s-btn-sm" id="btnTkaiToolsExportJson">📦 Export JSON</button>
                     <button class="s-btn-sm" id="btnTkaiToolsExportCsv">📄 Export CSV</button>
+                    <button class="s-btn-sm" id="btnTkaiToolsSongRec">🎧 SongRec detect now</button>
                     <button class="s-btn-sm" id="btnTkaiToolsClear"
                       style="background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑️ Clear session</button>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+                    <label style="font-size:11px;color:var(--text3)">SongRec command</label>
+                    <input type="text" class="s-input" data-setting="tkaiSongRecCommand" value="songrec"
+                      style="width:170px;font-family:monospace;font-size:11px">
+                    <label style="font-size:11px;color:var(--text3)">Timeout (ms)</label>
+                    <input type="number" class="s-input" data-setting="tkaiSongRecTimeoutMs" min="2000" max="25000"
+                      value="12000" style="width:90px">
+                    <span id="tkaiSongRecStatus" style="font-size:10px;color:var(--text3)">SongRec: idle</span>
                   </div>
                 </div>
                 <!-- drawer: session history + merge + stats -->
@@ -10117,7 +10256,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.220</span></div>
+                    id="helpVersionNum2">2.4.221</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -10355,6 +10494,8 @@
               <div style="display:flex;align-items:center;gap:6px">
                 <button id="tkaiExpandChatBtn" class="tkai-gen-btn" style="font-size:9px;padding:2px 6px"
                   title="Proširi chat na cijelu širinu">⤢ Proširi</button>
+                <button id="tkaiExpandLiveBtn" class="tkai-gen-btn" style="font-size:9px;padding:2px 6px"
+                  title="Otvori veliki live prozor sa svim statistikama">🖥 Live prozor</button>
                 <button id="tkaiFilterStarredBtn" class="tkai-gen-btn" style="font-size:9px;padding:2px 6px">⭐
                   Sve</button>
                 <span id="tkaiMsgCount" style="font-size:9px;color:var(--text3)"></span>
@@ -10435,6 +10576,11 @@
         <div class="tkai-top-supporters" id="tkaiTopSupporters">
           <div class="tkai-empty" style="padding:6px">Top podržavatelji pojavit će se ovdje.</div>
         </div>
+        <div class="tkai-user-summary" id="tkaiUserSummary">
+          <div class="tkai-insights-title" style="margin:0">👥 AI Live Chat korisnici</div>
+          <div id="tkaiUserSummaryMeta" style="font-size:10px;color:var(--text3)">0 korisnika</div>
+          <div id="tkaiUserSummaryList" class="tkai-user-summary-list"></div>
+        </div>
         <div class="tkai-insights" id="tkaiInsights">
           <div class="tkai-insights-row">
             <div class="tkai-insights-card">
@@ -10503,6 +10649,16 @@
                 <span id="tkaiShadowbanResult" style="font-size:10px;color:var(--text3)">Otvori TikTok Live pa
                   klikni.</span>
               </div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+                <label for="tkaiShadowbanUserFilter" style="font-size:10px;color:var(--text3)">Filter korisnika:</label>
+                <select id="tkaiShadowbanUserFilter" class="tkai-cfg-select"
+                  style="max-width:220px;font-size:10px;padding:2px 6px">
+                  <option value="__all__">Svi korisnici</option>
+                </select>
+                <span id="tkaiShadowbanUserCount" style="font-size:10px;color:var(--text3)">0</span>
+              </div>
+              <div id="tkaiShadowbanUserStats"
+                style="margin-top:6px;max-height:120px;overflow-y:auto;font-size:10px;color:var(--text2)"></div>
             </div>
           </div>
           <div class="tkai-insights-row">
@@ -12467,15 +12623,59 @@
         document.getElementById('settingsPanel')?.classList.remove('open');
         togglePanel('tiktokAIPanel');
       });
+      document.getElementById('btnTkaiToolsOpenLive')?.addEventListener('click', () => {
+        document.getElementById('settingsPanel')?.classList.remove('open');
+        togglePanel('tiktokAIPanel');
+        openLiveDashboardPopout();
+      });
       document.getElementById('btnTkaiToolsExportJson')?.addEventListener('click', () => {
         document.getElementById('tkaiExportBtn')?.click();
       });
       document.getElementById('btnTkaiToolsExportCsv')?.addEventListener('click', () => {
         document.getElementById('tkaiExportCsvBtn')?.click();
       });
+      document.getElementById('btnTkaiToolsSongRec')?.addEventListener('click', () => {
+        runSongRecRecognition(true);
+      });
       document.getElementById('btnTkaiToolsClear')?.addEventListener('click', () => {
         if (!confirm('Obriši sve prikupljene poruke ove sesije?')) return;
         document.getElementById('tkaiClearBtn')?.click();
+      });
+
+      document.getElementById('btnTkaiAiModelRunTest')?.addEventListener('click', async () => {
+        const statusEl = document.getElementById('tkaiAiModelTestStatus');
+        const resultEl = document.getElementById('tkaiAiModelTestResult');
+        const btn = document.getElementById('btnTkaiAiModelRunTest');
+        const esc = (s) => String(s || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        if (!resultEl || !btn) return;
+        resultEl.style.display = '';
+        resultEl.innerHTML = '<div style="color:var(--text3)">⏳ Pokrećem TikTok Chat stack test…</div>';
+        if (statusEl) statusEl.textContent = 'Test: running...';
+        btn.disabled = true;
+        try {
+          if (typeof window.runTkaiStackSelfTest !== 'function') {
+            throw new Error('TikTok AI test funkcija nije dostupna (panel još nije inicijaliziran)');
+          }
+          const report = await window.runTkaiStackSelfTest();
+          const items = (report.tests || []).map((t) => {
+            const icon = t.ok === true ? '✅' : t.ok === false ? '❌' : 'ℹ️';
+            const color = t.ok === true ? '#27c93f' : t.ok === false ? '#ff6b6b' : 'var(--text3)';
+            return '<div style="margin:4px 0"><span style="color:' + color + '">' + icon + ' ' + esc(t.name) + '</span><div style="margin-left:16px;color:var(--text3)">' + esc(t.detail || '') + '</div></div>';
+          }).join('');
+          resultEl.innerHTML =
+            '<div style="font-size:11px;margin-bottom:6px">Provider: <b>' + esc(report.provider || '-') + '</b> · Model: <b>' + esc(report.model || '-') + '</b></div>' +
+            items;
+          if (statusEl) statusEl.textContent = report.ok ? 'Test: sve radi ✅' : ('Test: ' + String(report.failed || 0) + ' fail');
+        } catch (e) {
+          resultEl.innerHTML = '<div style="color:#ff6b6b">❌ ' + esc(e?.message || 'Neuspjelo testiranje') + '</div>';
+          if (statusEl) statusEl.textContent = 'Test: error';
+        } finally {
+          btn.disabled = false;
+        }
       });
 
       // HF token for Cardiff NLP — load saved token + wire save button
@@ -14337,6 +14537,9 @@
       const coinTotalEl = document.getElementById('tkaiCoinTotal');
       const supporterCountEl = document.getElementById('tkaiSupporterCount');
       const topSupportersEl = document.getElementById('tkaiTopSupporters');
+      const userSummaryEl = document.getElementById('tkaiUserSummary');
+      const userSummaryMetaEl = document.getElementById('tkaiUserSummaryMeta');
+      const userSummaryListEl = document.getElementById('tkaiUserSummaryList');
       const viewerTrendLabelEl = document.getElementById('tkaiViewerTrendLabel');
       const viewerSparkEl = document.getElementById('tkaiViewerSpark');
       const insightsListEl = document.getElementById('tkaiInsightsList');
@@ -14354,11 +14557,15 @@
       const pieSummaryEl = document.getElementById('tkaiPieSummary');
       const songListEl = document.getElementById('tkaiSongList');
       const joinLevelListEl = document.getElementById('tkaiJoinLevelList');
+      const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
+      const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
+      const shadowbanUserStatsEl = document.getElementById('tkaiShadowbanUserStats');
       const spikeAllBtn = document.getElementById('tkaiSpikeAll');
       const spikeViewersBtn = document.getElementById('tkaiSpikeViewers');
       const spikeGiftsBtn = document.getElementById('tkaiSpikeGifts');
       let recommendationsPopoutEl = null;
       let recommendationsPopoutBodyEl = null;
+      let lastShadowbanUserStats = [];
       const toneEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTone"]');
       const readLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReadLang"]');
       const translateLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTranslateLang"]');
@@ -14427,6 +14634,176 @@
         const n = Number(value || 0);
         if (!Number.isFinite(n)) return '0';
         return n.toLocaleString('hr-HR');
+      }
+      async function runSongRecRecognition(manualTrigger) {
+        const statusNode = document.getElementById('tkaiSongRecStatus');
+        if (!window.etherx?.songrec?.recognize) {
+          if (statusNode) statusNode.textContent = 'SongRec: API nije dostupan';
+          if (manualTrigger) showToast('SongRec API nije dostupan. Provjeri preload/main integraciju.');
+          return;
+        }
+
+        const cfg = DB.getSettings() || {};
+        const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
+        const timeoutMs = Math.max(2000, Math.min(25000, Number(cfg.tkaiSongRecTimeoutMs || 12000) || 12000));
+        if (statusNode) statusNode.textContent = 'SongRec: slusam...';
+
+        try {
+          const result = await window.etherx.songrec.recognize({ command, timeoutMs });
+          if (!result?.ok) {
+            if (statusNode) statusNode.textContent = 'SongRec: greska';
+            if (manualTrigger) showToast('SongRec greska: ' + (result?.error || 'nepoznata greska'));
+            return;
+          }
+
+          const title = String(result.title || '').trim();
+          if (!title) {
+            if (statusNode) statusNode.textContent = 'SongRec: nema detekcije';
+            if (manualTrigger) showToast('SongRec nije prepoznao pjesmu.');
+            return;
+          }
+
+          const trackMsg = {
+            id: 'songrec_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            user: 'SYSTEM (SongRec)',
+            text: title,
+            type: 'song',
+            ts: Date.now(),
+          };
+          collectedMessages.push(trackMsg);
+          const maxLen = Math.max(120, Number(DB.getSettings().tkaiMsgBuffer || 300));
+          if (collectedMessages.length > maxLen) collectedMessages = collectedMessages.slice(-maxLen);
+
+          if (statusNode) statusNode.textContent = 'SongRec: ' + title;
+          renderMessages();
+          updateSessionStatsUI();
+          if (manualTrigger) showToast('🎵 SongRec: ' + title);
+        } catch (err) {
+          if (statusNode) statusNode.textContent = 'SongRec: greska';
+          if (manualTrigger) showToast('SongRec poziv nije uspio: ' + String(err?.message || err));
+        }
+      }
+      function getUserColor(name) {
+        const input = String(name || '').trim().toLowerCase();
+        let h = 0;
+        for (let i = 0; i < input.length; i += 1) h = (h * 31 + input.charCodeAt(i)) >>> 0;
+        const hue = h % 360;
+        return `hsl(${hue} 78% 72%)`;
+      }
+      function buildUserStats(messages, limit) {
+        const scanLimit = Math.max(30, Math.min(1000, Number(limit || 200)));
+        const base = (Array.isArray(messages) ? messages : collectedMessages).slice(-scanLimit);
+        const map = new Map();
+        base.forEach((m) => {
+          const user = String(m?.user || '').trim();
+          if (!user) return;
+          if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, lastTs: 0, texts: new Map() });
+          const row = map.get(user);
+          row.total += 1;
+          if (m.type === 'gift' || m.type === 'subscriber') row.gifts += 1;
+          else if (m.type === 'join') row.joins += 1;
+          else row.chat += 1;
+          const txt = String(m.text || '').trim().toLowerCase();
+          if (txt) row.texts.set(txt, (row.texts.get(txt) || 0) + 1);
+          row.lastTs = Math.max(row.lastTs, Number(m.ts || 0));
+        });
+        return Array.from(map.values())
+          .map((r) => ({
+            user: r.user,
+            total: r.total,
+            chat: r.chat,
+            gifts: r.gifts,
+            joins: r.joins,
+            lastTs: r.lastTs,
+            repeatMax: Math.max(0, ...Array.from(r.texts.values()))
+          }))
+          .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
+      }
+      function buildDailyStats(messages, limit) {
+        const scanLimit = Math.max(30, Math.min(2000, Number(limit || 200)));
+        const base = (Array.isArray(messages) ? messages : collectedMessages).slice(-scanLimit);
+        const map = new Map();
+        base.forEach((m) => {
+          const d = new Date(Number(m.ts || Date.now()));
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          if (!map.has(key)) map.set(key, { day: key, total: 0, chat: 0, gifts: 0, joins: 0, users: new Set() });
+          const row = map.get(key);
+          row.total += 1;
+          if (m.type === 'gift' || m.type === 'subscriber') row.gifts += 1;
+          else if (m.type === 'join') row.joins += 1;
+          else row.chat += 1;
+          if (m.user) row.users.add(String(m.user));
+        });
+        return Array.from(map.values())
+          .map((r) => ({
+            day: r.day,
+            total: r.total,
+            chat: r.chat,
+            gifts: r.gifts,
+            joins: r.joins,
+            users: r.users.size
+          }))
+          .sort((a, b) => String(b.day).localeCompare(String(a.day)));
+      }
+      function applyTkaiPanelScale() {
+        const panel = document.getElementById('tiktokAIPanel');
+        if (!panel) return;
+        const s = DB.getSettings();
+        const uiScale = Math.max(80, Math.min(140, Number(s.tkaiUiScale || 100)));
+        const fontScale = Math.max(85, Math.min(170, Number(s.tkaiFontScale || 100)));
+        panel.style.setProperty('--tkai-ui-scale', String(uiScale / 100));
+        panel.style.setProperty('--tkai-font-scale', String(fontScale / 100));
+      }
+      function renderUserSummary() {
+        if (!userSummaryListEl || !userSummaryMetaEl) return;
+        const s = DB.getSettings();
+        const limit = Number(s.tkaiUserScanLimit || 200);
+        const users = buildUserStats(collectedMessages, limit);
+        userSummaryMetaEl.textContent = `${formatNum(users.length)} korisnika • scan ${formatNum(limit)} poruka`;
+        userSummaryListEl.innerHTML = '';
+        users.slice(0, 18).forEach((u) => {
+          const pill = document.createElement('button');
+          pill.type = 'button';
+          pill.className = 'tkai-user-pill';
+          pill.style.borderColor = getUserColor(u.user);
+          pill.style.color = getUserColor(u.user);
+          pill.textContent = `@${u.user} (${u.total})`;
+          pill.title = 'Klik za copy @mention';
+          pill.addEventListener('click', () => {
+            navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { });
+          });
+          userSummaryListEl.appendChild(pill);
+        });
+      }
+      function renderShadowbanUserStats() {
+        if (!shadowbanUserStatsEl || !shadowbanUserFilterEl) return;
+        const selected = shadowbanUserFilterEl.value || '__all__';
+        const rows = selected === '__all__'
+          ? lastShadowbanUserStats
+          : lastShadowbanUserStats.filter((r) => r.user === selected);
+        shadowbanUserStatsEl.innerHTML = rows.length
+          ? rows.map((r) => {
+            const botHint = r.repeatMax >= 4 || (r.total >= 10 && r.chat >= 8) ? ' • moguci bot' : '';
+            return `<div style="margin:2px 0;color:${getUserColor(r.user)}">@${escHtml(r.user)}: ${formatNum(r.total)} msg (${formatNum(r.chat)} chat, ${formatNum(r.gifts)} gift, ${formatNum(r.joins)} join)${botHint}</div>`;
+          }).join('')
+          : '<div style="color:var(--text3)">Nema podataka za korisnika.</div>';
+        if (shadowbanUserCountEl) shadowbanUserCountEl.textContent = `${formatNum(rows.length)} prikazano`;
+      }
+      function refreshShadowbanUserFilterOptions() {
+        if (!shadowbanUserFilterEl) return;
+        const current = shadowbanUserFilterEl.value || '__all__';
+        shadowbanUserFilterEl.innerHTML = '';
+        const allOpt = document.createElement('option');
+        allOpt.value = '__all__';
+        allOpt.textContent = 'Svi korisnici';
+        shadowbanUserFilterEl.appendChild(allOpt);
+        lastShadowbanUserStats.forEach((r) => {
+          const opt = document.createElement('option');
+          opt.value = r.user;
+          opt.textContent = `@${r.user} (${formatNum(r.total)})`;
+          shadowbanUserFilterEl.appendChild(opt);
+        });
+        shadowbanUserFilterEl.value = lastShadowbanUserStats.some((r) => r.user === current) ? current : '__all__';
       }
       function ensureTkaiMsgContextMenu() {
         if (tkaiMsgCtxEl && document.body.contains(tkaiMsgCtxEl)) return tkaiMsgCtxEl;
@@ -15028,6 +15405,7 @@
           uniqueSongs.push(s);
         });
 
+        const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 32));
         const joinLevels = messages
           .filter((m) => m.type === 'join')
           .map((m) => ({
@@ -15036,6 +15414,7 @@
             ts: Number(m.ts || now)
           }))
           .filter((j) => j.user)
+          .filter((j) => !joinMinLevel || !j.level || Number(j.level) >= joinMinLevel)
           .slice(-32);
 
         const joinBuckets = {
@@ -15077,7 +15456,7 @@
           },
           pieBreakdown,
           songs: uniqueSongs.slice(0, 8),
-          joinLevels: joinLevels.slice(-8).reverse(),
+          joinLevels: joinLevels.slice(-8).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
           joinBuckets,
           spikeDebug: {
             sensitivity: spikeSensitivity,
@@ -15349,13 +15728,14 @@
           joinLevelListEl.innerHTML = '';
           const joins = Array.isArray(insights.joinLevels) ? insights.joinLevels : [];
           const buckets = insights.joinBuckets || {};
+          const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 32));
           const summary = document.createElement('li');
           summary.textContent =
-            `Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
+            `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
           joinLevelListEl.appendChild(summary);
           if (!joins.length) {
             const li = document.createElement('li');
-            li.textContent = 'Nema join eventova (uključi Join scan u postavkama).';
+            li.textContent = 'Nema join eventova za odabrani minimum levela (provjeri Join scan i min level).';
             joinLevelListEl.appendChild(li);
           } else {
             joins.forEach((j) => {
@@ -15364,7 +15744,18 @@
                 hour: '2-digit',
                 minute: '2-digit'
               });
-              li.textContent = `${j.user} • lvl ${j.level ? formatNum(j.level) : '?'} @ ${when}`;
+              const mention = document.createElement('a');
+              mention.href = '#';
+              mention.className = 'tkai-join-mention';
+              mention.textContent = '@' + String(j.user || '').replace(/^@+/, '');
+              mention.title = 'Klikni za copy @mention';
+              mention.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                const value = '@' + String(j.user || '').replace(/^@+/, '') + ' ';
+                navigator.clipboard.writeText(value).then(() => showToast('📋 Kopirano: ' + value.trim())).catch(() => { });
+              });
+              li.appendChild(mention);
+              li.appendChild(document.createTextNode(` • lvl ${j.level ? formatNum(j.level) : '?'} @ ${when}`));
               joinLevelListEl.appendChild(li);
             });
           }
@@ -15392,10 +15783,11 @@
       }
       function openRecommendationsPopout() {
         if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) return;
+        const recBg = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopBgColor, '#1f2937');
         const wrap = document.createElement('div');
         wrap.style.cssText =
           'position:fixed;z-index:99998;top:86px;right:16px;width:360px;max-height:55vh;overflow:auto;' +
-          'background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;' +
+          `background:${recBg};border:1px solid var(--border);border-radius:10px;padding:10px;` +
           'box-shadow:0 16px 40px rgba(0,0,0,.45);';
         wrap.innerHTML =
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
@@ -15465,8 +15857,11 @@
 
       // ── Chat pop-out floating window ─────────────────────────────────────
       const expandChatBtn = document.getElementById('tkaiExpandChatBtn');
+      const expandLiveBtn = document.getElementById('tkaiExpandLiveBtn');
       let chatPopout = null;
       let chatPopoutMirrorTimer = null;
+      let liveDashboardPopout = null;
+      let liveDashboardTimer = null;
 
       function openChatPopout() {
         if (chatPopout && document.body.contains(chatPopout)) {
@@ -15559,7 +15954,7 @@
               m.type === 'subscriber' ? 'background:rgba(74,222,128,.08);border-left:2px solid #4ade80;' :
                 'background:rgba(255,255,255,.04);');
           const icon = m.type === 'gift' ? '🎁 ' : m.type === 'subscriber' ? '⭐ ' : '';
-          row.innerHTML = '<span style="color:#a5b4fc;font-weight:600">' + (m.user || '?') + '</span>' +
+          row.innerHTML = '<span style="color:' + getUserColor(m.user || '?') + ';font-weight:600">' + (m.user || '?') + '</span>' +
             '<span style="color:rgba(255,255,255,.35);margin:0 4px">·</span>' +
             '<span style="color:var(--text,#e2e8f0)">' + icon + (m.translatedText || m.text || '') + '</span>' +
             (m.coins ? '<span style="color:#ffd700;font-size:10px;margin-left:4px">🪙' + m.coins + '</span>' : '');
@@ -15577,8 +15972,122 @@
         }, 1500);
       }
 
+      function syncLiveDashboardPopout() {
+        if (!liveDashboardPopout || !document.body.contains(liveDashboardPopout)) return;
+        const stats = document.getElementById('tkaiStatsStrip');
+        const supporters = document.getElementById('tkaiTopSupporters');
+        const users = document.getElementById('tkaiUserSummary');
+        const insights = document.getElementById('tkaiInsights');
+        const chat = document.getElementById('tkaiMessages');
+        const outStats = liveDashboardPopout.querySelector('#tkaiLiveOutStats');
+        const outSupporters = liveDashboardPopout.querySelector('#tkaiLiveOutSupporters');
+        const outUsers = liveDashboardPopout.querySelector('#tkaiLiveOutUsers');
+        const outInsights = liveDashboardPopout.querySelector('#tkaiLiveOutInsights');
+        const outChat = liveDashboardPopout.querySelector('#tkaiLiveOutChat');
+        const outMeta = liveDashboardPopout.querySelector('#tkaiLiveOutMeta');
+        if (outStats && stats) outStats.innerHTML = stats.innerHTML;
+        if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
+        if (outUsers && users) outUsers.innerHTML = users.innerHTML;
+        if (outInsights && insights) outInsights.innerHTML = insights.innerHTML;
+        if (outChat && chat) outChat.innerHTML = chat.innerHTML;
+        if (outMeta) {
+          const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
+          outMeta.textContent = 'Live: ' + formatNum(collectedMessages.length) + ' poruka • ' + elapsedMin + ' min • viewers ' + formatNum(liveViewerCount);
+        }
+      }
+
+      function closeLiveDashboardPopout() {
+        if (liveDashboardTimer) { clearInterval(liveDashboardTimer); liveDashboardTimer = null; }
+        if (liveDashboardPopout) { liveDashboardPopout.remove(); liveDashboardPopout = null; }
+        if (expandLiveBtn) { expandLiveBtn.textContent = '🖥 Live prozor'; expandLiveBtn.style.background = ''; }
+      }
+
+      function openLiveDashboardPopout() {
+        if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) {
+          liveDashboardPopout.style.display = '';
+          if (!liveDashboardTimer) {
+            syncLiveDashboardPopout();
+            liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+          }
+          if (expandLiveBtn) {
+            expandLiveBtn.textContent = '🖥 Zatvori live';
+            expandLiveBtn.style.background = 'rgba(45,212,191,.28)';
+          }
+          return;
+        }
+
+        liveDashboardPopout = document.createElement('div');
+        liveDashboardPopout.id = 'tkaiLiveDashboardPopout';
+        liveDashboardPopout.style.cssText =
+          'position:fixed;z-index:100000;top:56px;left:3vw;width:94vw;height:88vh;min-width:820px;min-height:520px;' +
+          'background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;' +
+          'box-shadow:0 18px 46px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;resize:both;';
+        liveDashboardPopout.innerHTML =
+          '<div id="tkaiLiveDashHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:linear-gradient(135deg,#134e4a,#0f766e);cursor:move">' +
+          '<div style="display:flex;flex-direction:column;gap:3px">' +
+          '<div style="font-size:13px;font-weight:700">🖥 AI Live Chat - Full Live Dashboard</div>' +
+          '<div id="tkaiLiveOutMeta" style="font-size:10px;color:rgba(255,255,255,.82)"></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+          '<button id="tkaiLiveSongRecNow" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">🎧 SongRec now</button>' +
+          '<button id="tkaiLiveDashClose" class="panel-close" style="position:static">×</button>' +
+          '</div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
+          '<div style="overflow:auto;padding-right:4px">' +
+          '<div id="tkaiLiveOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiLiveOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiLiveOutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiLiveOutInsights" class="tkai-insights"></div>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:8px;overflow:hidden">' +
+          '<div style="font-size:11px;color:#cbd5e1;padding:2px 4px">💬 Live chat stream</div>' +
+          '<div id="tkaiLiveOutChat" class="tkai-messages" style="flex:1;max-height:none"></div>' +
+          '</div>' +
+          '</div>';
+        document.body.appendChild(liveDashboardPopout);
+
+        const head = liveDashboardPopout.querySelector('#tkaiLiveDashHead');
+        let dragging = false;
+        let dx = 0;
+        let dy = 0;
+        head?.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          dragging = true;
+          dx = e.clientX - liveDashboardPopout.getBoundingClientRect().left;
+          dy = e.clientY - liveDashboardPopout.getBoundingClientRect().top;
+          head.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        head?.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const maxLeft = Math.max(0, window.innerWidth - 300);
+          const maxTop = Math.max(48, window.innerHeight - 120);
+          liveDashboardPopout.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + 'px';
+          liveDashboardPopout.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + 'px';
+          liveDashboardPopout.style.width = Math.min(window.innerWidth - 12, liveDashboardPopout.offsetWidth) + 'px';
+          liveDashboardPopout.style.height = Math.min(window.innerHeight - 12, liveDashboardPopout.offsetHeight) + 'px';
+        });
+        head?.addEventListener('pointerup', () => { dragging = false; });
+        head?.addEventListener('pointercancel', () => { dragging = false; });
+
+        liveDashboardPopout.querySelector('#tkaiLiveDashClose')?.addEventListener('click', closeLiveDashboardPopout);
+        liveDashboardPopout.querySelector('#tkaiLiveSongRecNow')?.addEventListener('click', () => runSongRecRecognition(true));
+
+        syncLiveDashboardPopout();
+        liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+        if (expandLiveBtn) {
+          expandLiveBtn.textContent = '🖥 Zatvori live';
+          expandLiveBtn.style.background = 'rgba(45,212,191,.28)';
+        }
+      }
+
       expandChatBtn?.addEventListener('click', () => {
         if (chatPopout && document.body.contains(chatPopout)) { closeChatPopout(); } else { openChatPopout(); }
+      });
+      expandLiveBtn?.addEventListener('click', () => {
+        if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
+        else openLiveDashboardPopout();
       });
 
       // ── Shadowban check ──────────────────────────────────────────────────
@@ -15618,11 +16127,18 @@
         const uniqueUsers = new Set(collectedMessages.map(m => m.user).filter(Boolean));
         if (uniqueUsers.size > 0) {
           // Flag bots: users sending 10+ messages rapidly
-          const userMsgCounts = {};
-          collectedMessages.forEach(m => { if (m.user) userMsgCounts[m.user] = (userMsgCounts[m.user] || 0) + 1; });
-          const heavyUsers = Object.entries(userMsgCounts).filter(([, c]) => c >= 8).map(([u]) => u);
+          const mergedUsers = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
+          lastShadowbanUserStats = mergedUsers;
+          refreshShadowbanUserFilterOptions();
+          renderShadowbanUserStats();
+          const heavyUsers = mergedUsers
+            .filter((u) => u.repeatMax >= 4 || (u.total >= 10 && u.chat >= 8))
+            .map((u) => u.user);
           if (heavyUsers.length > 0) lines.push('🤖 Moguć bot: ' + heavyUsers.slice(0, 3).join(', ') + ' (' + heavyUsers.length + ' korisnika šalje 8+ poruka)');
           lines.push('👥 Jedinstveni korisnici u chatu: ' + uniqueUsers.size);
+          mergedUsers.slice(0, 8).forEach((u) => {
+            lines.push('• @' + u.user + ': ' + formatNum(u.total) + ' msg, gifts ' + formatNum(u.gifts) + ', join ' + formatNum(u.joins));
+          });
         }
 
         // Try webview scrape for more signals
@@ -15660,13 +16176,18 @@
           if (username) navigateTo('https://www.tiktok.com/search/user?q=' + encodeURIComponent(username));
         });
       });
+      shadowbanUserFilterEl?.addEventListener('change', () => {
+        renderShadowbanUserStats();
+      });
       function updateSessionStatsUI() {
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         const giftStats = computeGiftStats();
         if (sessionInfoEl) sessionInfoEl.textContent = elapsedMin + 'm';
-        if (viewerCountEl) viewerCountEl.textContent = liveViewerCount > 0
-          ? formatNum(liveViewerCount) + ' (peak ' + formatNum(peakViewerCount) + ')'
-          : '-';
+        if (viewerCountEl) {
+          if (liveViewerCount > 0) viewerCountEl.textContent = formatNum(liveViewerCount) + ' (peak ' + formatNum(peakViewerCount) + ')';
+          else if (peakViewerCount > 0) viewerCountEl.textContent = 'peak ' + formatNum(peakViewerCount);
+          else viewerCountEl.textContent = '0';
+        }
         if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
         // ── Nove statistike ──────────────────────────────────────────────
         const msgsPerMin = elapsedMin > 0 ? (collectedMessages.length / elapsedMin).toFixed(1) : '-';
@@ -15680,6 +16201,10 @@
         // Use the running collectedQuestions count (all unique questions this session)
         const questionCountEl = document.getElementById('tkaiQuestionCount');
         if (questionCountEl) questionCountEl.textContent = formatNum(collectedQuestions.length);
+        lastShadowbanUserStats = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
+        refreshShadowbanUserFilterOptions();
+        renderShadowbanUserStats();
+        renderUserSummary();
         renderQuestionsUI();
         const sentimentBadgeEl = document.getElementById('tkaiSentimentBadge');
         if (sentimentBadgeEl) {
@@ -15777,9 +16302,10 @@
           const original = translated
             ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65">' + escHtml(message.text) + '</div>'
             : '<div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
+          const userColor = getUserColor(message.user);
           const userRow = typeBadge
-            ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>' + escHtml(message.user) + '</span>' + typeBadge + '</div>'
-            : '<div class="tkai-msg-user">' + escHtml(message.user) + '</div>';
+            ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(message.user) + '</span>' + typeBadge + '</div>'
+            : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(message.user) + '</div>';
           div.innerHTML = userRow + original + translated;
           div.title = 'Klikni za odabir/deodabir';
           div.addEventListener('click', () => {
@@ -15907,6 +16433,17 @@
         const count = parseInt(countEl?.value || '3', 10);
         const context = contextEl?.value?.trim() || '';
         const custom = customPromptEl?.value?.trim() || '';
+        const specificPrompts = {
+          chat: String(DB.getSettings().tkaiPromptChat || '').trim(),
+          gift: String(DB.getSettings().tkaiPromptGift || '').trim(),
+          subscriber: String(DB.getSettings().tkaiPromptSub || '').trim(),
+          caption: String(DB.getSettings().tkaiPromptCaption || '').trim(),
+        };
+        const primaryType = String(messages[messages.length - 1]?.type || 'chat').toLowerCase();
+        const typePrompt =
+          specificPrompts[primaryType] ||
+          (primaryType === 'sub' ? specificPrompts.subscriber : '') ||
+          '';
         const toneMap = {
           friendly: 'prijateljski i topao',
           funny: 'smiješan i zabavan, koristi humor',
@@ -15950,6 +16487,7 @@ PRAVILA:
 - Možeš koristiti max 1-2 emojia po odgovoru
 - Uzmi u obzir korisničko ime i cijelu poruku iz chata pri formiranju odgovora
 - Ne koristi prefiks poput "Odgovor 1:"
+${typePrompt ? '- UPUTA ZA OVAJ TIP PORUKE: ' + typePrompt : ''}
 ${custom ? '- POSEBNE UPUTE: ' + custom : ''}
 
 Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numeracije, bez objašnjenja.`;
@@ -16475,6 +17013,101 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
       }
 
+      async function runTkaiStackSelfTest() {
+        const cfg = DB.getSettings() || {};
+        const provider = cfg.tkaiProviderOverride || cfg.aiProvider || 'gemini';
+        const model = cfg.tkaiModelOverride || cfg.aiModel || 'gemini-2.0-flash';
+        const tests = [];
+
+        const push = (ok, name, detail) => {
+          tests.push({ ok, name, detail: String(detail || '') });
+        };
+
+        try {
+          const probe = await runAiTextRequest('Odgovori samo: OK', {
+            provider,
+            model,
+            temperature: 0,
+            maxOutputTokens: 16,
+          });
+          push(!!probe, 'AI provider/model', probe ? 'Konekcija uspješna' : 'Prazan odgovor');
+        } catch (e) {
+          push(false, 'AI provider/model', e?.message || 'Neuspjela konekcija');
+        }
+
+        const samples = [
+          { type: 'chat', user: 'viewer_chat', text: 'Kako ide stream?' },
+          { type: 'gift', user: 'viewer_gift', text: 'Sent rose x5' },
+          { type: 'subscriber', user: 'viewer_sub', text: 'joined subscriber club' },
+          { type: 'caption', user: 'SYSTEM', text: 'DJ CC: sada ide nova pjesma' },
+        ];
+
+        for (const sample of samples) {
+          try {
+            const out = await runAiTextRequest(buildPrompt([sample]), {
+              provider,
+              model,
+              temperature: 0.4,
+              maxOutputTokens: 120,
+            });
+            push(
+              !!String(out || '').trim(),
+              'Prompt ' + sample.type,
+              String(out || '').trim()
+                ? 'Generiranje radi (' + sample.type + ')'
+                : 'Prazan odgovor (' + sample.type + ')',
+            );
+          } catch (e) {
+            push(false, 'Prompt ' + sample.type, e?.message || 'Greška u generiranju');
+          }
+        }
+
+        try {
+          const tab = getActiveTab();
+          if (tab?.url && tab.url.includes('tiktok.com')) {
+            const wv = getTabWebview(tab.id);
+            if (wv && typeof wv.executeJavaScript === 'function') {
+              const v = await wv.executeJavaScript('(() => 2 + 2)()');
+              push(v === 4, 'TikTok webview access', v === 4 ? 'executeJavaScript radi' : 'Neočekivan rezultat');
+            } else {
+              push(false, 'TikTok webview access', 'Webview nije spreman');
+            }
+          } else {
+            push(null, 'TikTok webview access', 'Nije otvoren TikTok tab (preskočeno)');
+          }
+        } catch (e) {
+          push(false, 'TikTok webview access', e?.message || 'Greška u pristupu webviewu');
+        }
+
+        try {
+          if (!window.etherx?.songrec?.recognize) {
+            push(false, 'SongRec API', 'SongRec bridge nije dostupan');
+          } else {
+            const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
+            const timeoutMs = Math.max(3000, Math.min(12000, Number(cfg.tkaiSongRecTimeoutMs || 8000) || 8000));
+            const rs = await window.etherx.songrec.recognize({ command, timeoutMs });
+            if (rs?.ok) {
+              push(true, 'SongRec detect', rs.title ? ('Prepoznato: ' + rs.title) : 'SongRec pokrenut (bez trenutne detekcije)');
+            } else {
+              push(false, 'SongRec detect', rs?.error || 'SongRec nije uspio');
+            }
+          }
+        } catch (e) {
+          push(false, 'SongRec detect', e?.message || 'Greška pri SongRec testu');
+        }
+
+        const failed = tests.filter(t => t.ok === false).length;
+        return {
+          ok: failed === 0,
+          tests,
+          provider,
+          model,
+          failed,
+        };
+      }
+
+      window.runTkaiStackSelfTest = runTkaiStackSelfTest;
+
       function clearConversation() {
         collectedMessages = [];
         collectedQuestions = [];
@@ -16496,6 +17129,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const translateLang = getTranslateTargetLang();
         const replyLang = replyLangEl?.value || 'hr';
         const giftStats = computeGiftStats();
+        const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 200);
         const payload = {
           exportedAt: new Date().toISOString(),
           targetLanguage: targetLang,
@@ -16505,6 +17139,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
           peakViewers: peakViewerCount,
           totalCoins: giftStats.totalCoins,
+          mergedUsers: buildUserStats(collectedMessages, userLimit),
+          dailyStats: buildDailyStats(collectedMessages, userLimit),
           messages: collectedMessages.map(message => ({
             user: message.user,
             text: message.text,
@@ -16532,6 +17168,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const rows = [['user', 'text', 'translatedText', 'type', 'coins', 'timestamp'].join(',')];
         collectedMessages.forEach(m => {
           rows.push([esc(m.user), esc(m.text), esc(m.translatedText || ''), esc(m.type || 'chat'), m.coins || 0, new Date(m.ts || Date.now()).toISOString()].join(','));
+        });
+        const merged = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
+        rows.push('');
+        rows.push('MERGED_USERS');
+        rows.push(['user', 'total', 'chat', 'gifts', 'joins', 'repeatMax', 'lastTs'].join(','));
+        merged.forEach((u) => {
+          rows.push([esc(u.user), u.total, u.chat, u.gifts, u.joins, u.repeatMax, new Date(u.lastTs || Date.now()).toISOString()].join(','));
         });
         const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
@@ -16648,6 +17291,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         const totalMsgs = collectedMessages.length;
         const engPerMin = elapsedMin > 0 ? (totalMsgs / elapsedMin).toFixed(2) : '0';
+        const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 200);
         const payload = {
           exportedAt: new Date().toISOString(),
           sessionMinutes: elapsedMin,
@@ -16669,7 +17313,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           sentimentTrendChart: insights.sentimentTrend,
           pieBreakdown: insights.pieBreakdown,
           songs: insights.songs,
-          recommendations: buildRecommendations(insights)
+          recommendations: buildRecommendations(insights),
+          joinMinLevel: Number(DB.getSettings().tkaiJoinMinLevel ?? 32),
+          perUser: buildUserStats(collectedMessages, userLimit),
+          perDay: buildDailyStats(collectedMessages, userLimit)
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
         const a = document.createElement('a');
@@ -16693,6 +17340,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         vis('tkaiInsights', 'tkaiShowInsights');
         vis('tkaiGiftGallery', 'tkaiShowGiftGallery');
         vis('tkaiTopSupporters', 'tkaiShowTopSupporters');
+        vis('tkaiUserSummary', 'tkaiShowTopSupporters');
         vis('tkaiShadowbanCard', 'tkaiShowShadowban');
         vis('tkaiSpikesCard', 'tkaiShowSpikes');
         vis('tkaiRecommendationsCard', 'tkaiShowRecommendations');
@@ -16734,6 +17382,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           btn.style.borderColor = 'rgba(255,255,255,.22)';
           btn.style.color = '#fff';
         });
+        applyTkaiPanelScale();
       }
 
       // Apply on panel open
@@ -16752,7 +17401,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       document.getElementById('settingsPanel')?.addEventListener('input', e => {
         const t = e.target.closest('[data-setting]');
         if (!t || !t.dataset.setting) return;
-        if (t.dataset.setting.startsWith('tkaiBtnColor')) setTimeout(applyTkaiButtonTheme, 10);
+        if (t.dataset.setting.startsWith('tkaiBtnColor') || t.dataset.setting === 'tkaiUiScale' || t.dataset.setting === 'tkaiFontScale') {
+          setTimeout(applyTkaiButtonTheme, 10);
+        }
       });
       applyTkaiFeatureToggles();
       applyTkaiButtonTheme();
