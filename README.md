@@ -2,7 +2,6 @@
 
 Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 
-
 <!-- GitHub token se NE sprema u fajlove — upiši ga u Settings → Developer -->
 
 ## 📥 Download & Installation
@@ -10,6 +9,7 @@ Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 **Download:** https://etherx.io/browser.html
 
 **Platforms:**
+
 - 🍎 macOS (arm64 DMG, x64 ZIP)
 - 🪟 Windows (EXE installer)
 - 🐧 Linux (AppImage)
@@ -65,6 +65,22 @@ Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 1. `npm install`
 2. `npm start` — pokreće Electron app
 3. `npm run build` — kreira distributable pakete
+
+### Siguran deploy bez .env commita
+
+`.env.local` je ignoriran i ne treba ići na GitHub.
+
+Preporučeni način za deploy tajne:
+
+1. Spremi tajne izvan repozitorija u `~/.config/etherx/deploy.env`
+2. Pokreni deploy skriptu normalno: `./deploy.sh`
+
+Korisne opcije:
+
+- `./deploy.sh --save-secrets` sprema trenutno exportane tajne u `~/.config/etherx/deploy.env`
+- `./deploy.sh --write-env-local` generira lokalni `.env.local` iz učitanih tajni
+
+Deploy skripta automatski nikad ne stage-a `.env*` datoteke.
 
 ## API ključevi
 

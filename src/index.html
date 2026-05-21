@@ -8840,7 +8840,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.207</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.208</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9798,7 +9798,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.207</span></div>
+                    id="helpVersionNum2">2.4.208</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -13730,10 +13730,10 @@
           .filter((x) => /^[a-f0-9]{64}$/.test(x))
       );
       const TKAI_LICENSE_KEY = 'ex_tkai_license';
-      const TKAI_REQUIRED_PREFIX = 'ETHERX_TIKTOKCHATAI';
+      const TKAI_REQUIRED_PREFIX = 'EtherX_TiktokChatAI';
       const TKAI_REQUIRED_PREFIX_NORM = TKAI_REQUIRED_PREFIX.replace(/[\s\-_]/g, '');
-      let _tkaiAdminDevice = { enabled: false, allowed: true, deviceId: '' };
       let _tkaiRuntimeHashesLoaded = false;
+      let _tkaiLastValidationMessage = '';
 
       async function _tkaiLoadRuntimeHashes() {
         if (_tkaiRuntimeHashesLoaded) return;
@@ -13750,18 +13750,6 @@
         } catch (_) { }
       }
 
-      async function _tkaiRefreshAdminLock() {
-        try {
-          if (window.etherx?.license?.isAdminDevice) {
-            const st = await window.etherx.license.isAdminDevice();
-            if (st && typeof st === 'object') _tkaiAdminDevice = st;
-          }
-        } catch (_) {
-          _tkaiAdminDevice = { enabled: false, allowed: true, deviceId: '' };
-        }
-        return _tkaiAdminDevice;
-      }
-
       // Normalize a raw code string before hashing
       function _tkaiNormCode(raw) {
         return String(raw || '').toUpperCase().replace(/[\s\-_]/g, '');
@@ -13774,12 +13762,32 @@
         const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
         return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
       }
+      async function _tkaiValidateRemote(code, hash) {
+        try {
+          const fn = window.etherx?.license?.validateTkaiCode;
+          if (typeof fn !== 'function') {
+            return { ok: false, valid: false, message: 'License validator is unavailable.' };
+          }
+          const res = await fn(code, hash);
+          const msg =
+            (res && res.data && typeof res.data.message === 'string' && res.data.message) ||
+            (res && typeof res.error === 'string' && res.error) ||
+            '';
+          return {
+            ok: !!(res && res.ok),
+            valid: !!(res && res.valid),
+            message: msg,
+          };
+        } catch (err) {
+          return {
+            ok: false,
+            valid: false,
+            message: err?.message || 'Remote validation failed.',
+          };
+        }
+      }
       // Public helper — call from DevTools to generate hashes for new codes
       window._tkaiGenHash = async function (code) {
-        await _tkaiRefreshAdminLock();
-        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
-          throw new Error('This build is locked to administrator device only.');
-        }
         if (!_tkaiHasRequiredPrefix(code)) {
           throw new Error('Activation code must start with: EtherX_TiktokChatAI');
         }
@@ -13793,10 +13801,6 @@
       //   _tkaiGenerateCodes(25, 'CUSTOM_ADMIN_PREFIX')  // custom admin prefix, still starts with fixed required prefix
       // Returns: [{ code, hash }, ...]
       window._tkaiGenerateCodes = async function (count = 10, prefix = '') {
-        await _tkaiRefreshAdminLock();
-        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
-          throw new Error('This build is locked to administrator device only.');
-        }
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         const makeSeg = (len = 4) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
         const out = [];
@@ -13823,12 +13827,16 @@
       }
       // Verify code, save if valid, return true/false
       async function tkaiActivate(code) {
-        await _tkaiRefreshAdminLock();
         await _tkaiLoadRuntimeHashes();
-        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) return false;
+        _tkaiLastValidationMessage = '';
         if (!_tkaiHasRequiredPrefix(code)) return false;
         const hash = await _tkaiHash(_tkaiNormCode(code));
-        if (TKAI_VALID_HASHES.has(hash)) {
+        const remote = await _tkaiValidateRemote(code, hash);
+        if (!remote.valid) {
+          _tkaiLastValidationMessage = remote.message || 'License validation failed.';
+          return false;
+        }
+        if (TKAI_VALID_HASHES.has(hash) || remote.valid) {
           localStorage.setItem(TKAI_LICENSE_KEY, hash);
           return true;
         }
@@ -13854,13 +13862,7 @@
           btnNav.title = activated ? 'TikTok Chat AI' : 'TikTok Chat AI — Not Activated';
           btnNav.style.opacity = activated ? '' : '0.45';
         }
-        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
-          if (msgEl) {
-            msgEl.textContent = '🔒 Admin lock active: this device is not allowed.';
-            msgEl.style.color = '#f87171';
-          }
-          if (actBtn) actBtn.disabled = true;
-        } else if (actBtn) {
+        if (actBtn) {
           actBtn.disabled = false;
         }
         // Sync the lock state on the panel itself (show overlay if not activated)
@@ -13872,14 +13874,6 @@
         const input = document.getElementById('tkaiLicenseInput');
         const msgEl = document.getElementById('tkaiLicenseMsg');
         const code = input ? input.value.trim() : '';
-        await _tkaiRefreshAdminLock();
-        if (_tkaiAdminDevice.enabled && !_tkaiAdminDevice.allowed) {
-          if (msgEl) {
-            msgEl.textContent = '🔒 Admin lock active: this device is not allowed.';
-            msgEl.style.color = '#f87171';
-          }
-          return;
-        }
         if (!code) { if (msgEl) { msgEl.textContent = '⚠️ Please enter your activation code.'; msgEl.style.color = '#f87171'; } return; }
         if (!_tkaiHasRequiredPrefix(code)) {
           if (msgEl) {
@@ -13896,7 +13890,8 @@
           applyTkaiLicenseGate();
           showToast('✅ AI Live Chat activated!');
         } else {
-          if (msgEl) { msgEl.textContent = '❌ Invalid code. Please check and try again.'; msgEl.style.color = '#f87171'; }
+          const extra = _tkaiLastValidationMessage ? ` (${_tkaiLastValidationMessage})` : '';
+          if (msgEl) { msgEl.textContent = `❌ Activation failed${extra}`; msgEl.style.color = '#f87171'; }
         }
       });
       document.getElementById('tkaiLicenseInput')?.addEventListener('keydown', function (e) {
@@ -13910,12 +13905,10 @@
       });
       // Run gate check on settings tab open
       document.querySelector('[data-stab="ai-live-chat"]')?.addEventListener('click', async () => {
-        await _tkaiRefreshAdminLock();
         await _tkaiLoadRuntimeHashes();
         setTimeout(applyTkaiLicenseGate, 30);
       });
       (async () => {
-        await _tkaiRefreshAdminLock();
         await _tkaiLoadRuntimeHashes();
         applyTkaiLicenseGate();
       })();

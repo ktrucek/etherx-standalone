@@ -360,6 +360,58 @@ function _getTkaiRuntimeHashes() {
     .filter((x) => /^[a-f0-9]{64}$/.test(x));
 }
 
+async function _validateTkaiLicenseRemote(code, hashrate) {
+  const envLocal = _readEnvLocalMap();
+  const endpoint =
+    process.env.ETHERX_TKAI_LICENSE_API_URL ||
+    envLocal.ETHERX_TKAI_LICENSE_API_URL ||
+    "https://kriptoentuzijasti.io/wp-json/ken-webshop/v1/license/validate";
+  const apiKey =
+    process.env.ETHERX_TKAI_LICENSE_API_KEY ||
+    envLocal.ETHERX_TKAI_LICENSE_API_KEY ||
+    "";
+
+  const body = {
+    code: String(code || "").trim(),
+    hashrate: String(hashrate || "").trim().toLowerCase(),
+  };
+
+  try {
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (apiKey) headers["X-ETHERX-KEY"] = apiKey;
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+
+    return {
+      ok: res.ok,
+      valid: !!(data && data.valid),
+      status: res.status,
+      data,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      valid: false,
+      status: 0,
+      error: err?.message || String(err || "Remote validation failed"),
+    };
+  }
+}
+
 function _isAdminDeviceAllowed() {
   const allowed = _getAllowedAdminDeviceIds();
   if (!allowed.length) return { enabled: false, allowed: true, deviceId: _computeDeviceId() };
@@ -1315,6 +1367,9 @@ function setupIPC() {
   ipcMain.handle("license:isAdminDevice", () => _isAdminDeviceAllowed());
   ipcMain.handle("license:debugAdminEnv", () => _getAdminEnvDebugInfo());
   ipcMain.handle("license:getTkaiValidHashes", () => _getTkaiRuntimeHashes());
+  ipcMain.handle("license:validateTkaiCode", (_e, payload = {}) =>
+    _validateTkaiLicenseRemote(payload.code, payload.hashrate)
+  );
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   ipcMain.handle("db:saveTab", (_e, tab) => {
