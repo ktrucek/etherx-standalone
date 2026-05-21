@@ -10653,6 +10653,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     renderShadowbanUserStats();
   });
 
+  const tkaiMinBtn = document.getElementById("minimizeTiktokAIPanel");
+  const TKAI_MIN_KEY = "ex_tkai_panel_minimized";
+  const applyTkaiMinimized = (minimized) => {
+    panel.classList.toggle("tkai-minimized", !!minimized);
+    if (tkaiMinBtn) {
+      tkaiMinBtn.textContent = minimized ? "▢" : "−";
+      tkaiMinBtn.title = minimized ? "Proširi" : "Spusti / proširi";
+    }
+  };
+  try {
+    applyTkaiMinimized(localStorage.getItem(TKAI_MIN_KEY) === "1");
+  } catch {
+    applyTkaiMinimized(false);
+  }
+  tkaiMinBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const next = !panel.classList.contains("tkai-minimized");
+    applyTkaiMinimized(next);
+    try {
+      localStorage.setItem(TKAI_MIN_KEY, next ? "1" : "0");
+    } catch { }
+  });
+
   document
     .getElementById("closeTiktokAIPanel")
     ?.addEventListener("click", () => {

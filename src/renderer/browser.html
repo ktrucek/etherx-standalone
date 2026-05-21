@@ -4682,13 +4682,39 @@
       top: auto;
       height: min(580px, calc(100vh - 120px));
       max-height: calc(100vh - 120px);
-      min-width: 520px;
+      min-width: 360px;
       min-height: 430px;
       border-radius: 10px 0 0 10px;
       box-shadow: -6px 6px 32px rgba(0, 0, 0, .55);
       z-index: 9999;
       resize: both;
       overflow: hidden;
+    }
+
+    #tiktokAIPanel .panel-close {
+      color: rgba(255, 255, 255, .96);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+      font-weight: 700;
+    }
+
+    #tiktokAIPanel .panel-close:hover {
+      color: #fff;
+    }
+
+    #tiktokAIPanel .tkai-min-btn {
+      font-size: 18px;
+      margin-right: 2px;
+    }
+
+    #tiktokAIPanel.tkai-minimized {
+      height: auto !important;
+      min-height: 0;
+      max-height: none;
+      resize: none;
+    }
+
+    #tiktokAIPanel.tkai-minimized .tkai-body {
+      display: none;
     }
 
     #tiktokAIPanel .panel-header {
@@ -9808,7 +9834,7 @@
       </div>
     </div>
   </div>
-  <div class="panel" id="tiktokAIPanel" style="width:520px">
+  <div class="panel" id="tiktokAIPanel" style="width:460px">
     <div class="panel-header" id="tiktokAIPanelHeader" style="padding:8px 12px">
       <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
           title="Povuci za premještanje">⠿</span></span>
@@ -9816,7 +9842,8 @@
         <span id="tkaiScanStatus" style="font-size:10px;color:#ffe0ea"></span>
         <span id="tkaiAutoSuggestBadge"
           style="font-size:10px;color:#cbd5ff;background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.35);padding:2px 6px;border-radius:999px;display:none"></span>
-        <button class="panel-close" id="closeTiktokAIPanel">×</button>
+        <button class="panel-close tkai-min-btn" id="minimizeTiktokAIPanel" title="Spusti / proširi">−</button>
+        <button class="panel-close" id="closeTiktokAIPanel" title="Zatvori">×</button>
       </div>
     </div>
     <div class="tkai-body">

@@ -15,32 +15,57 @@
 # ============================================================
 
 set -euo pipefail
+trap 'echo -e "\033[0;31m[✗]\033[0m Deploy failed at line $LINENO" >&2' ERR
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NO_PUSH=false
+FORCE_PUSH=false
 SYNC_BROWSER_HTML=false
 SAVE_SECRETS=false
 WRITE_ENV_LOCAL=false
+ALLOW_NON_MAIN=false
 SECRETS_FILE_DEFAULT="${HOME}/.config/etherx/deploy.env"
 SECRETS_FILE="${DEPLOY_SECRETS_FILE:-$SECRETS_FILE_DEFAULT}"
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+is_semver() {
+  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+base64_noline() {
+  if base64 --help 2>/dev/null | grep -q -- '-w'; then
+    base64 -w0
+  else
+    base64 | tr -d '\n'
+  fi
+}
 
 # ── Parse args ────────────────────────────────────────────────────────────────
 REQUESTED_VERSION=""
 for arg in "$@"; do
   case "$arg" in
     --no-push)   NO_PUSH=true ;;
+    --force-push) FORCE_PUSH=true ;;
+    --allow-non-main) ALLOW_NON_MAIN=true ;;
     --sync-browser-html) SYNC_BROWSER_HTML=true ;;
     --save-secrets) SAVE_SECRETS=true ;;
     --write-env-local) WRITE_ENV_LOCAL=true ;;
     --help|-h)
-      echo "Usage: ./deploy.sh [VERSION] [--no-push] [--sync-browser-html] [--save-secrets] [--write-env-local]"
+      echo "Usage: ./deploy.sh [VERSION] [--no-push] [--force-push] [--allow-non-main] [--sync-browser-html] [--save-secrets] [--write-env-local]"
       echo "  VERSION   e.g. 2.5.0  (default: auto-increment patch)"
       echo "  --no-push Skip git push (local only)"
+      echo "  --force-push Use --force-with-lease when pushing main"
+      echo "  --allow-non-main Allow deploy from a branch other than main"
       echo "  --sync-browser-html Force sync: src/index.html -> src/renderer/browser.html"
       echo "  --save-secrets Save current env secrets to $SECRETS_FILE_DEFAULT"
       echo "  --write-env-local Generate .env.local from loaded secrets"
       exit 0 ;;
-    *)  REQUESTED_VERSION="$arg" ;;
+    *)
+      if [[ -n "$REQUESTED_VERSION" ]]; then
+        error "Unknown argument: $arg"
+      fi
+      REQUESTED_VERSION="$arg"
+      ;;
   esac
 done
 
@@ -125,6 +150,17 @@ info "Pre-flight checks..."
 command -v git  &>/dev/null       || error "git not found"
 command -v python3 &>/dev/null    || error "python3 not found"
 command -v curl &>/dev/null       || error "curl not found"
+command -v base64 &>/dev/null      || error "base64 not found"
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  error "Current directory is not a git repository"
+fi
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+[[ "$CURRENT_BRANCH" != "HEAD" ]] || error "Detached HEAD is not supported for deploy"
+if [[ "$ALLOW_NON_MAIN" == false && "$CURRENT_BRANCH" != "main" ]]; then
+  error "Deploy must run from main (current: $CURRENT_BRANCH). Use --allow-non-main if intentional."
+fi
 
 # Check git status
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -141,6 +177,7 @@ CURRENT_VERSION=$(python3 -c "import json; print(json.load(open('package.json'))
 info "Current version: ${YELLOW}$CURRENT_VERSION${NC}"
 
 if [[ -n "$REQUESTED_VERSION" ]]; then
+  is_semver "$REQUESTED_VERSION" || error "Invalid version format: $REQUESTED_VERSION (expected X.Y.Z)"
   NEW_VERSION="$REQUESTED_VERSION"
 else
   # Auto-increment patch: 2.4.28 → 2.4.29
@@ -279,14 +316,22 @@ git reset -q HEAD -- \
   .env.*.local \
   "*.env" 2>/dev/null || true
 
+CHANGES_STAGED=true
 if git diff --cached --quiet; then
   warn "No changes to commit (version already set?)"
+  CHANGES_STAGED=false
 else
-  git commit -m "v${NEW_VERSION}: Version bump" || warn "Commit failed"
+  git commit -m "v${NEW_VERSION}: Version bump" || error "Commit failed"
   success "Committed v${NEW_VERSION}"
 fi
 
 TAG_NAME="v${NEW_VERSION}"
+
+if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
+  if [[ "$CHANGES_STAGED" == false ]]; then
+    error "Tag ${TAG_NAME} already exists and there are no new changes to release"
+  fi
+fi
 
 # Delete local tag if exists
 if git tag -l | grep -q "^${TAG_NAME}$"; then
@@ -319,14 +364,20 @@ if [[ "$NO_PUSH" == false ]]; then
   fi
 
   # Credentials via -c http.extraHeader — ne upisuje se u .git/config, vidljivo samo za ovaj poziv
-  GIT_AUTH=(-c "http.extraHeader=Authorization: Basic $(echo -n "x-token:${GITHUB_TOKEN_DEPLOY}" | base64 -w0)")
+  GIT_AUTH=(-c "http.extraHeader=Authorization: Basic $(printf 'x-token:%s' "${GITHUB_TOKEN_DEPLOY}" | base64_noline)")
 
   info "Fetching github/main to refresh stale tracking ref..."
   git "${GIT_AUTH[@]}" fetch github main 2>/dev/null || true
 
   info "Pushing to GitHub (triggers build)..."
-  if git "${GIT_AUTH[@]}" push --force-with-lease github main && \
-     git "${GIT_AUTH[@]}" push -f github "$TAG_NAME"; then
+  if [[ "$FORCE_PUSH" == true ]]; then
+    PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push --force-with-lease github "HEAD:main")
+  else
+    PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push github "HEAD:main")
+  fi
+
+  if "${PUSH_MAIN_CMD[@]}" && \
+     git "${GIT_AUTH[@]}" push github "$TAG_NAME"; then
     success "Pushed to GitHub → GitHub Actions će buildati"
     
     # ── Update EtherX.io download page ─────────────────────────────────────────
@@ -354,17 +405,22 @@ if [[ "$NO_PUSH" == false ]]; then
     fi
 
     # ── Ažuriraj api.kriptoentuzijasti.io/version ──────────────────────────
-    KRIPTOAPI_URL="https://api.kriptoentuzijasti.io/version"
-    info "Updating api.kriptoentuzijasti.io version endpoint → v$NEW_VERSION"
-    KRIPTOAPI_RESPONSE=$(curl -s -X POST "$KRIPTOAPI_URL" \
-      -H "Content-Type: application/json" \
-      -d "{\"version\": \"$NEW_VERSION\", \"api_key\": \"${ETHERX_API_KEY}\"}" \
-      --max-time 15 || echo '{"ok":false,"error":"Curl failed"}')
-
-    if echo "$KRIPTOAPI_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)" 2>/dev/null; then
-      success "api.kriptoentuzijasti.io/version updated to v$NEW_VERSION"
+    KRIPTOAPI_URL="${ETHERX_KRIPTO_API_URL:-https://api.kriptoentuzijasti.io/version}"
+    KRIPTOAPI_KEY="${ETHERX_KRIPTO_API_KEY:-${ETHERX_API_KEY:-}}"
+    if [[ -z "$KRIPTOAPI_KEY" ]]; then
+      warn "ETHERX_KRIPTO_API_KEY / ETHERX_API_KEY missing — skipping kriptoentuzijasti.io update"
     else
-      warn "Failed to update kriptoentuzijasti.io endpoint: $KRIPTOAPI_RESPONSE"
+      info "Updating api.kriptoentuzijasti.io version endpoint → v$NEW_VERSION"
+      KRIPTOAPI_RESPONSE=$(curl -s -X POST "$KRIPTOAPI_URL" \
+        -H "Content-Type: application/json" \
+        -d "{\"version\": \"$NEW_VERSION\", \"api_key\": \"${KRIPTOAPI_KEY}\"}" \
+        --max-time 15 || echo '{"ok":false,"error":"Curl failed"}')
+
+      if echo "$KRIPTOAPI_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('ok') else 1)" 2>/dev/null; then
+        success "api.kriptoentuzijasti.io/version updated to v$NEW_VERSION"
+      else
+        warn "Failed to update kriptoentuzijasti.io endpoint: $KRIPTOAPI_RESPONSE"
+      fi
     fi
     
   else
@@ -388,10 +444,10 @@ echo -e "  🐙 GitHub:    ${CYAN}https://github.com/ktrucek/etherx-standalone${
 echo -e "  🌐 EtherX.io: ${CYAN}https://etherx.io/browser.html${NC}"
 echo ""
 echo -e "  📥 Download URLs (after Actions build completes):"
-echo -e "     🍎 macOS arm64 DMG: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-arm64.dmg${NC}"
-echo -e "     🍎 macOS x64 ZIP:   ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-x64-mac.zip${NC}"
-echo -e "     🪟 Windows EXE:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-x64-Setup.exe${NC}"
-echo -e "     🐧 Linux AppImage:  ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}.AppImage${NC}"
+echo -e "     🍎 macOS arm64 DMG: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-arm64.dmg${NC}"
+echo -e "     🍎 macOS x64 ZIP:   ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-x64.zip${NC}"
+echo -e "     🪟 Windows EXE:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.exe${NC}"
+echo -e "     🐧 Linux AppImage:  ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.AppImage${NC}"
 echo ""
 if [[ "$NO_PUSH" == false ]]; then
   echo -e "  ${YELLOW}🚀 GitHub Actions će buildati Linux + Windows + macOS...${NC}"

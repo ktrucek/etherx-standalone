@@ -2249,52 +2249,108 @@ function setupIPC() {
       Math.min(25000, Number(cfg.timeoutMs || 12000) || 12000),
     );
 
-    return new Promise((resolve) => {
-      execFile(
-        command,
-        ["recognize"],
-        {
-          windowsHide: true,
-          timeout: timeoutMs,
-          maxBuffer: 1024 * 1024,
-        },
-        (error, stdout, stderr) => {
-          if (error) {
-            if (error.code === "ENOENT") {
-              resolve({
-                ok: false,
-                error:
-                  "SongRec nije pronađen. Instaliraj SongRec ili upiši punu putanju u Postavke → AI Live Chat.",
-              });
-              return;
-            }
-            if (error.killed || error.signal === "SIGTERM") {
-              resolve({
-                ok: false,
-                error:
-                  "SongRec timeout. Povećaj timeout u Postavke → AI Live Chat ili pusti čistiji audio.",
-              });
-              return;
-            }
-            resolve({
-              ok: false,
-              error:
-                String(stderr || stdout || error.message || "SongRec failed").trim() ||
-                "SongRec failed",
-            });
-            return;
-          }
+    const parseCommandLine = (value) => {
+      const parts = [];
+      String(value || "")
+        .match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g)
+        ?.forEach((part) => {
+          const unquoted = part.replace(/^['"]|['"]$/g, "").trim();
+          if (unquoted) parts.push(unquoted);
+        });
+      return parts;
+    };
 
-          const raw = String(stdout || "").trim();
-          const lines = raw
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .filter(Boolean);
-          const title = lines.length ? lines[lines.length - 1] : "";
-          resolve({ ok: true, title, raw });
-        },
-      );
+    const createAttempt = (cmdText, presetArgs = []) => {
+      const tokens = parseCommandLine(cmdText);
+      if (!tokens.length) return null;
+      const bin = tokens[0];
+      const args = [...tokens.slice(1), ...presetArgs];
+      if (!args.includes("recognize")) args.push("recognize");
+      return { bin, args };
+    };
+
+    const attempts = [];
+    const primary = createAttempt(command);
+    if (primary) attempts.push(primary);
+
+    if (command === "songrec") {
+      attempts.push({ bin: "/usr/bin/songrec", args: ["recognize"] });
+      attempts.push({ bin: "/usr/local/bin/songrec", args: ["recognize"] });
+      attempts.push({
+        bin: "flatpak",
+        args: ["run", "com.github.marinm.songrec", "recognize"],
+      });
+    }
+
+    const seen = new Set();
+    const uniqueAttempts = attempts.filter((a) => {
+      const key = `${a.bin} ${a.args.join(" ")}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
+
+    const runAttempt = (bin, args) =>
+      new Promise((resolve) => {
+        execFile(
+          bin,
+          args,
+          {
+            windowsHide: true,
+            timeout: timeoutMs,
+            maxBuffer: 1024 * 1024,
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              resolve({
+                ok: false,
+                code: error.code,
+                timedOut: error.killed || error.signal === "SIGTERM",
+                errorText:
+                  String(stderr || stdout || error.message || "SongRec failed").trim() ||
+                  "SongRec failed",
+              });
+              return;
+            }
+
+            const raw = String(stdout || "").trim();
+            const lines = raw
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter(Boolean);
+            const title = lines.length ? lines[lines.length - 1] : "";
+            resolve({ ok: true, title, raw });
+          },
+        );
+      });
+
+    for (const attempt of uniqueAttempts) {
+      const result = await runAttempt(attempt.bin, attempt.args);
+      if (result.ok) return result;
+
+      if (result.timedOut) {
+        return {
+          ok: false,
+          error:
+            "SongRec timeout. Povećaj timeout u Postavke → AI Live Chat ili pusti čistiji audio.",
+        };
+      }
+
+      if (result.code === "ENOENT") {
+        continue;
+      }
+
+      return {
+        ok: false,
+        error: result.errorText,
+      };
+    }
+
+    return {
+      ok: false,
+      error:
+        "SongRec nije pronađen. Instaliraj SongRec ili upiši komandu/putanju u Postavke → AI Live Chat (npr. songrec ili flatpak run com.github.marinm.songrec).",
+    };
   });
 
   // ── Screenshot Region (returns base64) ─────────────────────────────────────

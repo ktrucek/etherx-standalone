@@ -4688,6 +4688,31 @@
       zoom: var(--tkai-ui-scale);
     }
 
+    #tiktokAIPanel .panel-close {
+      color: rgba(255, 255, 255, .96);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+      font-weight: 700;
+    }
+
+    #tiktokAIPanel .panel-close:hover {
+      color: #fff;
+    }
+
+    #tiktokAIPanel .tkai-min-btn {
+      font-size: 18px;
+      margin-right: 2px;
+    }
+
+    #tiktokAIPanel.tkai-minimized {
+      height: auto !important;
+      min-height: 0;
+      max-height: none;
+    }
+
+    #tiktokAIPanel.tkai-minimized .tkai-body {
+      display: none;
+    }
+
     #tiktokAIPanel .panel-header {
       background: linear-gradient(135deg, #ff0050 0%, #ff7a00 100%);
       box-shadow: 0 0 24px rgba(255, 0, 80, .18);
@@ -9116,7 +9141,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.221</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.222</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -10256,7 +10281,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.221</span></div>
+                    id="helpVersionNum2">2.4.222</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -10457,7 +10482,7 @@
       </div>
     </div>
   </div>
-  <div class="panel" id="tiktokAIPanel" style="width:520px">
+  <div class="panel" id="tiktokAIPanel" style="width:460px">
     <!-- Lock overlay — shown when not activated -->
     <div id="tkaiPanelLockOverlay"
       style="display:none;position:absolute;inset:0;z-index:99;background:rgba(10,10,18,.88);backdrop-filter:blur(4px);border-radius:inherit;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 24px">
@@ -10481,7 +10506,8 @@
         <span id="tkaiScanStatus" style="font-size:10px;color:#ffe0ea"></span>
         <span id="tkaiAutoSuggestBadge"
           style="font-size:10px;color:#cbd5ff;background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.35);padding:2px 6px;border-radius:999px;display:none"></span>
-        <button class="panel-close" id="closeTiktokAIPanel">×</button>
+        <button class="panel-close tkai-min-btn" id="minimizeTiktokAIPanel" title="Spusti / proširi">−</button>
+        <button class="panel-close" id="closeTiktokAIPanel" title="Zatvori">×</button>
       </div>
     </div>
     <div class="tkai-body">
@@ -17417,6 +17443,28 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (galleryEl) galleryEl.style.display = giftGalleryVisible ? '' : 'none';
         giftToggleBtn.textContent = giftGalleryVisible ? 'Sakrij' : 'Prikaži';
       });
+
+      const tkaiMinBtn = document.getElementById('minimizeTiktokAIPanel');
+      const TKAI_MIN_KEY = 'ex_tkai_panel_minimized';
+      const applyTkaiMinimized = (minimized) => {
+        panel.classList.toggle('tkai-minimized', !!minimized);
+        if (tkaiMinBtn) {
+          tkaiMinBtn.textContent = minimized ? '▢' : '−';
+          tkaiMinBtn.title = minimized ? 'Proširi' : 'Spusti / proširi';
+        }
+      };
+      try {
+        applyTkaiMinimized(localStorage.getItem(TKAI_MIN_KEY) === '1');
+      } catch (_) {
+        applyTkaiMinimized(false);
+      }
+      tkaiMinBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = !panel.classList.contains('tkai-minimized');
+        applyTkaiMinimized(next);
+        try { localStorage.setItem(TKAI_MIN_KEY, next ? '1' : '0'); } catch (_) { }
+      });
+
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', stopScanning);
       document.addEventListener('keydown', onTikTokHoldLShortcut);
       updateHoldLButton();
