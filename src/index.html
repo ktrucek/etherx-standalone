@@ -4931,6 +4931,13 @@
       background: rgba(102, 126, 234, .15)
     }
 
+    .tkai-msg.targeted {
+      border-color: #f59e0b;
+      border-left: 3px solid #f59e0b;
+      background: linear-gradient(90deg, rgba(245, 158, 11, .22), rgba(245, 158, 11, .06));
+      box-shadow: 0 0 0 1px rgba(245, 158, 11, .35) inset;
+    }
+
     .tkai-gift-gallery {
       max-height: 148px;
       min-height: 78px;
@@ -9055,7 +9062,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.217</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.218</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -10100,7 +10107,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.217</span></div>
+                    id="helpVersionNum2">2.4.218</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -14275,6 +14282,9 @@
       let statsTimerInterval = null;
       let collectedMessages = [];
       let selectedMsgIds = new Set();
+      let targetedChatUser = '';
+      let tkaiMsgCtxEl = null;
+      let tkaiMsgCtxTarget = null;
       let isGenerating = false;
       let isTranslating = false;
       let holdLActive = false;
@@ -14407,6 +14417,59 @@
         const n = Number(value || 0);
         if (!Number.isFinite(n)) return '0';
         return n.toLocaleString('hr-HR');
+      }
+      function ensureTkaiMsgContextMenu() {
+        if (tkaiMsgCtxEl && document.body.contains(tkaiMsgCtxEl)) return tkaiMsgCtxEl;
+        tkaiMsgCtxEl = document.createElement('div');
+        tkaiMsgCtxEl.id = 'tkaiMsgCtxMenu';
+        tkaiMsgCtxEl.style.cssText = 'position:fixed;z-index:100001;display:none;min-width:190px;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;box-shadow:0 12px 26px rgba(0,0,0,.45);padding:4px;';
+        tkaiMsgCtxEl.innerHTML =
+          '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
+          '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>';
+        document.body.appendChild(tkaiMsgCtxEl);
+
+        tkaiMsgCtxEl.querySelector('[data-act="ai"]')?.addEventListener('click', () => {
+          const m = tkaiMsgCtxTarget;
+          if (!m) return;
+          selectedMsgIds = new Set([m.id]);
+          renderMessages();
+          generateReplies([m]);
+          closeTkaiMsgContextMenu();
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="target"]')?.addEventListener('click', async () => {
+          const m = tkaiMsgCtxTarget;
+          if (!m) return;
+          targetedChatUser = String(m.user || '');
+          m._targetedAt = Date.now();
+          const targetText = '@' + targetedChatUser + ' ' + String(m.translatedText || m.text || '').slice(0, 280);
+          if (typeof window.pushTextToTikTokAI === 'function') {
+            await window.pushTextToTikTokAI(targetText, 'Reply→' + targetedChatUser);
+          }
+          renderMessages();
+          closeTkaiMsgContextMenu();
+          showToast('🎯 Označen korisnik: ' + targetedChatUser);
+        });
+
+        document.addEventListener('click', (event) => {
+          if (tkaiMsgCtxEl && tkaiMsgCtxEl.contains(event.target)) return;
+          closeTkaiMsgContextMenu();
+        }, true);
+        document.addEventListener('scroll', () => closeTkaiMsgContextMenu(), true);
+        return tkaiMsgCtxEl;
+      }
+      function openTkaiMsgContextMenu(x, y, message) {
+        const el = ensureTkaiMsgContextMenu();
+        tkaiMsgCtxTarget = message || null;
+        el.style.display = 'block';
+        const rect = el.getBoundingClientRect();
+        const left = Math.min(x, window.innerWidth - rect.width - 8);
+        const top = Math.min(y, window.innerHeight - rect.height - 8);
+        el.style.left = Math.max(8, left) + 'px';
+        el.style.top = Math.max(8, top) + 'px';
+      }
+      function closeTkaiMsgContextMenu() {
+        if (tkaiMsgCtxEl) tkaiMsgCtxEl.style.display = 'none';
       }
       function extractJoinLevel(message) {
         if (!message || message.type !== 'join') return null;
@@ -15401,6 +15464,7 @@
         const hdr = chatPopout.querySelector('#tkaiPopoutHeader');
         let pdragging = false, pox = 0, poy = 0;
         hdr.addEventListener('pointerdown', e => {
+          if (e.target.closest('button')) return;
           pdragging = true;
           pox = e.clientX - chatPopout.getBoundingClientRect().left;
           poy = e.clientY - chatPopout.getBoundingClientRect().top;
@@ -15422,7 +15486,11 @@
         hdr.addEventListener('pointerup', () => { pdragging = false; });
         hdr.addEventListener('pointercancel', () => { pdragging = false; });
 
-        chatPopout.querySelector('#tkaiPopoutClose').addEventListener('click', closeChatPopout);
+        chatPopout.querySelector('#tkaiPopoutClose').addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          closeChatPopout();
+        });
         chatPopout.querySelector('#tkaiPopoutClearFilter').addEventListener('click', () => {
           mirrorToPopout(collectedMessages);
         });
@@ -15661,6 +15729,9 @@
         collectedMessages.slice(-30).forEach((message) => {
           const div = document.createElement('div');
           div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
+          if (targetedChatUser && String(message.user || '') === targetedChatUser) {
+            div.classList.add('targeted');
+          }
           const typeBadge = message.type === 'gift'
             ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,195,74,.25);color:#ffd278;border:1px solid rgba(255,210,120,.35)">🎁 gift</span>'
             : (message.type === 'subscriber'
@@ -15682,9 +15753,24 @@
             else selectedMsgIds.add(message.id);
             div.classList.toggle('selected', selectedMsgIds.has(message.id));
           });
+          div.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            selectedMsgIds = new Set([message.id]);
+            renderMessages();
+            openTkaiMsgContextMenu(event.clientX, event.clientY, message);
+          });
           messagesEl.appendChild(div);
         });
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        if (targetedChatUser) {
+          const targetedRows = messagesEl.querySelectorAll('.tkai-msg.targeted');
+          const lastTargeted = targetedRows[targetedRows.length - 1];
+          if (lastTargeted) {
+            lastTargeted.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+        } else {
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
         if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
         renderGiftGallery();
       }
