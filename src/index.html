@@ -5129,6 +5129,44 @@
       height: 30px;
     }
 
+    .tkai-sentiment-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 2px 0 4px;
+      gap: 8px;
+    }
+
+    .tkai-sentiment-score {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text2);
+    }
+
+    .tkai-sentiment-percent {
+      font-size: 10px;
+      font-weight: 700;
+      color: #a5b4fc;
+      background: rgba(102, 126, 234, .14);
+      border: 1px solid rgba(102, 126, 234, .28);
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+
+    .tkai-sentiment-desc {
+      font-size: 10px;
+      color: var(--text3);
+      line-height: 1.35;
+      margin-bottom: 6px;
+      min-height: 26px;
+    }
+
+    .tkai-sentiment-bars svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
     .tkai-sentiment-bar {
       flex: 1;
       border-radius: 3px;
@@ -8840,7 +8878,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.212</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.213</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -9339,7 +9377,9 @@
                       in</div>
                   </div>
                   <select class="s-select" data-setting="tkaiReplyLang">
+                    <option value="en_auto">English (AUTO)</option>
                     <option value="auto">Auto (match chat language)</option>
+                    <option value="read">Same as reading language</option>
                     <option value="hr">Croatian (Hrvatski)</option>
                     <option value="en">English</option>
                     <option value="de">German (Deutsch)</option>
@@ -9372,6 +9412,26 @@
 
                 <div class="s-row">
                   <div class="s-row-left">
+                    <div class="s-row-label" data-i18n="tkaiTranslateLangLabel">Translation language</div>
+                    <div class="s-row-desc" data-i18n="tkaiTranslateLangDesc">Target language for auto-translated chat
+                      text</div>
+                  </div>
+                  <select class="s-select" data-setting="tkaiTranslateLang">
+                    <option value="auto">Auto (use reading language)</option>
+                    <option value="hr">Croatian (Hrvatski)</option>
+                    <option value="en">English</option>
+                    <option value="de">German (Deutsch)</option>
+                    <option value="es">Spanish (Español)</option>
+                    <option value="fr">French (Français)</option>
+                    <option value="pt">Portuguese (Português)</option>
+                    <option value="it">Italian (Italiano)</option>
+                    <option value="tr">Turkish (Türkçe)</option>
+                    <option value="ar">Arabic (عربي)</option>
+                  </select>
+                </div>
+
+                <div class="s-row">
+                  <div class="s-row-left">
                     <div class="s-row-label" data-i18n="tkaiContextWindowLabel">Context window (messages)</div>
                     <div class="s-row-desc" data-i18n="tkaiContextWindowDesc">How many previous messages the AI sees for
                       better context</div>
@@ -9382,7 +9442,7 @@
 
                 <div class="s-row">
                   <div class="s-row-left">
-                    <div class="s-row-label" data-i18n="tkaiAutoTranslateLabel">Auto-translate to English</div>
+                    <div class="s-row-label" data-i18n="tkaiAutoTranslateLabel">Auto-translate chat</div>
                     <div class="s-row-desc" data-i18n="tkaiAutoTranslateDesc">Automatically translate foreign chat
                       messages</div>
                   </div>
@@ -9804,7 +9864,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.212</span></div>
+                    id="helpVersionNum2">2.4.213</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -10129,6 +10189,11 @@
               <ul class="tkai-insights-list" id="tkaiInsightsList"></ul>
               <div class="tkai-insights-title" style="margin-top:8px" title="Trend pozitivnog/negativnog tona">Sentiment
                 trend<span>↕</span></div>
+              <div class="tkai-sentiment-meta">
+                <div class="tkai-sentiment-score" id="tkaiSentimentScore">Neutral</div>
+                <div class="tkai-sentiment-percent" id="tkaiSentimentPercent">0%</div>
+              </div>
+              <div class="tkai-sentiment-desc" id="tkaiSentimentDesc">Trend sentimenta kroz zadnje poruke.</div>
               <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
             </div>
             <div class="tkai-insights-card">
@@ -13982,27 +14047,48 @@
       const spikeAllBtn = document.getElementById('tkaiSpikeAll');
       const spikeViewersBtn = document.getElementById('tkaiSpikeViewers');
       const spikeGiftsBtn = document.getElementById('tkaiSpikeGifts');
-      const toneEl = document.getElementById('tkaiTone');
-      const readLangEl = document.getElementById('tkaiReadLang');
-      const replyLangEl = document.getElementById('tkaiReplyLang');
-      const autoTranslateEl = document.getElementById('tkaiAutoTranslate');
-      const countEl = document.getElementById('tkaiCount');
-      const contextEl = document.getElementById('tkaiContext');
-      const customPromptEl = document.getElementById('tkaiCustomPrompt');
+      const toneEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTone"]');
+      const readLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReadLang"]');
+      const translateLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTranslateLang"]');
+      const replyLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyLang"]');
+      const autoTranslateEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiAutoTranslate"]');
+      const countEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyCount"]');
+      const contextEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiContextCount"]');
+      const customPromptEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiCustomPrompt"]');
       const configToggle = document.getElementById('tkaiConfigToggle');
       const configInner = document.getElementById('tkaiConfigInner');
       const configArrow = document.getElementById('tkaiConfigArrow');
+
+      function isToggleOn(el) {
+        if (!el) return true;
+        if (typeof el.checked === 'boolean') return el.checked;
+        return el.classList.contains('on');
+      }
+      function setToggleOn(el, on) {
+        if (!el) return;
+        if (typeof el.checked === 'boolean') el.checked = !!on;
+        el.classList.toggle('on', !!on);
+      }
+      function getTranslateTargetLang() {
+        if (!isToggleOn(autoTranslateEl)) return 'auto';
+        const readLang = readLangEl?.value || 'auto';
+        const translateLang = translateLangEl?.value || 'auto';
+        if (translateLang !== 'auto') return translateLang;
+        if (readLang !== 'auto') return readLang;
+        return 'en';
+      }
 
       function loadCfg() {
         try {
           const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
           if (toneEl && saved.tone) toneEl.value = saved.tone;
           if (readLangEl && (saved.readLang || saved.lang)) readLangEl.value = saved.readLang || saved.lang;
+          if (translateLangEl && saved.translateLang) translateLangEl.value = saved.translateLang;
           if (replyLangEl && (saved.replyLang || saved.lang)) replyLangEl.value = saved.replyLang || saved.lang;
           if (countEl && saved.count) countEl.value = saved.count;
           if (contextEl && saved.context) contextEl.value = saved.context;
           if (customPromptEl && saved.customPrompt) customPromptEl.value = saved.customPrompt;
-          if (autoTranslateEl) autoTranslateEl.checked = saved.autoTranslate !== false;
+          setToggleOn(autoTranslateEl, saved.autoTranslate !== false);
           if (typeof saved.holdL === 'boolean') holdLActive = saved.holdL;
         } catch (e) { }
       }
@@ -14012,8 +14098,9 @@
             tone: toneEl?.value,
             lang: replyLangEl?.value,
             readLang: readLangEl?.value,
+            translateLang: translateLangEl?.value,
             replyLang: replyLangEl?.value,
-            autoTranslate: autoTranslateEl?.checked !== false,
+            autoTranslate: isToggleOn(autoTranslateEl),
             count: countEl?.value,
             context: contextEl?.value,
             customPrompt: customPromptEl?.value,
@@ -14450,18 +14537,56 @@
           engagementBarsEl.appendChild(bar);
         });
         if (sentimentTrendEl) {
-          sentimentTrendEl.innerHTML = '';
-          const maxAbs = Math.max(1, ...insights.sentimentTrend.map((s) => Math.abs(s.score)));
-          insights.sentimentTrend.forEach((s) => {
-            const bar = document.createElement('div');
-            bar.className = 'tkai-sentiment-bar';
-            const ratio = Math.min(1, Math.abs(s.score) / maxAbs);
-            const height = Math.max(4, Math.round(ratio * 30));
-            bar.style.height = `${height}px`;
-            bar.style.background = s.score > 0 ? 'rgba(74, 222, 128, .75)' : s.score < 0 ? 'rgba(248, 113, 113, .75)' : 'rgba(255, 255, 255, .15)';
-            bar.title = `${s.minute}m: ${s.score}`;
-            sentimentTrendEl.appendChild(bar);
-          });
+          const sentimentScoreEl = document.getElementById('tkaiSentimentScore');
+          const sentimentPercentEl = document.getElementById('tkaiSentimentPercent');
+          const sentimentDescEl = document.getElementById('tkaiSentimentDesc');
+          const trendData = insights.sentimentTrend.slice(-18);
+          const avgScore = trendData.length
+            ? (trendData.reduce((sum, point) => sum + Number(point.score || 0), 0) / trendData.length)
+            : 0;
+          const maxAbs = Math.max(1, ...trendData.map((point) => Math.abs(Number(point.score || 0))), 1);
+          const normalizedPct = Math.max(0, Math.min(100, Math.round(((avgScore / maxAbs) + 1) * 50)));
+
+          let sentimentLabel = 'Neutral';
+          let sentimentColor = 'var(--text2)';
+          if (avgScore > 0.15) {
+            sentimentLabel = 'Pozitivan trend';
+            sentimentColor = '#4ade80';
+          } else if (avgScore < -0.15) {
+            sentimentLabel = 'Negativan trend';
+            sentimentColor = '#f87171';
+          }
+
+          const modelConfidence = _cardiffSentiment
+            ? `Cardiff model: ${Math.round(Number(_cardiffSentiment.score || 0) * 100)}% pouzdanosti.`
+            : '';
+          const slope = trendData.length > 1 ? Number(trendData[trendData.length - 1].score || 0) - Number(trendData[0].score || 0) : 0;
+          const slopeText = slope > 0.2
+            ? 'Sentiment raste u zadnjim porukama.'
+            : slope < -0.2
+              ? 'Sentiment pada u zadnjim porukama.'
+              : 'Sentiment je stabilan.';
+
+          if (sentimentScoreEl) {
+            sentimentScoreEl.textContent = sentimentLabel;
+            sentimentScoreEl.style.color = sentimentColor;
+          }
+          if (sentimentPercentEl) sentimentPercentEl.textContent = `${normalizedPct}%`;
+          if (sentimentDescEl) sentimentDescEl.textContent = `${slopeText}${modelConfidence ? ' ' + modelConfidence : ''}`;
+
+          if (!trendData.length) {
+            sentimentTrendEl.innerHTML = '';
+          } else {
+            const width = 220;
+            const height = 30;
+            const points = trendData.map((point, i) => {
+              const x = trendData.length === 1 ? width / 2 : (i / (trendData.length - 1)) * (width - 4) + 2;
+              const y = ((1 - ((Number(point.score || 0) / maxAbs + 1) / 2)) * (height - 6)) + 3;
+              return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+            const tone = avgScore > 0.15 ? '74,222,128' : avgScore < -0.15 ? '248,113,113' : '165,180,252';
+            sentimentTrendEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><line x1="2" y1="${height / 2}" x2="${width - 2}" y2="${height / 2}" stroke="rgba(255,255,255,.12)" stroke-width="1" stroke-dasharray="3 3"></line><polyline fill="none" stroke="rgba(${tone},.95)" stroke-width="2" points="${points}"></polyline></svg>`;
+          }
         }
         spikeListEl.innerHTML = '';
         let filteredSpikes = insights.spikes;
@@ -14788,8 +14913,8 @@
           return;
         }
         messagesEl.innerHTML = '';
-        const readLang = readLangEl?.value || 'hr';
-        const showTranslated = autoTranslateEl?.checked !== false && readLang !== 'auto';
+        const targetLang = getTranslateTargetLang();
+        const showTranslated = targetLang !== 'auto';
         collectedMessages.slice(-30).forEach((message) => {
           const div = document.createElement('div');
           div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
@@ -14798,7 +14923,7 @@
             : (message.type === 'subscriber'
               ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(120,200,255,.22);color:#bde7ff;border:1px solid rgba(150,220,255,.35)">⭐ sub</span>'
               : '');
-          const translated = showTranslated && message.translatedLang === readLang && message.translatedText
+          const translated = showTranslated && message.translatedLang === targetLang && message.translatedText
             ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff">' + escHtml(message.translatedText) + '</div>'
             : '';
           const original = translated
@@ -14860,9 +14985,9 @@
         collectedMessages.push({ user, text, id, ts: Date.now(), type: 'chat' });
         extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
-        const readLang = readLangEl?.value || 'hr';
-        if (autoTranslateEl?.checked !== false && readLang !== 'auto') {
-          await translateMessagesInPlace(collectedMessages, readLang);
+        const targetLang = getTranslateTargetLang();
+        if (targetLang !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, targetLang);
         }
         if (panel && !panel.classList.contains('open')) panel.classList.add('open');
         renderMessages();
@@ -14910,8 +15035,12 @@
 
       function buildPrompt(messages) {
         const tone = toneEl?.value || 'friendly';
-        const replyLang = replyLangEl?.value || 'hr';
-        const readLang = readLangEl?.value || 'hr';
+        const replyLangRaw = replyLangEl?.value || 'en_auto';
+        const readLang = readLangEl?.value || 'auto';
+        const targetLang = getTranslateTargetLang();
+        let replyLang = replyLangRaw;
+        if (replyLangRaw === 'en_auto') replyLang = 'en';
+        else if (replyLangRaw === 'read') replyLang = readLang !== 'auto' ? readLang : 'en';
         const count = parseInt(countEl?.value || '3', 10);
         const context = contextEl?.value?.trim() || '';
         const custom = customPromptEl?.value?.trim() || '';
@@ -14936,7 +15065,7 @@
           id: 'ISKLJUČIVO na indonesijskom jeziku',
           auto: 'na istom jeziku kao poruke u chatu',
         };
-        const useTranslated = autoTranslateEl?.checked !== false && readLang !== 'auto';
+        const useTranslated = targetLang !== 'auto';
         const chatLines = messages.map(message => {
           const msgText = useTranslated ? (message.translatedText || message.text) : message.text;
           return `${message.user}: ${msgText}`;
@@ -15291,9 +15420,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
           if (!sessionStartedAt) sessionStartedAt = Date.now();
           if (added > 0) extractAndTrackQuestions(collectedMessages.slice(-added));
-          const readLang = readLangEl?.value || 'hr';
-          if (autoTranslateEl?.checked !== false && readLang !== 'auto' && added > 0) {
-            await translateMessagesInPlace(collectedMessages, readLang);
+          const targetLang = getTranslateTargetLang();
+          if (targetLang !== 'auto' && added > 0) {
+            await translateMessagesInPlace(collectedMessages, targetLang);
           }
           renderMessages();
           updateSessionStatsUI();
@@ -15367,11 +15496,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           return;
         }
         const targetLang = readLangEl?.value || 'auto';
+        const translateLang = getTranslateTargetLang();
         const replyLang = replyLangEl?.value || 'hr';
         const giftStats = computeGiftStats();
         const payload = {
           exportedAt: new Date().toISOString(),
           targetLanguage: targetLang,
+          translateLanguage: translateLang,
           replyLanguage: replyLang,
           messageCount: collectedMessages.length,
           sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
@@ -15435,20 +15566,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }
 
       loadCfg();
-      [toneEl, readLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+      [toneEl, readLangEl, translateLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
       contextEl?.addEventListener('input', saveCfg);
       customPromptEl?.addEventListener('input', saveCfg);
       readLangEl?.addEventListener('change', async () => {
-        if (autoTranslateEl?.checked !== false && (readLangEl?.value || 'auto') !== 'auto') {
-          await translateMessagesInPlace(collectedMessages, readLangEl.value);
+        const targetLang = getTranslateTargetLang();
+        if (targetLang !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, targetLang);
           renderMessages();
           return;
         }
         renderMessages();
       });
+      translateLangEl?.addEventListener('change', async () => {
+        const targetLang = getTranslateTargetLang();
+        if (targetLang !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, targetLang);
+        }
+        renderMessages();
+      });
       autoTranslateEl?.addEventListener('change', async () => {
-        if (autoTranslateEl.checked && (readLangEl?.value || 'auto') !== 'auto') {
-          await translateMessagesInPlace(collectedMessages, readLangEl.value);
+        const targetLang = getTranslateTargetLang();
+        if (targetLang !== 'auto') {
+          await translateMessagesInPlace(collectedMessages, targetLang);
         }
         renderMessages();
       });
@@ -21165,13 +21305,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tkaiThreeReplies: '3 replies',
         tkaiReplyLangLabel: 'Reply language',
         tkaiReplyLangDesc: 'Language the AI writes its reply suggestions in',
+        tkaiReplyLangEnglishAuto: 'English (AUTO)',
+        tkaiReplyLangReadLang: 'Same as reading language',
         tkaiAutoMatchChatLang: 'Auto (match chat language)',
         tkaiReadLangLabel: 'Chat reading language',
         tkaiReadLangDesc: 'Language used when reading and translating incoming chat',
         tkaiAutoDetectLang: 'Auto-detect',
+        tkaiTranslateLangLabel: 'Translation language',
+        tkaiTranslateLangDesc: 'Target language for auto-translated chat text',
+        tkaiTranslateLangAutoRead: 'Auto (use reading language)',
         tkaiContextWindowLabel: 'Context window (messages)',
         tkaiContextWindowDesc: 'How many previous messages the AI sees for better context',
-        tkaiAutoTranslateLabel: 'Auto-translate to English',
+        tkaiAutoTranslateLabel: 'Auto-translate chat',
         tkaiAutoTranslateDesc: 'Automatically translate foreign chat messages',
         tkaiCustomInstructionsLabel: 'Custom instructions (System Prompt)',
         tkaiCustomInstructionsDesc: 'Additional instructions always applied to AI generation',
@@ -21272,13 +21417,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         tkaiThreeReplies: '3 odgovora',
         tkaiReplyLangLabel: 'Jezik odgovora',
         tkaiReplyLangDesc: 'Jezik na kojem AI piše prijedloge odgovora',
+        tkaiReplyLangEnglishAuto: 'Engleski (AUTO)',
+        tkaiReplyLangReadLang: 'Prema jeziku čitanja',
         tkaiAutoMatchChatLang: 'Auto (prati jezik chata)',
         tkaiReadLangLabel: 'Jezik čitanja chata',
         tkaiReadLangDesc: 'Jezik koji se koristi za čitanje i prijevod dolaznog chata',
         tkaiAutoDetectLang: 'Auto-detekcija',
+        tkaiTranslateLangLabel: 'Jezik prijevoda',
+        tkaiTranslateLangDesc: 'Ciljni jezik za automatski prijevod poruka',
+        tkaiTranslateLangAutoRead: 'Auto (koristi jezik čitanja)',
         tkaiContextWindowLabel: 'Kontekstni prozor (poruke)',
         tkaiContextWindowDesc: 'Koliko prethodnih poruka AI vidi za bolji kontekst',
-        tkaiAutoTranslateLabel: 'Auto-prijevod na engleski',
+        tkaiAutoTranslateLabel: 'Auto-prijevod poruka',
         tkaiAutoTranslateDesc: 'Automatski prevedi strane poruke iz chata',
         tkaiCustomInstructionsLabel: 'Prilagođene upute (System Prompt)',
         tkaiCustomInstructionsDesc: 'Dodatne upute koje se uvijek primjenjuju pri AI generiranju',
@@ -21456,22 +21606,27 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     function syncTkaiLanguageSelects(langPack = LANGS.en) {
       const replySel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyLang"]');
       const readSel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReadLang"]');
-      if (!replySel || !readSel) return;
+      const translateSel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTranslateLang"]');
+      if (!replySel || !readSel || !translateSel) return;
 
       const settings = DB.getSettings();
-      const prevReply = replySel.value || settings.tkaiReplyLang || 'auto';
+      const prevReply = replySel.value || settings.tkaiReplyLang || 'en_auto';
       const prevRead = readSel.value || settings.tkaiReadLang || 'auto';
+      const prevTranslate = translateSel.value || settings.tkaiTranslateLang || 'auto';
 
       const langOptions = Object.entries(LANGS).map(([code, data]) => {
         const name = (data && data.name) ? data.name : code.toUpperCase();
         return `<option value="${code}">${name}</option>`;
       }).join('');
 
-      replySel.innerHTML = `<option value="auto">${langPack.tkaiAutoMatchChatLang || LANGS.en.tkaiAutoMatchChatLang || 'Auto (match chat language)'}</option>${langOptions}`;
+      replySel.innerHTML = `<option value="en_auto">${langPack.tkaiReplyLangEnglishAuto || LANGS.en.tkaiReplyLangEnglishAuto || 'English (AUTO)'}</option><option value="auto">${langPack.tkaiAutoMatchChatLang || LANGS.en.tkaiAutoMatchChatLang || 'Auto (match chat language)'}</option><option value="read">${langPack.tkaiReplyLangReadLang || LANGS.en.tkaiReplyLangReadLang || 'Same as reading language'}</option>${langOptions}`;
       readSel.innerHTML = `<option value="auto">${langPack.tkaiAutoDetectLang || LANGS.en.tkaiAutoDetectLang || 'Auto-detect'}</option>${langOptions}`;
+      translateSel.innerHTML = `<option value="auto">${langPack.tkaiTranslateLangAutoRead || LANGS.en.tkaiTranslateLangAutoRead || 'Auto (use reading language)'}</option>${langOptions}`;
 
-      replySel.value = LANGS[prevReply] || prevReply === 'auto' ? prevReply : 'auto';
+      const allowedReply = new Set(['en_auto', 'auto', 'read', ...Object.keys(LANGS)]);
+      replySel.value = allowedReply.has(prevReply) ? prevReply : 'en_auto';
       readSel.value = LANGS[prevRead] || prevRead === 'auto' ? prevRead : 'auto';
+      translateSel.value = LANGS[prevTranslate] || prevTranslate === 'auto' ? prevTranslate : 'auto';
     }
 
     function applyLanguage(code) {
