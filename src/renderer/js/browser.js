@@ -7307,9 +7307,19 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const autoSuggestBadgeEl = document.getElementById("tkaiAutoSuggestBadge");
   const insightsListEl = document.getElementById("tkaiInsightsList");
   const engagementBarsEl = document.getElementById("tkaiEngagementBars");
+  const engagementTopEl = document.getElementById("tkaiEngagementTop");
+  const engagementSummaryEl = document.getElementById("tkaiEngagementSummary");
   const spikeListEl = document.getElementById("tkaiSpikeList");
   const recommendationsEl = document.getElementById("tkaiRecommendations");
   const sentimentTrendEl = document.getElementById("tkaiSentimentTrend");
+  const sentimentTopEl = document.getElementById("tkaiSentimentTop");
+  const sentimentSummaryEl = document.getElementById("tkaiSentimentSummary");
+  const pieChartEl = document.getElementById("tkaiPieChart");
+  const pieCenterEl = document.getElementById("tkaiPieCenter");
+  const pieLegendEl = document.getElementById("tkaiPieLegend");
+  const pieSummaryEl = document.getElementById("tkaiPieSummary");
+  const songListEl = document.getElementById("tkaiSongList");
+  const joinLevelListEl = document.getElementById("tkaiJoinLevelList");
   const spikeAllBtn = document.getElementById("tkaiSpikeAll");
   const spikeViewersBtn = document.getElementById("tkaiSpikeViewers");
   const spikeGiftsBtn = document.getElementById("tkaiSpikeGifts");
@@ -7317,11 +7327,30 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const btnTikTokAI = document.getElementById("btnTikTokAI");
   let filterStarredOnly = getTkaiSetting("tkaiFilterStarredOnly", false);
   let spikeFilter = "all";
+  let recommendationsPopoutEl = null;
+  let recommendationsPopoutBodyEl = null;
 
   function formatNum(v) {
     const n = Number(v || 0);
     if (!Number.isFinite(n)) return "0";
     return n.toLocaleString("hr-HR");
+  }
+
+  function extractJoinLevel(message) {
+    if (!message || message.type !== "join") return null;
+    const direct = Number(message.level || message.joinLevel || 0);
+    if (Number.isFinite(direct) && direct > 0 && direct < 500) return direct;
+    const fromBadge = String(message.badgeText || "").match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
+    if (fromBadge) {
+      const val = Number(fromBadge[1] || 0);
+      if (Number.isFinite(val) && val > 0 && val < 500) return val;
+    }
+    const fromText = String(message.text || "").match(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*(\d{1,3})\b/i);
+    if (fromText) {
+      const val = Number(fromText[1] || 0);
+      if (Number.isFinite(val) && val > 0 && val < 500) return val;
+    }
+    return null;
   }
 
   function saveTkaiSessions(arr) {
@@ -7622,6 +7651,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     const topicCounts = new Map();
     const questions = [];
     let sentimentScore = 0;
+    let positiveHits = 0;
+    let negativeHits = 0;
 
     messages.forEach((m) => {
       const text = String(m.text || "").toLowerCase();
@@ -7638,8 +7669,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         topicCounts.set(t, (topicCounts.get(t) || 0) + 1);
       });
       tokens.forEach((t) => {
-        if (positiveWords.has(t)) sentimentScore += 1;
-        if (negativeWords.has(t)) sentimentScore -= 1;
+        if (positiveWords.has(t)) {
+          sentimentScore += 1;
+          positiveHits += 1;
+        }
+        if (negativeWords.has(t)) {
+          sentimentScore -= 1;
+          negativeHits += 1;
+        }
       });
     });
 
@@ -7673,49 +7710,269 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       .sort((a, b) => a[0] - b[0])
       .slice(-12)
       .map(([minute, count]) => ({ minute, count }));
+
+    const totalEngagement = engagement.reduce((acc, e) => acc + e.count, 0);
+    const engagementWithPct = engagement.map((e) => ({
+      minute: e.minute,
+      count: e.count,
+      percent: totalEngagement > 0 ? Math.round((e.count / totalEngagement) * 100) : 0,
+    }));
+
+    const engagementAvgPerMin = engagementWithPct.length
+      ? Math.round(totalEngagement / engagementWithPct.length)
+      : 0;
+    const engagementPeak = engagementWithPct.reduce(
+      (best, cur) => (cur.count > best.count ? cur : best),
+      { minute: 0, count: 0, percent: 0 },
+    );
+
     const sentimentTrend = Array.from(perMinuteSentiment.entries())
       .sort((a, b) => a[0] - b[0])
       .slice(-12)
       .map(([minute, score]) => ({ minute, score }));
 
+    const sentimentTotal = Math.max(1, positiveHits + negativeHits);
+    const positivePct = Math.round((positiveHits / sentimentTotal) * 100);
+    const negativePct = Math.round((negativeHits / sentimentTotal) * 100);
+    const neutralPct = Math.max(0, 100 - positivePct - negativePct);
+
     const spikes = [];
-    if (viewerSamplePoints.length >= 2) {
-      const prev = viewerSamplePoints[viewerSamplePoints.length - 2];
-      const last = viewerSamplePoints[viewerSamplePoints.length - 1];
-      const delta = last.value - prev.value;
-      const threshold = Math.max(50, Math.round(prev.value * 0.15));
-      if (Math.abs(delta) >= threshold) {
-        spikes.push({
-          type: "viewers",
+    const spikeSensitivity = String(
+      getTkaiSetting("tkaiSpikeSensitivity", "normal") || "normal",
+    ).toLowerCase();
+    const spikeCfg =
+      spikeSensitivity === "high"
+        ? {
+          viewerAbsMin: 12,
+          viewerPctMin: 0.06,
+          viewerPctFallback: 0.08,
+          giftWindowMs: 60 * 1000,
+          giftCountMin: 1,
+          giftCountMul: 1.35,
+          giftCountPlus: 1,
+          giftCoinMin: 15,
+          giftCoinMul: 1.3,
+          giftCoinPlus: 15,
+          giftDeltaDiv: 8,
+        }
+        : spikeSensitivity === "low"
+          ? {
+            viewerAbsMin: 30,
+            viewerPctMin: 0.12,
+            viewerPctFallback: 0.16,
+            giftWindowMs: 120 * 1000,
+            giftCountMin: 3,
+            giftCountMul: 1.9,
+            giftCountPlus: 3,
+            giftCoinMin: 60,
+            giftCoinMul: 1.8,
+            giftCoinPlus: 45,
+            giftDeltaDiv: 12,
+          }
+          : {
+            viewerAbsMin: 20,
+            viewerPctMin: 0.08,
+            viewerPctFallback: 0.12,
+            giftWindowMs: 90 * 1000,
+            giftCountMin: 2,
+            giftCountMul: 1.6,
+            giftCountPlus: 2,
+            giftCoinMin: 30,
+            giftCoinMul: 1.5,
+            giftCoinPlus: 30,
+            giftDeltaDiv: 10,
+          };
+    let viewerSpikeDebug = null;
+    if (viewerSamplePoints.length >= 3) {
+      const recent = viewerSamplePoints.slice(-8);
+      const last = recent[recent.length - 1];
+      const baselineValues = recent.slice(0, -1).map((p) => Number(p.value || 0)).filter((v) => v > 0);
+      if (baselineValues.length) {
+        const sorted = baselineValues.slice().sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const baseline =
+          sorted.length % 2 === 0
+            ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+            : sorted[mid];
+        const delta = Number(last.value || 0) - baseline;
+        const threshold = Math.max(
+          spikeCfg.viewerAbsMin,
+          Math.round(baseline * spikeCfg.viewerPctMin),
+        );
+        const pctMove = baseline > 0 ? Math.abs(delta) / baseline : 0;
+        viewerSpikeDebug = {
+          baseline,
+          last: Number(last.value || 0),
           delta,
-          ts: last.ts,
-        });
+          threshold,
+          pctMove,
+          fired: Math.abs(delta) >= threshold || pctMove >= spikeCfg.viewerPctFallback,
+        };
+        if (Math.abs(delta) >= threshold || pctMove >= spikeCfg.viewerPctFallback) {
+          spikes.push({ type: "viewers", delta, ts: last.ts });
+        }
       }
     }
 
     const giftMsgs = messages.filter((m) => m.type === "gift" || m.type === "subscriber");
-    const windowMs = 2 * 60 * 1000;
-    const nowWindow = giftMsgs.filter((m) => now - Number(m.ts || now) <= windowMs).length;
+    const windowMs = spikeCfg.giftWindowMs;
+    const nowWindow = giftMsgs.filter((m) => now - Number(m.ts || now) <= windowMs);
     const prevWindow = giftMsgs.filter((m) => {
       const ts = Number(m.ts || now);
       return now - ts > windowMs && now - ts <= 2 * windowMs;
-    }).length;
-    if (nowWindow >= Math.max(3, prevWindow * 2)) {
-      spikes.push({ type: "gifts", delta: nowWindow - prevWindow, ts: now });
+    });
+    const nowCount = nowWindow.length;
+    const prevCount = prevWindow.length;
+    const nowCoins = nowWindow.reduce((acc, m) => acc + Number(m.coins || 0), 0);
+    const prevCoins = prevWindow.reduce((acc, m) => acc + Number(m.coins || 0), 0);
+    const countSpike =
+      nowCount >= spikeCfg.giftCountMin &&
+      (prevCount === 0 ||
+        nowCount >= prevCount + spikeCfg.giftCountPlus ||
+        nowCount >= Math.ceil(prevCount * spikeCfg.giftCountMul));
+    const coinSpike =
+      nowCoins >= spikeCfg.giftCoinMin &&
+      (prevCoins === 0 ||
+        nowCoins >= prevCoins + spikeCfg.giftCoinPlus ||
+        nowCoins >= Math.ceil(prevCoins * spikeCfg.giftCoinMul));
+    const giftSpikeDebug = {
+      windowMs,
+      nowCount,
+      prevCount,
+      nowCoins,
+      prevCoins,
+      countSpike,
+      coinSpike,
+      fired: countSpike || coinSpike,
+    };
+    if (countSpike || coinSpike) {
+      const delta = Math.max(
+        nowCount - prevCount,
+        Math.round((nowCoins - prevCoins) / spikeCfg.giftDeltaDiv),
+      );
+      spikes.push({ type: "gifts", delta, ts: now });
     }
+
+    const msgTypeCounts = {
+      chat: messages.filter((m) => m.type === "chat").length,
+      gift: messages.filter((m) => m.type === "gift" || m.type === "subscriber").length,
+      caption: messages.filter((m) => m.type === "caption").length,
+      song: messages.filter((m) => m.type === "song").length,
+      join: messages.filter((m) => m.type === "join").length,
+    };
+    const msgTypeTotal = Math.max(
+      1,
+      msgTypeCounts.chat + msgTypeCounts.gift + msgTypeCounts.caption + msgTypeCounts.song + msgTypeCounts.join,
+    );
+
+    const pieBreakdown = [
+      { key: "chat", label: "Chat", color: "#60a5fa", value: msgTypeCounts.chat },
+      { key: "gift", label: "Gifts", color: "#f97316", value: msgTypeCounts.gift },
+      { key: "caption", label: "CC", color: "#a78bfa", value: msgTypeCounts.caption },
+      { key: "song", label: "Songs", color: "#22c55e", value: msgTypeCounts.song },
+      { key: "join", label: "Join", color: "#6b7280", value: msgTypeCounts.join },
+    ].map((row) => ({
+      ...row,
+      pct: Math.round((row.value / msgTypeTotal) * 100),
+    }));
+
+    const songs = [];
+    const songRegex = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\s*[:\-]?\s*([^\n]{3,120})/i;
+    const quoteRegex = /["']([^"']{4,90})["']/;
+    messages
+      .filter((m) => m.type === "caption" || m.type === "chat")
+      .forEach((m) => {
+        const text = String(m.text || "").trim();
+        if (!text) return;
+        let title = "";
+        const match = text.match(songRegex);
+        if (match) title = String(match[1] || "").trim();
+        if (!title) {
+          const quoted = text.match(quoteRegex);
+          if (quoted && /(music|song|dj|pjesma|beat|track)/i.test(text)) {
+            title = String(quoted[1] || "").trim();
+          }
+        }
+        if (!title) return;
+        songs.push({
+          title: title.slice(0, 90),
+          source: m.type,
+          ts: Number(m.ts || now),
+        });
+      });
+
+    const uniqueSongs = [];
+    const songSet = new Set();
+    songs.forEach((s) => {
+      const key = s.title.toLowerCase();
+      if (songSet.has(key)) return;
+      songSet.add(key);
+      uniqueSongs.push(s);
+    });
+
+    const joinLevels = messages
+      .filter((m) => m.type === "join")
+      .map((m) => ({
+        user: String(m.user || "").slice(0, 40) || "unknown",
+        level: extractJoinLevel(m),
+        ts: Number(m.ts || now),
+      }))
+      .filter((j) => j.user)
+      .slice(-32);
+
+    const joinBuckets = {
+      lvl1to20: 0,
+      lvl21to34: 0,
+      lvl35to49: 0,
+      lvl50plus: 0,
+      unknown: 0,
+    };
+    joinLevels.forEach((j) => {
+      const lvl = Number(j.level || 0);
+      if (!lvl) {
+        joinBuckets.unknown += 1;
+      } else if (lvl <= 20) {
+        joinBuckets.lvl1to20 += 1;
+      } else if (lvl <= 34) {
+        joinBuckets.lvl21to34 += 1;
+      } else if (lvl <= 49) {
+        joinBuckets.lvl35to49 += 1;
+      } else {
+        joinBuckets.lvl50plus += 1;
+      }
+    });
 
     return {
       topTopics,
       questions: questions.slice(0, 3),
       sentiment,
-      engagement,
+      engagement: engagementWithPct,
+      engagementAvgPerMin,
+      engagementPeak,
       sentimentTrend,
+      sentimentCounts: {
+        positive: positiveHits,
+        negative: negativeHits,
+        positivePct,
+        negativePct,
+        neutralPct,
+      },
+      pieBreakdown,
+      songs: uniqueSongs.slice(0, 8),
+      joinLevels: joinLevels.slice(-8).reverse(),
+      joinBuckets,
+      spikeDebug: {
+        sensitivity: spikeSensitivity,
+        viewers: viewerSpikeDebug,
+        gifts: giftSpikeDebug,
+      },
       spikes,
     };
   }
 
   function buildRecommendations(insights) {
     const recs = [];
+    const avgPerMin = Number(insights.engagementAvgPerMin || 0);
     if (topSupporters?.length) {
       const top = topSupporters[0]?.user;
       if (top) recs.push(`Zahvali se top supporteru: ${top}.`);
@@ -7729,8 +7986,15 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     if (insights.questions.length) {
       recs.push("Odgovori na top pitanje iz chata.");
     }
+    if (avgPerMin <= 1) {
+      recs.push("Malo poruka (1/min): postavi publici pitanje 'Odakle ste i koja vam je omiljena pjesma večeras?'.");
+      recs.push("Malo poruka (1/min): pitaj publiku da glasa emoji-em za sljedeću temu ili pjesmu.");
+    }
+    if (!insights.spikes.some((s) => s.type === "gifts")) {
+      recs.push("Potakni giftove: najavi kratki shoutout za sljedeća 3 gift supportera.");
+    }
     if (!recs.length) recs.push("Nastavi s dobrim tempom i ukljuci publiku.");
-    return recs.slice(0, 3);
+    return recs.slice(0, 6);
   }
 
   function updateInsightsUI() {
@@ -7763,9 +8027,22 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const bar = document.createElement("div");
       bar.className = "tkai-mini-bar";
       bar.style.height = `${Math.max(4, Math.round((e.count / maxEng) * 38))}px`;
-      bar.title = `${e.minute}m: ${e.count}`;
+      bar.title = `${e.minute}m: ${e.count} (${e.percent || 0}%)`;
       engagementBarsEl.appendChild(bar);
     });
+
+    if (engagementTopEl) {
+      engagementTopEl.textContent =
+        `${formatNum(insights.engagementAvgPerMin || 0)}/min • Peak ${formatNum(insights.engagementPeak?.count || 0)}/min`;
+    }
+    if (engagementSummaryEl) {
+      const peakMinute = Number(insights.engagementPeak?.minute || 0);
+      const elapsedMin = sessionStartedAt
+        ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000))
+        : 0;
+      engagementSummaryEl.textContent =
+        `Najviši engagement u ${peakMinute}. minuti • trajanje ${elapsedMin}m`;
+    }
 
     if (sentimentTrendEl) {
       sentimentTrendEl.innerHTML = "";
@@ -7777,17 +8054,38 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         const bar = document.createElement("div");
         bar.className = "tkai-sentiment-bar";
         const ratio = Math.min(1, Math.abs(s.score) / maxAbs);
-        const height = Math.max(4, Math.round(ratio * 30));
+        const height = Math.max(4, Math.round(ratio * 32));
         bar.style.height = `${height}px`;
-        bar.style.background =
-          s.score > 0
-            ? "rgba(74, 222, 128, .75)"
-            : s.score < 0
-              ? "rgba(248, 113, 113, .75)"
-              : "rgba(255, 255, 255, .15)";
+        const posPart = document.createElement("div");
+        posPart.className = "tkai-sentiment-stack-pos";
+        const negPart = document.createElement("div");
+        negPart.className = "tkai-sentiment-stack-neg";
+        if (s.score > 0) {
+          posPart.style.height = `${Math.max(2, height)}px`;
+          negPart.style.height = "1px";
+        } else if (s.score < 0) {
+          posPart.style.height = "1px";
+          negPart.style.height = `${Math.max(2, height)}px`;
+        } else {
+          posPart.style.height = "1px";
+          negPart.style.height = "1px";
+        }
+        bar.appendChild(posPart);
+        bar.appendChild(negPart);
         bar.title = `${s.minute}m: ${s.score}`;
         sentimentTrendEl.appendChild(bar);
       });
+    }
+
+    if (sentimentTopEl) {
+      const sc = insights.sentimentCounts || {};
+      sentimentTopEl.textContent =
+        `Pozitivno ${formatNum(sc.positivePct || 0)}% • Negativno ${formatNum(sc.negativePct || 0)}%`;
+    }
+    if (sentimentSummaryEl) {
+      const sc = insights.sentimentCounts || {};
+      sentimentSummaryEl.textContent =
+        `Neutralno ${formatNum(sc.neutralPct || 0)}% • hitovi +${formatNum(sc.positive || 0)} / -${formatNum(sc.negative || 0)}`;
     }
 
     spikeListEl.innerHTML = "";
@@ -7816,12 +8114,123 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       });
     }
 
+    const spikeDebug = insights.spikeDebug || {};
+    if (spikeFilter === "all" || spikeFilter === "viewers") {
+      const li = document.createElement("li");
+      const vd = spikeDebug.viewers;
+      li.textContent = vd
+        ? `Debug viewers (${spikeDebug.sensitivity || "normal"}): base ${formatNum(vd.baseline)} → ${formatNum(vd.last)} (Δ ${vd.delta > 0 ? "+" : ""}${formatNum(vd.delta)}), prag ${formatNum(vd.threshold)}`
+        : "Debug viewers: čekam više uzoraka.";
+      spikeListEl.appendChild(li);
+    }
+    if (spikeFilter === "all" || spikeFilter === "gifts") {
+      const li = document.createElement("li");
+      const gd = spikeDebug.gifts;
+      li.textContent = gd
+        ? `Debug gifts (${Math.round((gd.windowMs || 0) / 1000)}s): ${formatNum(gd.nowCount)} vs ${formatNum(gd.prevCount)} | coins ${formatNum(gd.nowCoins)} vs ${formatNum(gd.prevCoins)}`
+        : "Debug gifts: nema dovoljno podataka.";
+      spikeListEl.appendChild(li);
+    }
+
+    const recommendations = buildRecommendations(insights);
     recommendationsEl.innerHTML = "";
-    buildRecommendations(insights).forEach((r) => {
+    recommendations.forEach((r) => {
       const li = document.createElement("li");
       li.textContent = r;
       recommendationsEl.appendChild(li);
     });
+    syncRecommendationsPopout(recommendations);
+
+    if (pieChartEl && pieLegendEl && pieCenterEl) {
+      const parts = Array.isArray(insights.pieBreakdown) ? insights.pieBreakdown : [];
+      let start = 0;
+      const slices = parts.map((p) => {
+        const end = Math.min(100, start + Number(p.pct || 0));
+        const seg = `${p.color} ${start}% ${end}%`;
+        start = end;
+        return seg;
+      });
+      pieChartEl.style.background =
+        slices.length > 0 ? `conic-gradient(${slices.join(", ")})` : "conic-gradient(#6b7280 0% 100%)";
+      const totalPie = parts.reduce((acc, p) => acc + Number(p.value || 0), 0);
+      pieCenterEl.textContent = `${formatNum(totalPie)} total`;
+
+      pieLegendEl.innerHTML = "";
+      parts.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "tkai-pie-legend-row";
+        row.innerHTML =
+          `<span style="display:flex;align-items:center"><span class="tkai-pie-dot" style="background:${p.color}"></span>${escHtml(p.label)}</span>` +
+          `<span>${formatNum(p.value || 0)} (${formatNum(p.pct || 0)}%)</span>`;
+        pieLegendEl.appendChild(row);
+      });
+    }
+
+    if (pieSummaryEl) {
+      pieSummaryEl.innerHTML = "";
+      const parts = Array.isArray(insights.pieBreakdown) ? insights.pieBreakdown : [];
+      const topPart = parts.slice().sort((a, b) => b.value - a.value)[0];
+      const li1 = document.createElement("li");
+      li1.textContent = topPart
+        ? `Najveći udio: ${topPart.label} (${formatNum(topPart.pct || 0)}%)`
+        : "Nema podataka za pie.";
+      pieSummaryEl.appendChild(li1);
+      const li2 = document.createElement("li");
+      li2.textContent = `CC: ${formatNum(parts.find((p) => p.key === "caption")?.value || 0)} • Songs: ${formatNum(parts.find((p) => p.key === "song")?.value || 0)} • Gifts: ${formatNum(parts.find((p) => p.key === "gift")?.value || 0)}`;
+      pieSummaryEl.appendChild(li2);
+    }
+
+    if (songListEl) {
+      songListEl.innerHTML = "";
+      const showSongs = getTkaiSetting("tkaiShowSongSection", true);
+      if (!showSongs) {
+        const li = document.createElement("li");
+        li.textContent = "Sekcija je isključena u postavkama.";
+        songListEl.appendChild(li);
+      } else {
+        const songs = Array.isArray(insights.songs) ? insights.songs : [];
+        if (!songs.length) {
+          const li = document.createElement("li");
+          li.textContent = "Nema detektiranih pjesama/DJ CC stavki.";
+          songListEl.appendChild(li);
+        } else {
+          songs.forEach((s) => {
+            const li = document.createElement("li");
+            const time = new Date(Number(s.ts || Date.now())).toLocaleTimeString("hr-HR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            li.textContent = `${s.source === "caption" ? "DJ CC" : "Chat"} • ${s.title} @ ${time}`;
+            songListEl.appendChild(li);
+          });
+        }
+      }
+    }
+
+    if (joinLevelListEl) {
+      joinLevelListEl.innerHTML = "";
+      const joins = Array.isArray(insights.joinLevels) ? insights.joinLevels : [];
+      const buckets = insights.joinBuckets || {};
+      const summary = document.createElement("li");
+      summary.textContent =
+        `Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
+      joinLevelListEl.appendChild(summary);
+      if (!joins.length) {
+        const li = document.createElement("li");
+        li.textContent = "Nema join eventova (uključi Join scan u postavkama).";
+        joinLevelListEl.appendChild(li);
+      } else {
+        joins.forEach((j) => {
+          const li = document.createElement("li");
+          const when = new Date(Number(j.ts || Date.now())).toLocaleTimeString("hr-HR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          li.textContent = `${j.user} • lvl ${j.level ? formatNum(j.level) : "?"} @ ${when}`;
+          joinLevelListEl.appendChild(li);
+        });
+      }
+    }
   }
 
   function updateSpikeFilterButtons() {
@@ -7829,6 +8238,95 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     spikeAllBtn.classList.toggle("active", spikeFilter === "all");
     spikeViewersBtn.classList.toggle("active", spikeFilter === "viewers");
     spikeGiftsBtn.classList.toggle("active", spikeFilter === "gifts");
+  }
+
+  function syncRecommendationsPopout(recommendations) {
+    if (!recommendationsPopoutBodyEl) return;
+    recommendationsPopoutBodyEl.innerHTML = "";
+    (recommendations || []).forEach((text) => {
+      const li = document.createElement("li");
+      li.textContent = text;
+      recommendationsPopoutBodyEl.appendChild(li);
+    });
+  }
+
+  function closeRecommendationsPopout() {
+    if (recommendationsPopoutEl) recommendationsPopoutEl.remove();
+    recommendationsPopoutEl = null;
+    recommendationsPopoutBodyEl = null;
+  }
+
+  function openRecommendationsPopout() {
+    if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) return;
+    const wrap = document.createElement("div");
+    wrap.style.cssText =
+      "position:fixed;z-index:99998;top:86px;right:16px;width:360px;max-height:55vh;overflow:auto;" +
+      "background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px;" +
+      "box-shadow:0 16px 40px rgba(0,0,0,.45);";
+    wrap.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--text2)">AI Recommendations</div>' +
+      '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
+      '</div>' +
+      '<ul id="tkaiRecPopList" class="tkai-insights-list"></ul>';
+    document.body.appendChild(wrap);
+    recommendationsPopoutEl = wrap;
+    recommendationsPopoutBodyEl = wrap.querySelector("#tkaiRecPopList");
+    wrap.querySelector("#tkaiRecPopClose")?.addEventListener("click", closeRecommendationsPopout);
+    const currentRecommendations = Array.from(recommendationsEl?.querySelectorAll("li") || []).map((li) => li.textContent || "");
+    syncRecommendationsPopout(currentRecommendations);
+  }
+
+  function initInsightCardControls() {
+    const cards = document.querySelectorAll("#tkaiInsights .tkai-insights-card");
+    cards.forEach((card, idx) => {
+      if (card.dataset.tkaiCardInit === "1") return;
+      const title = card.querySelector(":scope > .tkai-insights-title");
+      if (!title) return;
+      const head = document.createElement("div");
+      head.className = "tkai-card-head";
+      card.insertBefore(head, title);
+      head.appendChild(title);
+
+      if (card.id === "tkaiRecommendationsCard") {
+        const popBtn = document.createElement("button");
+        popBtn.className = "tkai-collapse-btn popout";
+        popBtn.type = "button";
+        popBtn.textContent = "⤢";
+        popBtn.title = "Prikaži AI prijedloge vani";
+        popBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (recommendationsPopoutEl) closeRecommendationsPopout();
+          else openRecommendationsPopout();
+        });
+        head.appendChild(popBtn);
+      }
+
+      const btn = document.createElement("button");
+      btn.className = "tkai-collapse-btn";
+      btn.type = "button";
+      btn.title = "Sakrij/prikaži sekciju";
+      head.appendChild(btn);
+
+      const stateKey = `ex_tkai_collapsed_${card.id || idx}`;
+      const applyCollapsed = (collapsed) => {
+        btn.textContent = collapsed ? "▸" : "▾";
+        Array.from(card.children).forEach((child) => {
+          if (child === head) return;
+          child.style.display = collapsed ? "none" : "";
+        });
+      };
+
+      const initial = localStorage.getItem(stateKey) === "1";
+      applyCollapsed(initial);
+      btn.addEventListener("click", () => {
+        const collapsed = btn.textContent === "▾";
+        applyCollapsed(collapsed);
+        localStorage.setItem(stateKey, collapsed ? "1" : "0");
+      });
+
+      card.dataset.tkaiCardInit = "1";
+    });
   }
 
   function buildSessionReportFromPayload(session) {
@@ -8134,6 +8632,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const btnFanClubGallery = document.getElementById("btnTkaiFanClubGallery");
   const btnAutoScan = document.getElementById("btnTkaiAutoScan");
   const btnMsgTypes = document.getElementById("btnTkaiMsgTypes");
+  const btnSongDetection = document.getElementById("btnTkaiSongDetection");
   const btnTools = document.getElementById("btnTkaiTools");
   const btnSessions = document.getElementById("btnTkaiSessions");
 
@@ -8191,6 +8690,17 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
             <div class="s-row-desc">Koliko često provjeravati je li live otvoren</div>
           </div>
           <input type="number" class="s-input" data-setting="tkaiAutoScanInterval" min="5" max="300" value="10" style="width:70px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Osjetljivost spike detekcije</div>
+            <div class="s-row-desc">Koliko lako detektirati viewer/gift spike</div>
+          </div>
+          <select class="s-select" data-setting="tkaiSpikeSensitivity" style="width:120px">
+            <option value="low">Low</option>
+            <option value="normal" selected>Normal</option>
+            <option value="high">High</option>
+          </select>
         </div>
       </div>
     `,
@@ -8548,10 +9058,55 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         </div>
         <div class="s-row">
           <div class="s-row-left">
+            <div class="s-row-label">Skeniraj pjesme iz CC/chat teksta</div>
+            <div class="s-row-desc">Detekcija najave pjesme ili DJ track info</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiDetectSongs"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
             <div class="s-row-label">Skeniraj ulaske (Join)</div>
             <div class="s-row-desc">Kad netko uđe u live (može biti puno poruka)</div>
           </div>
           <div class="toggle" data-setting="tkaiScanJoins"></div>
+        </div>
+      </div>
+    `,
+    );
+  });
+
+  btnSongDetection?.addEventListener("click", () => {
+    openTkaiSubPanel(
+      "Pjesme i DJ CC",
+      `
+      <div class="s-group">
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Detekcija DJ CC titlova</div>
+            <div class="s-row-desc">Pročitaj i prikaži subtitle/CC tekst streamera</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiScanCaptions"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Detekcija pjesama iz teksta</div>
+            <div class="s-row-desc">Pokušaj prepoznati pjesmu iz DJ najave ili stihova</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiDetectSongs"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Prikaži song sekciju u panelu</div>
+            <div class="s-row-desc">Ako je ugašeno, songovi se i dalje spremaju u sesiju</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiShowSongSection"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Prikaži pie breakdown sekciju</div>
+            <div class="s-row-desc">Uključi/isključi kružni prikaz raspodjele događaja</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiShowPieBreakdown"></div>
         </div>
       </div>
     `,
@@ -8684,11 +9239,17 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
     function getViewerCount() {
       const viewerSelectors = [
+        '[data-e2e="live-people-count"]',
+        '[data-e2e="live-audience-count"]',
         '[data-e2e*="viewer"]',
+        '[data-e2e*="people-count"]',
+        '[data-e2e*="audience-count"]',
         '[class*="viewer"]',
         '[class*="Viewer"]',
         '[class*="audience"]',
         '[class*="Audience"]',
+        '[class*="watching"]',
+        '[class*="Watching"]',
       ];
       let maxViewer = 0;
       for (const sel of viewerSelectors) {
@@ -8701,12 +9262,25 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           if (v > maxViewer) maxViewer = v;
         });
       }
+
+      if (maxViewer <= 0) {
+        const globalText = (document.body?.innerText || '').replace(/\s+/g, ' ');
+        const candidates = globalText.match(/(\d[\d.,\s]*[km]?)(?:\+)?\s*(viewers?|gledatelja|watching|spectators?)/gi) || [];
+        candidates.forEach((chunk) => {
+          const m = String(chunk).match(/(\d[\d.,\s]*[km]?)/i);
+          if (!m) return;
+          const v = parseNumberLike(m[1]);
+          if (v > maxViewer) maxViewer = v;
+        });
+      }
       return maxViewer;
     }
 
     function getTopSupportersFromPage() {
       const rows = [];
       const leaderboardSelectors = [
+        '[data-e2e*="top-viewer"]',
+        '[data-e2e*="leaderboard"]',
         '[class*="rank"]',
         '[class*="leaderboard"]',
         '[class*="supporter"]',
@@ -8716,7 +9290,20 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         document.querySelectorAll(sel).forEach((el) => {
           const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
           if (!txt || txt.length < 4) return;
-          const r = txt.match(/#?\s*([1-3])\s*[.)-]?\s*([A-Za-z0-9_.\-\s]{2,30}?)\s+(\d[\d.,\s]*[km]?)\s*(coins?|coin|coina|kovanica|diamonds?)/i);
+          const r = txt.match(/#?\s*([1-9])\s*[.)-]?\s*(.{2,40}?)\s+(\d[\d.,\s]*[km]?)(?:\s*(coins?|coin|coina|kovanica|diamonds?))?/i);
+          if (!r) return;
+          rows.push({
+            rank: parseInt(r[1], 10) || 99,
+            user: String(r[2] || '').trim().slice(0, 40),
+            coins: parseNumberLike(r[3]),
+          });
+        });
+      }
+
+      if (!rows.length) {
+        const lines = (document.body?.innerText || '').split(/\n+/).map((l) => l.trim()).filter(Boolean);
+        lines.forEach((line) => {
+          const r = line.match(/^#?\s*([1-9])\s+(.{2,40}?)\s+(\d[\d.,\s]*[km]?)(?:\s*(coins?|coin|coina|kovanica|diamonds?))?$/i);
           if (!r) return;
           rows.push({
             rank: parseInt(r[1], 10) || 99,
@@ -8799,18 +9386,25 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     }
     debug.itemsFound = items.length;
     
-    // --- Scan for On-Screen Captions/Subtitles ---
+    // --- Scan for On-Screen Captions/Subtitles and Song labels ---
     const captionSelectors = [
       '[class*="webcast-caption"]',
       '[class*="webcast-subtitles"]',
+      '[class*="caption"]',
+      '[class*="Caption"]',
+      '[class*="subtitle"]',
+      '[class*="Subtitle"]',
       '[data-e2e="live-subtitle"]',
+      '[data-e2e*="caption"]',
+      '[data-e2e*="subtitle"]',
       '.webcast-chatroom__caption',
       '.webcast-chatroom__subtitle',
       '.caption-content',
       '.subtitle-content',
       '[class*="CaptionContainer"]',
+      '[aria-live="polite"] span',
     ];
-    let captions = [];
+    const songKeywords = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)/i;
     for (const sel of captionSelectors) {
       const found = document.querySelectorAll(sel);
       if (found.length > 0) { 
@@ -8829,6 +9423,19 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
               isPopular: false,
               badgeText: ''
             });
+            if (songKeywords.test(text)) {
+              results.push({
+                user: 'SYSTEM (Song)',
+                text: text,
+                id: 'song_' + Date.now() + '_' + Math.random(),
+                type: 'song',
+                isSuperFan: false,
+                isFanClub: false,
+                isModerator: false,
+                isPopular: false,
+                badgeText: ''
+              });
+            }
           }
         });
       }
@@ -8848,7 +9455,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         text = el.textContent.trim().slice(0, 200);
       }
       
-      const user = userEl ? userEl.textContent.trim() : ('Korisnik ' + (i + 1));
+      const user = userEl && userEl.textContent.trim()
+        ? userEl.textContent.trim()
+        : ((textEl?.previousElementSibling?.textContent || '').trim() || ('Korisnik ' + (i + 1)));
       text = text.replace(/\\s*\\[(thumb|image|emoji|video|gif)\\]\\s*/gi, '').trim();
 
       // Detect Badges (Super Fan, Fan Club, etc.)
@@ -8871,6 +9480,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
       // Detect "Popular" or trending indicators
       const isPopular = el.innerHTML.toLowerCase().includes('popular') || el.classList.contains('popular-message');
+      const textLower = text.toLowerCase();
 
       // Determine message type
       let messageType = 'chat';
@@ -8878,8 +9488,24 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         messageType = 'gift';
       } else if (el.querySelector('[data-e2e*="subscribe"], [class*="SubscribeMessage"], [class*="SubscriptionEvent"]')) {
         messageType = 'subscriber';
-      } else if (el.querySelector('[data-e2e*="join"], [class*="JoinMessage"], [class*="JoinEvent"]')) {
+      } else if (el.querySelector('[data-e2e*="join"], [class*="JoinMessage"], [class*="JoinEvent"]') || /\b(joined|joined\s+the\s+live|ulazi|u[sš]ao|u[sš]la)\b/i.test(textLower)) {
         messageType = 'join';
+      }
+
+      let levelHint = null;
+      if (messageType === 'join') {
+        const levelMatch = String(badgeText || text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
+        if (levelMatch) {
+          const lvl = parseInt(levelMatch[1], 10);
+          if (Number.isFinite(lvl) && lvl > 0 && lvl < 500) levelHint = lvl;
+        }
+      }
+
+      if (
+        messageType === 'chat' &&
+        /(sent\s+.*heart|heart\s*me|hand\s*heart|\bgift\b|\spoklon)/i.test(textLower)
+      ) {
+        messageType = 'gift';
       }
 
       if ((text && text.length > 0 && text !== user) || messageType !== 'chat') {
@@ -8894,7 +9520,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           isFanClub,
           isModerator,
           isPopular,
-          badgeText: badgeText.trim()
+          badgeText: badgeText.trim(),
+          level: levelHint
         });
       }
     });
@@ -9031,6 +9658,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const scanGifts = getTkaiSetting("tkaiScanGifts", true);
       const scanSubs = getTkaiSetting("tkaiScanSubs", true);
       const scanCaptions = getTkaiSetting("tkaiScanCaptions", true);
+      const scanSongs = getTkaiSetting("tkaiDetectSongs", true);
       const scanJoins = getTkaiSetting("tkaiScanJoins", false);
       const maxKeep =
         parseInt(getTkaiSetting("tkaiMaxMessagesKeep", "80"), 10) || 80;
@@ -9040,6 +9668,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         if (m.type === "gift" && !scanGifts) return false;
         if (m.type === "subscriber" && !scanSubs) return false;
         if (m.type === "caption" && !scanCaptions) return false;
+        if (m.type === "song" && !scanSongs) return false;
         if (m.type === "join" && !scanJoins) return false;
         return true;
       });
@@ -9053,6 +9682,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         } else {
           setStatus("📭 Nema novih poruka (filter)");
         }
+        updateSessionStatsUI();
+        updateAutoSuggestIndicator();
         return;
       }
 
@@ -9125,6 +9756,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         "tkai-msg" + (selectedMsgIds.has(m.id) ? " selected" : "");
       if (m.isPopular) div.classList.add("popular");
       if (m.type === "caption") div.classList.add("caption");
+      if (m.type === "song") div.classList.add("caption");
 
       let badgesHtml = "";
       if (m.isSuperFan)
@@ -9145,6 +9777,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       if (m.type === "caption")
         badgesHtml +=
           '<span class="tk-badge caption" title="Subtitle">💬</span>';
+      if (m.type === "song")
+        badgesHtml +=
+          '<span class="tk-badge caption" title="Song">♫</span>';
 
       div.innerHTML = `
         <div class="tkai-msg-user">
@@ -9230,6 +9865,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         if (m.isModerator) status += "[MODERATOR] ";
         if (m.type === "gift") status += "[GIFT SENT] ";
         if (m.type === "caption") status += "[LIVE SUBTITLE/SCREEN TEXT] ";
+        if (m.type === "song") status += "[SONG INFO] ";
         return `${status}${m.user}: ${m.text}`;
       })
       .join("\n");
@@ -9531,12 +10167,95 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   if (!sessionStartedAt) sessionStartedAt = Date.now();
   updateSessionStatsUI();
 
+  function applyTkaiFeatureToggles() {
+    const vis = (id, settingKey, def = true) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const on = getTkaiSetting(settingKey, def);
+      el.style.display = on ? "" : "none";
+    };
+    vis("tkaiGiftGallery", "tkaiShowGiftGallery", true);
+    vis("tkaiTopSupporters", "tkaiShowTopSupporters", true);
+    vis("tkaiSpikesCard", "tkaiShowSpikes", true);
+    vis("tkaiRecommendationsCard", "tkaiShowRecommendations", true);
+    vis("tkaiJoinsCard", "tkaiScanJoins", false);
+    vis("tkaiPieCard", "tkaiShowPieBreakdown", true);
+    vis("tkaiSongsCard", "tkaiShowSongSection", true);
+  }
+
+  function normalizeTkaiHexColor(value, fallback) {
+    const v = String(value || "").trim();
+    return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) ? v : fallback;
+  }
+
+  function applyTkaiButtonTheme() {
+    const primary = normalizeTkaiHexColor(
+      getTkaiSetting("tkaiBtnColorPrimary", "#667eea"),
+      "#667eea",
+    );
+    const secondary = normalizeTkaiHexColor(
+      getTkaiSetting("tkaiBtnColorSecondary", "#764ba2"),
+      "#764ba2",
+    );
+    const insights = normalizeTkaiHexColor(
+      getTkaiSetting("tkaiBtnColorInsights", "#2dd4bf"),
+      "#2dd4bf",
+    );
+    const panel = document.getElementById("tiktokAIPanel");
+    if (!panel) return;
+
+    const scanBtnEl = document.getElementById("tkaiBtnToggle");
+    if (scanBtnEl) {
+      scanBtnEl.style.background = `linear-gradient(135deg, ${secondary}, ${primary})`;
+      scanBtnEl.style.borderColor = "rgba(255,255,255,.2)";
+      scanBtnEl.style.color = "#fff";
+    }
+
+    panel.querySelectorAll(".tkai-gen-btn").forEach((btn) => {
+      if (btn.id === "tkaiClearBtn") return;
+      btn.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
+      btn.style.borderColor = "rgba(255,255,255,.2)";
+      btn.style.color = "#fff";
+    });
+
+    panel
+      .querySelectorAll(".tkai-insights-btn, .tkai-collapse-btn")
+      .forEach((btn) => {
+        btn.style.background = `linear-gradient(135deg, ${insights}, ${primary})`;
+        btn.style.borderColor = "rgba(255,255,255,.22)";
+        btn.style.color = "#fff";
+      });
+  }
+
   btnTikTokAI?.addEventListener("click", () => {
     updateAutoSuggestIndicator();
     updateFilterStarredButton();
     updateSpikeFilterButtons();
+    applyTkaiFeatureToggles();
+    applyTkaiButtonTheme();
+    initInsightCardControls();
     if (pendingForAutoSuggest > 0) scheduleAutoSuggest();
   });
+
+  document.getElementById("settingsPanel")?.addEventListener("click", (e) => {
+    const t = e.target.closest(".toggle[data-setting]");
+    if (!t?.dataset?.setting) return;
+    if (t.dataset.setting.startsWith("tkaiShow")) {
+      setTimeout(applyTkaiFeatureToggles, 30);
+    }
+  });
+
+  document.getElementById("settingsPanel")?.addEventListener("input", (e) => {
+    const t = e.target.closest("[data-setting]");
+    if (!t?.dataset?.setting) return;
+    if (t.dataset.setting.startsWith("tkaiBtnColor")) {
+      setTimeout(applyTkaiButtonTheme, 10);
+    }
+  });
+
+  applyTkaiFeatureToggles();
+  applyTkaiButtonTheme();
+  initInsightCardControls();
 
   spikeAllBtn?.addEventListener("click", () => {
     spikeFilter = "all";

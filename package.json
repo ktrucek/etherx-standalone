@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "2.4.216",
+  "version": "2.4.217",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -22,6 +22,7 @@
     "node": ">=20.0.0"
   },
   "overrides": {
+    "ws": "8.20.1",
     "lzma-native": {
       "node-addon-api": "^7.1.0"
     },
@@ -93,7 +94,7 @@
     "electron": "^39.8.5",
     "electron-builder": "^24.13.3",
     "picomatch": "^4.0.4",
-    "ws": ">=8.20.1"
+    "ws": "8.20.1"
   },
   "dependencies": {
     "@cliqz/adblocker-electron": "^1.26.8",
@@ -106,8 +107,7 @@
     "i18next": "^23.11.5",
     "qrcode": "^1.5.3",
     "uuid": "^9.0.0",
-    "ws": ">=8.20.1",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-05-21T13:14:22Z"
+  "buildTime": "2026-05-21T19:40:41Z"
 }

@@ -5083,6 +5083,34 @@
       margin-left: 4px;
     }
 
+    .tkai-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .tkai-card-head .tkai-insights-title {
+      margin-bottom: 0;
+      flex: 1;
+    }
+
+    .tkai-collapse-btn {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, .04);
+      color: var(--text2);
+      cursor: pointer;
+      line-height: 1.4;
+    }
+
+    .tkai-collapse-btn.popout {
+      font-size: 11px;
+    }
+
     .tkai-insights-list {
       list-style: none;
       margin: 0;
@@ -5125,6 +5153,7 @@
       align-items: flex-end;
       gap: 3px;
       height: 38px;
+      margin-bottom: 5px;
     }
 
     .tkai-mini-bar {
@@ -5138,7 +5167,8 @@
       display: flex;
       align-items: center;
       gap: 3px;
-      height: 30px;
+      height: 34px;
+      margin-bottom: 5px;
     }
 
     .tkai-sentiment-bar {
@@ -5146,6 +5176,111 @@
       border-radius: 3px;
       min-height: 4px;
       background: rgba(255, 255, 255, .08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 1px;
+    }
+
+    .tkai-sentiment-stack-pos {
+      width: 100%;
+      background: linear-gradient(180deg, rgba(34, 197, 94, .95), rgba(22, 163, 74, .85));
+      min-height: 1px;
+    }
+
+    .tkai-sentiment-stack-neg {
+      width: 100%;
+      background: linear-gradient(180deg, rgba(248, 113, 113, .95), rgba(220, 38, 38, .85));
+      min-height: 1px;
+    }
+
+    .tkai-metric-top,
+    .tkai-metric-bottom {
+      font-size: 9px;
+      color: var(--text3);
+      line-height: 1.35;
+    }
+
+    .tkai-metric-top {
+      margin-bottom: 5px;
+      color: #e8d8ff;
+    }
+
+    .tkai-metric-bottom {
+      margin-top: 3px;
+    }
+
+    .tkai-pie-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tkai-pie-chart {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, .12);
+      position: relative;
+      background: conic-gradient(#6b7280 0% 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25);
+    }
+
+    .tkai-pie-center {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: var(--text2);
+      text-align: center;
+      line-height: 1.2;
+      padding: 2px;
+    }
+
+    .tkai-pie-legend {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 9px;
+      color: var(--text2);
+    }
+
+    .tkai-pie-legend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+    }
+
+    .tkai-pie-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+
+    .tkai-song-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--text2);
+      max-height: 110px;
+      overflow-y: auto;
     }
 
     .tkai-gift-gallery.collapsed {
@@ -9258,6 +9393,33 @@
                 </div>
                 <div class="toggle" data-setting="tkaiAutoTranslate"></div>
               </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Boja glavnih AI gumba</div>
+                  <div class="s-row-desc">Primjenjuje se na "Generiraj" i pomoćne AI akcije</div>
+                </div>
+                <input type="color" class="s-input" data-setting="tkaiBtnColorPrimary" value="#667eea"
+                  style="width:56px;height:32px;padding:3px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Boja Scan gumba</div>
+                  <div class="s-row-desc">Glavna boja za ON/OFF skeniranje</div>
+                </div>
+                <input type="color" class="s-input" data-setting="tkaiBtnColorSecondary" value="#764ba2"
+                  style="width:56px;height:32px;padding:3px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Boja Insight gumba</div>
+                  <div class="s-row-desc">Filtri, collapse i pomoćni gumbi u Insights dijelu</div>
+                </div>
+                <input type="color" class="s-input" data-setting="tkaiBtnColorInsights" value="#2dd4bf"
+                  style="width:56px;height:32px;padding:3px">
+              </div>
             </div>
 
             <div class="s-group">
@@ -9294,6 +9456,7 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
                 <button class="s-btn-sm" id="btnTkaiAutoScan">Automatsko skeniranje</button>
                 <button class="s-btn-sm" id="btnTkaiMsgTypes">Vrste poruka za skeniranje</button>
+                <button class="s-btn-sm" id="btnTkaiSongDetection">Pjesme i DJ CC</button>
                 <button class="s-btn-sm" id="btnTkaiTools">Alati i ostalo</button>
                 <button class="s-btn-sm" id="btnTkaiSessions">Session History</button>
               </div>
@@ -9651,15 +9814,19 @@
               <ul class="tkai-insights-list" id="tkaiInsightsList"></ul>
               <div class="tkai-insights-title" style="margin-top:8px" title="Trend pozitivnog/negativnog tona">Sentiment
                 trend<span>↕</span></div>
+              <div class="tkai-metric-top" id="tkaiSentimentTop">Pozitivno 0% • Negativno 0%</div>
               <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
+              <div class="tkai-metric-bottom" id="tkaiSentimentSummary">Nema dovoljno podataka.</div>
             </div>
             <div class="tkai-insights-card">
               <div class="tkai-insights-title" title="Broj poruka po minuti">Engagement/min<span>⏱</span></div>
+              <div class="tkai-metric-top" id="tkaiEngagementTop">0/min • Peak 0/min</div>
               <div class="tkai-mini-bars" id="tkaiEngagementBars"></div>
+              <div class="tkai-metric-bottom" id="tkaiEngagementSummary">Nema dovoljno podataka.</div>
             </div>
           </div>
           <div class="tkai-insights-row">
-            <div class="tkai-insights-card">
+            <div class="tkai-insights-card" id="tkaiSpikesCard">
               <div class="tkai-insights-title" title="Skokovi viewera ili giftova">Spike events<span>⚡</span></div>
               <div class="tkai-insights-actions">
                 <button class="tkai-insights-btn" id="tkaiSpikeAll">All</button>
@@ -9668,9 +9835,33 @@
               </div>
               <ul class="tkai-insights-list" id="tkaiSpikeList"></ul>
             </div>
-            <div class="tkai-insights-card">
+            <div class="tkai-insights-card" id="tkaiRecommendationsCard">
               <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span></div>
               <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
+            </div>
+          </div>
+          <div class="tkai-insights-row">
+            <div class="tkai-insights-card" id="tkaiJoinsCard">
+              <div class="tkai-insights-title" title="Novi ulasci u chat i procjena levela">Join level
+                feed<span>👋</span></div>
+              <ul class="tkai-insights-list" id="tkaiJoinLevelList"></ul>
+            </div>
+          </div>
+          <div class="tkai-insights-row">
+            <div class="tkai-insights-card" id="tkaiPieCard">
+              <div class="tkai-insights-title" title="Raspodjela tipova događaja">Pie breakdown<span>◔</span></div>
+              <div class="tkai-pie-wrap">
+                <div class="tkai-pie-chart" id="tkaiPieChart">
+                  <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
+                </div>
+                <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
+              </div>
+              <ul class="tkai-insights-list" id="tkaiPieSummary" style="margin-top:6px"></ul>
+            </div>
+            <div class="tkai-insights-card" id="tkaiSongsCard">
+              <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs & DJ CC<span>♫</span>
+              </div>
+              <ul class="tkai-song-list" id="tkaiSongList"></ul>
             </div>
           </div>
         </div>
@@ -10527,6 +10718,7 @@
     <!-- Clipboard -->
     <div class="ctx-item" id="ctx-copy-text">📋 Kopiraj</div>
     <div class="ctx-item" id="ctx-send-tiktok-ai" style="display:none">🎵 Pošalji u TikTok Chat AI</div>
+    <div class="ctx-item" id="ctx-shadowban-check" style="display:none">🔍 Provjeri shadowban</div>
     <div class="ctx-item" id="ctx-paste-text">📌 Zalijepi</div>
     <div class="ctx-sep"></div>
     <!-- Page / general items -->
@@ -13442,6 +13634,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             + '[class*="comment-text"],'
             + 'p, span'
           );
+          const textNodes = Array.from(el.querySelectorAll(
+            '[data-e2e="chat-message-text"],'
+            + '[data-e2e="message-text"],'
+            + '[data-e2e="webcast-live-comment"],'
+            + '[data-e2e="webcast-live-message"],'
+            + '[data-e2e="webcast-message"],'
+            + '[data-e2e="live-comment-text"],'
+            + '[class*="MessageText"],'
+            + '[class*="CommentText"],'
+            + '[class*="message-content"],'
+            + '[class*="chat-content"],'
+            + '[class*="SpanMessage"],'
+            + '[class*="comment-text"],'
+            + 'p, span'
+          ));
           const fallbackText = (el.textContent || '').replace(/\s+/g, ' ').trim();
           const derivedUser = (() => {
             const direct = userEl ? userEl.textContent.trim() : '';
@@ -13454,7 +13661,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           })();
           const user = (derivedUser || 'Chat user').slice(0, 60);
           const textBase = textEl ? textEl.textContent.trim() : '';
-          let rawText = (textBase || el.textContent || '').trim().slice(0, 420);
+          const assembledText = textNodes
+            .map(n => (n.textContent || '').replace(/\s+/g, ' ').trim())
+            .filter(Boolean)
+            .filter((part, idx, arr) => arr.indexOf(part) === idx)
+            .join(' ')
+            .trim();
+          let rawText = (assembledText || textBase || el.textContent || '').trim().slice(0, 1200);
+          if (user) {
+            const userEsc = String(user).replace(/[|{}()[\]\\^$+*?.-]/g, '\\$&');
+            rawText = rawText.replace(new RegExp('^\\s*' + userEsc + '\\s*[:\\-–—]?\\s*', 'i'), '');
+          }
           
           // Hvati nagrade, emotikone, specijalne znakove
           const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
@@ -13472,7 +13689,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             .replace(/\s+/g, ' ')
             .replace(/^[:\-\s]+/, '')
             .trim();
-          const text = cleaned.slice(0, 380);
+          const text = cleaned.slice(0, 900);
           if (text && text.length > 1) {
             const low = text.toLowerCase();
             const isGift = /gift|rose|coins?|diamond|galaxy|lion|sent\s+|poklon|dar/i.test(low) || giftEls.length > 0;
@@ -17192,6 +17409,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       const onTikTok = !!(getActiveTab()?.url && getActiveTab().url.includes('tiktok.com'));
       const ctxSendTikTokEl = document.getElementById('ctx-send-tiktok-ai');
       if (ctxSendTikTokEl) ctxSendTikTokEl.style.display = (onTikTok && hasSel) ? '' : 'none';
+      const ctxShadowbanEl = document.getElementById('ctx-shadowban-check');
+      if (ctxShadowbanEl) ctxShadowbanEl.style.display = onTikTok ? '' : 'none';
       const ctxPasteTextEl = document.getElementById('ctx-paste-text');
       if (ctxPasteTextEl) ctxPasteTextEl.style.display = _ctxIsEditable ? '' : 'none';
       // Show/hide reverse image search items
@@ -17335,6 +17554,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }
       window.pushTextToTikTokAI(sel, 'Desni klik');
       closeCtxMenu();
+    });
+    document.getElementById('ctx-shadowban-check')?.addEventListener('click', () => {
+      const tab = getActiveTab();
+      if (!tab?.url || !tab.url.includes('tiktok.com')) {
+        showToast('⚠️ Ova opcija radi na TikTok stranici');
+        return;
+      }
+      const btn = document.getElementById('tkaiShadowbanCheckBtn');
+      if (!btn) {
+        showToast('⚠️ Shadowban check nije dostupan');
+        return;
+      }
+      try { btn.click(); } catch (_) { }
+      closeCtxMenu();
+      showToast('🔍 Pokrenut shadowban check');
     });
     document.getElementById('ctx-paste-text').addEventListener('click', async () => {
       try {
