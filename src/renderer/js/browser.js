@@ -7294,6 +7294,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const giftGalleryEl = document.getElementById("tkaiGiftGallery");
   const exportBtn = document.getElementById("tkaiExportBtn");
   const exportCsvBtn = document.getElementById("tkaiExportCsvBtn");
+  const expandStatsBtn = document.getElementById("tkaiExpandStatsBtn");
   const clearBtn = document.getElementById("tkaiClearBtn");
   const holdLBtn = document.getElementById("tkaiHoldLBtn");
   const filterStarredBtn = document.getElementById("tkaiFilterStarredBtn");
@@ -7335,7 +7336,11 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let spikeFilter = "all";
   let recommendationsPopoutEl = null;
   let recommendationsPopoutBodyEl = null;
+  let statsPopoutEl = null;
+  let statsPopoutTimer = null;
   let lastShadowbanUserStats = [];
+  const TKAI_USER_COLORS_KEY = "ex_tkai_user_colors";
+  const TKAI_USER_ALIASES_KEY = "ex_tkai_user_aliases";
 
   function formatNum(v) {
     const n = Number(v || 0);
@@ -7344,11 +7349,143 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   }
 
   function getUserColor(name) {
-    const input = String(name || "").trim().toLowerCase();
+    const colorMap = getTkaiUserColors();
+    const canonical = resolveTkaiUserKey(name);
+    const manual = String(colorMap[canonical] || "").trim();
+    if (/^#([0-9a-fA-F]{6})$/.test(manual)) return manual;
+    const input = canonical || String(name || "").trim().toLowerCase();
     let h = 0;
     for (let i = 0; i < input.length; i += 1) h = (h * 31 + input.charCodeAt(i)) >>> 0;
     const hue = h % 360;
     return `hsl(${hue} 78% 72%)`;
+  }
+
+  function normalizeTkaiUserName(name) {
+    return String(name || "")
+      .trim()
+      .replace(/^@+/, "")
+      .toLowerCase()
+      .replace(/\s+/g, "");
+  }
+
+  function getTkaiUserAliases() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(TKAI_USER_ALIASES_KEY) || "{}");
+      return raw && typeof raw === "object" ? raw : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveTkaiUserAliases(map) {
+    localStorage.setItem(TKAI_USER_ALIASES_KEY, JSON.stringify(map || {}));
+  }
+
+  function getTkaiUserColors() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(TKAI_USER_COLORS_KEY) || "{}");
+      return raw && typeof raw === "object" ? raw : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveTkaiUserColors(map) {
+    localStorage.setItem(TKAI_USER_COLORS_KEY, JSON.stringify(map || {}));
+  }
+
+  function resolveTkaiUserKey(name) {
+    const base = normalizeTkaiUserName(name);
+    if (!base) return "";
+    const aliases = getTkaiUserAliases();
+    const mapped = aliases[base];
+    return normalizeTkaiUserName(mapped || base);
+  }
+
+  function resolveTkaiUserDisplay(name) {
+    const raw = String(name || "").trim().replace(/^@+/, "");
+    const base = normalizeTkaiUserName(raw);
+    if (!base) return raw;
+    const aliases = getTkaiUserAliases();
+    const mapped = String(aliases[base] || "").trim().replace(/^@+/, "");
+    return mapped || raw;
+  }
+
+  function ensureShadowbanControls() {
+    if (!shadowbanUserFilterEl) return;
+    if (document.getElementById("tkaiShadowbanControls")) return;
+    const host = shadowbanUserFilterEl.parentElement;
+    if (!host || !host.parentElement) return;
+    const row = document.createElement("div");
+    row.id = "tkaiShadowbanControls";
+    row.style.cssText = "display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap";
+    row.innerHTML =
+      '<button type="button" class="tkai-insights-btn" id="tkaiSetUserColorBtn" style="font-size:10px;padding:2px 8px">🎨 Boja</button>' +
+      '<button type="button" class="tkai-insights-btn" id="tkaiMergeUserBtn" style="font-size:10px;padding:2px 8px">🔗 Spoji ime</button>' +
+      '<button type="button" class="tkai-insights-btn" id="tkaiResetUserMergeBtn" style="font-size:10px;padding:2px 8px">↺ Vrati ime</button>';
+    host.parentElement.appendChild(row);
+
+    row.querySelector("#tkaiSetUserColorBtn")?.addEventListener("click", () => {
+      const selected = String(shadowbanUserFilterEl.value || "");
+      if (!selected || selected === "__all__") {
+        showToast("Odaberi korisnika u filteru.");
+        return;
+      }
+      const key = resolveTkaiUserKey(selected);
+      if (!key) return;
+      const colors = getTkaiUserColors();
+      const current = String(colors[key] || "");
+      const next = prompt(`Boja za @${selected} (hex #RRGGBB, prazno = reset)`, current || "");
+      if (next === null) return;
+      const clean = String(next).trim();
+      if (!clean) {
+        delete colors[key];
+      } else if (/^#([0-9a-fA-F]{6})$/.test(clean)) {
+        colors[key] = clean;
+      } else {
+        showToast("Boja mora biti #RRGGBB.");
+        return;
+      }
+      saveTkaiUserColors(colors);
+      renderMessages();
+      updateSessionStatsUI();
+      showToast("🎨 Boja spremljena.");
+    });
+
+    row.querySelector("#tkaiMergeUserBtn")?.addEventListener("click", () => {
+      const selected = String(shadowbanUserFilterEl.value || "");
+      if (!selected || selected === "__all__") {
+        showToast("Odaberi korisnika u filteru.");
+        return;
+      }
+      const to = prompt(`Spoji @${selected} u korisničko ime:`, resolveTkaiUserDisplay(selected));
+      if (to === null) return;
+      const target = String(to).trim().replace(/^@+/, "");
+      if (!target) {
+        showToast("Ime ne smije biti prazno.");
+        return;
+      }
+      const aliases = getTkaiUserAliases();
+      aliases[normalizeTkaiUserName(selected)] = target;
+      saveTkaiUserAliases(aliases);
+      renderMessages();
+      updateSessionStatsUI();
+      showToast(`🔗 @${selected} spojen u @${target}`);
+    });
+
+    row.querySelector("#tkaiResetUserMergeBtn")?.addEventListener("click", () => {
+      const selected = String(shadowbanUserFilterEl.value || "");
+      if (!selected || selected === "__all__") {
+        showToast("Odaberi korisnika u filteru.");
+        return;
+      }
+      const aliases = getTkaiUserAliases();
+      delete aliases[normalizeTkaiUserName(selected)];
+      saveTkaiUserAliases(aliases);
+      renderMessages();
+      updateSessionStatsUI();
+      showToast(`↺ Vraćen original za @${selected}`);
+    });
   }
 
   function buildUserStats(messages, limit) {
@@ -7358,11 +7495,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     );
     const map = new Map();
     base.forEach((m) => {
-      const user = String(m?.user || "").trim();
-      if (!user) return;
-      if (!map.has(user)) {
-        map.set(user, {
-          user,
+      const rawUser = String(m?.user || "").trim();
+      const userKey = resolveTkaiUserKey(rawUser);
+      if (!userKey) return;
+      const userDisplay = resolveTkaiUserDisplay(rawUser);
+      if (!map.has(userKey)) {
+        map.set(userKey, {
+          userKey,
+          user: userDisplay,
           total: 0,
           chat: 0,
           gifts: 0,
@@ -7371,7 +7511,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           texts: new Map(),
         });
       }
-      const row = map.get(user);
+      const row = map.get(userKey);
+      if (userDisplay.length > String(row.user || "").length) row.user = userDisplay;
       row.total += 1;
       if (m.type === "gift" || m.type === "subscriber") row.gifts += 1;
       else if (m.type === "join") row.joins += 1;
@@ -7420,7 +7561,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       if (m.type === "gift" || m.type === "subscriber") row.gifts += 1;
       else if (m.type === "join") row.joins += 1;
       else row.chat += 1;
-      if (m.user) row.users.add(String(m.user));
+      if (m.user) row.users.add(resolveTkaiUserKey(m.user));
     });
     return Array.from(map.values())
       .map((r) => ({
@@ -7492,6 +7633,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
   function refreshShadowbanUserFilterOptions() {
     if (!shadowbanUserFilterEl) return;
+    ensureShadowbanControls();
     const current = shadowbanUserFilterEl.value || "__all__";
     shadowbanUserFilterEl.innerHTML = "";
     const allOpt = document.createElement("option");
@@ -8092,7 +8234,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     const joinLevels = messages
       .filter((m) => m.type === "join")
       .map((m) => ({
-        user: String(m.user || "").slice(0, 40) || "unknown",
+        user: String(resolveTkaiUserDisplay(m.user || "") || "unknown").slice(0, 40),
         level: extractJoinLevel(m),
         ts: Number(m.ts || now),
       }))
@@ -8417,6 +8559,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           mention.href = "#";
           mention.className = "tkai-join-mention";
           mention.textContent = "@" + String(j.user || "").replace(/^@+/, "");
+          mention.style.color = getUserColor(j.user);
           mention.title = "Klikni za copy @mention";
           mention.addEventListener("click", (ev) => {
             ev.preventDefault();
@@ -8450,6 +8593,10 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
   function syncRecommendationsPopout(recommendations) {
     if (!recommendationsPopoutBodyEl) return;
+    const meta = recommendationsPopoutEl?.querySelector("#tkaiRecPopMeta");
+    if (meta) {
+      meta.textContent = `Viewers: ${formatNum(liveViewerCount)} • Peak: ${formatNum(peakViewerCount)}`;
+    }
     recommendationsPopoutBodyEl.innerHTML = "";
     (recommendations || []).forEach((text) => {
       const li = document.createElement("li");
@@ -8462,6 +8609,121 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     if (recommendationsPopoutEl) recommendationsPopoutEl.remove();
     recommendationsPopoutEl = null;
     recommendationsPopoutBodyEl = null;
+  }
+
+  function syncStatsPopout() {
+    if (!statsPopoutEl || !document.body.contains(statsPopoutEl)) return;
+    const stats = document.getElementById("tkaiStatsStrip");
+    const supporters = document.getElementById("tkaiTopSupporters");
+    const users = document.getElementById("tkaiUserSummary");
+    const outStats = statsPopoutEl.querySelector("#tkaiStatsPopoutStats");
+    const outSupporters = statsPopoutEl.querySelector("#tkaiStatsPopoutSupporters");
+    const outUsers = statsPopoutEl.querySelector("#tkaiStatsPopoutUsers");
+    const outMeta = statsPopoutEl.querySelector("#tkaiStatsPopoutMeta");
+    if (outStats && stats) outStats.innerHTML = stats.innerHTML;
+    if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
+    if (outUsers && users) outUsers.innerHTML = users.innerHTML;
+    if (outMeta) {
+      const elapsedMin = sessionStartedAt
+        ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000))
+        : 0;
+      outMeta.textContent =
+        "Poruke: " +
+        formatNum(collectedMessages.length) +
+        " • " +
+        formatNum(elapsedMin) +
+        " min • Viewers " +
+        formatNum(liveViewerCount) +
+        " (peak " +
+        formatNum(peakViewerCount) +
+        ")";
+    }
+  }
+
+  function closeStatsPopout() {
+    if (statsPopoutTimer) {
+      clearInterval(statsPopoutTimer);
+      statsPopoutTimer = null;
+    }
+    if (statsPopoutEl) {
+      statsPopoutEl.remove();
+      statsPopoutEl = null;
+    }
+    if (expandStatsBtn) {
+      expandStatsBtn.textContent = "📈 Stats prozor";
+      expandStatsBtn.style.background = "";
+    }
+  }
+
+  function openStatsPopout() {
+    if (statsPopoutEl && document.body.contains(statsPopoutEl)) {
+      statsPopoutEl.style.display = "";
+      if (!statsPopoutTimer) {
+        syncStatsPopout();
+        statsPopoutTimer = setInterval(syncStatsPopout, 1200);
+      }
+      if (expandStatsBtn) {
+        expandStatsBtn.textContent = "📈 Zatvori stats";
+        expandStatsBtn.style.background = "rgba(34,197,94,.28)";
+      }
+      return;
+    }
+
+    statsPopoutEl = document.createElement("div");
+    statsPopoutEl.id = "tkaiStatsPopout";
+    statsPopoutEl.style.cssText =
+      "position:fixed;z-index:100000;top:68px;right:16px;width:min(640px,92vw);max-height:84vh;overflow:auto;" +
+      "background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:12px;color:#e2e8f0;" +
+      "box-shadow:0 18px 46px rgba(0,0,0,.55);padding:10px;";
+    statsPopoutEl.innerHTML =
+      '<div id="tkaiStatsPopoutHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;cursor:move">' +
+      '<div style="display:flex;flex-direction:column;gap:3px">' +
+      '<div style="font-size:12px;font-weight:700">📈 TikTok AI - Statistika</div>' +
+      '<div id="tkaiStatsPopoutMeta" style="font-size:10px;color:#cbd5e1"></div>' +
+      "</div>" +
+      '<button id="tkaiStatsPopoutClose" class="panel-close" style="position:static">×</button>' +
+      "</div>" +
+      '<div id="tkaiStatsPopoutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
+      '<div id="tkaiStatsPopoutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
+      '<div id="tkaiStatsPopoutUsers" class="tkai-user-summary"></div>';
+    document.body.appendChild(statsPopoutEl);
+    statsPopoutEl
+      .querySelector("#tkaiStatsPopoutClose")
+      ?.addEventListener("click", closeStatsPopout);
+
+    const statsHead = statsPopoutEl.querySelector("#tkaiStatsPopoutHead");
+    let dragging = false;
+    let dx = 0;
+    let dy = 0;
+    statsHead?.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button")) return;
+      dragging = true;
+      dx = e.clientX - statsPopoutEl.getBoundingClientRect().left;
+      dy = e.clientY - statsPopoutEl.getBoundingClientRect().top;
+      statsHead.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    statsHead?.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const maxLeft = Math.max(0, window.innerWidth - 240);
+      const maxTop = Math.max(48, window.innerHeight - 120);
+      statsPopoutEl.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + "px";
+      statsPopoutEl.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + "px";
+      statsPopoutEl.style.right = "auto";
+    });
+    statsHead?.addEventListener("pointerup", () => {
+      dragging = false;
+    });
+    statsHead?.addEventListener("pointercancel", () => {
+      dragging = false;
+    });
+
+    syncStatsPopout();
+    statsPopoutTimer = setInterval(syncStatsPopout, 1200);
+    if (expandStatsBtn) {
+      expandStatsBtn.textContent = "📈 Zatvori stats";
+      expandStatsBtn.style.background = "rgba(34,197,94,.28)";
+    }
   }
 
   function openRecommendationsPopout() {
@@ -8480,6 +8742,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       '<div style="font-size:11px;font-weight:700;color:var(--text2)">AI Recommendations</div>' +
       '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
       '</div>' +
+      '<div id="tkaiRecPopMeta" style="font-size:10px;color:var(--text3);margin-bottom:6px"></div>' +
       '<ul id="tkaiRecPopList" class="tkai-insights-list"></ul>';
     document.body.appendChild(wrap);
     recommendationsPopoutEl = wrap;
@@ -8618,6 +8881,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       "isPopular",
       "starred",
       "badgeText",
+      "mergedUser",
+      "userColor",
     ];
     const lines = [headers.join(",")];
     rows.forEach((m) => {
@@ -8633,6 +8898,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         m.isPopular ? 1 : 0,
         m.starred ? 1 : 0,
         m.badgeText || "",
+        resolveTkaiUserDisplay(m.user),
+        getUserColor(m.user),
       ].map(toCsvValue);
       lines.push(vals.join(","));
     });
@@ -8745,6 +9012,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
     renderViewerSparkline();
     updateInsightsUI();
+    syncStatsPopout();
   }
 
   function archiveSession(reason = "manual") {
@@ -8823,6 +9091,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       },
       mergedUsers: buildUserStats(collectedMessages, userLimit),
       dailyStats: buildDailyStats(collectedMessages, userLimit),
+      userAliases: getTkaiUserAliases(),
+      userColors: getTkaiUserColors(),
       messages: exportMessages,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -8894,6 +9164,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
       perUser: buildUserStats(collectedMessages, userLimit),
       perDay: buildDailyStats(collectedMessages, userLimit),
+      userAliases: getTkaiUserAliases(),
+      userColors: getTkaiUserColors(),
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -8910,6 +9182,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       URL.revokeObjectURL(a.href);
     }, 500);
     showToast("📊 Statistike preuzete");
+  });
+
+  expandStatsBtn?.addEventListener("click", () => {
+    if (statsPopoutEl && document.body.contains(statsPopoutEl)) {
+      closeStatsPopout();
+    } else {
+      openStatsPopout();
+    }
   });
 
   clearBtn?.addEventListener("click", () => {
@@ -10110,6 +10390,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       ? collectedMessages.filter((m) => m.starred)
       : collectedMessages;
     visibleMessages.slice(-40).forEach((m) => {
+      const displayUser = resolveTkaiUserDisplay(m.user);
       const div = document.createElement("div");
       div.className =
         "tkai-msg" + (selectedMsgIds.has(m.id) ? " selected" : "");
@@ -10143,7 +10424,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       div.innerHTML = `
         <div class="tkai-msg-user">
           ${badgesHtml}
-          <span class="u-name" style="color:${getUserColor(m.user)}">${escHtml(m.user)}</span>
+          <span class="u-name" style="color:${getUserColor(displayUser)}">${escHtml(displayUser)}</span>
           ${m.badgeText ? `<span class="u-badge-text">${escHtml(m.badgeText)}</span>` : ""}
         </div>
         <div class="tkai-msg-text">${escHtml(m.text)}</div>

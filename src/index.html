@@ -9141,7 +9141,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.222</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.223</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -10281,7 +10281,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.222</span></div>
+                    id="helpVersionNum2">2.4.223</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -10704,6 +10704,7 @@
         <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Chat JSON</button>
         <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
         <button class="tkai-gen-btn" id="tkaiExportStatsBtn" style="font-size:11px">📊 Statistike</button>
+        <button class="tkai-gen-btn" id="tkaiExpandStatsBtn" style="font-size:11px">📈 Stats prozor</button>
         <button class="tkai-gen-btn" id="tkaiClearBtn"
           style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
       </div>
@@ -15884,10 +15885,13 @@
       // ── Chat pop-out floating window ─────────────────────────────────────
       const expandChatBtn = document.getElementById('tkaiExpandChatBtn');
       const expandLiveBtn = document.getElementById('tkaiExpandLiveBtn');
+      const expandStatsBtn = document.getElementById('tkaiExpandStatsBtn');
       let chatPopout = null;
       let chatPopoutMirrorTimer = null;
       let liveDashboardPopout = null;
       let liveDashboardTimer = null;
+      let statsDashboardPopout = null;
+      let statsDashboardTimer = null;
 
       function openChatPopout() {
         if (chatPopout && document.body.contains(chatPopout)) {
@@ -16022,6 +16026,99 @@
         }
       }
 
+      function syncStatsDashboardPopout() {
+        if (!statsDashboardPopout || !document.body.contains(statsDashboardPopout)) return;
+        const stats = document.getElementById('tkaiStatsStrip');
+        const supporters = document.getElementById('tkaiTopSupporters');
+        const users = document.getElementById('tkaiUserSummary');
+        const outStats = statsDashboardPopout.querySelector('#tkaiStatsOutStats');
+        const outSupporters = statsDashboardPopout.querySelector('#tkaiStatsOutSupporters');
+        const outUsers = statsDashboardPopout.querySelector('#tkaiStatsOutUsers');
+        const outMeta = statsDashboardPopout.querySelector('#tkaiStatsOutMeta');
+        if (outStats && stats) outStats.innerHTML = stats.innerHTML;
+        if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
+        if (outUsers && users) outUsers.innerHTML = users.innerHTML;
+        if (outMeta) {
+          const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
+          outMeta.textContent = 'Poruke: ' + formatNum(collectedMessages.length) + ' • ' + elapsedMin + ' min • viewers ' + formatNum(liveViewerCount) + ' (peak ' + formatNum(peakViewerCount) + ')';
+        }
+      }
+
+      function closeStatsDashboardPopout() {
+        if (statsDashboardTimer) { clearInterval(statsDashboardTimer); statsDashboardTimer = null; }
+        if (statsDashboardPopout) { statsDashboardPopout.remove(); statsDashboardPopout = null; }
+        if (expandStatsBtn) { expandStatsBtn.textContent = '📈 Stats prozor'; expandStatsBtn.style.background = ''; }
+      }
+
+      function openStatsDashboardPopout() {
+        if (statsDashboardPopout && document.body.contains(statsDashboardPopout)) {
+          statsDashboardPopout.style.display = '';
+          if (!statsDashboardTimer) {
+            syncStatsDashboardPopout();
+            statsDashboardTimer = setInterval(syncStatsDashboardPopout, 1200);
+          }
+          if (expandStatsBtn) {
+            expandStatsBtn.textContent = '📈 Zatvori stats';
+            expandStatsBtn.style.background = 'rgba(34,197,94,.28)';
+          }
+          return;
+        }
+
+        statsDashboardPopout = document.createElement('div');
+        statsDashboardPopout.id = 'tkaiStatsDashboardPopout';
+        statsDashboardPopout.style.cssText =
+          'position:fixed;z-index:100001;top:68px;right:16px;width:min(640px,92vw);max-height:84vh;overflow:auto;' +
+          'background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:12px;color:#e2e8f0;' +
+          'box-shadow:0 18px 46px rgba(0,0,0,.55);padding:10px;';
+        statsDashboardPopout.innerHTML =
+          '<div id="tkaiStatsDashHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;cursor:move">' +
+          '<div style="display:flex;flex-direction:column;gap:3px">' +
+          '<div style="font-size:12px;font-weight:700">📈 TikTok AI - Statistika</div>' +
+          '<div id="tkaiStatsOutMeta" style="font-size:10px;color:#cbd5e1"></div>' +
+          '</div>' +
+          '<button id="tkaiStatsDashClose" class="panel-close" style="position:static">×</button>' +
+          '</div>' +
+          '<div id="tkaiStatsOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiStatsOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiStatsOutUsers" class="tkai-user-summary"></div>';
+        document.body.appendChild(statsDashboardPopout);
+        statsDashboardPopout.querySelector('#tkaiStatsDashClose')?.addEventListener('click', closeStatsDashboardPopout);
+
+        const statsHead = statsDashboardPopout.querySelector('#tkaiStatsDashHead');
+        let dragging = false;
+        let dx = 0;
+        let dy = 0;
+        statsHead?.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          dragging = true;
+          dx = e.clientX - statsDashboardPopout.getBoundingClientRect().left;
+          dy = e.clientY - statsDashboardPopout.getBoundingClientRect().top;
+          statsHead.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        statsHead?.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const maxLeft = Math.max(0, window.innerWidth - 240);
+          const maxTop = Math.max(48, window.innerHeight - 120);
+          statsDashboardPopout.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + 'px';
+          statsDashboardPopout.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + 'px';
+          statsDashboardPopout.style.right = 'auto';
+        });
+        statsHead?.addEventListener('pointerup', () => {
+          dragging = false;
+        });
+        statsHead?.addEventListener('pointercancel', () => {
+          dragging = false;
+        });
+
+        syncStatsDashboardPopout();
+        statsDashboardTimer = setInterval(syncStatsDashboardPopout, 1200);
+        if (expandStatsBtn) {
+          expandStatsBtn.textContent = '📈 Zatvori stats';
+          expandStatsBtn.style.background = 'rgba(34,197,94,.28)';
+        }
+      }
+
       function closeLiveDashboardPopout() {
         if (liveDashboardTimer) { clearInterval(liveDashboardTimer); liveDashboardTimer = null; }
         if (liveDashboardPopout) { liveDashboardPopout.remove(); liveDashboardPopout = null; }
@@ -16114,6 +16211,10 @@
       expandLiveBtn?.addEventListener('click', () => {
         if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
         else openLiveDashboardPopout();
+      });
+      expandStatsBtn?.addEventListener('click', () => {
+        if (statsDashboardPopout && document.body.contains(statsDashboardPopout)) closeStatsDashboardPopout();
+        else openStatsDashboardPopout();
       });
 
       // ── Shadowban check ──────────────────────────────────────────────────
@@ -16254,6 +16355,7 @@
         updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
         renderViewerSparkline();
         updateInsightsUI();
+        syncStatsDashboardPopout();
       }
       function renderGiftGallery() {
         if (!giftGalleryEl) return;
