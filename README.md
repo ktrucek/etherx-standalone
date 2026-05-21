@@ -70,6 +70,16 @@ Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 
 `.env.local` je ignoriran i ne treba ići na GitHub.
 
+Repo sada uključuje sigurni template: `.env.local.example` (bez tajni).
+
+EtherX na startupu automatski generira runtime env datoteke ako ne postoje:
+
+- `~/.etherx/.env.local`
+- `~/.config/EtherX Browser/.env.local`
+
+Automatski upisuje sigurne default vrijednosti (URL endpointa), a ako lokalno već postoji ključ,
+preslikava ga u runtime lokacije tako da korisnik ne mora ručno uređivati datoteke nakon instalacije.
+
 Preporučeni način za deploy tajne:
 
 1. Spremi tajne izvan repozitorija u `~/.config/etherx/deploy.env`
