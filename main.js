@@ -46,6 +46,8 @@ const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isHeadless =
   process.env.DISPLAY === undefined && process.platform === "linux";
 const forceDisableGpu = process.env.ETHERX_DISABLE_GPU === "1";
+const forceDisableGpuSandbox = process.env.ETHERX_DISABLE_GPU_SANDBOX === "1";
+const aggressiveGpuFlags = process.env.ETHERX_GPU_AGGRESSIVE === "1";
 
 if (forceDisableGpu) {
   app.disableHardwareAcceleration();
@@ -62,18 +64,23 @@ if (process.platform !== "darwin") {
       app.commandLine.appendSwitch("disable-software-rasterizer");
     }
   } else {
-    // 🔥 PERFORMANCE: Maximum hardware acceleration on desktop
+    // Stable desktop profile: keep HW accel, but avoid aggressive flags by default.
+    // Some Windows GPUs show corrupted frames with zero-copy / blocklist overrides.
     app.commandLine.appendSwitch("enable-gpu-rasterization");
-    if (process.platform === "win32") {
+    if (process.platform === "win32" && aggressiveGpuFlags) {
       app.commandLine.appendSwitch("enable-zero-copy");
     }
-    app.commandLine.appendSwitch("ignore-gpu-blocklist");
+    if (aggressiveGpuFlags) {
+      app.commandLine.appendSwitch("ignore-gpu-blocklist");
+    }
     app.commandLine.appendSwitch("enable-accelerated-2d-canvas");
     app.commandLine.appendSwitch("enable-accelerated-video-decode");
   }
 }
-// Prevent GPU sandbox from crashing the renderer (fixes launch-failed / exit 1003)
-app.commandLine.appendSwitch("disable-gpu-sandbox");
+// Keep GPU sandbox enabled by default for stability. Allow explicit override only.
+if (isCI || isHeadless || forceDisableGpuSandbox) {
+  app.commandLine.appendSwitch("disable-gpu-sandbox");
+}
 
 // Allow video autoplay without user gesture (required for YouTube, TikTok, Twitch, etc.)
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -303,6 +310,70 @@ function _ensureRuntimeEnvLocals() {
       // Never crash startup due to bootstrap helper.
     }
   });
+}
+
+function _getRuntimeEnvTargetPaths() {
+  const targets = [
+    path.join(os.homedir(), ".etherx", ".env.local"),
+    path.join(os.homedir(), ".config", "EtherX Browser", ".env.local"),
+  ];
+  try {
+    targets.push(path.join(app.getPath("userData"), ".env.local"));
+  } catch (_) {
+    // ignore
+  }
+  return [...new Set(targets)];
+}
+
+function _saveRuntimeLicenseConfig({ apiKey = "", apiUrl = "", validHashes = "" } = {}) {
+  _ensureRuntimeEnvLocals();
+  const targets = _getRuntimeEnvTargetPaths();
+  const patch = {
+    ETHERX_TKAI_LICENSE_API_KEY: String(apiKey || "").trim(),
+    ETHERX_TKAI_LICENSE_API_URL:
+      String(apiUrl || "").trim() ||
+      "https://kriptoentuzijasti.io/wp-json/ken-webshop/v1/license/validate",
+  };
+  if (String(validHashes || "").trim()) {
+    patch.ETHERX_TKAI_VALID_HASHES = String(validHashes || "").trim();
+  }
+
+  targets.forEach((target) => {
+    try {
+      const cur = _readEnvLocalFile(target);
+      const next = { ...cur, ...patch };
+      _writeEnvLocalFile(target, next);
+    } catch (_) {
+      // ignore
+    }
+  });
+
+  return _getRuntimeEnvStatus();
+}
+
+function _getRuntimeEnvStatus() {
+  _ensureRuntimeEnvLocals();
+  const targets = _getRuntimeEnvTargetPaths();
+  const files = targets.map((target) => {
+    const map = _readEnvLocalFile(target);
+    const hasKey = !!String(map.ETHERX_TKAI_LICENSE_API_KEY || "").trim();
+    const hasUrl = !!String(map.ETHERX_TKAI_LICENSE_API_URL || "").trim();
+    const keyLen = String(map.ETHERX_TKAI_LICENSE_API_KEY || "").trim().length;
+    return {
+      path: target,
+      exists: fs.existsSync(target),
+      hasKey,
+      hasUrl,
+      keyLen,
+      url: String(map.ETHERX_TKAI_LICENSE_API_URL || "").trim(),
+    };
+  });
+
+  return {
+    ok: true,
+    deviceId: _computeDeviceId(),
+    files,
+  };
 }
 
 function _readEnvLocalMap() {
@@ -1468,6 +1539,18 @@ function setupIPC() {
   ipcMain.handle("license:isAdminDevice", () => _isAdminDeviceAllowed());
   ipcMain.handle("license:debugAdminEnv", () => _getAdminEnvDebugInfo());
   ipcMain.handle("license:getTkaiValidHashes", () => _getTkaiRuntimeHashes());
+  ipcMain.handle("license:getRuntimeEnvStatus", () => _getRuntimeEnvStatus());
+  ipcMain.handle("license:bootstrapRuntimeEnv", () => {
+    _ensureRuntimeEnvLocals();
+    return _getRuntimeEnvStatus();
+  });
+  ipcMain.handle("license:saveTkaiApiConfig", (_e, payload = {}) =>
+    _saveRuntimeLicenseConfig({
+      apiKey: payload.apiKey,
+      apiUrl: payload.apiUrl,
+      validHashes: payload.validHashes,
+    })
+  );
   ipcMain.handle("license:validateTkaiCode", (_e, payload = {}) =>
     _validateTkaiLicenseRemote(payload.code, payload.hashrate)
   );
