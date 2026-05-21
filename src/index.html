@@ -4678,7 +4678,8 @@
       right: 0;
       left: auto;
       top: auto;
-      height: 580px;
+      height: min(580px, calc(100vh - 120px));
+      max-height: calc(100vh - 120px);
       border-radius: 10px 0 0 10px;
       box-shadow: -6px 6px 32px rgba(0, 0, 0, .55);
       z-index: 9999;
@@ -4772,7 +4773,10 @@
       display: flex;
       flex-direction: column;
       height: 100%;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       background: var(--bg)
     }
 
@@ -4781,7 +4785,13 @@
       flex: 1;
       flex-direction: column;
       min-height: 0;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .tkai-main {
+      min-height: 230px;
+      flex: 0 0 clamp(230px, 34vh, 320px);
     }
 
     .tkai-config {
@@ -9062,7 +9072,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.219</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.220</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -10107,7 +10117,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.219</span></div>
+                    id="helpVersionNum2">2.4.220</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -14823,6 +14833,30 @@
 
         const sentimentTrend = Array.from(perMinuteSentiment.entries()).sort((a, b) => a[0] - b[0]).slice(-12)
           .map(([minute, score]) => ({ minute, score }));
+        if (sentimentTrend.length < 2 && messages.length > 3) {
+          const recentForTrend = messages.slice(-48);
+          const chunkSize = Math.max(2, Math.ceil(recentForTrend.length / 12));
+          const rollingTrend = [];
+          for (let i = 0; i < recentForTrend.length; i += chunkSize) {
+            const chunk = recentForTrend.slice(i, i + chunkSize);
+            let chunkScore = 0;
+            chunk.forEach((m) => {
+              String(m.text || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9čćđšž\s]/gi, ' ')
+                .split(/\s+/)
+                .filter((t) => t.length >= 3)
+                .forEach((t) => {
+                  if (positiveWords.has(t)) chunkScore += 1;
+                  if (negativeWords.has(t)) chunkScore -= 1;
+                });
+            });
+            rollingTrend.push({ minute: rollingTrend.length, score: chunkScore });
+          }
+          if (rollingTrend.length) {
+            sentimentTrend.splice(0, sentimentTrend.length, ...rollingTrend.slice(-12));
+          }
+        }
         const sentimentTotal = Math.max(1, positiveHits + negativeHits);
         const positivePct = Math.round((positiveHits / sentimentTotal) * 100);
         const negativePct = Math.round((negativeHits / sentimentTotal) * 100);
