@@ -48,6 +48,7 @@ const isHeadless =
 const forceDisableGpu = process.env.ETHERX_DISABLE_GPU === "1";
 const forceDisableGpuSandbox = process.env.ETHERX_DISABLE_GPU_SANDBOX === "1";
 const aggressiveGpuFlags = process.env.ETHERX_GPU_AGGRESSIVE === "1";
+const enableLinuxVaapi = process.env.ETHERX_ENABLE_VAAPI === "1";
 
 if (forceDisableGpu) {
   app.disableHardwareAcceleration();
@@ -74,7 +75,10 @@ if (process.platform !== "darwin") {
       app.commandLine.appendSwitch("ignore-gpu-blocklist");
     }
     app.commandLine.appendSwitch("enable-accelerated-2d-canvas");
-    app.commandLine.appendSwitch("enable-accelerated-video-decode");
+    // Linux can show audio-without-video on some GPU/driver stacks when decode is forced.
+    if (process.platform !== "linux" || enableLinuxVaapi) {
+      app.commandLine.appendSwitch("enable-accelerated-video-decode");
+    }
   }
 }
 // Keep GPU sandbox enabled by default for stability. Allow explicit override only.
@@ -161,8 +165,15 @@ try {
 (function applyStartupDoH() {
   try {
     const cfgPath = path.join(app.getPath("userData"), "etherx_doh.json");
-    let features =
-      "VaapiVideoDecoder,VaapiVideoEncoder,PlatformHEVCVideoDecoder";
+    const features = [];
+
+    if (process.platform !== "linux" || enableLinuxVaapi) {
+      features.push(
+        "VaapiVideoDecoder",
+        "VaapiVideoEncoder",
+        "PlatformHEVCVideoDecoder",
+      );
+    }
 
     if (fs.existsSync(cfgPath)) {
       const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
@@ -176,7 +187,7 @@ try {
         const tmpl = templates[provider] || templates.cloudflare;
         // Add DnsOverHttps to features. Use automatic mode to allow
         // fallback to system DNS if DoH endpoint is unavailable.
-        features += ",DnsOverHttps";
+        features.push("DnsOverHttps");
         app.commandLine.appendSwitch("dns-over-https-mode", "automatic");
         app.commandLine.appendSwitch(
           "dns-over-https-server-uri-template",
@@ -186,7 +197,9 @@ try {
     }
 
     // Set enable-features ONLY ONCE here (avoid overwrite bug)
-    app.commandLine.appendSwitch("enable-features", features);
+    if (features.length) {
+      app.commandLine.appendSwitch("enable-features", features.join(","));
+    }
   } catch (_) {
     /* ignore */
   }
