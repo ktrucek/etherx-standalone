@@ -9392,7 +9392,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.230</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.231</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10649,7 +10649,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.230</span></div>
+                                    v<span id="helpVersionNum2">2.4.231</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11108,8 +11108,6 @@
             <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
             <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Chat JSON</button>
             <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
-            <button class="tkai-gen-btn" id="tkaiExportStatsBtn" style="font-size:11px">📊 Statistike</button>
-            <button class="tkai-gen-btn" id="tkaiExpandStatsBtn" style="font-size:11px">📈 Stats prozor</button>
             <button class="tkai-gen-btn" id="tkaiClearBtn"
                 style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
         </div>
@@ -16361,13 +16359,10 @@
             // ── Chat pop-out floating window ─────────────────────────────────────
             const expandChatBtn = document.getElementById('tkaiExpandChatBtn');
             const expandLiveBtn = document.getElementById('tkaiExpandLiveBtn');
-            const expandStatsBtn = document.getElementById('tkaiExpandStatsBtn');
             let chatPopout = null;
             let chatPopoutMirrorTimer = null;
             let liveDashboardPopout = null;
             let liveDashboardTimer = null;
-            let statsDashboardPopout = null;
-            let statsDashboardTimer = null;
 
             function openChatPopout() {
                 if (chatPopout && document.body.contains(chatPopout)) {
@@ -16502,222 +16497,6 @@
                 }
             }
 
-            function syncStatsDashboardPopout() {
-                if (!statsDashboardPopout || !document.body.contains(statsDashboardPopout)) return;
-                const stats = document.getElementById('tkaiStatsStrip');
-                const supporters = document.getElementById('tkaiTopSupporters');
-                const users = document.getElementById('tkaiUserSummary');
-                const insightsPanel = document.getElementById('tkaiInsights');
-                const outStats = statsDashboardPopout.querySelector('#tkaiStatsOutStats');
-                const outSupporters = statsDashboardPopout.querySelector('#tkaiStatsOutSupporters');
-                const outUsers = statsDashboardPopout.querySelector('#tkaiStatsOutUsers');
-                const outInsights = statsDashboardPopout.querySelector('#tkaiStatsOutInsights');
-                const outPeople = statsDashboardPopout.querySelector('#tkaiStatsOutPeople');
-                const outGifts = statsDashboardPopout.querySelector('#tkaiStatsOutGifts');
-                const outComments = statsDashboardPopout.querySelector('#tkaiStatsOutComments');
-                const outMeta = statsDashboardPopout.querySelector('#tkaiStatsOutMeta');
-                if (outStats && stats) outStats.innerHTML = stats.innerHTML;
-                if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
-                if (outUsers && users) outUsers.innerHTML = users.innerHTML;
-                if (outInsights && insightsPanel) outInsights.innerHTML = insightsPanel.innerHTML;
-
-                const insights = computeInsightsSnapshot();
-                const giftStats = computeGiftStats();
-                const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 300);
-                const usersDetailed = buildUserStats(collectedMessages, userLimit);
-                const totalMessages = collectedMessages.length;
-                const chatMessages = collectedMessages.filter((m) => m && (m.type === 'chat' || !m.type));
-                const questionCount = collectedQuestions.length;
-                const avgCommentLen = chatMessages.length
-                    ? Math.round(chatMessages.reduce((acc, m) => acc + String(m.text || '').length, 0) / chatMessages.length)
-                    : 0;
-
-                if (outPeople) {
-                    const topRows = usersDetailed.slice(0, 18).map((u, idx) => {
-                        const share = totalMessages > 0 ? Math.round((u.total / totalMessages) * 100) : 0;
-                        return '<div style="display:grid;grid-template-columns:26px 1.4fr .7fr .7fr .7fr .6fr .6fr;gap:6px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
-                            + '<span style="color:var(--text3)">#' + (idx + 1) + '</span>'
-                            + '<span style="color:' + getUserColor(u.user) + '">@' + escHtml(u.user) + '</span>'
-                            + '<span title="Ukupno">' + formatNum(u.total) + '</span>'
-                            + '<span title="Chat">' + formatNum(u.chat) + '</span>'
-                            + '<span title="Gift">' + formatNum(u.gifts) + '</span>'
-                            + '<span title="Join">' + formatNum(u.joins) + '</span>'
-                            + '<span title="Udio poruka">' + share + '%</span>'
-                            + '</div>';
-                    }).join('');
-                    outPeople.innerHTML =
-                        '<div class="tkai-insights-title" style="margin-bottom:6px">👥 Po ljudima / activity<span>📊</span></div>'
-                        + '<div style="font-size:10px;color:var(--text3);margin-bottom:6px">'
-                        + formatNum(usersDetailed.length) + ' korisnika • scan limit ' + formatNum(userLimit) + ' poruka'
-                        + '</div>'
-                        + '<div style="display:grid;grid-template-columns:26px 1.4fr .7fr .7fr .7fr .6fr .6fr;gap:6px;padding:3px 0;font-size:10px;color:var(--text3);border-bottom:1px solid rgba(255,255,255,.12)">'
-                        + '<span>#</span><span>Korisnik</span><span>Uk</span><span>Chat</span><span>Gift</span><span>Join</span><span>Udio</span>'
-                        + '</div>'
-                        + '<div style="max-height:220px;overflow:auto;font-size:10.5px">' + (topRows || '<div style="padding:6px;color:var(--text3)">Nema podataka.</div>') + '</div>';
-                }
-
-                if (outGifts) {
-                    const recentGiftRows = collectedMessages
-                        .filter((m) => m && (m.type === 'gift' || m.type === 'subscriber'))
-                        .slice(-20)
-                        .reverse()
-                        .map((m) => {
-                            const coins = Number(m.coins || parseCoinsFromText(m.text) || 0);
-                            const ts = new Date(Number(m.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
-                            return '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">'
-                                + '<span><b style="color:' + getUserColor(m.user || 'unknown') + '">@' + escHtml(m.user || 'unknown') + '</b> ' + escHtml(String(m.text || '').slice(0, 72)) + '</span>'
-                                + '<span style="white-space:nowrap">' + formatNum(coins) + ' 🪙 • ' + ts + '</span>'
-                                + '</div>';
-                        }).join('');
-                    const topGiftRows = giftStats.leaders.slice(0, 10).map((g, idx) =>
-                        '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">'
-                        + '<span>#' + (idx + 1) + ' <b style="color:' + getUserColor(g.user || 'unknown') + '">@' + escHtml(g.user || 'unknown') + '</b></span>'
-                        + '<span>' + formatNum(g.coins) + ' 🪙 / ' + formatNum(g.events) + ' gift</span>'
-                        + '</div>'
-                    ).join('');
-
-                    outGifts.innerHTML =
-                        '<div class="tkai-insights-title" style="margin-bottom:6px">🎁 Gift statistika<span>💎</span></div>'
-                        + '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:10px;color:var(--text3);margin-bottom:6px">'
-                        + '<span>Ukupno coins: <b style="color:var(--text2)">' + formatNum(giftStats.totalCoins) + '</b></span>'
-                        + '<span>Supporters: <b style="color:var(--text2)">' + formatNum(giftStats.supportersCount) + '</b></span>'
-                        + '<span>Gift eventa: <b style="color:var(--text2)">' + formatNum(giftStats.gifts.length) + '</b></span>'
-                        + '</div>'
-                        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-                        + '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:6px">'
-                        + '<div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:4px">Top gifteri</div>'
-                        + '<div style="max-height:180px;overflow:auto;font-size:10.5px">' + (topGiftRows || '<div style="padding:4px;color:var(--text3)">Nema giftova.</div>') + '</div>'
-                        + '</div>'
-                        + '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:6px">'
-                        + '<div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:4px">Zadnji gift događaji</div>'
-                        + '<div style="max-height:180px;overflow:auto;font-size:10.5px">' + (recentGiftRows || '<div style="padding:4px;color:var(--text3)">Nema recent giftova.</div>') + '</div>'
-                        + '</div>'
-                        + '</div>';
-                }
-
-                if (outComments) {
-                    const recentComments = chatMessages.slice(-20).reverse().map((m) => {
-                        const ts = new Date(Number(m.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
-                        return '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">'
-                            + '<span><b style="color:' + getUserColor(m.user || 'unknown') + '">@' + escHtml(m.user || 'unknown') + '</b>: ' + escHtml(String(m.text || '').slice(0, 90)) + '</span>'
-                            + '<span style="white-space:nowrap;color:var(--text3)">' + ts + '</span>'
-                            + '</div>';
-                    }).join('');
-
-                    const movementBars = (insights.engagement || []).map((e) => {
-                        const peak = Math.max(1, Number(insights.engagementPeak?.count || 1));
-                        const h = Math.max(10, Math.round((Number(e.count || 0) / peak) * 54));
-                        return '<div style="width:14px;height:' + h + 'px;background:linear-gradient(180deg,rgba(45,212,191,.9),rgba(37,99,235,.65));border-radius:4px" title="m+' + e.minute + ': ' + e.count + ' msg"></div>';
-                    }).join('');
-
-                    outComments.innerHTML =
-                        '<div class="tkai-insights-title" style="margin-bottom:6px">💬 Komentari & kretanje<span>↗</span></div>'
-                        + '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:10px;color:var(--text3);margin-bottom:6px">'
-                        + '<span>Komentara: <b style="color:var(--text2)">' + formatNum(chatMessages.length) + '</b></span>'
-                        + '<span>Prosj. duljina: <b style="color:var(--text2)">' + formatNum(avgCommentLen) + ' znakova</b></span>'
-                        + '<span>Pitanja: <b style="color:var(--text2)">' + formatNum(questionCount) + '</b></span>'
-                        + '<span>Sentiment: <b style="color:var(--text2)">' + escHtml(String(insights.sentiment || '-')) + '</b></span>'
-                        + '</div>'
-                        + '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:6px;margin-bottom:8px">'
-                        + '<div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:5px">Engagement kretanje (zadnji intervali)</div>'
-                        + '<div style="display:flex;align-items:flex-end;gap:4px;min-height:60px">' + (movementBars || '<span style="color:var(--text3)">Nema dovoljno podataka.</span>') + '</div>'
-                        + '</div>'
-                        + '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:6px">'
-                        + '<div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:4px">Zadnji komentari</div>'
-                        + '<div style="max-height:200px;overflow:auto;font-size:10.5px">' + (recentComments || '<div style="padding:4px;color:var(--text3)">Nema komentara.</div>') + '</div>'
-                        + '</div>';
-                }
-
-                if (outMeta) {
-                    const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
-                    outMeta.textContent = 'Poruke: ' + formatNum(collectedMessages.length)
-                        + ' • chat ' + formatNum(chatMessages.length)
-                        + ' • users ' + formatNum(usersDetailed.length)
-                        + ' • ' + elapsedMin + ' min • viewers ' + formatNum(liveViewerCount) + ' (peak ' + formatNum(peakViewerCount) + ')';
-                }
-            }
-
-            function closeStatsDashboardPopout() {
-                if (statsDashboardTimer) { clearInterval(statsDashboardTimer); statsDashboardTimer = null; }
-                if (statsDashboardPopout) { statsDashboardPopout.remove(); statsDashboardPopout = null; }
-                if (expandStatsBtn) { expandStatsBtn.textContent = '📈 Stats prozor'; expandStatsBtn.style.background = ''; }
-            }
-
-            function openStatsDashboardPopout() {
-                if (statsDashboardPopout && document.body.contains(statsDashboardPopout)) {
-                    statsDashboardPopout.style.display = '';
-                    if (!statsDashboardTimer) {
-                        syncStatsDashboardPopout();
-                        statsDashboardTimer = setInterval(syncStatsDashboardPopout, 1200);
-                    }
-                    if (expandStatsBtn) {
-                        expandStatsBtn.textContent = '📈 Zatvori stats';
-                        expandStatsBtn.style.background = 'rgba(34,197,94,.28)';
-                    }
-                    return;
-                }
-
-                statsDashboardPopout = document.createElement('div');
-                statsDashboardPopout.id = 'tkaiStatsDashboardPopout';
-                statsDashboardPopout.style.cssText =
-                    'position:fixed;z-index:100001;top:68px;right:16px;width:min(640px,92vw);max-height:84vh;overflow:auto;' +
-                    'background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:12px;color:#e2e8f0;' +
-                    'box-shadow:0 18px 46px rgba(0,0,0,.55);padding:10px;';
-                statsDashboardPopout.innerHTML =
-                    '<div id="tkaiStatsDashHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;cursor:move">' +
-                    '<div style="display:flex;flex-direction:column;gap:3px">' +
-                    '<div style="font-size:12px;font-weight:700">📈 TikTok AI - Full statistički dashboard</div>' +
-                    '<div id="tkaiStatsOutMeta" style="font-size:10px;color:#cbd5e1"></div>' +
-                    '</div>' +
-                    '<button id="tkaiStatsDashClose" class="panel-close" style="position:static">×</button>' +
-                    '</div>' +
-                    '<div id="tkaiStatsOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
-                    '<div id="tkaiStatsOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
-                    '<div id="tkaiStatsOutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
-                    '<div id="tkaiStatsOutInsights" class="tkai-insights" style="margin-bottom:8px"></div>' +
-                    '<div style="display:grid;grid-template-columns:1fr;gap:8px">' +
-                    '<div id="tkaiStatsOutPeople" class="tkai-insights-card" style="padding:8px"></div>' +
-                    '<div id="tkaiStatsOutGifts" class="tkai-insights-card" style="padding:8px"></div>' +
-                    '<div id="tkaiStatsOutComments" class="tkai-insights-card" style="padding:8px"></div>' +
-                    '</div>';
-                document.body.appendChild(statsDashboardPopout);
-                statsDashboardPopout.querySelector('#tkaiStatsDashClose')?.addEventListener('click', closeStatsDashboardPopout);
-
-                const statsHead = statsDashboardPopout.querySelector('#tkaiStatsDashHead');
-                let dragging = false;
-                let dx = 0;
-                let dy = 0;
-                statsHead?.addEventListener('pointerdown', (e) => {
-                    if (e.target.closest('button')) return;
-                    dragging = true;
-                    dx = e.clientX - statsDashboardPopout.getBoundingClientRect().left;
-                    dy = e.clientY - statsDashboardPopout.getBoundingClientRect().top;
-                    statsHead.setPointerCapture(e.pointerId);
-                    e.preventDefault();
-                });
-                statsHead?.addEventListener('pointermove', (e) => {
-                    if (!dragging) return;
-                    const maxLeft = Math.max(0, window.innerWidth - 240);
-                    const maxTop = Math.max(48, window.innerHeight - 120);
-                    statsDashboardPopout.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + 'px';
-                    statsDashboardPopout.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + 'px';
-                    statsDashboardPopout.style.right = 'auto';
-                });
-                statsHead?.addEventListener('pointerup', () => {
-                    dragging = false;
-                });
-                statsHead?.addEventListener('pointercancel', () => {
-                    dragging = false;
-                });
-
-                syncStatsDashboardPopout();
-                statsDashboardTimer = setInterval(syncStatsDashboardPopout, 1200);
-                if (expandStatsBtn) {
-                    expandStatsBtn.textContent = '📈 Zatvori stats';
-                    expandStatsBtn.style.background = 'rgba(34,197,94,.28)';
-                }
-            }
-
             function closeLiveDashboardPopout() {
                 if (liveDashboardTimer) { clearInterval(liveDashboardTimer); liveDashboardTimer = null; }
                 if (liveDashboardPopout) { liveDashboardPopout.remove(); liveDashboardPopout = null; }
@@ -16808,10 +16587,6 @@
             expandLiveBtn?.addEventListener('click', () => {
                 if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
                 else openLiveDashboardPopout();
-            });
-            expandStatsBtn?.addEventListener('click', () => {
-                if (statsDashboardPopout && document.body.contains(statsDashboardPopout)) closeStatsDashboardPopout();
-                else openStatsDashboardPopout();
             });
 
             // ── Shadowban check ──────────────────────────────────────────────────
@@ -16952,7 +16727,6 @@
                 updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
                 renderViewerSparkline();
                 updateInsightsUI();
-                syncStatsDashboardPopout();
             }
             function renderGiftGallery() {
                 if (!giftGalleryEl) return;
@@ -18034,46 +17808,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             });
             exportBtn?.addEventListener('click', exportConversation);
             exportCsvBtn?.addEventListener('click', exportCsvConversation);
-            document.getElementById('tkaiExportStatsBtn')?.addEventListener('click', () => {
-                const insights = computeInsightsSnapshot();
-                const giftStats = computeGiftStats();
-                const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
-                const totalMsgs = collectedMessages.length;
-                const engPerMin = elapsedMin > 0 ? (totalMsgs / elapsedMin).toFixed(2) : '0';
-                const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 200);
-                const payload = {
-                    exportedAt: new Date().toISOString(),
-                    sessionMinutes: elapsedMin,
-                    viewers: liveViewerCount,
-                    peakViewers: peakViewerCount,
-                    totalMessages: totalMsgs,
-                    engagementPerMin: parseFloat(engPerMin),
-                    giftCoins: giftStats.totalCoins,
-                    supportersCount: giftStats.supportersCount,
-                    topSupporters: giftStats.leaders.slice(0, 5).map(r => ({ user: r.user, coins: r.coins, gifts: r.events })),
-                    sentiment: insights.sentiment,
-                    sentimentCounts: insights.sentimentCounts,
-                    topTopics: insights.topTopics.slice(0, 10),
-                    topQuestions: insights.questions,
-                    spikes: insights.spikes,
-                    engagementPerMinuteChart: insights.engagement,
-                    engagementAvgPerMin: insights.engagementAvgPerMin,
-                    engagementPeak: insights.engagementPeak,
-                    sentimentTrendChart: insights.sentimentTrend,
-                    pieBreakdown: insights.pieBreakdown,
-                    songs: insights.songs,
-                    recommendations: buildRecommendations(insights),
-                    joinMinLevel: Number(DB.getSettings().tkaiJoinMinLevel ?? 32),
-                    perUser: buildUserStats(collectedMessages, userLimit),
-                    perDay: buildDailyStats(collectedMessages, userLimit)
-                };
-                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = 'tiktok-stats-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
-                document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); }, 500);
-                showToast('📊 Statistike preuzete');
-            });
             clearBtn?.addEventListener('click', clearConversation);
 
             // ── Složi / Rasloži / Zaključano layout ──────────────────────────────
