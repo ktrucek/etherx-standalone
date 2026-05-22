@@ -5241,6 +5241,25 @@
       padding: 2px 8px;
     }
 
+    .tkai-insights-card.tkai-folded>*:not(.tkai-insights-title):not(.tkai-card-head) {
+      display: none !important;
+    }
+
+    .tkai-insights-card.tkai-folded {
+      min-height: unset;
+    }
+
+    .tkai-insights-card.tkai-folded .tkai-insights-title {
+      margin-bottom: 0;
+      cursor: pointer;
+    }
+
+    #tkaiLayoutLockBtn.locked {
+      background: rgba(255, 122, 0, .25);
+      color: #ffd4a2;
+      border-color: rgba(255, 122, 0, .45);
+    }
+
     .tkai-mini-bars {
       display: flex;
       align-items: flex-end;
@@ -14192,6 +14211,218 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       });
       exportBtn?.addEventListener('click', exportConversation);
       clearBtn?.addEventListener('click', clearConversation);
+
+      // ── CSV export ────────────────────────────────────────────────────────────
+      document.getElementById('tkaiExportCsvBtn')?.addEventListener('click', () => {
+        if (!collectedMessages.length) { showToast('⚠️ Nema poruka za CSV export.'); return; }
+        const rows = [['user', 'text', 'translatedText', 'translatedLang', 'timestamp']];
+        collectedMessages.forEach(m => rows.push([
+          m.user || '', m.text || '', m.translatedText || '', m.translatedLang || '',
+          m.ts ? new Date(m.ts).toISOString() : ''
+        ]));
+        const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = 'tiktok-chat-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(href); }, 0);
+        showToast('⬇️ CSV skinut.');
+      });
+
+      // ── Stats export ──────────────────────────────────────────────────────────
+      document.getElementById('tkaiExportStatsBtn')?.addEventListener('click', () => {
+        const statsEl = document.getElementById('tkaiInsights');
+        const payload = {
+          exportedAt: new Date().toISOString(),
+          totalMessages: collectedMessages.length,
+          viewerCount: document.getElementById('tkaiViewerCount')?.textContent || '-',
+          coinTotal: document.getElementById('tkaiCoinTotal')?.textContent || '0',
+          supporterCount: document.getElementById('tkaiSupporterCount')?.textContent || '0',
+          viewerTrend: document.getElementById('tkaiViewerTrendLabel')?.textContent || '-',
+          sentimentTop: document.getElementById('tkaiSentimentTop')?.textContent || '-',
+          engagementTop: document.getElementById('tkaiEngagementTop')?.textContent || '-',
+          sessionInfo: document.getElementById('tkaiSessionInfo')?.textContent || '-'
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = 'tiktok-stats-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(href); }, 0);
+        showToast('📊 Stats skinut.');
+      });
+
+      // ── Full stats dashboard popout ────────────────────────────────────────
+      const expandStatsBtn = document.getElementById('tkaiExpandStatsBtn');
+      let statsDashboardPopout = null;
+      let statsDashboardTimer = null;
+
+      function syncStatsDashboardPopout() {
+        if (!statsDashboardPopout || !document.body.contains(statsDashboardPopout)) return;
+        const stats = document.getElementById('tkaiStatsStrip');
+        const supporters = document.getElementById('tkaiTopSupporters');
+        const users = document.getElementById('tkaiUserSummary');
+        const insights = document.getElementById('tkaiInsights');
+        const chat = document.getElementById('tkaiMessages');
+        const outStats = statsDashboardPopout.querySelector('#tkaiStatsOutStats');
+        const outSupporters = statsDashboardPopout.querySelector('#tkaiStatsOutSupporters');
+        const outUsers = statsDashboardPopout.querySelector('#tkaiStatsOutUsers');
+        const outInsights = statsDashboardPopout.querySelector('#tkaiStatsOutInsights');
+        const outChat = statsDashboardPopout.querySelector('#tkaiStatsOutChat');
+        const outMeta = statsDashboardPopout.querySelector('#tkaiStatsOutMeta');
+        if (outStats && stats) outStats.innerHTML = stats.innerHTML;
+        if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
+        if (outUsers && users) outUsers.innerHTML = users.innerHTML;
+        if (outInsights && insights) outInsights.innerHTML = insights.innerHTML;
+        if (outChat && chat) outChat.innerHTML = chat.innerHTML;
+        if (outMeta) {
+          outMeta.textContent = 'Poruke: ' + collectedMessages.length
+            + ' • viewers ' + (document.getElementById('tkaiViewerCount')?.textContent || '-')
+            + ' • support ' + (document.getElementById('tkaiSupporterCount')?.textContent || '0')
+            + ' • sentiment ' + (document.getElementById('tkaiSentimentTop')?.textContent || '-');
+        }
+      }
+
+      function closeStatsDashboardPopout() {
+        if (statsDashboardTimer) {
+          clearInterval(statsDashboardTimer);
+          statsDashboardTimer = null;
+        }
+        if (statsDashboardPopout) {
+          statsDashboardPopout.remove();
+          statsDashboardPopout = null;
+        }
+        if (expandStatsBtn) {
+          expandStatsBtn.textContent = '📈 Full stats';
+          expandStatsBtn.style.background = '';
+        }
+      }
+
+      function openStatsDashboardPopout() {
+        if (statsDashboardPopout && document.body.contains(statsDashboardPopout)) {
+          statsDashboardPopout.style.display = '';
+          if (!statsDashboardTimer) {
+            syncStatsDashboardPopout();
+            statsDashboardTimer = setInterval(syncStatsDashboardPopout, 1200);
+          }
+          if (expandStatsBtn) {
+            expandStatsBtn.textContent = '📈 Zatvori stats';
+            expandStatsBtn.style.background = 'rgba(34,197,94,.28)';
+          }
+          return;
+        }
+
+        statsDashboardPopout = document.createElement('div');
+        statsDashboardPopout.id = 'tkaiStatsDashboardPopout';
+        statsDashboardPopout.style.cssText =
+          'position:fixed;z-index:100001;top:56px;left:3vw;width:94vw;height:88vh;min-width:860px;min-height:520px;' +
+          'background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;' +
+          'box-shadow:0 18px 46px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;resize:both;';
+        statsDashboardPopout.innerHTML =
+          '<div id="tkaiStatsDashHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:linear-gradient(135deg,#1d4ed8,#0f766e);cursor:move">' +
+          '<div style="display:flex;flex-direction:column;gap:3px">' +
+          '<div style="font-size:13px;font-weight:700">📈 TikTok AI - Full statistički dashboard</div>' +
+          '<div id="tkaiStatsOutMeta" style="font-size:10px;color:rgba(255,255,255,.82)"></div>' +
+          '</div>' +
+          '<button id="tkaiStatsDashClose" class="panel-close" style="position:static">×</button>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1.35fr 1fr;gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
+          '<div style="overflow:auto;padding-right:4px">' +
+          '<div id="tkaiStatsOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiStatsOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiStatsOutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiStatsOutInsights" class="tkai-insights"></div>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;gap:8px;overflow:hidden">' +
+          '<div style="font-size:11px;color:#cbd5e1;padding:2px 4px">💬 Komentari / live feed</div>' +
+          '<div id="tkaiStatsOutChat" class="tkai-messages" style="flex:1;max-height:none"></div>' +
+          '</div>' +
+          '</div>';
+        document.body.appendChild(statsDashboardPopout);
+
+        const head = statsDashboardPopout.querySelector('#tkaiStatsDashHead');
+        let dragging = false;
+        let dx = 0;
+        let dy = 0;
+        head?.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          dragging = true;
+          dx = e.clientX - statsDashboardPopout.getBoundingClientRect().left;
+          dy = e.clientY - statsDashboardPopout.getBoundingClientRect().top;
+          head.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        head?.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const maxLeft = Math.max(0, window.innerWidth - 320);
+          const maxTop = Math.max(48, window.innerHeight - 120);
+          statsDashboardPopout.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + 'px';
+          statsDashboardPopout.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + 'px';
+          statsDashboardPopout.style.right = 'auto';
+        });
+        head?.addEventListener('pointerup', () => { dragging = false; });
+        head?.addEventListener('pointercancel', () => { dragging = false; });
+
+        statsDashboardPopout.querySelector('#tkaiStatsDashClose')?.addEventListener('click', closeStatsDashboardPopout);
+
+        syncStatsDashboardPopout();
+        statsDashboardTimer = setInterval(syncStatsDashboardPopout, 1200);
+        if (expandStatsBtn) {
+          expandStatsBtn.textContent = '📈 Zatvori stats';
+          expandStatsBtn.style.background = 'rgba(34,197,94,.28)';
+        }
+      }
+
+      expandStatsBtn?.addEventListener('click', () => {
+        if (statsDashboardPopout && document.body.contains(statsDashboardPopout)) closeStatsDashboardPopout();
+        else openStatsDashboardPopout();
+      });
+
+      // ── Složi / Rasloži insights cards ────────────────────────────────────
+      let insightsLocked = false;
+      document.getElementById('tkaiLayoutFoldBtn')?.addEventListener('click', () => {
+        if (insightsLocked) { showToast('🔒 Otključaj layout da bi složio/rasložio'); return; }
+        panel?.querySelectorAll('.tkai-insights-card').forEach(card => card.classList.add('tkai-folded'));
+        showToast('🗂 Sve složeno');
+      });
+      document.getElementById('tkaiLayoutUnfoldBtn')?.addEventListener('click', () => {
+        if (insightsLocked) { showToast('🔒 Otključaj layout da bi složio/rasložio'); return; }
+        panel?.querySelectorAll('.tkai-insights-card').forEach(card => card.classList.remove('tkai-folded'));
+        showToast('🧩 Sve rasloženo');
+      });
+
+      // ── Zaključaj / otključaj layout ──────────────────────────────────────
+      (function initLayoutLock() {
+        const lockBtn = document.getElementById('tkaiLayoutLockBtn');
+        if (!lockBtn) return;
+        function applyLockState() {
+          lockBtn.textContent = insightsLocked ? '🔒 Zaključano' : '🔓 Otključano';
+          lockBtn.classList.toggle('locked', insightsLocked);
+          if (splitterEl) splitterEl.style.pointerEvents = insightsLocked ? 'none' : '';
+          panel?.querySelectorAll('.tkai-insights-card').forEach(card => {
+            card.style.userSelect = insightsLocked ? 'none' : '';
+          });
+        }
+        lockBtn.addEventListener('click', () => {
+          insightsLocked = !insightsLocked;
+          applyLockState();
+          showToast(insightsLocked ? '🔒 Layout zaključan' : '🔓 Layout otključan');
+        });
+        // Individual card fold on title click (when unlocked)
+        panel?.querySelectorAll('.tkai-insights-card').forEach(card => {
+          const title = card.querySelector('.tkai-insights-title');
+          if (!title) return;
+          title.style.cursor = 'pointer';
+          title.addEventListener('click', () => {
+            if (insightsLocked) return;
+            card.classList.toggle('tkai-folded');
+          });
+        });
+        applyLockState();
+      })();
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', async () => {
         stopScanning();
       });
