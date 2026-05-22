@@ -9547,6 +9547,27 @@
 
               <div class="s-row">
                 <div class="s-row-left">
+                  <div class="s-row-label">Jezik prijevoda (CC/chat)</div>
+                  <div class="s-row-desc">Jezik za prikaz prijevoda. Auto prati jezik čitanja.</div>
+                </div>
+                <select class="s-select" data-setting="tkaiTranslateLang">
+                  <option value="auto">Auto (kao jezik čitanja)</option>
+                  <option value="hr">Hrvatski</option>
+                  <option value="en">English</option>
+                  <option value="de">Deutsch</option>
+                </select>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">CC čitanje streamera</div>
+                  <div class="s-row-desc">Automatski pročitaj titlove streamera kada stignu</div>
+                </div>
+                <div class="toggle" data-setting="tkaiCcReadEnabled"></div>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
                   <div class="s-row-label">Kontekst (zadnjih poruka)</div>
                   <div class="s-row-desc">Koliko prethodnih poruka AI vidi za bolji kontekst</div>
                 </div>
@@ -9556,8 +9577,8 @@
 
               <div class="s-row">
                 <div class="s-row-left">
-                  <div class="s-row-label">Auto-prijevod na HR</div>
-                  <div class="s-row-desc">Automatski prevedi strane poruke u chatu</div>
+                  <div class="s-row-label">Auto-prijevod poruka</div>
+                  <div class="s-row-desc">Automatski prevedi poruke i CC u odabrani jezik</div>
                 </div>
                 <div class="toggle" data-setting="tkaiAutoTranslate"></div>
               </div>
@@ -10169,6 +10190,7 @@
       </div>
       <div class="tkai-footer">
         <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
+        <button class="tkai-gen-btn" id="tkaiCcReadBtn" style="font-size:11px">💬🔊 CC Read OFF</button>
         <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
         <button class="tkai-gen-btn" id="tkaiExpandLiveBtn" style="font-size:11px">🖥 Live prozor</button>
         <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
@@ -14844,7 +14866,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
         function clampPanelPosition() {
           const rect = panel.getBoundingClientRect();
-          const chromeH = document.querySelector('.content-area')?.getBoundingClientRect().top || 90;
+          const chromeH = getTkaiTopBoundary();
           const maxLeft = Math.max(0, window.innerWidth - Math.min(panel.offsetWidth || rect.width, window.innerWidth));
           const maxTop = Math.max(chromeH, window.innerHeight - Math.min(panel.offsetHeight || rect.height, window.innerHeight));
           const visibleEnough = rect.right > 80 && rect.left < window.innerWidth - 40 && rect.bottom > chromeH + 40 && rect.top < window.innerHeight - 40;
@@ -14858,6 +14880,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const bottom = Math.max(0, Math.min(parseFloat(panel.style.bottom) || 10, Math.max(0, window.innerHeight - maxTop - (panel.offsetHeight || rect.height))));
             panel.style.bottom = bottom + 'px';
           }
+        }
+
+        function getTkaiTopBoundary() {
+          const tabTop = document.querySelector('.tab-bar')?.getBoundingClientRect()?.top;
+          if (Number.isFinite(tabTop)) return Math.max(0, tabTop);
+          const contentTop = document.querySelector('.content-area')?.getBoundingClientRect()?.top;
+          return Number.isFinite(contentTop) ? Math.max(0, contentTop) : 90;
         }
 
         // Restore saved position
@@ -14896,7 +14925,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           // Clamp inside viewport — don't allow dragging above browser chrome
           const pw = panel.offsetWidth;
           const ph = panel.offsetHeight;
-          const chromeH = document.querySelector('.content-area')?.getBoundingClientRect().top || 90;
+          const chromeH = getTkaiTopBoundary();
           nx = Math.max(0, Math.min(nx, window.innerWidth - pw));
           ny = Math.max(chromeH, Math.min(ny, window.innerHeight - ph));
           panel.style.left = nx + 'px';

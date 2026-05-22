@@ -7221,6 +7221,108 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let lastViewerSampleAt = 0;
   let lastViewerSampleValue = 0;
   let lastScrapeMeta = null;
+  let lastCaptionSpeakKey = "";
+  let lastCaptionSpeakAt = 0;
+  const translateCache = new Map();
+
+  function getTkaiTranslateTargetLang() {
+    const preferred = String(getTkaiSetting("tkaiTranslateLang", "auto") || "auto").toLowerCase();
+    if (preferred && preferred !== "auto") return preferred;
+    const readLang = String(getTkaiSetting("tkaiReadLang", "hr") || "hr").toLowerCase();
+    return readLang && readLang !== "auto" ? readLang : "hr";
+  }
+
+  async function translateTkaiMessageInPlace(message, options = {}) {
+    if (!message || !String(message.text || "").trim()) return;
+    const targetLang = getTkaiTranslateTargetLang();
+    const sourceText = String(message.text || "").trim();
+    const cacheKey = `${targetLang}::${sourceText}`;
+    if (translateCache.has(cacheKey)) {
+      const cached = translateCache.get(cacheKey);
+      message.translatedText = cached.translated;
+      message.translatedLang = targetLang;
+      message.detectedLang = cached.detected || "";
+      renderMessages();
+      return;
+    }
+
+    const url =
+      "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&dt=t&tl=" +
+      encodeURIComponent(targetLang) +
+      "&q=" +
+      encodeURIComponent(sourceText);
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) throw new Error("Translate HTTP " + res.status);
+    const data = await res.json();
+    const translated = Array.isArray(data?.[0])
+      ? data[0].map((part) => part?.[0] || "").join("").trim()
+      : "";
+    if (!translated) throw new Error("Prazan prijevod");
+
+    const detected = String(data?.[2] || "").toLowerCase();
+    translateCache.set(cacheKey, { translated, detected });
+    message.translatedText = translated;
+    message.translatedLang = targetLang;
+    message.detectedLang = detected;
+    renderMessages();
+
+    if (!options.silent) {
+      const from = detected || "auto";
+      showToast(`🌐 ${from} → ${targetLang}`);
+    }
+  }
+
+  function mapTkaiLangForSpeech(langCode) {
+    const code = String(langCode || "").toLowerCase();
+    if (code === "hr") return "hr-HR";
+    if (code === "en") return "en-US";
+    if (code === "de") return "de-DE";
+    return code || "hr-HR";
+  }
+
+  function speakTkaiCaption(text) {
+    const clean = String(text || "").trim();
+    if (!clean || !("speechSynthesis" in window) || !window.speechSynthesis) {
+      return;
+    }
+    const langTag = mapTkaiLangForSpeech(getTkaiTranslateTargetLang());
+    const key = `${langTag}::${clean}`;
+    const now = Date.now();
+    if (key === lastCaptionSpeakKey && now - lastCaptionSpeakAt < 3500) return;
+    lastCaptionSpeakKey = key;
+    lastCaptionSpeakAt = now;
+
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = langTag;
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    const voices = speechSynthesis.getVoices();
+    const voice = voices.find((v) =>
+      String(v.lang || "").toLowerCase().startsWith(langTag.slice(0, 2).toLowerCase()),
+    );
+    if (voice) utterance.voice = voice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utterance);
+  }
+
+  async function handleIncomingCaption(message) {
+    if (!message || message.type !== "caption") return;
+    const autoTranslate = getTkaiSetting("tkaiAutoTranslate", false);
+    const ccReadEnabled = getTkaiSetting("tkaiCcReadEnabled", false);
+    if (!autoTranslate && !ccReadEnabled) return;
+
+    if (!message.translatedText) {
+      try {
+        await translateTkaiMessageInPlace(message, { silent: true });
+      } catch {
+        // Keep raw caption when translation fails.
+      }
+    }
+
+    if (ccReadEnabled) {
+      speakTkaiCaption(message.translatedText || message.text || "");
+    }
+  }
 
   function startScanning() {
     if (scanActive) return;
@@ -7288,6 +7390,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const toggleBtn = document.getElementById("tkaiBtnToggle");
   const genBtn = document.getElementById("tkaiGenBtn");
   const genAllBtn = document.getElementById("tkaiGenAllBtn");
+  const ccReadBtn = document.getElementById("tkaiCcReadBtn");
   const statusEl = document.getElementById("tkaiScanStatus");
   const streamOwnerEl = document.getElementById("tkaiStreamOwner");
   const msgCountEl = document.getElementById("tkaiMsgCount");
@@ -7348,11 +7451,20 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let recommendationsPopoutBodyEl = null;
   let statsPopoutEl = null;
   let statsPopoutTimer = null;
+  let lastRecommendationsHash = "";
   let dashboardLayoutLocked = getTkaiSetting("tkaiDashboardLayoutLocked", true);
   let dashboardLayoutFolded = getTkaiSetting("tkaiDashboardLayoutFolded", false);
   let lastShadowbanUserStats = [];
   const TKAI_USER_COLORS_KEY = "ex_tkai_user_colors";
   const TKAI_USER_ALIASES_KEY = "ex_tkai_user_aliases";
+
+  function updateCcReadButton() {
+    if (!ccReadBtn) return;
+    const on = getTkaiSetting("tkaiCcReadEnabled", false) === true;
+    ccReadBtn.textContent = on ? "💬🔊 CC Read ON" : "💬🔊 CC Read OFF";
+    ccReadBtn.style.opacity = on ? "1" : "0.85";
+    ccReadBtn.style.boxShadow = on ? "0 0 0 1px rgba(125,211,252,.5) inset" : "none";
+  }
 
   function parseTikTokOwnerFromUrl(url) {
     try {
@@ -8506,12 +8618,23 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         `Najviši engagement u ${peakMinute}. minuti • trajanje ${elapsedMin}m`;
     }
 
+    let sentimentTrendSourceLabel = "live trend";
     if (sentimentTrendEl) {
       sentimentTrendEl.innerHTML = "";
-      const trendData =
+      const rawTrendData =
         insights.sentimentTrend && insights.sentimentTrend.length
           ? insights.sentimentTrend
-          : Array.from({ length: 12 }, (_, i) => ({ minute: i, score: 0 }));
+          : [];
+      const hasTrendSignal = rawTrendData.some(
+        (s) => Math.abs(Number(s?.score || 0)) > 0.001,
+      );
+      const sc = insights.sentimentCounts || {};
+      const fallbackBalance = Number(sc.positivePct || 0) - Number(sc.negativePct || 0);
+      const fallbackScore = Math.max(-4, Math.min(4, fallbackBalance / 25));
+      const trendData = hasTrendSignal
+        ? rawTrendData
+        : Array.from({ length: 12 }, (_, i) => ({ minute: i, score: fallbackScore }));
+      sentimentTrendSourceLabel = hasTrendSignal ? "live trend" : "fallback trend";
       const maxAbs = Math.max(
         1,
         ...trendData.map((s) => Math.abs(s.score)),
@@ -8551,7 +8674,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     if (sentimentSummaryEl) {
       const sc = insights.sentimentCounts || {};
       sentimentSummaryEl.textContent =
-        `Neutralno ${formatNum(sc.neutralPct || 0)}% • hitovi +${formatNum(sc.positive || 0)} / -${formatNum(sc.negative || 0)}`;
+        `Neutralno ${formatNum(sc.neutralPct || 0)}% • hitovi +${formatNum(sc.positive || 0)} / -${formatNum(sc.negative || 0)} • ${sentimentTrendSourceLabel}`;
     }
 
     spikeListEl.innerHTML = "";
@@ -8605,6 +8728,13 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       li.textContent = r;
       recommendationsEl.appendChild(li);
     });
+    const currentRecommendationsHash = JSON.stringify(recommendations || []);
+    if (currentRecommendationsHash !== lastRecommendationsHash) {
+      lastRecommendationsHash = currentRecommendationsHash;
+      if ((recommendations || []).length > 0) {
+        openRecommendationsPopout();
+      }
+    }
     syncRecommendationsPopout(recommendations);
 
     if (pieChartEl && pieLegendEl && pieCenterEl) {
@@ -9412,14 +9542,6 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       URL.revokeObjectURL(a.href);
     }, 500);
     showToast("📊 Statistike preuzete");
-  });
-
-  expandStatsBtn?.addEventListener("click", () => {
-    if (statsPopoutEl && document.body.contains(statsPopoutEl)) {
-      closeStatsPopout();
-    } else {
-      openStatsPopout();
-    }
   });
 
   clearBtn?.addEventListener("click", () => {
@@ -10449,6 +10571,22 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       }
     }
 
+    function isLikelyNoiseChatText(text, user, messageType) {
+      const t = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!t) return true;
+      const letterCount = (t.match(/[a-zA-Z\u00C0-\u024F\u0400-\u04FF]/g) || []).length;
+      const digitCount = (t.match(/\d/g) || []).length;
+      const emojiCount = (t.match(/[\u{1F300}-\u{1FAFF}]/gu) || []).length;
+      const looksCounter = /^(?:\d[\d.,\s]*[km]?)(?:\+)?(?:\s*(?:viewers?|gledatelja|watching|coins?|diamonds?))?$/i.test(t);
+      const onlyNumericOrPunct = /^[\d\s.,:+\-x×/%|()[\]#*]+$/.test(t);
+      const sameAsUser = !!user && t.toLowerCase() === String(user).trim().toLowerCase();
+
+      if (sameAsUser || looksCounter || onlyNumericOrPunct) return true;
+      if (messageType === 'chat' && letterCount === 0 && emojiCount === 0) return true;
+      if (messageType === 'chat' && digitCount > 0 && letterCount === 0 && t.length < 28) return true;
+      return false;
+    }
+
     items.slice(-40).forEach(function(el, i) {
       // Try various selectors for username
       const userEl = el.querySelector('[data-e2e="user-name"], .user-name, [class*="Username"], [class*="user-name"], .owner-name, [class*="AuthorName"], strong');
@@ -10517,6 +10655,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       }
 
       if ((text && text.length > 0 && text !== user) || messageType !== 'chat') {
+        if (isLikelyNoiseChatText(text, user, messageType)) return;
         const parsedCoins = parseCoins(text);
         results.push({ 
           user: user.slice(0, 40), 
@@ -10705,6 +10844,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         collectedMessages.map((m) => m.user + ":" + m.text),
       );
       let added = 0;
+      const incomingCaptions = [];
       filteredMsgs.forEach((m) => {
         const key = m.user + ":" + m.text;
         if (!existing.has(key)) {
@@ -10712,6 +10852,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           collectedMessages.push(m);
           existing.add(key);
           added++;
+          if (m.type === "caption") incomingCaptions.push(m);
         }
       });
 
@@ -10724,6 +10865,12 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       // Keep last 50 messages
       if (collectedMessages.length > maxKeep)
         collectedMessages = collectedMessages.slice(-maxKeep);
+
+      if (incomingCaptions.length > 0) {
+        incomingCaptions.forEach((caption) => {
+          handleIncomingCaption(caption).catch(() => { });
+        });
+      }
 
       const autoSessionMin =
         parseInt(getTkaiSetting("tkaiAutoSessionMinutes", "15"), 10) || 15;
@@ -10802,9 +10949,10 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           ${m.badgeText ? `<span class="u-badge-text">${escHtml(m.badgeText)}</span>` : ""}
         </div>
         <div class="tkai-msg-text">${escHtml(m.text)}</div>
+        ${m.translatedText ? `<div class="tkai-msg-text" style="margin-top:4px;color:#d8f3ff">🌐 ${m.detectedLang ? escHtml(m.detectedLang) + " → " : ""}${escHtml(m.translatedText)}</div>` : ""}
       `;
 
-      div.title = "Klikni za odabir poruke • Alt klik = oznaci";
+      div.title = "Klikni za odabir poruke • Alt klik = oznaci • Desni klik = prijevod";
       div.addEventListener("click", (e) => {
         if (e.altKey) {
           m.starred = !m.starred;
@@ -10817,6 +10965,21 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
           el.classList.remove("selected"),
         );
         div.classList.add("selected");
+      });
+      div.addEventListener("contextmenu", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectedMsgIds.clear();
+        selectedMsgIds.add(m.id);
+        Array.from(messagesEl.children).forEach((el) =>
+          el.classList.remove("selected"),
+        );
+        div.classList.add("selected");
+        try {
+          await translateTkaiMessageInPlace(m);
+        } catch (err) {
+          showToast("❌ Prijevod nije uspio: " + String(err?.message || err));
+        }
       });
       messagesEl.appendChild(div);
     });
@@ -11399,27 +11562,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           showToast("Poruka nije pronađena.");
           return;
         }
-        // Pozovi AI prijevod (koristi window.etherx.ai.translate ili fallback)
-        let translated = "";
         try {
-          if (window.etherx?.ai?.translate) {
-            const result = await window.etherx.ai.translate(
-              msg.text,
-              getTkaiSetting("tkaiReadLang", "hr"),
-            );
-            if (result?.ok && result.translated) {
-              translated = result.translated;
-            } else {
-              translated = "[Greška] " + (result?.error || "Prazan odgovor");
-            }
-          } else {
-            // Fallback: samo prikaži tekst s oznakom jezika
-            translated = `[${getTkaiSetting("tkaiReadLang", "hr")}] ${msg.text}`;
-          }
-        } catch (e) {
-          translated = "[Greška u prijevodu] " + msg.text;
+          await translateTkaiMessageInPlace(msg);
+        } catch (err) {
+          showToast("❌ Prijevod nije uspio: " + String(err?.message || err));
         }
-        showToast("Prijevod: " + translated);
       });
     }
   }
@@ -11428,6 +11575,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   toggleBtn?.addEventListener("click", () => {
     if (scanActive) stopScanning();
     else startScanning();
+  });
+
+  ccReadBtn?.addEventListener("click", () => {
+    const next = !(getTkaiSetting("tkaiCcReadEnabled", false) === true);
+    DB.saveSetting("tkaiCcReadEnabled", next);
+    updateCcReadButton();
+    if (!next && "speechSynthesis" in window && window.speechSynthesis) {
+      speechSynthesis.cancel();
+    }
+    showToast(next ? "💬🔊 CC čitanje uključeno" : "💬🔇 CC čitanje isključeno");
   });
 
   // ── Generate for selected messages ──
@@ -11544,6 +11701,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
   applyTkaiFeatureToggles();
   applyTkaiButtonTheme();
+  updateCcReadButton();
   initInsightCardControls();
 
   spikeAllBtn?.addEventListener("click", () => {
