@@ -10059,9 +10059,15 @@
               </div>
               <ul class="tkai-insights-list" id="tkaiSpikeList"></ul>
             </div>
-            <div class="tkai-insights-card" id="tkaiRecommendationsCard">
-              <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span></div>
-              <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
+            <div class="tkai-insights-card" id="tkaiLiveTrendCard">
+              <div class="tkai-insights-title" title="Trend live sesija">Live session trend<span>📈</span></div>
+              <div class="tkai-metric-top" id="tkaiLiveTrendTop">0/min • Peak 0/min</div>
+              <div class="tkai-mini-bars" id="tkaiLiveTrendBars"></div>
+              <div class="tkai-area-wrap">
+                <div class="tkai-area-chart" id="tkaiLiveTrendLine"></div>
+                <div class="tkai-area-meta" id="tkaiLiveTrendMeta">Trend: -</div>
+              </div>
+              <div class="tkai-metric-bottom" id="tkaiLiveTrendSummary">Nema dovoljno podataka.</div>
             </div>
           </div>
           <div class="tkai-insights-row">
@@ -10083,6 +10089,10 @@
             </div>
           </div>
           <div class="tkai-insights-row">
+            <div class="tkai-insights-card" id="tkaiRecommendationsCard">
+              <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span></div>
+              <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
+            </div>
             <div class="tkai-insights-card" id="tkaiSongsCard">
               <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs & DJ CC<span>♫</span>
               </div>
@@ -10094,11 +10104,11 @@
       <div class="tkai-footer">
         <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
         <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
+        <button class="tkai-gen-btn" id="tkaiExpandLiveBtn" style="font-size:11px">🖥 Live prozor</button>
         <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
         <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Skini razgovor</button>
         <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
         <button class="tkai-gen-btn" id="tkaiExportStatsBtn" style="font-size:11px">📊 Stats</button>
-        <button class="tkai-gen-btn" id="tkaiExpandStatsBtn" style="font-size:11px">📈 Full stats</button>
         <button class="tkai-gen-btn" id="tkaiClearBtn"
           style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
       </div>
@@ -13655,12 +13665,154 @@
         });
         if (giftCountEl) giftCountEl.textContent = aggregated.length + ' stavki';
       }
+
+      function getLiveSessionTrend() {
+        const bucketMs = 2 * 60 * 1000;
+        const bucketCount = 15;
+        const windowMs = bucketMs * bucketCount;
+        const now = Date.now();
+        const start = now - windowMs;
+        const buckets = Array.from({ length: bucketCount }, (_, index) => ({
+          ts: start + (index * bucketMs),
+          count: 0,
+        }));
+
+        collectedMessages.forEach((message) => {
+          const ts = Number(message?.ts || 0);
+          if (!ts || ts < start) return;
+          const index = Math.min(bucketCount - 1, Math.max(0, Math.floor((ts - start) / bucketMs)));
+          buckets[index].count += 1;
+        });
+
+        const counts = buckets.map((bucket) => bucket.count);
+        const max = Math.max(1, ...counts);
+        const total = counts.reduce((sum, value) => sum + value, 0);
+        const avg = total / bucketCount;
+        const last = counts[counts.length - 1] || 0;
+        const prev = counts[counts.length - 2] || last;
+        const delta = last - prev;
+        const points = counts.map((value, index) => {
+          const x = bucketCount === 1 ? 0 : (index / (bucketCount - 1)) * 100;
+          const y = 100 - ((value / max) * 100);
+          return `${x.toFixed(2)},${y.toFixed(2)}`;
+        }).join(' ');
+
+        return {
+          buckets,
+          counts,
+          max,
+          total,
+          avg,
+          last,
+          prev,
+          delta,
+          points,
+          windowMinutes: bucketCount * 2,
+        };
+      }
+
+      function renderLiveSessionTrend() {
+        const barsEl = document.getElementById('tkaiLiveTrendBars');
+        const lineEl = document.getElementById('tkaiLiveTrendLine');
+        const topEl = document.getElementById('tkaiLiveTrendTop');
+        const metaEl = document.getElementById('tkaiLiveTrendMeta');
+        const summaryEl = document.getElementById('tkaiLiveTrendSummary');
+        if (!barsEl || !lineEl || !topEl || !metaEl || !summaryEl) return;
+
+        if (!collectedMessages.length) {
+          barsEl.innerHTML = '<div class="tkai-empty" style="padding:8px 0">Nema dovoljno podataka za trend.</div>';
+          lineEl.innerHTML = '<div class="tkai-empty" style="padding:8px 0">Nema dovoljno podataka za trend.</div>';
+          topEl.textContent = '0/min • Peak 0/min';
+          metaEl.textContent = 'Trend: -';
+          summaryEl.textContent = 'Kreni sa skeniranjem da vidiš live session trend.';
+          return;
+        }
+
+        const trend = getLiveSessionTrend();
+        barsEl.innerHTML = trend.buckets.map((bucket, index) => {
+          const height = Math.max(4, Math.round((bucket.count / trend.max) * 42));
+          const alpha = 0.28 + (index / Math.max(1, trend.buckets.length - 1)) * 0.42;
+          return `<div class="tkai-mini-bar" title="${new Date(bucket.ts).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' })}: ${bucket.count}" style="height:${height}px;background:linear-gradient(180deg, rgba(34,197,94,${alpha.toFixed(2)}), rgba(20,184,166,${Math.min(0.9, alpha + 0.18).toFixed(2)}))"></div>`;
+        }).join('');
+
+        lineEl.innerHTML = `
+          <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:100%;display:block">
+            <defs>
+              <linearGradient id="tkaiLiveTrendGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#22c55e" stop-opacity="0.95" />
+                <stop offset="100%" stop-color="#22c55e" stop-opacity="0.15" />
+              </linearGradient>
+            </defs>
+            <polyline fill="none" stroke="url(#tkaiLiveTrendGradient)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" points="${trend.points}" />
+            <polyline fill="none" stroke="#22c55e" stroke-opacity="0.2" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" points="${trend.points}" />
+          </svg>`;
+
+        topEl.textContent = `${trend.avg.toFixed(1)}/min • Peak ${trend.max}/min`;
+        metaEl.textContent = `Trend: ${trend.delta >= 0 ? '+' : ''}${trend.delta} u zadnja 2 bucket-a`;
+        summaryEl.textContent = `U zadnjih ${trend.windowMinutes} min: ${trend.total} poruka • zadnji bucket ${trend.last} • prethodni ${trend.prev}`;
+      }
+
+      function buildRecommendationsFromLiveData() {
+        const recs = [];
+        const userCounts = new Map();
+        let giftCount = 0;
+        let questionCount = 0;
+
+        collectedMessages.forEach((message) => {
+          const user = String(message?.user || '').trim();
+          if (user) userCounts.set(user, (userCounts.get(user) || 0) + 1);
+          const text = String(message?.text || '');
+          const lower = text.toLowerCase();
+          if (message?.type === 'gift') giftCount += 1;
+          if (lower.includes('?')) questionCount += 1;
+        });
+
+        const trend = getLiveSessionTrend();
+        const topUser = Array.from(userCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+
+        if (topUser) recs.push('Pozdravi najaktivnijeg korisnika: ' + topUser + '.');
+        if (giftCount > 0) recs.push('Spomeni giftove i napravi kratki shoutout.');
+        if (questionCount > 0) recs.push('Odgovori na najjače pitanje iz chata.');
+        if (trend.avg <= 1) recs.push('Chat je miran: postavi publici direktno pitanje ili anketu.');
+        if (trend.delta > 0) recs.push('Chat raste: iskoristi momentum i pojačaj CTA.');
+        if (trend.delta < 0) recs.push('Chat pada: ubaci novu temu, giveaway ili mini izazov.');
+        if (!recs.length) recs.push('Drži tempo i nastavi pratiti reakcije publike.');
+        return recs.slice(0, 6);
+      }
+
+      let lastRecommendationsSignature = '';
+
+      function renderRecommendationsCard() {
+        const recommendationsEl = document.getElementById('tkaiRecommendations');
+        if (!recommendationsEl) return;
+
+        const recs = buildRecommendationsFromLiveData();
+        recommendationsEl.innerHTML = '';
+        recs.forEach((text) => {
+          const li = document.createElement('li');
+          li.textContent = text;
+          recommendationsEl.appendChild(li);
+        });
+
+        const signature = recs.join(' | ');
+        if (collectedMessages.length && signature && signature !== lastRecommendationsSignature) {
+          lastRecommendationsSignature = signature;
+          showToast('💡 Preporuke ažurirane (' + recs.length + ')');
+        }
+      }
+
+      function refreshInsightWidgets() {
+        renderLiveSessionTrend();
+        renderRecommendationsCard();
+      }
+
       function renderMessages() {
         if (!messagesEl) return;
         if (!collectedMessages.length) {
           messagesEl.innerHTML = '<div class="tkai-empty">Nema poruka.<br>Klikni "Skeniranje ON" dok si<br>na TikTok Live.</div>';
           if (msgCountEl) msgCountEl.textContent = '';
           renderGiftGallery();
+          refreshInsightWidgets();
           return;
         }
         messagesEl.innerHTML = '';
@@ -13705,6 +13857,7 @@
         }
         if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
         renderGiftGallery();
+        refreshInsightWidgets();
       }
       function renderReplies(suggestions) {
         if (!repliesEl) return;
@@ -14255,6 +14408,139 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         showToast('📊 Stats skinut.');
       });
 
+      // ── Live dashboard popout (full TikTok AI mirror) ─────────────────────
+      const expandLiveBtn = document.getElementById('tkaiExpandLiveBtn');
+      let liveDashboardPopout = null;
+      let liveDashboardTimer = null;
+
+      function syncLiveDashboardPopout() {
+        if (!liveDashboardPopout || !document.body.contains(liveDashboardPopout)) return;
+        const stats = document.querySelector('#tiktokAIPanel .tkai-stats-strip');
+        const supporters = document.getElementById('tkaiTopSupporters');
+        const users = document.getElementById('tkaiUserSummary');
+        const insights = document.getElementById('tkaiInsights');
+        const chat = document.getElementById('tkaiMessages');
+        const replies = document.getElementById('tkaiReplies');
+        const gifts = document.getElementById('tkaiGiftGallery');
+        const outStats = liveDashboardPopout.querySelector('#tkaiLiveOutStats');
+        const outSupporters = liveDashboardPopout.querySelector('#tkaiLiveOutSupporters');
+        const outUsers = liveDashboardPopout.querySelector('#tkaiLiveOutUsers');
+        const outInsights = liveDashboardPopout.querySelector('#tkaiLiveOutInsights');
+        const outChat = liveDashboardPopout.querySelector('#tkaiLiveOutChat');
+        const outReplies = liveDashboardPopout.querySelector('#tkaiLiveOutReplies');
+        const outGifts = liveDashboardPopout.querySelector('#tkaiLiveOutGifts');
+        const outMeta = liveDashboardPopout.querySelector('#tkaiLiveOutMeta');
+        if (outStats && stats) outStats.innerHTML = stats.innerHTML;
+        if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
+        if (outUsers && users) outUsers.innerHTML = users.innerHTML;
+        if (outInsights && insights) outInsights.innerHTML = insights.innerHTML;
+        if (outChat && chat) outChat.innerHTML = chat.innerHTML;
+        if (outReplies && replies) outReplies.innerHTML = replies.innerHTML;
+        if (outGifts && gifts) outGifts.innerHTML = gifts.innerHTML;
+        if (outMeta) {
+          outMeta.textContent = 'Poruke: ' + collectedMessages.length
+            + ' • viewers ' + (document.getElementById('tkaiViewerCount')?.textContent || '-')
+            + ' • support ' + (document.getElementById('tkaiSupporterCount')?.textContent || '0')
+            + ' • sentiment ' + (document.getElementById('tkaiSentimentTop')?.textContent || '-');
+        }
+      }
+
+      function closeLiveDashboardPopout() {
+        if (liveDashboardTimer) {
+          clearInterval(liveDashboardTimer);
+          liveDashboardTimer = null;
+        }
+        if (liveDashboardPopout) {
+          liveDashboardPopout.remove();
+          liveDashboardPopout = null;
+        }
+        if (expandLiveBtn) {
+          expandLiveBtn.textContent = '🖥 Live prozor';
+          expandLiveBtn.style.background = '';
+        }
+      }
+
+      function openLiveDashboardPopout() {
+        if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) {
+          liveDashboardPopout.style.display = '';
+          if (!liveDashboardTimer) {
+            syncLiveDashboardPopout();
+            liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+          }
+          if (expandLiveBtn) {
+            expandLiveBtn.textContent = '🖥 Zatvori live';
+            expandLiveBtn.style.background = 'rgba(45,212,191,.28)';
+          }
+          return;
+        }
+
+        liveDashboardPopout = document.createElement('div');
+        liveDashboardPopout.id = 'tkaiLiveDashboardPopout';
+        liveDashboardPopout.style.cssText =
+          'position:fixed;z-index:100001;top:56px;left:3vw;width:94vw;height:88vh;min-width:920px;min-height:560px;' +
+          'background:#0b1220;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;' +
+          'box-shadow:0 18px 46px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;resize:both;';
+        liveDashboardPopout.innerHTML =
+          '<div id="tkaiLiveDashHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:linear-gradient(135deg,#0ea5e9,#0f766e);cursor:move">' +
+          '<div style="display:flex;flex-direction:column;gap:3px">' +
+          '<div style="font-size:13px;font-weight:700">🖥 TikTok Chat AI - Live prozor</div>' +
+          '<div id="tkaiLiveOutMeta" style="font-size:10px;color:rgba(255,255,255,.82)"></div>' +
+          '</div>' +
+          '<button id="tkaiLiveDashClose" class="panel-close" style="position:static">×</button>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1.25fr 1fr;gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
+          '<div style="overflow:auto;padding-right:4px">' +
+          '<div id="tkaiLiveOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiLiveOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiLiveOutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
+          '<div id="tkaiLiveOutInsights" class="tkai-insights"></div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-rows:1fr 1fr auto;gap:8px;overflow:hidden">' +
+          '<div style="display:flex;flex-direction:column;min-height:0"><div style="font-size:11px;color:#cbd5e1;padding:2px 4px">💬 Chat</div><div id="tkaiLiveOutChat" class="tkai-messages" style="flex:1;max-height:none"></div></div>' +
+          '<div style="display:flex;flex-direction:column;min-height:0"><div style="font-size:11px;color:#cbd5e1;padding:2px 4px">🤖 AI prijedlozi</div><div id="tkaiLiveOutReplies" class="tkai-replies" style="flex:1;max-height:none"></div></div>' +
+          '<div style="display:flex;flex-direction:column;min-height:120px"><div style="font-size:11px;color:#cbd5e1;padding:2px 4px">🎁 Gift galerija</div><div id="tkaiLiveOutGifts" class="tkai-gift-gallery" style="max-height:180px;overflow:auto"></div></div>' +
+          '</div>' +
+          '</div>';
+        document.body.appendChild(liveDashboardPopout);
+
+        const head = liveDashboardPopout.querySelector('#tkaiLiveDashHead');
+        let dragging = false;
+        let dx = 0;
+        let dy = 0;
+        head?.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('button')) return;
+          dragging = true;
+          dx = e.clientX - liveDashboardPopout.getBoundingClientRect().left;
+          dy = e.clientY - liveDashboardPopout.getBoundingClientRect().top;
+          head.setPointerCapture(e.pointerId);
+          e.preventDefault();
+        });
+        head?.addEventListener('pointermove', (e) => {
+          if (!dragging) return;
+          const maxLeft = Math.max(0, window.innerWidth - 320);
+          const maxTop = Math.max(48, window.innerHeight - 120);
+          liveDashboardPopout.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + 'px';
+          liveDashboardPopout.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + 'px';
+          liveDashboardPopout.style.right = 'auto';
+        });
+        head?.addEventListener('pointerup', () => { dragging = false; });
+        head?.addEventListener('pointercancel', () => { dragging = false; });
+
+        liveDashboardPopout.querySelector('#tkaiLiveDashClose')?.addEventListener('click', closeLiveDashboardPopout);
+
+        syncLiveDashboardPopout();
+        liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+        if (expandLiveBtn) {
+          expandLiveBtn.textContent = '🖥 Zatvori live';
+          expandLiveBtn.style.background = 'rgba(45,212,191,.28)';
+        }
+      }
+
+      expandLiveBtn?.addEventListener('click', () => {
+        if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
+        else openLiveDashboardPopout();
+      });
+
       // ── Full stats dashboard popout ────────────────────────────────────────
       const expandStatsBtn = document.getElementById('tkaiExpandStatsBtn');
       let statsDashboardPopout = null;
@@ -14420,11 +14706,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (insightsLocked) return;
             card.classList.toggle('tkai-folded');
           });
+          if (card.id === 'tkaiRecommendationsCard') {
+            title.addEventListener('click', () => {
+              if (insightsLocked) return;
+              const firstRec = document.getElementById('tkaiRecommendations')?.querySelector('li')?.textContent || 'Preporuke ažurirane';
+              showToast('💡 ' + firstRec);
+            });
+          }
         });
         applyLockState();
       })();
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', async () => {
         stopScanning();
+        closeLiveDashboardPopout();
       });
       document.addEventListener('keydown', onTikTokHoldLShortcut);
       updateHoldLButton();
