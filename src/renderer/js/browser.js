@@ -1696,7 +1696,10 @@ async function getGeminiEndpoint() {
     const s = await window.etherx.settings.get();
     key = s.geminiApiKey || s.gemini_api_key || "";
   } else {
-    key = (typeof DB !== "undefined" && DB.getSettings().gemini_api_key) || "";
+    key =
+      (typeof DB !== "undefined" &&
+        (DB.getSettings().geminiApiKey || DB.getSettings().gemini_api_key)) ||
+      "";
   }
   return key
     ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`
@@ -8505,11 +8508,15 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
     if (sentimentTrendEl) {
       sentimentTrendEl.innerHTML = "";
+      const trendData =
+        insights.sentimentTrend && insights.sentimentTrend.length
+          ? insights.sentimentTrend
+          : Array.from({ length: 12 }, (_, i) => ({ minute: i, score: 0 }));
       const maxAbs = Math.max(
         1,
-        ...insights.sentimentTrend.map((s) => Math.abs(s.score)),
+        ...trendData.map((s) => Math.abs(s.score)),
       );
-      insights.sentimentTrend.forEach((s) => {
+      trendData.forEach((s) => {
         const bar = document.createElement("div");
         bar.className = "tkai-sentiment-bar";
         const ratio = Math.min(1, Math.abs(s.score) / maxAbs);
@@ -10907,6 +10914,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     ).toLowerCase();
     const model = s.tkaiModelOverride || s.aiModel || "gemini-2.5-flash";
 
+    const parseApiError = async (res, label) => {
+      let detail = "";
+      try {
+        const text = await res.text();
+        if (text) detail = text.slice(0, 280);
+      } catch (_) { }
+      const msg = `${label} error: ${res.status}${detail ? " - " + detail : ""}`;
+      throw new Error(msg);
+    };
+
     if (provider === "gemini") {
       const endpoint = await getGeminiEndpoint();
       if (!endpoint) throw new Error("Gemini API ključ nije postavljen.");
@@ -10919,7 +10936,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }),
         signal: AbortSignal.timeout(30000),
       });
-      if (!res.ok) throw new Error("Gemini error: " + res.status);
+      if (!res.ok) await parseApiError(res, "Gemini");
       const data = await res.json();
       return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     }
@@ -10942,7 +10959,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }),
         signal: AbortSignal.timeout(35000),
       });
-      if (!res.ok) throw new Error("OpenRouter error: " + res.status);
+      if (!res.ok) await parseApiError(res, "OpenRouter");
       const data = await res.json();
       return data?.choices?.[0]?.message?.content || "";
     }
@@ -10966,7 +10983,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           signal: AbortSignal.timeout(25000),
         },
       );
-      if (!res.ok) throw new Error("Groq error: " + res.status);
+      if (!res.ok) await parseApiError(res, "Groq");
       const data = await res.json();
       return data?.choices?.[0]?.message?.content || "";
     }
@@ -10995,7 +11012,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }),
       signal: AbortSignal.timeout(40000),
     });
-    if (!res.ok) throw new Error(`${provider} error: ${res.status}`);
+    if (!res.ok) await parseApiError(res, provider);
     const data = await res.json();
     return data?.choices?.[0]?.message?.content || "";
   }

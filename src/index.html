@@ -9449,7 +9449,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.233</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.234</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10739,7 +10739,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.233</span></div>
+                                    v<span id="helpVersionNum2">2.4.234</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -13186,7 +13186,11 @@
                 document.getElementById('tkaiExportCsvBtn')?.click();
             });
             document.getElementById('btnTkaiToolsSongRec')?.addEventListener('click', () => {
-                runSongRecRecognition(true);
+                if (typeof window.runSongRecRecognition === 'function') {
+                    window.runSongRecRecognition(true);
+                } else {
+                    showToast('SongRec funkcija nije dostupna. Osvježi aplikaciju.');
+                }
             });
             document.getElementById('btnTkaiToolsClear')?.addEventListener('click', () => {
                 if (!confirm('Obriši sve prikupljene poruke ove sesije?')) return;
@@ -15346,6 +15350,7 @@
                     if (manualTrigger) showToast('SongRec poziv nije uspio: ' + String(err?.message || err));
                 }
             }
+            window.runSongRecRecognition = runSongRecRecognition;
             function getUserColor(name) {
                 const input = String(name || '').trim().toLowerCase();
                 let h = 0;
@@ -16239,30 +16244,47 @@
 
             function renderSentimentDualCharts(insights) {
                 const trend = Array.isArray(insights.sentimentTrend) ? insights.sentimentTrend.slice(-24) : [];
-                const scores = trend.map((s) => Number(s.score || 0));
+                const rawScores = trend.map((s) => Number(s.score || 0));
                 if (!sentimentTrendEl) return;
-                if (!scores.length) {
-                    sentimentTrendEl.innerHTML = '';
-                    if (sentimentWaveEl) sentimentWaveEl.innerHTML = '';
-                    if (sentimentAtmosphereEl) sentimentAtmosphereEl.textContent = 'Atmosfera: nema dovoljno podataka.';
-                    return;
-                }
+
+                const sentimentCounts = insights.sentimentCounts || {};
+                const fallbackBalance = Number(sentimentCounts.positivePct || 0) - Number(sentimentCounts.negativePct || 0);
+                const fallbackScore = Math.max(-4, Math.min(4, fallbackBalance / 25));
+                const fallbackTrend = Array.from({ length: 12 }, (_, i) => ({ minute: i, score: fallbackScore }));
+                const points = rawScores.length ? trend : fallbackTrend;
+                const scores = points.map((s) => Number(s.score || 0));
 
                 const width = 320;
                 const hLine = 64;
                 const hWave = 56;
                 const pad = 6;
                 const maxAbs = Math.max(1, ...scores.map((v) => Math.abs(v)));
-                const linePts = scores.map((v, i) => {
-                    const x = scores.length === 1 ? width / 2 : pad + (i / (scores.length - 1)) * (width - pad * 2);
-                    const y = hLine / 2 - (v / maxAbs) * ((hLine / 2) - 8);
-                    return `${x.toFixed(1)},${y.toFixed(1)}`;
-                }).join(' ');
-                sentimentTrendEl.innerHTML =
-                    `<svg viewBox="0 0 ${width} ${hLine}" preserveAspectRatio="none" aria-hidden="true">` +
-                    `<polyline fill="none" stroke="rgba(148,163,184,.28)" stroke-width="1" points="0,${(hLine / 2).toFixed(1)} ${width},${(hLine / 2).toFixed(1)}"></polyline>` +
-                    `<polyline fill="none" stroke="rgba(129,140,248,.95)" stroke-width="2" points="${linePts}"></polyline>` +
-                    `</svg>`;
+                sentimentTrendEl.innerHTML = '';
+                points.forEach((p) => {
+                    const score = Number(p.score || 0);
+                    const ratio = Math.min(1, Math.abs(score) / maxAbs);
+                    const h = Math.max(4, Math.round(ratio * 32));
+                    const bar = document.createElement('div');
+                    bar.className = 'tkai-sentiment-bar';
+                    const posPart = document.createElement('div');
+                    posPart.className = 'tkai-sentiment-stack-pos';
+                    const negPart = document.createElement('div');
+                    negPart.className = 'tkai-sentiment-stack-neg';
+                    if (score > 0) {
+                        posPart.style.height = `${Math.max(2, h)}px`;
+                        negPart.style.height = '1px';
+                    } else if (score < 0) {
+                        posPart.style.height = '1px';
+                        negPart.style.height = `${Math.max(2, h)}px`;
+                    } else {
+                        posPart.style.height = '1px';
+                        negPart.style.height = '1px';
+                    }
+                    bar.title = `${p.minute}m: ${score > 0 ? '+' : ''}${score.toFixed(2)}`;
+                    bar.appendChild(posPart);
+                    bar.appendChild(negPart);
+                    sentimentTrendEl.appendChild(bar);
+                });
 
                 if (sentimentWaveEl) {
                     const wavePts = scores.map((v, i) => {
@@ -16282,7 +16304,8 @@
                 const mood = avg > 0.7 ? 'pozitivna' : avg < -0.7 ? 'napeta' : 'miješana';
                 const tempo = variance >= 2 ? 'visoka dinamika' : 'mirniji ritam';
                 if (sentimentAtmosphereEl) {
-                    sentimentAtmosphereEl.textContent = `Atmosfera: ${mood} • ${tempo} • score ${avg > 0 ? '+' : ''}${avg.toFixed(2)}`;
+                    const source = rawScores.length ? 'live trend' : 'fallback trend';
+                    sentimentAtmosphereEl.textContent = `Atmosfera: ${mood} • ${tempo} • score ${avg > 0 ? '+' : ''}${avg.toFixed(2)} (${source})`;
                 }
             }
 
@@ -16810,7 +16833,13 @@
                 head?.addEventListener('pointercancel', () => { dragging = false; });
 
                 liveDashboardPopout.querySelector('#tkaiLiveDashClose')?.addEventListener('click', closeLiveDashboardPopout);
-                liveDashboardPopout.querySelector('#tkaiLiveSongRecNow')?.addEventListener('click', () => runSongRecRecognition(true));
+                liveDashboardPopout.querySelector('#tkaiLiveSongRecNow')?.addEventListener('click', () => {
+                    if (typeof window.runSongRecRecognition === 'function') {
+                        window.runSongRecRecognition(true);
+                    } else {
+                        showToast('SongRec funkcija nije dostupna. Osvježi aplikaciju.');
+                    }
+                });
 
                 syncLiveDashboardPopout();
                 liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
