@@ -4768,32 +4768,32 @@
     .tkai-resize-ne {
       top: 0;
       right: 0;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       cursor: ne-resize;
     }
 
     .tkai-resize-nw {
       top: 0;
       left: 0;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       cursor: nw-resize;
     }
 
     .tkai-resize-se {
       bottom: 0;
       right: 0;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       cursor: se-resize;
     }
 
     .tkai-resize-sw {
       bottom: 0;
       left: 0;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       cursor: sw-resize;
     }
 
@@ -9133,6 +9133,36 @@
               </div>
             </div>
 
+            <!-- SONGREC LOCAL INSTALL -->
+            <div class="s-group" style="margin-top:12px">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">🎧 SongRec (lokalna instalacija)</div>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.7;padding:4px 0">
+                Za lokalni SongRec na Linuxu koristi jednu od ovih opcija. Klik na gumb kopira komandu u clipboard.
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+                  <button id="helpSongRecCopyApt"
+                    style="font-size:11px;padding:6px 12px;background:rgba(59,130,246,.14);border:1px solid rgba(59,130,246,.35);border-radius:6px;color:var(--text);cursor:pointer">📋
+                    Copy APT install</button>
+                  <button id="helpSongRecCopyFlatpak"
+                    style="font-size:11px;padding:6px 12px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.35);border-radius:6px;color:var(--text);cursor:pointer">📋
+                    Copy Flatpak install</button>
+                  <button id="helpSongRecOpenPage"
+                    style="font-size:11px;padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer">🌐
+                    SongRec stranica</button>
+                  <button id="helpSongRecRunTest"
+                    style="font-size:11px;padding:6px 12px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.35);border-radius:6px;color:var(--text);cursor:pointer">▶
+                    Pokreni SongRec test</button>
+                </div>
+                <div style="margin-top:8px;color:var(--text3);font-family:monospace;font-size:11px">
+                  sudo apt install songrec<br>
+                  flatpak install flathub com.github.marinm.songrec
+                </div>
+              </div>
+            </div>
+
             <!-- VERSION -->
             <div class="s-group" style="margin-top:12px">
               <div class="s-row">
@@ -9141,7 +9171,7 @@
                 </div>
               </div>
               <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.223</span> — Web3 & kripto preglednik</div>
+                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.224</span> — Web3 & kripto preglednik</div>
                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp; Platform: <span
                     id="helpPlatform"></span></div>
                 <div style="color:var(--text3)">Projekt: kriptoentuzijasti.io &nbsp;|&nbsp; © 2024–2026
@@ -10191,6 +10221,10 @@
                       value="12000" style="width:90px">
                     <span id="tkaiSongRecStatus" style="font-size:10px;color:var(--text3)">SongRec: idle</span>
                   </div>
+                  <div style="margin-top:6px;font-size:10px;color:var(--text3)">
+                    Local install (Linux): <span style="font-family:monospace">sudo apt install songrec</span> ili
+                    <span style="font-family:monospace">flatpak install flathub com.github.marinm.songrec</span>
+                  </div>
                 </div>
                 <!-- drawer: session history + merge + stats -->
                 <div id="tkaiDrawerSessions"
@@ -10281,7 +10315,7 @@
               <div>
                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">v<span
-                    id="helpVersionNum2">2.4.223</span></div>
+                    id="helpVersionNum2">2.4.224</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja provjera: nikad
                 </div>
               </div>
@@ -16188,8 +16222,6 @@
           const maxTop = Math.max(48, window.innerHeight - 120);
           liveDashboardPopout.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + 'px';
           liveDashboardPopout.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + 'px';
-          liveDashboardPopout.style.width = Math.min(window.innerWidth - 12, liveDashboardPopout.offsetWidth) + 'px';
-          liveDashboardPopout.style.height = Math.min(window.innerHeight - 12, liveDashboardPopout.offsetHeight) + 'px';
         });
         head?.addEventListener('pointerup', () => { dragging = false; });
         head?.addEventListener('pointercancel', () => { dragging = false; });
@@ -17685,13 +17717,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         function saveSize() {
           try { localStorage.setItem(TKAI_SIZE_KEY, JSON.stringify({ width: panel.offsetWidth, height: panel.offsetHeight })); } catch (_) { }
         }
-        ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
+        ['ne', 'nw', 'se', 'sw'].forEach(dir => {
           const h = document.createElement('div');
           h.className = 'tkai-resize-handle tkai-resize-' + dir;
           panel.appendChild(h);
           h.addEventListener('mousedown', e => {
             e.stopPropagation();
             e.preventDefault();
+            let resizing = true;
             const sx = e.clientX, sy = e.clientY;
             const rect = panel.getBoundingClientRect();
             const sw = rect.width, sh = rect.height;
@@ -17700,6 +17733,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const sb = parseFloat(panel.style.bottom) || (window.innerHeight - rect.bottom);
             panel.style.left = sl + 'px'; panel.style.bottom = sb + 'px';
             const onMove = e2 => {
+              if (!resizing) return;
               const dx = e2.clientX - sx, dy = e2.clientY - sy;
               if (dir.includes('e')) panel.style.width = Math.max(MIN_W, sw + dx) + 'px';
               if (dir.includes('s')) panel.style.height = Math.max(MIN_H, sh + dy) + 'px';
@@ -17715,13 +17749,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               }
             };
             const onUp = () => {
+              if (!resizing) return;
+              resizing = false;
               document.removeEventListener('mousemove', onMove);
               document.removeEventListener('mouseup', onUp);
+              document.removeEventListener('mouseleave', onUp);
+              window.removeEventListener('blur', onUp);
               saveSize();
               try { localStorage.setItem('ex_tkai_panel_pos', JSON.stringify({ left: parseFloat(panel.style.left) || 0, bottom: parseFloat(panel.style.bottom) || 10 })); } catch (_) { }
             };
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
+            document.addEventListener('mouseleave', onUp);
+            window.addEventListener('blur', onUp);
           });
         });
       })();
@@ -21439,7 +21479,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.addEventListener('click', () => document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')));
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     let toastTimer;
-    function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2000); }
+    function showToast(msg, duration) {
+      const t = document.getElementById('toast');
+      if (!t) return;
+      const cfgDur = Number(DB?.getSettings?.().toastDurationMs || 3500);
+      const ms = Math.max(1200, Math.min(15000, Number(duration || cfgDur) || 3500));
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+    }
     function showPrompt(message, defaultVal = '', opts = {}) {
       return new Promise(resolve => {
         const overlay = document.createElement('div');
@@ -21464,8 +21513,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const done = val => { overlay.remove(); resolve(val); };
         okBtn.addEventListener('click', () => done(input.value));
         cancelBtn.addEventListener('click', () => done(null));
-        input.addEventListener('keydown', e => { if (e.key === 'Enter') done(input.value); if (e.key === 'Escape') done(null); });
-        overlay.addEventListener('click', e => { if (e.target === overlay) done(null); });
+        input.addEventListener('keydown', e => {
+          e.stopPropagation();
+          if (e.key === 'Enter') done(input.value);
+          if (e.key === 'Escape') done(null);
+        });
+        overlay.addEventListener('click', e => {
+          if (e.target !== overlay) return;
+          if (opts.dismissOnOverlay === true) done(null);
+        });
         btns.append(cancelBtn, okBtn);
         box.append(msg, input, btns);
         overlay.appendChild(box);
@@ -24502,6 +24558,41 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     document.getElementById('mobileInstallBtn')?.addEventListener('click', () => {
       window.open('https://ktrucek.github.io/etherx-standalone/src/index.html', '_blank');
       showToast('📱 Opening mobile install page...');
+    });
+
+    document.getElementById('helpSongRecCopyApt')?.addEventListener('click', async () => {
+      const cmd = 'sudo apt install songrec';
+      try {
+        await navigator.clipboard.writeText(cmd);
+        showToast('📋 Copied: ' + cmd);
+      } catch (_) {
+        showToast('⚠️ Copy failed. Komanda: ' + cmd, 5000);
+      }
+    });
+
+    document.getElementById('helpSongRecCopyFlatpak')?.addEventListener('click', async () => {
+      const cmd = 'flatpak install flathub com.github.marinm.songrec';
+      try {
+        await navigator.clipboard.writeText(cmd);
+        showToast('📋 Copied: ' + cmd);
+      } catch (_) {
+        showToast('⚠️ Copy failed. Komanda: ' + cmd, 5000);
+      }
+    });
+
+    document.getElementById('helpSongRecOpenPage')?.addEventListener('click', () => {
+      window.open('https://github.com/marin-m/SongRec', '_blank');
+      showToast('🌐 Otvaram SongRec stranicu');
+    });
+
+    document.getElementById('helpSongRecRunTest')?.addEventListener('click', () => {
+      const btn = document.getElementById('btnTkaiToolsSongRec');
+      if (btn) {
+        btn.click();
+        showToast('▶ Pokrećem SongRec test');
+      } else {
+        showToast('⚠️ SongRec test gumb nije dostupan u ovom prikazu.');
+      }
     });
 
     // ── Help → Browser Versions download buttons ──────────────────────────────

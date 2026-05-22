@@ -6068,7 +6068,7 @@ document
   .getElementById("newTabBtn")
   .addEventListener("click", () => createTab());
 let toastTimer;
-function showToast(msg, duration = 2000) {
+function showToast(msg, duration = 3500) {
   const t = document.getElementById("toast");
   t.textContent = msg;
   t.classList.add("show");
@@ -8616,13 +8616,16 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     const stats = document.getElementById("tkaiStatsStrip");
     const supporters = document.getElementById("tkaiTopSupporters");
     const users = document.getElementById("tkaiUserSummary");
+    const insights = document.getElementById("tkaiInsights");
     const outStats = statsPopoutEl.querySelector("#tkaiStatsPopoutStats");
     const outSupporters = statsPopoutEl.querySelector("#tkaiStatsPopoutSupporters");
     const outUsers = statsPopoutEl.querySelector("#tkaiStatsPopoutUsers");
+    const outInsights = statsPopoutEl.querySelector("#tkaiStatsPopoutInsights");
     const outMeta = statsPopoutEl.querySelector("#tkaiStatsPopoutMeta");
     if (outStats && stats) outStats.innerHTML = stats.innerHTML;
     if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
     if (outUsers && users) outUsers.innerHTML = users.innerHTML;
+    if (outInsights && insights) outInsights.innerHTML = insights.innerHTML;
     if (outMeta) {
       const elapsedMin = sessionStartedAt
         ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000))
@@ -8650,7 +8653,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       statsPopoutEl = null;
     }
     if (expandStatsBtn) {
-      expandStatsBtn.textContent = "📈 Stats prozor";
+      expandStatsBtn.textContent = "📈 Full stats";
       expandStatsBtn.style.background = "";
     }
   }
@@ -8663,7 +8666,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         statsPopoutTimer = setInterval(syncStatsPopout, 1200);
       }
       if (expandStatsBtn) {
-        expandStatsBtn.textContent = "📈 Zatvori stats";
+        expandStatsBtn.textContent = "📈 Zatvori full stats";
         expandStatsBtn.style.background = "rgba(34,197,94,.28)";
       }
       return;
@@ -8672,24 +8675,91 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     statsPopoutEl = document.createElement("div");
     statsPopoutEl.id = "tkaiStatsPopout";
     statsPopoutEl.style.cssText =
-      "position:fixed;z-index:100000;top:68px;right:16px;width:min(640px,92vw);max-height:84vh;overflow:auto;" +
+      "position:fixed;z-index:100000;top:56px;left:3vw;width:94vw;height:86vh;min-width:860px;min-height:520px;" +
       "background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:12px;color:#e2e8f0;" +
-      "box-shadow:0 18px 46px rgba(0,0,0,.55);padding:10px;";
+      "box-shadow:0 18px 46px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;resize:both;";
     statsPopoutEl.innerHTML =
-      '<div id="tkaiStatsPopoutHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;cursor:move">' +
+      '<div id="tkaiStatsPopoutHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;cursor:move;background:linear-gradient(135deg,#1d4ed8,#0f766e)">' +
       '<div style="display:flex;flex-direction:column;gap:3px">' +
-      '<div style="font-size:12px;font-weight:700">📈 TikTok AI - Statistika</div>' +
-      '<div id="tkaiStatsPopoutMeta" style="font-size:10px;color:#cbd5e1"></div>' +
+      '<div style="font-size:13px;font-weight:700">📈 TikTok AI - Full detaljna statistika</div>' +
+      '<div id="tkaiStatsPopoutMeta" style="font-size:10px;color:rgba(255,255,255,.82)"></div>' +
       "</div>" +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+      '<button id="tkaiStatsPopoutExportJson" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">JSON</button>' +
+      '<button id="tkaiStatsPopoutExportCsv" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">CSV</button>' +
+      '<button id="tkaiStatsPopoutPin" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">📌 Pin</button>' +
+      '<button id="tkaiStatsPopoutFullscreen" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">⛶ Full</button>' +
       '<button id="tkaiStatsPopoutClose" class="panel-close" style="position:static">×</button>' +
       "</div>" +
+      "</div>" +
+      '<div id="tkaiStatsPopoutBody" style="padding:10px;overflow:auto;height:calc(100% - 54px)">' +
       '<div id="tkaiStatsPopoutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
       '<div id="tkaiStatsPopoutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
-      '<div id="tkaiStatsPopoutUsers" class="tkai-user-summary"></div>';
+      '<div id="tkaiStatsPopoutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
+      '<div id="tkaiStatsPopoutInsights" class="tkai-insights"></div>' +
+      "</div>";
     document.body.appendChild(statsPopoutEl);
     statsPopoutEl
       .querySelector("#tkaiStatsPopoutClose")
       ?.addEventListener("click", closeStatsPopout);
+    statsPopoutEl
+      .querySelector("#tkaiStatsPopoutExportJson")
+      ?.addEventListener("click", () => document.getElementById("tkaiExportStatsBtn")?.click());
+    statsPopoutEl
+      .querySelector("#tkaiStatsPopoutExportCsv")
+      ?.addEventListener("click", () => document.getElementById("tkaiExportCsvBtn")?.click());
+
+    let isPinned = false;
+    const pinBtn = statsPopoutEl.querySelector("#tkaiStatsPopoutPin");
+    pinBtn?.addEventListener("click", () => {
+      isPinned = !isPinned;
+      statsPopoutEl.style.zIndex = isPinned ? "2147483000" : "100000";
+      if (pinBtn) {
+        pinBtn.textContent = isPinned ? "📌 Pinned" : "📌 Pin";
+        pinBtn.style.background = isPinned ? "rgba(251,191,36,.28)" : "";
+      }
+    });
+
+    let isFullscreen = false;
+    let restoreRect = null;
+    const fullBtn = statsPopoutEl.querySelector("#tkaiStatsPopoutFullscreen");
+    fullBtn?.addEventListener("click", () => {
+      if (!isFullscreen) {
+        const r = statsPopoutEl.getBoundingClientRect();
+        restoreRect = {
+          left: r.left,
+          top: r.top,
+          width: r.width,
+          height: r.height,
+        };
+        statsPopoutEl.style.left = "8px";
+        statsPopoutEl.style.top = "48px";
+        statsPopoutEl.style.width = "calc(100vw - 16px)";
+        statsPopoutEl.style.height = "calc(100vh - 56px)";
+        statsPopoutEl.style.minWidth = "0";
+        statsPopoutEl.style.minHeight = "0";
+        statsPopoutEl.style.right = "auto";
+        if (fullBtn) {
+          fullBtn.textContent = "🗗 Restore";
+          fullBtn.style.background = "rgba(59,130,246,.28)";
+        }
+        isFullscreen = true;
+        return;
+      }
+      if (restoreRect) {
+        statsPopoutEl.style.left = restoreRect.left + "px";
+        statsPopoutEl.style.top = restoreRect.top + "px";
+        statsPopoutEl.style.width = restoreRect.width + "px";
+        statsPopoutEl.style.height = restoreRect.height + "px";
+      }
+      statsPopoutEl.style.minWidth = "860px";
+      statsPopoutEl.style.minHeight = "520px";
+      if (fullBtn) {
+        fullBtn.textContent = "⛶ Full";
+        fullBtn.style.background = "";
+      }
+      isFullscreen = false;
+    });
 
     const statsHead = statsPopoutEl.querySelector("#tkaiStatsPopoutHead");
     let dragging = false;
@@ -8698,14 +8768,19 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     statsHead?.addEventListener("pointerdown", (e) => {
       if (e.target.closest("button")) return;
       dragging = true;
-      dx = e.clientX - statsPopoutEl.getBoundingClientRect().left;
-      dy = e.clientY - statsPopoutEl.getBoundingClientRect().top;
+      const rect = statsPopoutEl.getBoundingClientRect();
+      dx = e.clientX - rect.left;
+      dy = e.clientY - rect.top;
+      statsPopoutEl.style.left = rect.left + "px";
+      statsPopoutEl.style.top = rect.top + "px";
+      statsPopoutEl.style.right = "auto";
       statsHead.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
     statsHead?.addEventListener("pointermove", (e) => {
       if (!dragging) return;
-      const maxLeft = Math.max(0, window.innerWidth - 240);
+      if (isFullscreen) return;
+      const maxLeft = Math.max(0, window.innerWidth - 320);
       const maxTop = Math.max(48, window.innerHeight - 120);
       statsPopoutEl.style.left = Math.max(0, Math.min(maxLeft, e.clientX - dx)) + "px";
       statsPopoutEl.style.top = Math.max(48, Math.min(maxTop, e.clientY - dy)) + "px";
@@ -8721,7 +8796,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     syncStatsPopout();
     statsPopoutTimer = setInterval(syncStatsPopout, 1200);
     if (expandStatsBtn) {
-      expandStatsBtn.textContent = "📈 Zatvori stats";
+      expandStatsBtn.textContent = "📈 Zatvori full stats";
       expandStatsBtn.style.background = "rgba(34,197,94,.28)";
     }
   }
@@ -13114,6 +13189,41 @@ document.querySelectorAll('.sit-btn[data-stab="downloads"]').forEach((btn) => {
 document.getElementById("mobileInstallBtn")?.addEventListener("click", () => {
   window.open("https://ktrucek.github.io/etherx-standalone", "_blank");
   showToast("📱 Opening mobile install page...");
+});
+
+document.getElementById("helpSongRecCopyApt")?.addEventListener("click", async () => {
+  const cmd = "sudo apt install songrec";
+  try {
+    await navigator.clipboard.writeText(cmd);
+    showToast("📋 Copied: " + cmd);
+  } catch (_) {
+    showToast("⚠️ Copy failed. Komanda: " + cmd, 5000);
+  }
+});
+
+document.getElementById("helpSongRecCopyFlatpak")?.addEventListener("click", async () => {
+  const cmd = "flatpak install flathub com.github.marinm.songrec";
+  try {
+    await navigator.clipboard.writeText(cmd);
+    showToast("📋 Copied: " + cmd);
+  } catch (_) {
+    showToast("⚠️ Copy failed. Komanda: " + cmd, 5000);
+  }
+});
+
+document.getElementById("helpSongRecOpenPage")?.addEventListener("click", () => {
+  window.open("https://github.com/marin-m/SongRec", "_blank");
+  showToast("🌐 Otvaram SongRec stranicu");
+});
+
+document.getElementById("helpSongRecRunTest")?.addEventListener("click", () => {
+  const btn = document.getElementById("btnTkaiToolsSongRec");
+  if (btn) {
+    btn.click();
+    showToast("▶ Pokrećem SongRec test");
+  } else {
+    showToast("⚠️ SongRec test gumb nije dostupan u ovom prikazu.");
+  }
 });
 
 // AES encryption helpers (simple example - use crypto library in production)

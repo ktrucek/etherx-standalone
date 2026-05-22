@@ -9011,6 +9011,36 @@
               </div>
             </div>
 
+            <!-- SONGREC LOCAL INSTALL -->
+            <div class="s-group" style="margin-top:12px">
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">🎧 SongRec (lokalna instalacija)</div>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.7;padding:4px 0">
+                Za lokalni SongRec na Linuxu koristi jednu od ovih opcija. Klik na gumb kopira komandu u clipboard.
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+                  <button id="helpSongRecCopyApt"
+                    style="font-size:11px;padding:6px 12px;background:rgba(59,130,246,.14);border:1px solid rgba(59,130,246,.35);border-radius:6px;color:var(--text);cursor:pointer">📋
+                    Copy APT install</button>
+                  <button id="helpSongRecCopyFlatpak"
+                    style="font-size:11px;padding:6px 12px;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.35);border-radius:6px;color:var(--text);cursor:pointer">📋
+                    Copy Flatpak install</button>
+                  <button id="helpSongRecOpenPage"
+                    style="font-size:11px;padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer">🌐
+                    SongRec stranica</button>
+                  <button id="helpSongRecRunTest"
+                    style="font-size:11px;padding:6px 12px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.35);border-radius:6px;color:var(--text);cursor:pointer">▶
+                    Pokreni SongRec test</button>
+                </div>
+                <div style="margin-top:8px;color:var(--text3);font-family:monospace;font-size:11px">
+                  sudo apt install songrec<br>
+                  flatpak install flathub com.github.marinm.songrec
+                </div>
+              </div>
+            </div>
+
             <!-- VERSION -->
             <div class="s-group" style="margin-top:12px">
               <div class="s-row">
@@ -9998,7 +10028,7 @@
         <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Skini razgovor</button>
         <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
         <button class="tkai-gen-btn" id="tkaiExportStatsBtn" style="font-size:11px">📊 Stats</button>
-        <button class="tkai-gen-btn" id="tkaiExpandStatsBtn" style="font-size:11px">📈 Stats prozor</button>
+        <button class="tkai-gen-btn" id="tkaiExpandStatsBtn" style="font-size:11px">📈 Full stats</button>
         <button class="tkai-gen-btn" id="tkaiClearBtn"
           style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
       </div>
