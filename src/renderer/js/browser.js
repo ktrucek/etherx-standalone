@@ -7229,6 +7229,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       );
       return;
     }
+    updateTkaiStreamOwner("", url);
     scanActive = true;
     if (!sessionStartedAt) sessionStartedAt = Date.now();
     if (toggleBtn) {
@@ -7285,6 +7286,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const genBtn = document.getElementById("tkaiGenBtn");
   const genAllBtn = document.getElementById("tkaiGenAllBtn");
   const statusEl = document.getElementById("tkaiScanStatus");
+  const streamOwnerEl = document.getElementById("tkaiStreamOwner");
   const msgCountEl = document.getElementById("tkaiMsgCount");
   const translateSelectedBtn = document.getElementById(
     "tkaiTranslateSelectedBtn",
@@ -7311,6 +7313,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const autoSuggestBadgeEl = document.getElementById("tkaiAutoSuggestBadge");
   const insightsListEl = document.getElementById("tkaiInsightsList");
   const engagementBarsEl = document.getElementById("tkaiEngagementBars");
+  const engagementAreaEl = document.getElementById("tkaiEngagementArea");
+  const engagementAreaMetaEl = document.getElementById("tkaiEngagementAreaMeta");
   const engagementTopEl = document.getElementById("tkaiEngagementTop");
   const engagementSummaryEl = document.getElementById("tkaiEngagementSummary");
   const spikeListEl = document.getElementById("tkaiSpikeList");
@@ -7330,6 +7334,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const spikeAllBtn = document.getElementById("tkaiSpikeAll");
   const spikeViewersBtn = document.getElementById("tkaiSpikeViewers");
   const spikeGiftsBtn = document.getElementById("tkaiSpikeGifts");
+  const layoutFoldBtn = document.getElementById("tkaiLayoutFoldBtn");
+  const layoutUnfoldBtn = document.getElementById("tkaiLayoutUnfoldBtn");
+  const layoutLockBtn = document.getElementById("tkaiLayoutLockBtn");
   let holdLActive = false;
   const btnTikTokAI = document.getElementById("btnTikTokAI");
   let filterStarredOnly = getTkaiSetting("tkaiFilterStarredOnly", false);
@@ -7338,9 +7345,30 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let recommendationsPopoutBodyEl = null;
   let statsPopoutEl = null;
   let statsPopoutTimer = null;
+  let dashboardLayoutLocked = getTkaiSetting("tkaiDashboardLayoutLocked", true);
+  let dashboardLayoutFolded = getTkaiSetting("tkaiDashboardLayoutFolded", false);
   let lastShadowbanUserStats = [];
   const TKAI_USER_COLORS_KEY = "ex_tkai_user_colors";
   const TKAI_USER_ALIASES_KEY = "ex_tkai_user_aliases";
+
+  function parseTikTokOwnerFromUrl(url) {
+    try {
+      const pathname = new URL(String(url || ""), window.location.origin).pathname || "";
+      const m = pathname.match(/\/(@[^\/?#]+)/i);
+      return m ? decodeURIComponent(m[1]).replace(/^@+/, "") : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function updateTkaiStreamOwner(owner, sourceUrl) {
+    if (!streamOwnerEl) return;
+    const fromOwner = String(owner || "").trim().replace(/^@+/, "");
+    const fallback = parseTikTokOwnerFromUrl(sourceUrl || getActiveTab()?.url || "");
+    const resolved = (fromOwner || fallback || "").slice(0, 40);
+    streamOwnerEl.textContent = resolved ? "@" + resolved : "@-";
+    streamOwnerEl.title = resolved ? `Live stream owner: @${resolved}` : "Live stream owner nije detektiran";
+  }
 
   function formatNum(v) {
     const n = Number(v || 0);
@@ -8321,6 +8349,112 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     return recs.slice(0, 6);
   }
 
+  function renderEngagementAreaChart(engagement) {
+    if (!engagementAreaEl) return;
+    const points = Array.isArray(engagement) ? engagement.slice(-24) : [];
+    if (!points.length) {
+      engagementAreaEl.innerHTML = "";
+      if (engagementAreaMetaEl) engagementAreaMetaEl.textContent = "Trend: -";
+      return;
+    }
+    const width = 320;
+    const height = 92;
+    const padX = 8;
+    const padTop = 6;
+    const padBottom = 12;
+    const vals = points.map((p) => Number(p.count || 0));
+    const maxV = Math.max(1, ...vals);
+    const minV = Math.min(...vals);
+    const range = Math.max(1, maxV - minV);
+    const coords = vals.map((v, i) => {
+      const x = points.length === 1
+        ? width / 2
+        : padX + (i / (points.length - 1)) * (width - padX * 2);
+      const y = padTop + ((maxV - v) / range) * (height - padTop - padBottom);
+      return { x, y, v };
+    });
+    const line = coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    const area = `${coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")} ${coords[coords.length - 1].x.toFixed(1)},${(height - padBottom).toFixed(1)} ${coords[0].x.toFixed(1)},${(height - padBottom).toFixed(1)}`;
+    const first = vals[0] || 0;
+    const last = vals[vals.length - 1] || 0;
+    const delta = last - first;
+    const dir = delta > 0 ? "↗" : delta < 0 ? "↘" : "→";
+    engagementAreaEl.innerHTML =
+      `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">` +
+      `<polyline fill="none" stroke="rgba(148,163,184,.35)" stroke-width="1" points="${padX},${(height - padBottom).toFixed(1)} ${(width - padX).toFixed(1)},${(height - padBottom).toFixed(1)}"/>` +
+      `<polygon points="${area}" fill="rgba(45,212,191,.22)"></polygon>` +
+      `<polyline fill="none" stroke="rgba(94,234,212,.96)" stroke-width="2.1" points="${line}"></polyline>` +
+      `</svg>`;
+    if (engagementAreaMetaEl) {
+      engagementAreaMetaEl.textContent = `Trend ${dir} ${delta > 0 ? "+" : ""}${formatNum(delta)} • zadnje ${formatNum(last)}/min`;
+    }
+  }
+
+  function updateLayoutButtonsUi() {
+    if (layoutLockBtn) {
+      layoutLockBtn.textContent = dashboardLayoutLocked ? "🔒 Zaključano" : "🔓 Otključano";
+      layoutLockBtn.classList.toggle("active", dashboardLayoutLocked);
+    }
+    layoutFoldBtn?.classList.toggle("active", dashboardLayoutFolded);
+    layoutUnfoldBtn?.classList.toggle("active", !dashboardLayoutFolded);
+  }
+
+  function applyDashboardLayoutState() {
+    const cards = Array.from(document.querySelectorAll("#tkaiInsights .tkai-insights-card"));
+    cards.forEach((card) => {
+      const btn = card._tkaiCollapseBtn;
+      if (btn) {
+        btn.style.opacity = dashboardLayoutLocked ? "0.45" : "1";
+        btn.style.pointerEvents = dashboardLayoutLocked ? "none" : "";
+        btn.title = dashboardLayoutLocked ? "Layout je zaključan" : "Sakrij/prikaži sekciju";
+      }
+      if (typeof card._tkaiApplyCollapsed === "function") {
+        if (dashboardLayoutFolded) {
+          card._tkaiApplyCollapsed(true);
+        } else {
+          card._tkaiApplyCollapsed(localStorage.getItem(card._tkaiStateKey || "") === "1");
+        }
+      }
+    });
+    updateLayoutButtonsUi();
+  }
+
+  function initDashboardLayoutControls() {
+    if (layoutFoldBtn && layoutFoldBtn.dataset.bound !== "1") {
+      layoutFoldBtn.dataset.bound = "1";
+      layoutFoldBtn.addEventListener("click", () => {
+        if (dashboardLayoutLocked) {
+          showToast("🔒 Layout je zaključan. Otključaj za promjene.");
+          return;
+        }
+        dashboardLayoutFolded = true;
+        DB.saveSetting("tkaiDashboardLayoutFolded", true);
+        applyDashboardLayoutState();
+      });
+    }
+    if (layoutUnfoldBtn && layoutUnfoldBtn.dataset.bound !== "1") {
+      layoutUnfoldBtn.dataset.bound = "1";
+      layoutUnfoldBtn.addEventListener("click", () => {
+        if (dashboardLayoutLocked) {
+          showToast("🔒 Layout je zaključan. Otključaj za promjene.");
+          return;
+        }
+        dashboardLayoutFolded = false;
+        DB.saveSetting("tkaiDashboardLayoutFolded", false);
+        applyDashboardLayoutState();
+      });
+    }
+    if (layoutLockBtn && layoutLockBtn.dataset.bound !== "1") {
+      layoutLockBtn.dataset.bound = "1";
+      layoutLockBtn.addEventListener("click", () => {
+        dashboardLayoutLocked = !dashboardLayoutLocked;
+        DB.saveSetting("tkaiDashboardLayoutLocked", dashboardLayoutLocked);
+        applyDashboardLayoutState();
+      });
+    }
+    applyDashboardLayoutState();
+  }
+
   function updateInsightsUI() {
     if (!insightsListEl || !engagementBarsEl || !spikeListEl || !recommendationsEl) return;
     const insights = computeInsightsSnapshot();
@@ -8354,6 +8488,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       bar.title = `${e.minute}m: ${e.count} (${e.percent || 0}%)`;
       engagementBarsEl.appendChild(bar);
     });
+    renderEngagementAreaChart(insights.engagement);
 
     if (engagementTopEl) {
       engagementTopEl.textContent =
@@ -8582,6 +8717,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     }
 
     renderUserSummary();
+    applyDashboardLayoutState();
   }
 
   function updateSpikeFilterButtons() {
@@ -8870,13 +9006,19 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const initial = localStorage.getItem(stateKey) === "1";
       applyCollapsed(initial);
       btn.addEventListener("click", () => {
+        if (dashboardLayoutLocked) return;
         const collapsed = btn.textContent === "▾";
         applyCollapsed(collapsed);
         localStorage.setItem(stateKey, collapsed ? "1" : "0");
       });
 
+      card._tkaiCollapseBtn = btn;
+      card._tkaiApplyCollapsed = applyCollapsed;
+      card._tkaiStateKey = stateKey;
+
       card.dataset.tkaiCardInit = "1";
     });
+    initDashboardLayoutControls();
   }
 
   function buildSessionReportFromPayload(session) {
@@ -10036,6 +10178,28 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
         .slice(0, 3);
     }
+
+    function getStreamOwner() {
+      const pathMatch = String(location.pathname || '').match(/\/@([^\/?#]+)/i);
+      if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).replace(/^@+/, '');
+      const ownerSelectors = [
+        '[data-e2e="browse-username"]',
+        '[data-e2e="user-title"]',
+        '[data-e2e="user-name"]',
+        'a[href*="/@"][href*="/live"]',
+        'a[href^="/@"]',
+        '[class*="owner"] [class*="name"]',
+        '[class*="Author"] [class*="Name"]',
+      ];
+      for (const sel of ownerSelectors) {
+        const el = document.querySelector(sel);
+        const txt = String(el?.textContent || '').trim();
+        if (!txt) continue;
+        const m = txt.match(/@?([a-z0-9._]{2,40})/i);
+        if (m && m[1]) return m[1].replace(/^@+/, '');
+      }
+      return '';
+    }
     // TikTok Live chat selectors (multiple fallbacks for DOM changes)
     const selectors = [
       '[data-e2e="chat-message-item"]',
@@ -10241,6 +10405,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     });
     const viewerCount = getViewerCount();
     const topSupporters = getTopSupportersFromPage();
+    const streamOwner = getStreamOwner();
     const health = items.length > 0
       ? 'ok'
       : (debug.captionCount > 0 || viewerCount > 0 ? 'partial' : 'no-data');
@@ -10248,6 +10413,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       type: '_meta',
       viewerCount: viewerCount,
       topSupporters: topSupporters,
+      streamOwner: streamOwner,
       health: health,
       debug: {
         chatSelectorsTried: debug.chatSelectorsTried,
@@ -10320,8 +10486,10 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     const isTikTok = url.includes("tiktok.com");
     if (!isTikTok) {
       setStatus("⚠️ Nisi na TikTok stranici");
+      updateTkaiStreamOwner("", url);
       return;
     }
+    updateTkaiStreamOwner("", url);
     try {
       const debugMode = getTkaiSetting("tkaiDebugMode", false);
       const wv = getTabWebview(tab.id);
@@ -10351,6 +10519,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       if (meta) {
         lastScrapeMeta = meta;
         if (debugMode) console.log("[TikTokAI] scrape meta", meta);
+        updateTkaiStreamOwner(meta.streamOwner || meta.creatorName || meta.hostName || "", url);
         const v = Number(meta.viewerCount || 0);
         if (Number.isFinite(v) && v > 0) {
           liveViewerCount = v;

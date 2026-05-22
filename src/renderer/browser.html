@@ -5139,6 +5139,10 @@
       gap: 8px;
     }
 
+    .tkai-insights-row.triple {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .tkai-insights-card {
       background: var(--bg2);
       border: 1px solid var(--border);
@@ -5227,6 +5231,16 @@
       background: rgba(255, 122, 0, .15);
     }
 
+    .tkai-layout-actions {
+      justify-content: flex-end;
+      margin-bottom: 2px;
+    }
+
+    .tkai-layout-actions .tkai-insights-btn {
+      font-size: 10px;
+      padding: 2px 8px;
+    }
+
     .tkai-mini-bars {
       display: flex;
       align-items: flex-end;
@@ -5240,6 +5254,32 @@
       background: linear-gradient(180deg, rgba(255, 122, 0, .8), rgba(255, 0, 80, .6));
       border-radius: 3px 3px 0 0;
       min-height: 4px;
+    }
+
+    .tkai-area-wrap {
+      margin-top: 6px;
+      border: 1px solid rgba(45, 212, 191, .28);
+      border-radius: 6px;
+      background: linear-gradient(180deg, rgba(45, 212, 191, .08), rgba(30, 64, 175, .05));
+      padding: 5px 6px 4px;
+    }
+
+    .tkai-area-chart {
+      width: 100%;
+      height: 92px;
+    }
+
+    .tkai-area-chart svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .tkai-area-meta {
+      margin-top: 2px;
+      font-size: 9px;
+      color: #93c5fd;
+      text-align: right;
     }
 
     .tkai-sentiment-bars {
@@ -9869,6 +9909,8 @@
       <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
           title="Povuci za premještanje">⠿</span></span>
       <div style="display:flex;align-items:center;gap:6px">
+        <span id="tkaiStreamOwner"
+          style="font-size:10px;color:#bfdbfe;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@-</span>
         <span id="tkaiScanStatus" style="font-size:10px;color:#ffe0ea"></span>
         <span id="tkaiAutoSuggestBadge"
           style="font-size:10px;color:#cbd5ff;background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.35);padding:2px 6px;border-radius:999px;display:none"></span>
@@ -9952,7 +9994,12 @@
           <div id="tkaiUserSummaryList" class="tkai-user-summary-list"></div>
         </div>
         <div class="tkai-insights" id="tkaiInsights">
-          <div class="tkai-insights-row">
+          <div class="tkai-insights-actions tkai-layout-actions" id="tkaiLayoutActions">
+            <button class="tkai-insights-btn" id="tkaiLayoutFoldBtn">🗂 Složi</button>
+            <button class="tkai-insights-btn" id="tkaiLayoutUnfoldBtn">🧩 Rasloži</button>
+            <button class="tkai-insights-btn" id="tkaiLayoutLockBtn">🔒 Zaključano</button>
+          </div>
+          <div class="tkai-insights-row triple">
             <div class="tkai-insights-card">
               <div class="tkai-insights-title" title="Sažetak tema, pitanja i sentimenta">Insights<span>★</span></div>
               <ul class="tkai-insights-list" id="tkaiInsightsList"></ul>
@@ -9966,7 +10013,21 @@
               <div class="tkai-insights-title" title="Broj poruka po minuti">Engagement/min<span>⏱</span></div>
               <div class="tkai-metric-top" id="tkaiEngagementTop">0/min • Peak 0/min</div>
               <div class="tkai-mini-bars" id="tkaiEngagementBars"></div>
+              <div class="tkai-area-wrap">
+                <div class="tkai-area-chart" id="tkaiEngagementArea"></div>
+                <div class="tkai-area-meta" id="tkaiEngagementAreaMeta">Trend: -</div>
+              </div>
               <div class="tkai-metric-bottom" id="tkaiEngagementSummary">Nema dovoljno podataka.</div>
+            </div>
+            <div class="tkai-insights-card" id="tkaiPieCard">
+              <div class="tkai-insights-title" title="Raspodjela tipova događaja">Pie breakdown<span>◔</span></div>
+              <div class="tkai-pie-wrap">
+                <div class="tkai-pie-chart" id="tkaiPieChart">
+                  <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
+                </div>
+                <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
+              </div>
+              <ul class="tkai-insights-list" id="tkaiPieSummary" style="margin-top:6px"></ul>
             </div>
           </div>
           <div class="tkai-insights-row">
@@ -10003,16 +10064,6 @@
             </div>
           </div>
           <div class="tkai-insights-row">
-            <div class="tkai-insights-card" id="tkaiPieCard">
-              <div class="tkai-insights-title" title="Raspodjela tipova događaja">Pie breakdown<span>◔</span></div>
-              <div class="tkai-pie-wrap">
-                <div class="tkai-pie-chart" id="tkaiPieChart">
-                  <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
-                </div>
-                <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
-              </div>
-              <ul class="tkai-insights-list" id="tkaiPieSummary" style="margin-top:6px"></ul>
-            </div>
             <div class="tkai-insights-card" id="tkaiSongsCard">
               <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs & DJ CC<span>♫</span>
               </div>
