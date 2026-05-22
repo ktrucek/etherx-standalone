@@ -5277,10 +5277,24 @@
         }
 
         .tkai-sentiment-bars {
-            display: flex;
-            align-items: center;
-            gap: 3px;
-            height: 30px;
+            display: block;
+            width: 100%;
+            height: 64px;
+            border: 1px solid rgba(148, 163, 184, .25);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(15, 23, 42, .55), rgba(15, 23, 42, .12));
+            padding: 4px;
+            margin-top: 4px;
+        }
+
+        .tkai-sentiment-wave {
+            width: 100%;
+            height: 56px;
+            border: 1px solid rgba(94, 234, 212, .24);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(30, 64, 175, .22), rgba(15, 23, 42, .18));
+            padding: 4px;
+            margin-top: 6px;
         }
 
         .tkai-sentiment-meta {
@@ -5319,6 +5333,14 @@
             width: 100%;
             height: 100%;
             overflow: visible;
+            display: block;
+        }
+
+        .tkai-sentiment-wave svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            display: block;
         }
 
         .tkai-sentiment-bar {
@@ -5418,6 +5440,41 @@
             border-radius: 50%;
             margin-right: 4px;
             flex-shrink: 0;
+        }
+
+        .tkai-rec-jump-btn {
+            position: absolute;
+            right: 10px;
+            bottom: 50px;
+            z-index: 4;
+            font-size: 10px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            border: 1px solid rgba(251, 191, 36, .45);
+            color: #ffe6a3;
+            background: linear-gradient(135deg, rgba(120, 53, 15, .86), rgba(194, 65, 12, .82));
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, .42);
+            display: none;
+        }
+
+        .tkai-rec-jump-btn.live {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            animation: tkaiRecBounce .85s ease-in-out infinite;
+        }
+
+        @keyframes tkaiRecBounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-6px);
+            }
         }
 
         .tkai-song-list {
@@ -9392,7 +9449,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.231</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.232</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10339,6 +10396,39 @@
                                         Current global model: <span id="tkaiGlobalModelName"
                                             style="color:var(--text2)">—</span>
                                     </div>
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                                        <div>
+                                            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Test
+                                                provider</div>
+                                            <select class="s-select" id="tkaiStackTestProvider">
+                                                <option value="">(override/global)</option>
+                                                <option value="openai">OpenAI</option>
+                                                <option value="gemini">Google Gemini</option>
+                                                <option value="anthropic">Anthropic</option>
+                                                <option value="huggingface">HuggingFace</option>
+                                                <option value="openrouter">OpenRouter</option>
+                                                <option value="groq">Groq</option>
+                                                <option value="local">Local OpenAI-compatible</option>
+                                                <option value="ollama">Ollama</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Test model
+                                            </div>
+                                            <input type="text" class="s-input" id="tkaiStackTestModel"
+                                                placeholder="(override/global model)">
+                                        </div>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">
+                                        <input type="password" class="s-input" id="tkaiStackTestApiKey"
+                                            placeholder="API key za odabrani provider"
+                                            style="min-width:260px;flex:1;font-family:monospace">
+                                        <button id="tkaiStackTestSaveCreds" class="s-btn-sm"
+                                            style="background:rgba(102,126,234,.18);border-color:rgba(102,126,234,.42)">💾
+                                            Spremi</button>
+                                    </div>
+                                    <div style="font-size:10px;color:var(--text3);margin-top:6px">Polja iznad vrijede
+                                        samo za ovaj test dok ne klikneš "Spremi".</div>
                                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
                                         <button class="s-btn-sm" id="btnTkaiAiModelRunTest"
                                             style="background:rgba(102,126,234,.18);border-color:rgba(102,126,234,.42)">🧪
@@ -10649,7 +10739,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.231</span></div>
+                                    v<span id="helpVersionNum2">2.4.232</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11002,11 +11092,7 @@
                             <div class="tkai-insights-title" title="Sažetak tema, pitanja i sentimenta">
                                 Insights<span>★</span></div>
                             <ul class="tkai-insights-list" id="tkaiInsightsList"></ul>
-                            <div class="tkai-insights-title" style="margin-top:8px"
-                                title="Trend pozitivnog/negativnog tona">Sentiment
-                                trend<span>↕</span></div>
                             <div class="tkai-metric-top" id="tkaiSentimentTop">Pozitivno 0% • Negativno 0%</div>
-                            <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
                             <div class="tkai-metric-bottom" id="tkaiSentimentSummary">Nema dovoljno podataka.</div>
                         </div>
                         <div class="tkai-insights-card">
@@ -11020,22 +11106,13 @@
                             </div>
                             <div class="tkai-metric-bottom" id="tkaiEngagementSummary">Nema dovoljno podataka.</div>
                         </div>
-                        <div class="tkai-insights-card" id="tkaiPieCard">
-                            <div class="tkai-insights-title" title="Raspodjela tipova događaja">Pie
-                                breakdown<span>◔</span></div>
-                            <div class="tkai-pie-wrap">
-                                <div class="tkai-pie-chart" id="tkaiPieChart">
-                                    <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
-                                </div>
-                                <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
-                            </div>
-                            <ul class="tkai-insights-list" id="tkaiPieSummary" style="margin-top:6px"></ul>
+                        <div class="tkai-insights-card" id="tkaiSentimentLabCard">
+                            <div class="tkai-insights-title" title="Linija i valovi sentimenta live">Sentiment
+                                momentum<span>〰</span></div>
+                            <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
+                            <div class="tkai-sentiment-wave" id="tkaiSentimentWave"></div>
+                            <div class="tkai-metric-bottom" id="tkaiSentimentAtmosphere">Atmosfera: neutralna</div>
                         </div>
-                    </div>
-                    <div class="tkai-insights-row">
-                        <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span>
-                        </div>
-                        <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
                     </div>
                 </div>
                 <div class="tkai-insights-row">
@@ -11046,18 +11123,7 @@
                     </div>
                 </div>
                 <div class="tkai-insights-row">
-                    <div class="tkai-insights-card" id="tkaiPieCard">
-                        <div class="tkai-insights-title" title="Raspodjela tipova događaja">Pie breakdown<span>◔</span>
-                        </div>
-                        <div class="tkai-pie-wrap">
-                            <div class="tkai-pie-chart" id="tkaiPieChart">
-                                <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
-                            </div>
-                            <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
-                        </div>
-                        <ul class="tkai-insights-list" id="tkaiPieSummary" style="margin-top:6px"></ul>
-                    </div>
-                    <div class="tkai-insights-card" id="tkaiSongsCard">
+                    <div class="tkai-insights-card" id="tkaiSongsCard" style="flex:1">
                         <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs &amp; DJ
                             CC<span>♫</span>
                         </div>
@@ -11100,17 +11166,26 @@
                         </div>
                     </div>
                 </div>
+                <div class="tkai-insights-row">
+                    <div class="tkai-insights-card" style="flex:1" id="tkaiRecommendationsCard">
+                        <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span>
+                        </div>
+                        <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="tkai-footer">
             <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
             <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
+            <button class="tkai-gen-btn" id="tkaiExpandStatsBtn" style="font-size:11px">📈 Full stats</button>
             <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
             <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Chat JSON</button>
             <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
             <button class="tkai-gen-btn" id="tkaiClearBtn"
                 style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
         </div>
+        <button class="tkai-rec-jump-btn" id="tkaiRecJumpBtn">🔔 Preporuke</button>
     </div>
     </div>
     </div>
@@ -13122,6 +13197,9 @@
                 const statusEl = document.getElementById('tkaiAiModelTestStatus');
                 const resultEl = document.getElementById('tkaiAiModelTestResult');
                 const btn = document.getElementById('btnTkaiAiModelRunTest');
+                const providerInput = document.getElementById('tkaiStackTestProvider');
+                const modelInput = document.getElementById('tkaiStackTestModel');
+                const apiInput = document.getElementById('tkaiStackTestApiKey');
                 const esc = (s) => String(s || '')
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
@@ -13136,7 +13214,11 @@
                     if (typeof window.runTkaiStackSelfTest !== 'function') {
                         throw new Error('TikTok AI test funkcija nije dostupna (panel još nije inicijaliziran)');
                     }
-                    const report = await window.runTkaiStackSelfTest();
+                    const report = await window.runTkaiStackSelfTest({
+                        provider: String(providerInput?.value || '').trim(),
+                        model: String(modelInput?.value || '').trim(),
+                        apiKey: String(apiInput?.value || '').trim(),
+                    });
                     const items = (report.tests || []).map((t) => {
                         const icon = t.ok === true ? '✅' : t.ok === false ? '❌' : 'ℹ️';
                         const color = t.ok === true ? '#27c93f' : t.ok === false ? '#ff6b6b' : 'var(--text3)';
@@ -13153,6 +13235,81 @@
                     btn.disabled = false;
                 }
             });
+
+            (function initTkaiStackTestQuickInputs() {
+                const providerEl = document.getElementById('tkaiStackTestProvider');
+                const modelEl = document.getElementById('tkaiStackTestModel');
+                const apiEl = document.getElementById('tkaiStackTestApiKey');
+                const saveBtn = document.getElementById('tkaiStackTestSaveCreds');
+                if (!providerEl || !apiEl) return;
+
+                const readProviderKey = (provider, cfg) => {
+                    if (provider === 'gemini') return cfg.geminiApiKey || cfg.gemini_api_key || '';
+                    if (provider === 'openai') return cfg.openaiApiKey || cfg.openai_api_key || '';
+                    if (provider === 'anthropic') return cfg.anthropicApiKey || cfg.anthropic_api_key || '';
+                    if (provider === 'huggingface') return cfg.hfApiKey || cfg.hf_api_key || '';
+                    if (provider === 'openrouter') return cfg.openrouterApiKey || cfg.openrouter_api_key || '';
+                    if (provider === 'groq') return cfg.groqApiKey || cfg.groq_api_key || '';
+                    if (provider === 'local') return cfg.localAiApiKey || cfg.local_ai_api_key || '';
+                    return '';
+                };
+
+                const writeProviderKey = (provider, val) => {
+                    if (provider === 'gemini') {
+                        DB.saveSetting('geminiApiKey', val);
+                        DB.saveSetting('gemini_api_key', val);
+                    } else if (provider === 'openai') {
+                        DB.saveSetting('openaiApiKey', val);
+                        DB.saveSetting('openai_api_key', val);
+                    } else if (provider === 'anthropic') {
+                        DB.saveSetting('anthropicApiKey', val);
+                        DB.saveSetting('anthropic_api_key', val);
+                    } else if (provider === 'huggingface') {
+                        DB.saveSetting('hfApiKey', val);
+                        DB.saveSetting('hf_api_key', val);
+                    } else if (provider === 'openrouter') {
+                        DB.saveSetting('openrouterApiKey', val);
+                        DB.saveSetting('openrouter_api_key', val);
+                    } else if (provider === 'groq') {
+                        DB.saveSetting('groqApiKey', val);
+                        DB.saveSetting('groq_api_key', val);
+                    } else if (provider === 'local') {
+                        DB.saveSetting('localAiApiKey', val);
+                        DB.saveSetting('local_ai_api_key', val);
+                    }
+                };
+
+                const syncFromSettings = () => {
+                    const cfg = DB.getSettings() || {};
+                    const provider = String(cfg.tkaiProviderOverride || cfg.aiProvider || 'gemini');
+                    const model = String(cfg.tkaiModelOverride || cfg.aiModel || '');
+                    providerEl.value = provider;
+                    if (modelEl) modelEl.value = model;
+                    apiEl.value = readProviderKey(provider, cfg);
+                };
+
+                providerEl.addEventListener('change', () => {
+                    const cfg = DB.getSettings() || {};
+                    const provider = String(providerEl.value || '').trim();
+                    apiEl.value = readProviderKey(provider, cfg);
+                });
+
+                saveBtn?.addEventListener('click', () => {
+                    const provider = String(providerEl.value || '').trim();
+                    const model = String(modelEl?.value || '').trim();
+                    const key = String(apiEl.value || '').trim();
+                    if (!provider) {
+                        showToast('Odaberi provider prije spremanja.');
+                        return;
+                    }
+                    DB.saveSetting('tkaiProviderOverride', provider);
+                    if (model) DB.saveSetting('tkaiModelOverride', model);
+                    writeProviderKey(provider, key);
+                    showToast('✅ TikTok stack provider/API spremljeni.');
+                });
+
+                syncFromSettings();
+            })();
 
             // HF token for Cardiff NLP — load saved token + wire save button
             (function initTkaiHfToken() {
@@ -14990,6 +15147,7 @@
             let lastViewerSampleAt = 0;
             let lastViewerSampleValue = 0;
             let spikeFilter = 'all';
+            let lastRecommendationsHash = '';
             const translateCache = new Map();
             const STORAGE_KEY = 'ex_tkai_cfg';
 
@@ -14998,10 +15156,12 @@
             const toggleBtn = document.getElementById('tkaiBtnToggle');
             const genBtn = document.getElementById('tkaiGenBtn');
             const genAllBtn = document.getElementById('tkaiGenAllBtn');
+            const expandStatsBtn = document.getElementById('tkaiExpandStatsBtn');
             const holdLBtn = document.getElementById('tkaiHoldLBtn');
             const exportBtn = document.getElementById('tkaiExportBtn');
             const exportCsvBtn = document.getElementById('tkaiExportCsvBtn');
             const clearBtn = document.getElementById('tkaiClearBtn');
+            const recJumpBtn = document.getElementById('tkaiRecJumpBtn');
             const statusEl = document.getElementById('tkaiScanStatus');
             const streamOwnerEl = document.getElementById('tkaiStreamOwner');
             const msgCountEl = document.getElementById('tkaiMsgCount');
@@ -15028,8 +15188,10 @@
             const spikeListEl = document.getElementById('tkaiSpikeList');
             const recommendationsEl = document.getElementById('tkaiRecommendations');
             const sentimentTrendEl = document.getElementById('tkaiSentimentTrend');
+            const sentimentWaveEl = document.getElementById('tkaiSentimentWave');
             const sentimentTopEl = document.getElementById('tkaiSentimentTop');
             const sentimentSummaryEl = document.getElementById('tkaiSentimentSummary');
+            const sentimentAtmosphereEl = document.getElementById('tkaiSentimentAtmosphere');
             const pieChartEl = document.getElementById('tkaiPieChart');
             const pieCenterEl = document.getElementById('tkaiPieCenter');
             const pieLegendEl = document.getElementById('tkaiPieLegend');
@@ -15607,14 +15769,15 @@
                 gifts.forEach((message) => {
                     const coins = Number(message.coins || parseCoinsFromText(message.text) || 0);
                     totalCoins += coins;
-                    const row = byUser.get(message.user) || { user: message.user, coins: 0, events: 0 };
+                    const userKey = String(message.user || '').trim().toLowerCase();
+                    const row = byUser.get(userKey) || { user: String(message.user || '').trim(), coins: 0, events: 0 };
                     row.coins += coins;
                     row.events += 1;
-                    byUser.set(message.user, row);
+                    byUser.set(userKey, row);
                 });
                 const leaders = Array.from(byUser.values())
                     .sort((a, b) => b.coins - a.coins || b.events - a.events)
-                    .slice(0, 5);
+                    .slice(0, 20);
                 return { gifts, totalCoins, supportersCount: byUser.size, leaders };
             }
             function updateTopSupportersUI(list, supportersCount) {
@@ -15624,15 +15787,16 @@
                     if (supporterCountEl) supporterCountEl.textContent = formatNum(supportersCount || 0);
                     return;
                 }
+                const showLimit = Math.max(5, Number(DB.getSettings().tkaiTopSupportersLimit || 12));
                 topSupportersEl.innerHTML = '';
-                list.slice(0, 5).forEach((row, i) => {
+                list.slice(0, showLimit).forEach((row, i) => {
                     const item = document.createElement('div');
                     item.className = 'tkai-top-row';
                     item.innerHTML = '<span class="name">#' + (i + 1) + ' ' + escHtml(row.user || 'Unknown') + '</span>'
                         + '<span class="coins">' + formatNum(row.coins || 0) + ' 🪙</span>';
                     topSupportersEl.appendChild(item);
                 });
-                const others = Math.max(0, (supportersCount || 0) - list.slice(0, 5).length);
+                const others = Math.max(0, (supportersCount || 0) - list.slice(0, showLimit).length);
                 if (others > 0) {
                     const otherRow = document.createElement('div');
                     otherRow.className = 'tkai-top-row';
@@ -15907,7 +16071,7 @@
                 });
 
                 const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 32));
-                const joinLevels = messages
+                const joinSource = collectedMessages
                     .filter((m) => m.type === 'join')
                     .map((m) => ({
                         user: String(m.user || '').slice(0, 40) || 'unknown',
@@ -15916,7 +16080,7 @@
                     }))
                     .filter((j) => j.user)
                     .filter((j) => !joinMinLevel || !j.level || Number(j.level) >= joinMinLevel)
-                    .slice(-32);
+                    .slice(-120);
 
                 const joinBuckets = {
                     lvl1to20: 0,
@@ -15925,7 +16089,7 @@
                     lvl50plus: 0,
                     unknown: 0
                 };
-                joinLevels.forEach((j) => {
+                joinSource.forEach((j) => {
                     const lvl = Number(j.level || 0);
                     if (!lvl) {
                         joinBuckets.unknown += 1;
@@ -15957,7 +16121,7 @@
                     },
                     pieBreakdown,
                     songs: uniqueSongs.slice(0, 8),
-                    joinLevels: joinLevels.slice(-8).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
+                    joinLevels: joinSource.slice(-120).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
                     joinBuckets,
                     spikeDebug: {
                         sensitivity: spikeSensitivity,
@@ -16033,6 +16197,105 @@
                 if (!recs.length) recs.push('Nastavi s dobrim tempom i ukljuci publiku.');
                 return recs.slice(0, 6);
             }
+
+            function renderEngagementAreaChart(engagement) {
+                if (!engagementAreaEl) return;
+                const points = Array.isArray(engagement) ? engagement.slice(-24) : [];
+                if (!points.length) {
+                    engagementAreaEl.innerHTML = '';
+                    if (engagementAreaMetaEl) engagementAreaMetaEl.textContent = 'Trend: -';
+                    return;
+                }
+                const width = 320;
+                const height = 92;
+                const padX = 8;
+                const padTop = 6;
+                const padBottom = 12;
+                const vals = points.map((p) => Number(p.count || 0));
+                const maxV = Math.max(1, ...vals);
+                const minV = Math.min(...vals);
+                const range = Math.max(1, maxV - minV);
+                const coords = vals.map((v, i) => {
+                    const x = points.length === 1 ? width / 2 : padX + (i / (points.length - 1)) * (width - padX * 2);
+                    const y = padTop + ((maxV - v) / range) * (height - padTop - padBottom);
+                    return { x, y };
+                });
+                const line = coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+                const area = `${coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} ${coords[coords.length - 1].x.toFixed(1)},${(height - padBottom).toFixed(1)} ${coords[0].x.toFixed(1)},${(height - padBottom).toFixed(1)}`;
+                const first = vals[0] || 0;
+                const last = vals[vals.length - 1] || 0;
+                const delta = last - first;
+                const dir = delta > 0 ? '↗' : delta < 0 ? '↘' : '→';
+                engagementAreaEl.innerHTML =
+                    `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">` +
+                    `<polyline fill="none" stroke="rgba(148,163,184,.35)" stroke-width="1" points="${padX},${(height - padBottom).toFixed(1)} ${(width - padX).toFixed(1)},${(height - padBottom).toFixed(1)}"/>` +
+                    `<polygon points="${area}" fill="rgba(45,212,191,.22)"></polygon>` +
+                    `<polyline fill="none" stroke="rgba(94,234,212,.96)" stroke-width="2.1" points="${line}"></polyline>` +
+                    `</svg>`;
+                if (engagementAreaMetaEl) {
+                    engagementAreaMetaEl.textContent = `Trend ${dir} ${delta > 0 ? '+' : ''}${formatNum(delta)} • zadnje ${formatNum(last)}/min`;
+                }
+            }
+
+            function renderSentimentDualCharts(insights) {
+                const trend = Array.isArray(insights.sentimentTrend) ? insights.sentimentTrend.slice(-24) : [];
+                const scores = trend.map((s) => Number(s.score || 0));
+                if (!sentimentTrendEl) return;
+                if (!scores.length) {
+                    sentimentTrendEl.innerHTML = '';
+                    if (sentimentWaveEl) sentimentWaveEl.innerHTML = '';
+                    if (sentimentAtmosphereEl) sentimentAtmosphereEl.textContent = 'Atmosfera: nema dovoljno podataka.';
+                    return;
+                }
+
+                const width = 320;
+                const hLine = 64;
+                const hWave = 56;
+                const pad = 6;
+                const maxAbs = Math.max(1, ...scores.map((v) => Math.abs(v)));
+                const linePts = scores.map((v, i) => {
+                    const x = scores.length === 1 ? width / 2 : pad + (i / (scores.length - 1)) * (width - pad * 2);
+                    const y = hLine / 2 - (v / maxAbs) * ((hLine / 2) - 8);
+                    return `${x.toFixed(1)},${y.toFixed(1)}`;
+                }).join(' ');
+                sentimentTrendEl.innerHTML =
+                    `<svg viewBox="0 0 ${width} ${hLine}" preserveAspectRatio="none" aria-hidden="true">` +
+                    `<polyline fill="none" stroke="rgba(148,163,184,.28)" stroke-width="1" points="0,${(hLine / 2).toFixed(1)} ${width},${(hLine / 2).toFixed(1)}"></polyline>` +
+                    `<polyline fill="none" stroke="rgba(129,140,248,.95)" stroke-width="2" points="${linePts}"></polyline>` +
+                    `</svg>`;
+
+                if (sentimentWaveEl) {
+                    const wavePts = scores.map((v, i) => {
+                        const x = scores.length === 1 ? width / 2 : pad + (i / (scores.length - 1)) * (width - pad * 2);
+                        const y = hWave - 8 - ((Math.abs(v) / maxAbs) * (hWave - 18));
+                        return `${x.toFixed(1)},${y.toFixed(1)}`;
+                    }).join(' ');
+                    sentimentWaveEl.innerHTML =
+                        `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="none" aria-hidden="true">` +
+                        `<polygon points="${wavePts} ${width - pad},${hWave - 6} ${pad},${hWave - 6}" fill="rgba(94,234,212,.24)"></polygon>` +
+                        `<polyline fill="none" stroke="rgba(45,212,191,.92)" stroke-width="1.8" points="${wavePts}"></polyline>` +
+                        `</svg>`;
+                }
+
+                const avg = scores.reduce((acc, n) => acc + n, 0) / Math.max(1, scores.length);
+                const variance = Math.round(scores.reduce((acc, n) => acc + Math.abs(n), 0) / Math.max(1, scores.length));
+                const mood = avg > 0.7 ? 'pozitivna' : avg < -0.7 ? 'napeta' : 'miješana';
+                const tempo = variance >= 2 ? 'visoka dinamika' : 'mirniji ritam';
+                if (sentimentAtmosphereEl) {
+                    sentimentAtmosphereEl.textContent = `Atmosfera: ${mood} • ${tempo} • score ${avg > 0 ? '+' : ''}${avg.toFixed(2)}`;
+                }
+            }
+
+            function pulseRecommendationJump() {
+                if (!recJumpBtn) return;
+                recJumpBtn.classList.add('live');
+                recJumpBtn.style.display = 'inline-flex';
+                setTimeout(() => {
+                    recJumpBtn.classList.remove('live');
+                    recJumpBtn.style.display = 'none';
+                }, 8500);
+            }
+
             function updateInsightsUI() {
                 if (!insightsListEl || !engagementBarsEl || !spikeListEl || !recommendationsEl) return;
                 const insights = computeInsightsSnapshot();
@@ -16058,6 +16321,7 @@
                     bar.title = `${e.minute}m: ${e.count} (${e.percent || 0}%)`;
                     engagementBarsEl.appendChild(bar);
                 });
+                renderEngagementAreaChart(insights.engagement);
                 if (engagementTopEl) {
                     engagementTopEl.textContent =
                         `${formatNum(insights.engagementAvgPerMin || 0)}/min • Peak ${formatNum(insights.engagementPeak?.count || 0)}/min`;
@@ -16071,38 +16335,7 @@
                         `Najviši engagement u ${peakMinute}. minuti • trajanje ${elapsedMin}m`;
                 }
 
-                if (sentimentTrendEl) {
-                    sentimentTrendEl.innerHTML = '';
-                    const maxAbs = Math.max(
-                        1,
-                        ...insights.sentimentTrend.map((s) => Math.abs(s.score))
-                    );
-                    insights.sentimentTrend.forEach((s) => {
-                        const bar = document.createElement('div');
-                        bar.className = 'tkai-sentiment-bar';
-                        const ratio = Math.min(1, Math.abs(s.score) / maxAbs);
-                        const height = Math.max(4, Math.round(ratio * 32));
-                        bar.style.height = `${height}px`;
-                        const posPart = document.createElement('div');
-                        posPart.className = 'tkai-sentiment-stack-pos';
-                        const negPart = document.createElement('div');
-                        negPart.className = 'tkai-sentiment-stack-neg';
-                        if (s.score > 0) {
-                            posPart.style.height = `${Math.max(2, height)}px`;
-                            negPart.style.height = '1px';
-                        } else if (s.score < 0) {
-                            posPart.style.height = '1px';
-                            negPart.style.height = `${Math.max(2, height)}px`;
-                        } else {
-                            posPart.style.height = '1px';
-                            negPart.style.height = '1px';
-                        }
-                        bar.appendChild(posPart);
-                        bar.appendChild(negPart);
-                        bar.title = `${s.minute}m: ${s.score}`;
-                        sentimentTrendEl.appendChild(bar);
-                    });
-                }
+                renderSentimentDualCharts(insights);
 
                 if (sentimentTopEl) {
                     const sc = insights.sentimentCounts || {};
@@ -16157,6 +16390,11 @@
                     li.textContent = r;
                     recommendationsEl.appendChild(li);
                 });
+                const currentHash = JSON.stringify(recommendations);
+                if (currentHash !== lastRecommendationsHash) {
+                    lastRecommendationsHash = currentHash;
+                    pulseRecommendationJump();
+                }
                 syncRecommendationsPopout(recommendations);
 
                 if (pieChartEl && pieLegendEl && pieCenterEl) {
@@ -16239,7 +16477,7 @@
                         li.textContent = 'Nema join eventova za odabrani minimum levela (provjeri Join scan i min level).';
                         joinLevelListEl.appendChild(li);
                     } else {
-                        joins.forEach((j) => {
+                        joins.slice(0, 80).forEach((j) => {
                             const li = document.createElement('li');
                             const when = new Date(Number(j.ts || Date.now())).toLocaleTimeString('hr-HR', {
                                 hour: '2-digit',
@@ -16249,6 +16487,7 @@
                             mention.href = '#';
                             mention.className = 'tkai-join-mention';
                             mention.textContent = '@' + String(j.user || '').replace(/^@+/, '');
+                            mention.style.color = getUserColor(j.user);
                             mention.title = 'Klikni za copy @mention';
                             mention.addEventListener('click', (ev) => {
                                 ev.preventDefault();
@@ -16588,6 +16827,16 @@
                 if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
                 else openLiveDashboardPopout();
             });
+            expandStatsBtn?.addEventListener('click', () => {
+                if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
+                else openLiveDashboardPopout();
+            });
+            recJumpBtn?.addEventListener('click', () => {
+                document.getElementById('tkaiRecommendationsCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                showToast('📌 Recommendations');
+                recJumpBtn.classList.remove('live');
+                recJumpBtn.style.display = 'none';
+            });
 
             // ── Shadowban check ──────────────────────────────────────────────────
             document.getElementById('tkaiShadowbanCheckBtn')?.addEventListener('click', async () => {
@@ -16724,7 +16973,29 @@
                     }
                 }
                 // ────────────────────────────────────────────────────────────────
-                updateTopSupportersUI(topSupporters.length ? topSupporters : giftStats.leaders, giftStats.supportersCount);
+                const supporterMap = new Map();
+                (topSupporters || []).forEach((row) => {
+                    const key = String(row?.user || '').trim().toLowerCase();
+                    if (!key) return;
+                    supporterMap.set(key, {
+                        user: String(row.user || '').trim(),
+                        coins: Number(row.coins || 0),
+                        events: Number(row.events || 0)
+                    });
+                });
+                (giftStats.leaders || []).forEach((row) => {
+                    const key = String(row?.user || '').trim().toLowerCase();
+                    if (!key) return;
+                    const prev = supporterMap.get(key);
+                    const next = {
+                        user: String(row.user || '').trim(),
+                        coins: Number(row.coins || 0),
+                        events: Number(row.events || 0)
+                    };
+                    if (!prev || next.coins > prev.coins) supporterMap.set(key, next);
+                });
+                const mergedSupporters = Array.from(supporterMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events);
+                updateTopSupportersUI(mergedSupporters, Math.max(giftStats.supportersCount || 0, mergedSupporters.length));
                 renderViewerSparkline();
                 updateInsightsUI();
             }
@@ -17064,6 +17335,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               });
             } catch (_) {}
           }
+                    // 4) Broader text fallback (localized labels and compact banners)
+                    try {
+                        const patterns = [
+                            /(\d[\d.,\s]*[km]?)\s*(?:viewers?|watching(?:\s+now)?|spectators?|gledatelja|gleda|uživo)/i,
+                            /(?:viewers?|watching|gledatelja|gleda)\s*[:\-]?\s*(\d[\d.,\s]*[km]?)/i,
+                        ];
+                        document.querySelectorAll('span, div').forEach(function(el) {
+                            const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+                            if (!txt || txt.length > 42) return;
+                            for (const p of patterns) {
+                                const m = txt.match(p);
+                                if (!m) continue;
+                                const v = parseNumberLike(m[1]);
+                                if (v > maxViewer) maxViewer = v;
+                                break;
+                            }
+                        });
+                    } catch (_) {}
           return maxViewer;
         }
         function getTopSupportersFromPage() {
@@ -17099,7 +17388,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           });
           return Array.from(dedupe.values())
             .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
-            .slice(0, 3);
+                        .slice(0, 12);
         }
         // Primary selectors — TikTok Live chat (updated for 2025 DOM)
         const primarySelectors = [
@@ -17433,7 +17722,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     const scanSubs = DB.getSettings().tkaiScanSubs !== false;
                     const scanCaptions = DB.getSettings().tkaiScanCaptions !== false;
                     const scanSongs = DB.getSettings().tkaiDetectSongs !== false;
-                    const scanJoins = DB.getSettings().tkaiScanJoins === true;
+                    const scanJoins = DB.getSettings().tkaiScanJoins !== false;
 
                     const filteredMessages = messages.filter((m) => {
                         if (m.type === 'chat' && !scanChat) return false;
@@ -17536,10 +17825,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }
             }
 
-            async function runTkaiStackSelfTest() {
+            async function runTkaiStackSelfTest(options) {
+                const opts = options || {};
                 const cfg = DB.getSettings() || {};
-                const provider = cfg.tkaiProviderOverride || cfg.aiProvider || 'gemini';
-                const model = cfg.tkaiModelOverride || cfg.aiModel || 'gemini-2.0-flash';
+                const provider = opts.provider || cfg.tkaiProviderOverride || cfg.aiProvider || 'gemini';
+                const model = opts.model || cfg.tkaiModelOverride || cfg.aiModel || 'gemini-2.0-flash';
+                const apiKey = String(opts.apiKey || '').trim();
                 const tests = [];
 
                 const push = (ok, name, detail) => {
@@ -17550,6 +17841,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     const probe = await runAiTextRequest('Odgovori samo: OK', {
                         provider,
                         model,
+                        ...(apiKey ? { apiKey } : {}),
                         temperature: 0,
                         maxOutputTokens: 16,
                     });
@@ -17570,6 +17862,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         const out = await runAiTextRequest(buildPrompt([sample]), {
                             provider,
                             model,
+                            ...(apiKey ? { apiKey } : {}),
                             temperature: 0.4,
                             maxOutputTokens: 120,
                         });
@@ -17809,56 +18102,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             exportBtn?.addEventListener('click', exportConversation);
             exportCsvBtn?.addEventListener('click', exportCsvConversation);
             clearBtn?.addEventListener('click', clearConversation);
-
-            // ── Složi / Rasloži / Zaključano layout ──────────────────────────────
-            (function initInsightsLayoutControls() {
-                function getFoldTarget() {
-                    return panel?.querySelectorAll('.tkai-insights-card') || [];
-                }
-                function applyLockState() {
-                    if (!layoutLockBtn) return;
-                    layoutLockBtn.textContent = dashboardLayoutLocked ? '🔒 Zaključano' : '🔓 Otključano';
-                    layoutLockBtn.classList.toggle('locked', dashboardLayoutLocked);
-                    const splitter = document.getElementById('tkaiColSplitter');
-                    if (splitter) splitter.style.pointerEvents = dashboardLayoutLocked ? 'none' : '';
-                    getFoldTarget().forEach(card => {
-                        card.style.userSelect = dashboardLayoutLocked ? 'none' : '';
-                    });
-                }
-                layoutFoldBtn?.addEventListener('click', () => {
-                    if (dashboardLayoutLocked) { showToast('🔒 Otključaj layout da bi složio/rasložio'); return; }
-                    getFoldTarget().forEach(card => card.classList.add('tkai-folded'));
-                    dashboardLayoutFolded = true;
-                    try { const s = DB.getSettings(); s.tkaiDashboardLayoutFolded = true; DB.saveSettings(s); } catch (_) { }
-                    showToast('🗂 Sve složeno');
-                });
-                layoutUnfoldBtn?.addEventListener('click', () => {
-                    if (dashboardLayoutLocked) { showToast('🔒 Otključaj layout da bi složio/rasložio'); return; }
-                    getFoldTarget().forEach(card => card.classList.remove('tkai-folded'));
-                    dashboardLayoutFolded = false;
-                    try { const s = DB.getSettings(); s.tkaiDashboardLayoutFolded = false; DB.saveSettings(s); } catch (_) { }
-                    showToast('🧩 Sve rasloženo');
-                });
-                layoutLockBtn?.addEventListener('click', () => {
-                    dashboardLayoutLocked = !dashboardLayoutLocked;
-                    try { const s = DB.getSettings(); s.tkaiDashboardLayoutLocked = dashboardLayoutLocked; DB.saveSettings(s); } catch (_) { }
-                    applyLockState();
-                    showToast(dashboardLayoutLocked ? '🔒 Layout zaključan' : '🔓 Layout otključan');
-                });
-                // Individual card fold on title click (when unlocked)
-                getFoldTarget().forEach(card => {
-                    const title = card.querySelector('.tkai-insights-title');
-                    if (!title) return;
-                    title.style.cursor = 'pointer';
-                    title.addEventListener('click', () => {
-                        if (dashboardLayoutLocked) return;
-                        card.classList.toggle('tkai-folded');
-                    });
-                });
-                // Restore saved fold state
-                if (dashboardLayoutFolded) getFoldTarget().forEach(card => card.classList.add('tkai-folded'));
-                applyLockState();
-            })();
 
             // ── Filter starred messages ─────────────────────────────────────────
             let starredMsgIds = new Set();
@@ -27364,5 +27607,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
     </script>
 </body>
+
+</html>
 
 </html>
