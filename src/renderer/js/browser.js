@@ -3928,10 +3928,10 @@ document
                 preview.style.display = "none";
                 document.getElementById("qrsCameraBtn").textContent =
                   "📷 Scan with Camera";
-                document.getElementById("qrsImportText").value = code.data;
+                document.getElementById("qrsSyncInput").value = code.data;
                 showToast("✅ QR Code detected!");
                 // Auto-click import
-                document.getElementById("qrsImportBtn").click();
+                document.getElementById("qrsImport").click();
               }
             }
           }
@@ -8260,7 +8260,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
     const joinMinLevel = Math.max(
       0,
-      Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+      Number(getTkaiSetting("tkaiJoinMinLevel", 0)),
     );
     const joinLevels = messages
       .filter((m) => m.type === "join")
@@ -8679,13 +8679,19 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const buckets = insights.joinBuckets || {};
       const joinMinLevel = Math.max(
         0,
-        Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+        Number(getTkaiSetting("tkaiJoinMinLevel", 0)),
       );
+      const joinScanEnabled = getTkaiSetting("tkaiScanJoins", true) !== false;
       const summary = document.createElement("li");
       summary.textContent =
         `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
       joinLevelListEl.appendChild(summary);
-      if (!joins.length) {
+      if (!joinScanEnabled) {
+        const li = document.createElement("li");
+        li.textContent =
+          "Join scan je isključen u postavkama (Vrste poruka > Skeniraj ulaske).";
+        joinLevelListEl.appendChild(li);
+      } else if (!joins.length) {
         const li = document.createElement("li");
         li.textContent =
           "Nema join eventova za odabrani minimum levela (provjeri Join scan i min level).";
@@ -9306,7 +9312,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       viewers: { live: liveViewerCount, peak: peakViewerCount },
       report,
       insights: computeInsightsSnapshot(),
-      joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+      joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 0)),
       giftStats: {
         totalEvents: giftStats.gifts.length,
         totalCoins: giftStats.totalCoins,
@@ -9385,7 +9391,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       pieBreakdown: insights.pieBreakdown,
       songs: insights.songs,
       recommendations: buildRecommendations(insights),
-      joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 32)),
+      joinMinLevel: Number(getTkaiSetting("tkaiJoinMinLevel", 0)),
       perUser: buildUserStats(collectedMessages, userLimit),
       perDay: buildDailyStats(collectedMessages, userLimit),
       userAliases: getTkaiUserAliases(),
@@ -10034,14 +10040,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
             <div class="s-row-label">Skeniraj ulaske (Join)</div>
             <div class="s-row-desc">Kad netko uđe u live (može biti puno poruka)</div>
           </div>
-          <div class="toggle" data-setting="tkaiScanJoins"></div>
+          <div class="toggle on" data-setting="tkaiScanJoins"></div>
         </div>
         <div class="s-row">
           <div class="s-row-left">
             <div class="s-row-label">Min join level</div>
             <div class="s-row-desc">Prikaži join feed od ovog levela (0 = svi)</div>
           </div>
-          <input type="number" class="s-input" data-setting="tkaiJoinMinLevel" min="0" max="99" value="32" style="width:70px">
+          <input type="number" class="s-input" data-setting="tkaiJoinMinLevel" min="0" max="99" value="0" style="width:70px">
         </div>
         <div class="s-row">
           <div class="s-row-left">
@@ -10666,7 +10672,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const scanSubs = getTkaiSetting("tkaiScanSubs", true);
       const scanCaptions = getTkaiSetting("tkaiScanCaptions", true);
       const scanSongs = getTkaiSetting("tkaiDetectSongs", true);
-      const scanJoins = getTkaiSetting("tkaiScanJoins", false);
+      const scanJoins = getTkaiSetting("tkaiScanJoins", true) !== false;
       const maxKeep =
         parseInt(getTkaiSetting("tkaiMaxMessagesKeep", "80"), 10) || 80;
 
@@ -10924,10 +10930,31 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       throw new Error(msg);
     };
 
+    const fetchWith202Retry = async (url, init, label, maxAttempts = 3) => {
+      let lastAccepted = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const res = await fetch(url, init);
+        if (res.status !== 202) return res;
+        lastAccepted = res;
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+        }
+      }
+
+      let detail = "";
+      try {
+        const text = await lastAccepted.text();
+        if (text) detail = text.slice(0, 220);
+      } catch (_) { }
+      throw new Error(
+        `${label} odgovor je i dalje u obradi (HTTP 202). Pokušaj ponovno za nekoliko sekundi.${detail ? " Detalj: " + detail : ""}`,
+      );
+    };
+
     if (provider === "gemini") {
       const endpoint = await getGeminiEndpoint();
       if (!endpoint) throw new Error("Gemini API ključ nije postavljen.");
-      const res = await fetch(endpoint, {
+      const res = await fetchWith202Retry(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -10935,7 +10962,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           generationConfig: { temperature: 0.85, maxOutputTokens: 800 },
         }),
         signal: AbortSignal.timeout(30000),
-      });
+      }, "Gemini");
       if (!res.ok) await parseApiError(res, "Gemini");
       const data = await res.json();
       return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -10944,7 +10971,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     if (provider === "openrouter") {
       const key = s.openrouterApiKey || s.openrouter_api_key;
       if (!key) throw new Error("OpenRouter API ključ nije postavljen.");
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      const res = await fetchWith202Retry("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -10958,7 +10985,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           temperature: 0.8,
         }),
         signal: AbortSignal.timeout(35000),
-      });
+      }, "OpenRouter");
       if (!res.ok) await parseApiError(res, "OpenRouter");
       const data = await res.json();
       return data?.choices?.[0]?.message?.content || "";
@@ -10967,7 +10994,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     if (provider === "groq") {
       const key = s.groqApiKey || s.groq_api_key;
       if (!key) throw new Error("Groq API ključ nije postavljen.");
-      const res = await fetch(
+      const res = await fetchWith202Retry(
         "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
@@ -10982,6 +11009,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           }),
           signal: AbortSignal.timeout(25000),
         },
+        "Groq",
       );
       if (!res.ok) await parseApiError(res, "Groq");
       const data = await res.json();
@@ -10999,7 +11027,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       key = s.localAiKey || "";
     }
 
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    const res = await fetchWith202Retry(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -11011,7 +11039,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         temperature: 0.8,
       }),
       signal: AbortSignal.timeout(40000),
-    });
+    }, provider);
     if (!res.ok) await parseApiError(res, provider);
     const data = await res.json();
     return data?.choices?.[0]?.message?.content || "";
@@ -11289,9 +11317,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       );
       renderReplies(suggestions, msgs);
     } catch (e) {
+      const msg = String(e?.message || "Greška");
+      const prettyMsg = /\b202\b/.test(msg)
+        ? "AI provider je prihvatio zahtjev (202), ali odgovor još nije spreman. Pokušaj ponovno za par sekundi."
+        : msg;
       repliesEl.innerHTML =
         '<div class="tkai-status" style="color:var(--red)">❌ ' +
-        escHtml(e.message || "Greška") +
+        escHtml(prettyMsg) +
         "</div>";
     } finally {
       isGenerating = false;
