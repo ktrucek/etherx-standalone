@@ -9456,6 +9456,123 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const btnSongDetection = document.getElementById("btnTkaiSongDetection");
   const btnTools = document.getElementById("btnTkaiTools");
   const btnSessions = document.getElementById("btnTkaiSessions");
+  const btnTkaiAiModelRunTest = document.getElementById("btnTkaiAiModelRunTest");
+  const btnTkaiStackSaveCreds = document.getElementById("tkaiStackTestSaveCreds");
+  const tkaiStackTestProviderEl = document.getElementById("tkaiStackTestProvider");
+  const tkaiStackTestModelEl = document.getElementById("tkaiStackTestModel");
+  const tkaiStackTestApiKeyEl = document.getElementById("tkaiStackTestApiKey");
+
+  const getProviderApiKeyFromSettings = (settings, provider) => {
+    switch (String(provider || "").toLowerCase()) {
+      case "gemini":
+        return settings.geminiApiKey || settings.gemini_api_key || "";
+      case "openrouter":
+        return settings.openrouterApiKey || settings.openrouter_api_key || "";
+      case "groq":
+        return settings.groqApiKey || settings.groq_api_key || "";
+      case "anthropic":
+        return settings.anthropicApiKey || settings.anthropic_api_key || "";
+      case "huggingface":
+        return settings.huggingfaceApiKey || settings.huggingface_api_key || "";
+      case "local":
+        return settings.localAiKey || settings.local_ai_key || "";
+      case "ollama":
+        return settings.ollamaApiKey || settings.ollama_api_key || "";
+      default:
+        return settings.openaiApiKey || settings.openai_api_key || "";
+    }
+  };
+
+  const saveProviderApiKey = (provider, apiKey) => {
+    const p = String(provider || "").toLowerCase();
+    const v = String(apiKey || "").trim();
+    if (!p) return;
+    if (p === "gemini") {
+      DB.saveSetting("geminiApiKey", v);
+      DB.saveSetting("gemini_api_key", v);
+      return;
+    }
+    if (p === "openrouter") {
+      DB.saveSetting("openrouterApiKey", v);
+      DB.saveSetting("openrouter_api_key", v);
+      return;
+    }
+    if (p === "groq") {
+      DB.saveSetting("groqApiKey", v);
+      DB.saveSetting("groq_api_key", v);
+      return;
+    }
+    if (p === "anthropic") {
+      DB.saveSetting("anthropicApiKey", v);
+      DB.saveSetting("anthropic_api_key", v);
+      return;
+    }
+    if (p === "huggingface") {
+      DB.saveSetting("huggingfaceApiKey", v);
+      DB.saveSetting("huggingface_api_key", v);
+      return;
+    }
+    if (p === "local") {
+      DB.saveSetting("localAiKey", v);
+      DB.saveSetting("local_ai_key", v);
+      return;
+    }
+    if (p === "ollama") {
+      DB.saveSetting("ollamaApiKey", v);
+      DB.saveSetting("ollama_api_key", v);
+      return;
+    }
+    DB.saveSetting("openaiApiKey", v);
+    DB.saveSetting("openai_api_key", v);
+  };
+
+  const initTkaiStackQuickTestInputs = () => {
+    const settings = DB.getSettings() || {};
+    const provider =
+      String(settings.tkaiProviderOverride || settings.aiProvider || "").toLowerCase();
+    const model = String(
+      settings.tkaiModelOverride || settings.aiModel || "",
+    ).trim();
+    if (tkaiStackTestProviderEl) tkaiStackTestProviderEl.value = provider;
+    if (tkaiStackTestModelEl) tkaiStackTestModelEl.value = model;
+    if (tkaiStackTestApiKeyEl)
+      tkaiStackTestApiKeyEl.value = getProviderApiKeyFromSettings(
+        settings,
+        provider || "openai",
+      );
+  };
+
+  tkaiStackTestProviderEl?.addEventListener("change", () => {
+    const settings = DB.getSettings() || {};
+    const provider = String(tkaiStackTestProviderEl.value || "").toLowerCase();
+    if (!tkaiStackTestApiKeyEl) return;
+    tkaiStackTestApiKeyEl.value = getProviderApiKeyFromSettings(
+      settings,
+      provider || "openai",
+    );
+  });
+
+  btnTkaiStackSaveCreds?.addEventListener("click", () => {
+    const provider = String(tkaiStackTestProviderEl?.value || "").toLowerCase();
+    const model = String(tkaiStackTestModelEl?.value || "").trim();
+    const apiKey = String(tkaiStackTestApiKeyEl?.value || "").trim();
+
+    DB.saveSetting("tkaiProviderOverride", provider || "");
+    DB.saveSetting("tkaiModelOverride", model || "");
+    if (provider && apiKey) saveProviderApiKey(provider, apiKey);
+
+    showToast("💾 TikTok AI test postavke spremljene");
+  });
+
+  btnTkaiAiModelRunTest?.addEventListener("click", () => {
+    runTkaiStackSelfTest({
+      provider: String(tkaiStackTestProviderEl?.value || "").trim(),
+      model: String(tkaiStackTestModelEl?.value || "").trim(),
+      apiKey: String(tkaiStackTestApiKeyEl?.value || "").trim(),
+    });
+  });
+
+  initTkaiStackQuickTestInputs();
 
   btnCustomCategories?.addEventListener("click", () => {
     openTkaiSubPanel(
@@ -10785,8 +10902,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
   // ── Unified AI Call Function ──
   async function callAI(prompt) {
     const s = DB.getSettings();
-    const provider = s.aiProvider || "gemini";
-    const model = s.aiModel || "gemini-2.5-flash";
+    const provider = String(
+      s.tkaiProviderOverride || s.aiProvider || "gemini",
+    ).toLowerCase();
+    const model = s.tkaiModelOverride || s.aiModel || "gemini-2.5-flash";
 
     if (provider === "gemini") {
       const endpoint = await getGeminiEndpoint();
@@ -10880,6 +10999,235 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     const data = await res.json();
     return data?.choices?.[0]?.message?.content || "";
   }
+
+  async function runTkaiStackSelfTest(options = {}) {
+    const statusEl = document.getElementById("tkaiAiModelTestStatus");
+    const resultEl = document.getElementById("tkaiAiModelTestResult");
+    const startedAt = Date.now();
+
+    const baseSettings = DB.getSettings() || {};
+    const provider = String(
+      options.provider || baseSettings.tkaiProviderOverride || baseSettings.aiProvider || "gemini",
+    )
+      .trim()
+      .toLowerCase();
+    const model = String(
+      options.model || baseSettings.tkaiModelOverride || baseSettings.aiModel || "gemini-2.5-flash",
+    ).trim();
+    const apiKey = String(options.apiKey || "").trim();
+
+    const cfg = { ...baseSettings, tkaiProviderOverride: provider, tkaiModelOverride: model };
+    if (apiKey) {
+      if (provider === "gemini") {
+        cfg.geminiApiKey = apiKey;
+        cfg.gemini_api_key = apiKey;
+      } else if (provider === "openrouter") {
+        cfg.openrouterApiKey = apiKey;
+        cfg.openrouter_api_key = apiKey;
+      } else if (provider === "groq") {
+        cfg.groqApiKey = apiKey;
+        cfg.groq_api_key = apiKey;
+      } else if (provider === "anthropic") {
+        cfg.anthropicApiKey = apiKey;
+        cfg.anthropic_api_key = apiKey;
+      } else if (provider === "huggingface") {
+        cfg.huggingfaceApiKey = apiKey;
+        cfg.huggingface_api_key = apiKey;
+      } else if (provider === "local") {
+        cfg.localAiKey = apiKey;
+        cfg.local_ai_key = apiKey;
+      } else if (provider === "ollama") {
+        cfg.ollamaApiKey = apiKey;
+        cfg.ollama_api_key = apiKey;
+      } else {
+        cfg.openaiApiKey = apiKey;
+        cfg.openai_api_key = apiKey;
+      }
+    }
+
+    const runProbe = async (testPrompt) => {
+      if (provider === "gemini") {
+        let endpoint = "";
+        if (apiKey) {
+          endpoint =
+            "https://generativelanguage.googleapis.com/v1beta/models/" +
+            encodeURIComponent(model) +
+            ":generateContent?key=" +
+            encodeURIComponent(apiKey);
+        } else {
+          endpoint = await getGeminiEndpoint();
+        }
+        if (!endpoint) throw new Error("Gemini API ključ nije postavljen.");
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: testPrompt }] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!res.ok) throw new Error("Gemini error: " + res.status);
+        const data = await res.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      }
+
+      if (provider === "openrouter") {
+        const key = cfg.openrouterApiKey || cfg.openrouter_api_key;
+        if (!key) throw new Error("OpenRouter API ključ nije postavljen.");
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+            "HTTP-Referer": "https://etherx.io",
+            "X-Title": "EtherX Browser",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: testPrompt }],
+            temperature: 0.2,
+          }),
+          signal: AbortSignal.timeout(35000),
+        });
+        if (!res.ok) throw new Error("OpenRouter error: " + res.status);
+        const data = await res.json();
+        return data?.choices?.[0]?.message?.content || "";
+      }
+
+      if (provider === "groq") {
+        const key = cfg.groqApiKey || cfg.groq_api_key;
+        if (!key) throw new Error("Groq API ključ nije postavljen.");
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: testPrompt }],
+            temperature: 0.2,
+          }),
+          signal: AbortSignal.timeout(25000),
+        });
+        if (!res.ok) throw new Error("Groq error: " + res.status);
+        const data = await res.json();
+        return data?.choices?.[0]?.message?.content || "";
+      }
+
+      if (provider === "anthropic") {
+        const key = cfg.anthropicApiKey || cfg.anthropic_api_key;
+        if (!key) throw new Error("Anthropic API ključ nije postavljen.");
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 150,
+            temperature: 0.2,
+            messages: [{ role: "user", content: testPrompt }],
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!res.ok) throw new Error("Anthropic error: " + res.status);
+        const data = await res.json();
+        const txt = Array.isArray(data?.content)
+          ? data.content
+            .map((c) => c?.text)
+            .filter(Boolean)
+            .join("\n")
+          : "";
+        return txt || "";
+      }
+
+      if (provider === "huggingface") {
+        const key = cfg.huggingfaceApiKey || cfg.huggingface_api_key;
+        if (!key) throw new Error("HuggingFace API ključ nije postavljen.");
+        const res = await fetch("https://router.huggingface.co/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: testPrompt }],
+            temperature: 0.2,
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!res.ok) throw new Error("HuggingFace error: " + res.status);
+        const data = await res.json();
+        return data?.choices?.[0]?.message?.content || "";
+      }
+
+      let baseUrl = "https://api.openai.com/v1";
+      let key = cfg.openaiApiKey || cfg.openai_api_key;
+      if (provider === "ollama")
+        baseUrl = cfg.ollamaBaseUrl || "http://localhost:11434/v1";
+      if (provider === "local") {
+        baseUrl = cfg.localAiBaseUrl || "http://127.0.0.1:11434/v1";
+        key = cfg.localAiKey || cfg.local_ai_key || "";
+      }
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: key ? `Bearer ${key}` : undefined,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: testPrompt }],
+          temperature: 0.2,
+          max_tokens: 120,
+        }),
+        signal: AbortSignal.timeout(35000),
+      });
+      if (!res.ok) throw new Error(`${provider} error: ${res.status}`);
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content || "";
+    };
+
+    if (statusEl) statusEl.textContent = "Test: u tijeku...";
+    if (resultEl) {
+      resultEl.style.display = "none";
+      resultEl.textContent = "";
+    }
+    if (btnTkaiAiModelRunTest) btnTkaiAiModelRunTest.disabled = true;
+
+    try {
+      const probeText =
+        "Vrati tocno jednu recenicu na hrvatskom koja potvrduje da AI provider radi.";
+      const output = await runProbe(probeText);
+      const elapsed = Date.now() - startedAt;
+      if (statusEl)
+        statusEl.textContent = `Test: OK (${provider}/${model}) ${elapsed}ms`;
+      if (resultEl) {
+        resultEl.style.display = "block";
+        resultEl.style.color = "#86efac";
+        resultEl.textContent = output
+          ? output.slice(0, 700)
+          : "Provider je odgovorio, ali bez teksta.";
+      }
+    } catch (err) {
+      const msg = err?.message || String(err || "Nepoznata greška");
+      if (statusEl) statusEl.textContent = "Test: FAIL";
+      if (resultEl) {
+        resultEl.style.display = "block";
+        resultEl.style.color = "#fca5a5";
+        resultEl.textContent = "Greška: " + msg;
+      }
+    } finally {
+      if (btnTkaiAiModelRunTest) btnTkaiAiModelRunTest.disabled = false;
+    }
+  }
+
+  window.runTkaiStackSelfTest = runTkaiStackSelfTest;
 
   // ── Generate replies ──
   async function generateReplies(msgs) {

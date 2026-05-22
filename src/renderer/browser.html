@@ -9632,6 +9632,53 @@
             <div class="s-group" style="margin-top:16px">
               <div class="s-row">
                 <div class="s-row-left">
+                  <div class="s-row-label" style="font-weight:600">🧪 Test TikTok Chat stack</div>
+                  <div class="s-row-desc">Upiši provider/API ovdje i odmah testiraj bez odlaska na globalne AI postavke.
+                  </div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+                <div>
+                  <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Test provider</div>
+                  <select class="s-select" id="tkaiStackTestProvider">
+                    <option value="">(override/global)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="huggingface">HuggingFace</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="groq">Groq</option>
+                    <option value="local">Local OpenAI-compatible</option>
+                    <option value="ollama">Ollama</option>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Test model</div>
+                  <input type="text" class="s-input" id="tkaiStackTestModel" placeholder="(override/global model)">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px">
+                <input type="password" class="s-input" id="tkaiStackTestApiKey"
+                  placeholder="API key za odabrani provider" style="min-width:260px;flex:1;font-family:monospace">
+                <button class="s-btn-sm" id="tkaiStackTestSaveCreds"
+                  style="background:rgba(102,126,234,.18);border-color:rgba(102,126,234,.42)">💾 Spremi</button>
+              </div>
+              <div style="font-size:10px;color:var(--text3);margin-top:6px">Polja iznad vrijede samo za ovaj test dok ne
+                klikneš "Spremi".</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+                <button class="s-btn-sm" id="btnTkaiAiModelRunTest"
+                  style="background:rgba(102,126,234,.18);border-color:rgba(102,126,234,.42)">🧪 Test TikTok Chat
+                  stack</button>
+                <span id="tkaiAiModelTestStatus" style="font-size:10px;color:var(--text3)">Test: idle</span>
+              </div>
+              <div id="tkaiAiModelTestResult"
+                style="display:none;margin-top:8px;padding:8px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.03);font-size:10px;color:var(--text3)">
+              </div>
+            </div>
+
+            <div class="s-group" style="margin-top:16px">
+              <div class="s-row">
+                <div class="s-row-left">
                   <div class="s-row-label" style="font-weight:600">Upravljanje galerijama i pravilima</div>
                 </div>
               </div>
