@@ -9585,6 +9585,23 @@
 
               <div class="s-row">
                 <div class="s-row-left">
+                  <div class="s-row-label">Autosave chat podataka</div>
+                  <div class="s-row-desc">Automatski spremaj skenirane poruke (draft restore nakon reloada)</div>
+                </div>
+                <div class="toggle on" data-setting="tkaiAutosaveEnabled"></div>
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Autosave interval (sekunde)</div>
+                  <div class="s-row-desc">Koliko često spremiti autosave snapshot</div>
+                </div>
+                <input type="number" class="s-input" data-setting="tkaiAutosaveSeconds" min="10" max="300" value="30"
+                  style="width:70px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
                   <div class="s-row-label">Boja glavnih AI gumba</div>
                   <div class="s-row-desc">Primjenjuje se na "Generiraj" i pomoćne AI akcije</div>
                 </div>
@@ -9616,6 +9633,24 @@
                   <div class="s-row-desc">Pozadina izdvojenog AI recommendations prozora</div>
                 </div>
                 <input type="color" class="s-input" data-setting="tkaiRecPopBgColor" value="#1f2937"
+                  style="width:56px;height:32px;padding:3px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Boja teksta popouta</div>
+                  <div class="s-row-desc">Boja teksta u AI recommendations popout prozoru</div>
+                </div>
+                <input type="color" class="s-input" data-setting="tkaiRecPopTextColor" value="#e5e7eb"
+                  style="width:56px;height:32px;padding:3px">
+              </div>
+
+              <div class="s-row">
+                <div class="s-row-left">
+                  <div class="s-row-label">Boja okvira popouta</div>
+                  <div class="s-row-desc">Boja ruba AI recommendations popout prozora</div>
+                </div>
+                <input type="color" class="s-input" data-setting="tkaiRecPopBorderColor" value="#374151"
                   style="width:56px;height:32px;padding:3px">
               </div>
 
@@ -13970,6 +14005,50 @@
       }
 
       function buildRecommendationsFromLiveData() {
+        const resolveRecommendationLang = () => {
+          const raw = String(replyLangEl?.value || 'auto').toLowerCase();
+          const read = String(readLangEl?.value || 'hr').toLowerCase();
+          if (raw === 'en_auto') return 'en';
+          if (raw === 'read') return read !== 'auto' ? read : 'hr';
+          if (raw === 'auto') return read !== 'auto' ? read : 'hr';
+          return raw || 'hr';
+        };
+
+        const lang = resolveRecommendationLang();
+        const recText = (key, vars = {}) => {
+          const dict = {
+            hr: {
+              greetTop: 'Pozdravi najaktivnijeg korisnika: {top}.',
+              mentionGifts: 'Spomeni giftove i napravi kratki shoutout.',
+              answerQuestion: 'Odgovori na najjače pitanje iz chata.',
+              calmChat: 'Chat je miran: postavi publici direktno pitanje ili anketu.',
+              rising: 'Chat raste: iskoristi momentum i pojačaj CTA.',
+              falling: 'Chat pada: ubaci novu temu, giveaway ili mini izazov.',
+              keepGoing: 'Drži tempo i nastavi pratiti reakcije publike.',
+            },
+            en: {
+              greetTop: 'Greet the most active user: {top}.',
+              mentionGifts: 'Mention gifts and do a short shoutout.',
+              answerQuestion: 'Answer the strongest question from chat.',
+              calmChat: 'Chat is calm: ask the audience a direct question or poll.',
+              rising: 'Chat is growing: use the momentum and push CTA.',
+              falling: 'Chat is dropping: add a new topic, giveaway, or mini challenge.',
+              keepGoing: 'Keep the pace and continue tracking audience reactions.',
+            },
+            de: {
+              greetTop: 'Begruesse den aktivsten Nutzer: {top}.',
+              mentionGifts: 'Erwaehne Gifts und mache einen kurzen Shoutout.',
+              answerQuestion: 'Beantworte die staerkste Frage aus dem Chat.',
+              calmChat: 'Der Chat ist ruhig: stelle dem Publikum eine direkte Frage oder Umfrage.',
+              rising: 'Der Chat waechst: nutze den Schwung und verstaerke den CTA.',
+              falling: 'Der Chat faellt: bring ein neues Thema, Giveaway oder eine Mini-Challenge.',
+              keepGoing: 'Halte das Tempo und beobachte weiter die Reaktionen des Publikums.',
+            }
+          };
+          const pack = dict[lang] || dict.hr;
+          return String(pack[key] || dict.hr[key] || '').replace('{top}', String(vars.top || ''));
+        };
+
         const recs = [];
         const userCounts = new Map();
         let giftCount = 0;
@@ -13987,17 +14066,68 @@
         const trend = getLiveSessionTrend();
         const topUser = Array.from(userCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 
-        if (topUser) recs.push('Pozdravi najaktivnijeg korisnika: ' + topUser + '.');
-        if (giftCount > 0) recs.push('Spomeni giftove i napravi kratki shoutout.');
-        if (questionCount > 0) recs.push('Odgovori na najjače pitanje iz chata.');
-        if (trend.avg <= 1) recs.push('Chat je miran: postavi publici direktno pitanje ili anketu.');
-        if (trend.delta > 0) recs.push('Chat raste: iskoristi momentum i pojačaj CTA.');
-        if (trend.delta < 0) recs.push('Chat pada: ubaci novu temu, giveaway ili mini izazov.');
-        if (!recs.length) recs.push('Drži tempo i nastavi pratiti reakcije publike.');
+        if (topUser) recs.push(recText('greetTop', { top: topUser }));
+        if (giftCount > 0) recs.push(recText('mentionGifts'));
+        if (questionCount > 0) recs.push(recText('answerQuestion'));
+        if (trend.avg <= 1) recs.push(recText('calmChat'));
+        if (trend.delta > 0) recs.push(recText('rising'));
+        if (trend.delta < 0) recs.push(recText('falling'));
+        if (!recs.length) recs.push(recText('keepGoing'));
         return recs.slice(0, 6);
       }
 
       let lastRecommendationsSignature = '';
+      let recommendationsPopoutEl = null;
+      let recommendationsPopoutBodyEl = null;
+
+      function normalizeHexColor(value, fallback) {
+        const v = String(value || '').trim();
+        return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) ? v : fallback;
+      }
+
+      function syncRecommendationsPopout(recs) {
+        if (!recommendationsPopoutBodyEl) return;
+        recommendationsPopoutBodyEl.innerHTML = '';
+        (Array.isArray(recs) ? recs : []).forEach((text) => {
+          const li = document.createElement('li');
+          li.textContent = String(text || '');
+          recommendationsPopoutBodyEl.appendChild(li);
+        });
+      }
+
+      function closeRecommendationsPopout() {
+        if (recommendationsPopoutEl) recommendationsPopoutEl.remove();
+        recommendationsPopoutEl = null;
+        recommendationsPopoutBodyEl = null;
+      }
+
+      function openRecommendationsPopout() {
+        if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) return;
+        const settings = DB.getSettings();
+        const recBg = normalizeHexColor(settings.tkaiRecPopBgColor, '#1f2937');
+        const recText = normalizeHexColor(settings.tkaiRecPopTextColor, '#e5e7eb');
+        const recBorder = normalizeHexColor(settings.tkaiRecPopBorderColor, '#374151');
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText =
+          'position:fixed;z-index:100002;top:92px;right:16px;width:360px;max-height:58vh;overflow:auto;' +
+          `background:${recBg};color:${recText};border:1px solid ${recBorder};border-radius:10px;padding:10px;` +
+          'box-shadow:0 16px 40px rgba(0,0,0,.45);';
+        wrap.innerHTML =
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+          `<div style="font-size:11px;font-weight:700;color:${recText}">AI Recommendations</div>` +
+          '<button id="tkaiRecPopCloseInline" class="tkai-collapse-btn">✕</button>' +
+          '</div>' +
+          `<div style="font-size:10px;color:${recText};opacity:.75;margin-bottom:6px">Live sinkronizacija preporuka</div>` +
+          '<ul id="tkaiRecPopListInline" class="tkai-insights-list"></ul>';
+        document.body.appendChild(wrap);
+
+        recommendationsPopoutEl = wrap;
+        recommendationsPopoutBodyEl = wrap.querySelector('#tkaiRecPopListInline');
+        wrap.querySelector('#tkaiRecPopCloseInline')?.addEventListener('click', closeRecommendationsPopout);
+        const currentRecommendations = Array.from(document.querySelectorAll('#tkaiRecommendations li')).map((li) => li.textContent || '');
+        syncRecommendationsPopout(currentRecommendations);
+      }
 
       function renderRecommendationsCard() {
         const recommendationsEl = document.getElementById('tkaiRecommendations');
@@ -14010,6 +14140,7 @@
           li.textContent = text;
           recommendationsEl.appendChild(li);
         });
+        syncRecommendationsPopout(recs);
 
         const signature = recs.join(' | ');
         if (collectedMessages.length && signature && signature !== lastRecommendationsSignature) {
@@ -14018,8 +14149,88 @@
         }
       }
 
+      function renderPieBreakdownCard() {
+        const pieChartEl = document.getElementById('tkaiPieChart');
+        const pieLegendEl = document.getElementById('tkaiPieLegend');
+        const pieCenterEl = document.getElementById('tkaiPieCenter');
+        const pieSummaryEl = document.getElementById('tkaiPieSummary');
+        if (!pieChartEl || !pieLegendEl || !pieCenterEl || !pieSummaryEl) return;
+
+        const counts = {
+          chat: 0,
+          gift: 0,
+          caption: 0,
+          song: 0,
+          join: 0,
+        };
+
+        collectedMessages.forEach((m) => {
+          const type = String(m?.type || 'chat').toLowerCase();
+          if (type === 'gift' || type === 'subscriber') counts.gift += 1;
+          else if (type === 'caption') counts.caption += 1;
+          else if (type === 'song') counts.song += 1;
+          else if (type === 'join') counts.join += 1;
+          else counts.chat += 1;
+        });
+
+        const total = Math.max(0, counts.chat + counts.gift + counts.caption + counts.song + counts.join);
+        const parts = [
+          { key: 'chat', label: 'Chat', color: '#60a5fa', value: counts.chat },
+          { key: 'gift', label: 'Gifts', color: '#f97316', value: counts.gift },
+          { key: 'caption', label: 'CC', color: '#a78bfa', value: counts.caption },
+          { key: 'song', label: 'Songs', color: '#22c55e', value: counts.song },
+          { key: 'join', label: 'Join', color: '#6b7280', value: counts.join },
+        ].map((p) => ({
+          ...p,
+          pct: total > 0 ? Math.round((p.value / total) * 100) : 0,
+        }));
+
+        if (total <= 0) {
+          pieChartEl.style.background = 'conic-gradient(#6b7280 0% 100%)';
+          pieCenterEl.textContent = '0 total';
+          pieLegendEl.innerHTML = '<div class="tkai-pie-legend-row"><span>Nema podataka</span><span>0 (0%)</span></div>';
+          pieSummaryEl.innerHTML = '<li>Pokreni skeniranje da vidiš pie raspodjelu događaja.</li>';
+          return;
+        }
+
+        let start = 0;
+        const slices = parts
+          .filter((p) => p.value > 0)
+          .map((p) => {
+            const end = Math.min(100, start + Number(p.pct || 0));
+            const seg = `${p.color} ${start}% ${end}%`;
+            start = end;
+            return seg;
+          });
+
+        pieChartEl.style.background = slices.length
+          ? `conic-gradient(${slices.join(', ')})`
+          : 'conic-gradient(#6b7280 0% 100%)';
+        pieCenterEl.textContent = `${total} total`;
+
+        pieLegendEl.innerHTML = '';
+        parts.forEach((p) => {
+          const row = document.createElement('div');
+          row.className = 'tkai-pie-legend-row';
+          row.innerHTML =
+            `<span style="display:flex;align-items:center"><span class="tkai-pie-dot" style="background:${p.color}"></span>${p.label}</span>` +
+            `<span>${p.value} (${p.pct}%)</span>`;
+          pieLegendEl.appendChild(row);
+        });
+
+        pieSummaryEl.innerHTML = '';
+        const top = parts.slice().sort((a, b) => b.value - a.value)[0];
+        const li1 = document.createElement('li');
+        li1.textContent = top ? `Najveći udio: ${top.label} (${top.pct}%)` : 'Nema podataka za pie.';
+        pieSummaryEl.appendChild(li1);
+        const li2 = document.createElement('li');
+        li2.textContent = `CC: ${counts.caption} • Songs: ${counts.song} • Gifts: ${counts.gift} • Join: ${counts.join}`;
+        pieSummaryEl.appendChild(li2);
+      }
+
       function refreshInsightWidgets() {
         renderLiveSessionTrend();
+        renderPieBreakdownCard();
         renderRecommendationsCard();
       }
 
@@ -14322,15 +14533,30 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           ));
           const fallbackText = (el.textContent || '').replace(/\s+/g, ' ').trim();
           const derivedUser = (() => {
+            const isBadUser = (v) => !v || /^(chat\s*user|unknown|someone|viewer|guest|user)$/i.test(String(v).trim());
+
             const direct = userEl ? userEl.textContent.trim() : '';
-            if (direct) return direct;
+            if (!isBadUser(direct)) return direct;
+
             const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username') || '';
-            if (attrName) return attrName.trim();
-            const match = fallbackText.match(/^\s*([^:\-\n]{2,40}?)(?:\s*[:\-]|\s+sent\b|\s+joined\b)/i);
-            if (match && match[1]) return match[1].trim();
+            if (!isBadUser(attrName)) return attrName.trim();
+
+            const ariaLabel = el.getAttribute('aria-label') || '';
+            if (ariaLabel) {
+              const ariaMatch = ariaLabel.match(/^\s*@?([^:\-\n]{2,40}?)\s*[:\-]/i);
+              if (ariaMatch && !isBadUser(ariaMatch[1])) return ariaMatch[1].trim();
+            }
+
+            const colonHead = fallbackText.split(':')[0] || '';
+            if (colonHead && colonHead.length >= 2 && colonHead.length <= 40 && !isBadUser(colonHead)) {
+              return colonHead.trim();
+            }
+
+            const match = fallbackText.match(/^\s*@?([^:\-\n]{2,40}?)(?:\s*[:\-]|\s+sent\b|\s+joined\b|\s+ulazi\b|\s+u[šs]ao\b|\s+u[šs]la\b)/i);
+            if (match && !isBadUser(match[1])) return match[1].trim();
             return '';
           })();
-          const user = (derivedUser || 'Chat user').slice(0, 60);
+          const user = (derivedUser || '').slice(0, 60);
           const textBase = textEl ? textEl.textContent.trim() : '';
           const assembledText = textNodes
             .map(n => (n.textContent || '').replace(/\s+/g, ' ').trim())
@@ -14366,7 +14592,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isGift = /gift|rose|coins?|diamond|galaxy|lion|sent\s+|poklon|dar/i.test(low) || giftEls.length > 0;
             const isSubscriber = /sub|subscriber|subscribe|pretplat|member|joined\s+the\s+live|joined/i.test(low);
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-            results.push({ user, text, mid, type: isGift ? 'gift' : (isSubscriber ? 'subscriber' : 'chat') });
+            results.push({ user: user || null, text, mid, type: isGift ? 'gift' : (isSubscriber ? 'subscriber' : 'chat') });
           }
         });
         return JSON.stringify(results);
@@ -14396,10 +14622,18 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           }
           const existing = new Set(collectedMessages.map(message => message.id));
           let added = 0;
-          messages.forEach((message) => {
-            const id = `${message.user}:${message.text}`;
+          messages.forEach((message, idx) => {
+            const guessedUser = (() => {
+              const raw = String(message.user || '').trim();
+              if (raw && !/^(unknown|chat\s*user)$/i.test(raw)) return raw;
+              const txt = String(message.text || '');
+              const m = txt.match(/^\s*@?([^:\-\n]{2,40}?)(?:\s*[:\-]|\s+sent\b|\s+joined\b|\s+ulazi\b|\s+u[šs]ao\b|\s+u[šs]la\b)/i);
+              return m && m[1] ? m[1].trim() : '';
+            })();
+            const safeUser = guessedUser || 'Chat user';
+            const id = `${message.mid || idx}:${safeUser}:${message.text}`;
             if (!existing.has(id)) {
-              collectedMessages.push({ ...message, id, ts: Date.now() });
+              collectedMessages.push({ ...message, user: safeUser, id, ts: Date.now() });
               existing.add(id);
               added += 1;
             }
@@ -14831,11 +15065,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             card.classList.toggle('tkai-folded');
           });
           if (card.id === 'tkaiRecommendationsCard') {
-            title.addEventListener('click', () => {
-              if (insightsLocked) return;
-              const firstRec = document.getElementById('tkaiRecommendations')?.querySelector('li')?.textContent || 'Preporuke ažurirane';
-              showToast('💡 ' + firstRec);
-            });
+            if (!title.querySelector('.tkai-rec-pop-btn')) {
+              const popBtn = document.createElement('button');
+              popBtn.type = 'button';
+              popBtn.className = 'tkai-collapse-btn popout tkai-rec-pop-btn';
+              popBtn.textContent = '⤢';
+              popBtn.title = 'Prikaži recommendations u zasebnom prozoru';
+              popBtn.style.marginLeft = '8px';
+              popBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (recommendationsPopoutEl) {
+                  closeRecommendationsPopout();
+                } else {
+                  openRecommendationsPopout();
+                }
+              });
+              title.appendChild(popBtn);
+            }
           }
         });
         applyLockState();
@@ -14843,6 +15090,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       document.getElementById('closeTiktokAIPanel')?.addEventListener('click', async () => {
         stopScanning();
         closeLiveDashboardPopout();
+        closeRecommendationsPopout();
       });
       document.addEventListener('keydown', onTikTokHoldLShortcut);
       updateHoldLButton();

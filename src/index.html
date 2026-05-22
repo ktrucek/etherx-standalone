@@ -9449,7 +9449,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.236</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.237</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10110,6 +10110,22 @@
                                     <input type="color" class="s-input" data-setting="tkaiRecPopBgColor" value="#1f2937"
                                         style="width:56px;height:32px;padding:3px">
                                 </div>
+                                <div class="s-row">
+                                    <div class="s-row-left">
+                                        <div class="s-row-label">Boja teksta popout</div>
+                                        <div class="s-row-desc">Boja teksta u skočnom prozoru AI preporuka</div>
+                                    </div>
+                                    <input type="color" class="s-input" data-setting="tkaiRecPopTextColor"
+                                        value="#e5e7eb" style="width:56px;height:32px;padding:3px">
+                                </div>
+                                <div class="s-row">
+                                    <div class="s-row-left">
+                                        <div class="s-row-label">Boja okvira popout</div>
+                                        <div class="s-row-desc">Boja ruba skočnog prozora AI preporuka</div>
+                                    </div>
+                                    <input type="color" class="s-input" data-setting="tkaiRecPopBorderColor"
+                                        value="#374151" style="width:56px;height:32px;padding:3px">
+                                </div>
 
                                 <div class="s-row">
                                     <div class="s-row-left">
@@ -10306,6 +10322,22 @@
                                         </div>
                                         <input type="number" class="s-input" data-setting="tkaiJoinMinLevel" min="0"
                                             max="99" value="0" style="width:70px">
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Autosave chat podataka</div>
+                                            <div class="s-row-desc">Automatski spremaj skenirane poruke (restore drafta)
+                                            </div>
+                                        </div>
+                                        <div class="toggle on" data-setting="tkaiAutosaveEnabled"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Autosave interval (sekunde)</div>
+                                            <div class="s-row-desc">Koliko često spremiti autosave snapshot</div>
+                                        </div>
+                                        <input type="number" class="s-input" data-setting="tkaiAutosaveSeconds" min="10"
+                                            max="300" value="30" style="width:70px">
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -10748,7 +10780,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.236</span></div>
+                                    v<span id="helpVersionNum2">2.4.237</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -15177,6 +15209,9 @@
             let viewerSamplePoints = [];
             let lastViewerSampleAt = 0;
             let lastViewerSampleValue = 0;
+            const TKAI_AUTOSAVE_KEY = 'ex_tkai_live_autosave';
+            let tkaiAutosaveInterval = null;
+            let tkaiAutosaveDebounce = null;
             let spikeFilter = 'all';
             let lastRecommendationsHash = '';
             let lastCaptionSpeakKey = '';
@@ -15773,6 +15808,7 @@
                     toggleBtn.className = 'tkai-scan-btn start';
                 }
                 setStatus('');
+                persistTkaiAutosave('scan-stop');
                 showToast('⏹ Skeniranje zaustavljeno');
             }
             async function sendLKeyEvent(type) {
@@ -16120,6 +16156,17 @@
                     spikes.push({ type: 'gifts', delta, ts: now });
                 }
 
+                if (!spikes.length && engagementWithPct.length >= 2) {
+                    const last = engagementWithPct[engagementWithPct.length - 1];
+                    const prev = engagementWithPct[engagementWithPct.length - 2];
+                    const delta = Number(last?.count || 0) - Number(prev?.count || 0);
+                    const chatThreshold =
+                        spikeSensitivity === 'high' ? 2 : spikeSensitivity === 'low' ? 6 : 4;
+                    if (Math.abs(delta) >= chatThreshold && Number(last?.count || 0) >= chatThreshold) {
+                        spikes.push({ type: 'chat', delta, ts: now, reason: 'engagement' });
+                    }
+                }
+
                 const msgTypeCounts = {
                     chat: messages.filter((m) => m.type === 'chat').length,
                     gift: messages.filter((m) => m.type === 'gift' || m.type === 'subscriber').length,
@@ -16173,8 +16220,15 @@
                 });
 
                 const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
+                const isJoinLikeMessage = (m) => {
+                    if (!m) return false;
+                    if (m.type === 'join') return true;
+                    const text = String(m.text || '').toLowerCase();
+                    if (!text) return false;
+                    return /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text);
+                };
                 const joinSource = collectedMessages
-                    .filter((m) => m.type === 'join')
+                    .filter((m) => isJoinLikeMessage(m))
                     .map((m) => ({
                         user: String(m.user || '').slice(0, 40) || 'unknown',
                         level: extractJoinLevel(m),
@@ -16274,29 +16328,76 @@
             // ────────────────────────────────────────────────────────────────────────
 
             function buildRecommendations(insights) {
+                const resolveRecommendationLang = () => {
+                    const replyLangRaw = String(replyLangEl?.value || 'en_auto').toLowerCase();
+                    const readLang = String(readLangEl?.value || 'auto').toLowerCase();
+                    if (replyLangRaw === 'en_auto') return 'en';
+                    if (replyLangRaw === 'read') return readLang !== 'auto' ? readLang : 'en';
+                    if (replyLangRaw === 'auto') return readLang !== 'auto' ? readLang : 'en';
+                    return replyLangRaw || 'en';
+                };
+
+                const lang = resolveRecommendationLang();
+                const recText = (key, vars = {}) => {
+                    const dict = {
+                        hr: {
+                            thankTop: 'Zahvali se top supporteru: {top}.',
+                            greetViewers: 'Pozdravi nove gledatelje zbog skoka viewera.',
+                            praiseGifts: 'Pohvali giftove i potakni nove poklone.',
+                            answerQuestion: 'Odgovori na top pitanje iz chata.',
+                            lowMsgQ1: 'Malo poruka (1/min): postavi publici pitanje "Odakle ste i koja vam je omiljena pjesma večeras?".',
+                            lowMsgQ2: 'Malo poruka (1/min): pitaj publiku da glasa emoji-em za sljedeću temu ili pjesmu.',
+                            boostGifts: 'Potakni giftove: najavi kratki shoutout za sljedeća 3 gift supportera.',
+                            keepTempo: 'Nastavi s dobrim tempom i ukljuci publiku.',
+                        },
+                        en: {
+                            thankTop: 'Thank your top supporter: {top}.',
+                            greetViewers: 'Welcome new viewers after the viewer spike.',
+                            praiseGifts: 'Highlight gifts and encourage more support.',
+                            answerQuestion: 'Answer the top question from chat.',
+                            lowMsgQ1: 'Low chat (1/min): ask the audience where they are from and which song they like tonight.',
+                            lowMsgQ2: 'Low chat (1/min): ask viewers to vote with emojis for the next topic or song.',
+                            boostGifts: 'Boost gifts: announce a quick shoutout for the next 3 gift supporters.',
+                            keepTempo: 'Keep the pace and keep the audience involved.',
+                        },
+                        de: {
+                            thankTop: 'Bedanke dich beim Top-Supporter: {top}.',
+                            greetViewers: 'Begruesse neue Zuschauer nach dem Viewer-Anstieg.',
+                            praiseGifts: 'Lobe die Gifts und motiviere zu weiteren Geschenken.',
+                            answerQuestion: 'Beantworte die wichtigste Frage aus dem Chat.',
+                            lowMsgQ1: 'Wenig Chat (1/min): frage das Publikum, woher es kommt und welches Lied es heute mag.',
+                            lowMsgQ2: 'Wenig Chat (1/min): lass das Publikum per Emoji fuer das naechste Thema oder Lied abstimmen.',
+                            boostGifts: 'Mehr Gifts: kuendige einen kurzen Shoutout fuer die naechsten 3 Gift-Supporter an.',
+                            keepTempo: 'Halte das Tempo und binde das Publikum weiter ein.',
+                        },
+                    };
+                    const pack = dict[lang] || dict.hr;
+                    return String(pack[key] || dict.hr[key] || '').replace('{top}', String(vars.top || ''));
+                };
+
                 const recs = [];
                 const avgPerMin = Number(insights.engagementAvgPerMin || 0);
                 if (topSupporters?.length) {
                     const top = topSupporters[0]?.user;
-                    if (top) recs.push('Zahvali se top supporteru: ' + top + '.');
+                    if (top) recs.push(recText('thankTop', { top }));
                 }
                 if (insights.spikes.some((s) => s.type === 'viewers' && s.delta > 0)) {
-                    recs.push('Pozdravi nove gledatelje zbog skoka viewera.');
+                    recs.push(recText('greetViewers'));
                 }
                 if (insights.spikes.some((s) => s.type === 'gifts')) {
-                    recs.push('Pohvali giftove i potakni nove poklone.');
+                    recs.push(recText('praiseGifts'));
                 }
                 if (insights.questions.length) {
-                    recs.push('Odgovori na top pitanje iz chata.');
+                    recs.push(recText('answerQuestion'));
                 }
                 if (avgPerMin <= 1) {
-                    recs.push('Malo poruka (1/min): postavi publici pitanje "Odakle ste i koja vam je omiljena pjesma večeras?".');
-                    recs.push('Malo poruka (1/min): pitaj publiku da glasa emoji-em za sljedeću temu ili pjesmu.');
+                    recs.push(recText('lowMsgQ1'));
+                    recs.push(recText('lowMsgQ2'));
                 }
                 if (!insights.spikes.some((s) => s.type === 'gifts')) {
-                    recs.push('Potakni giftove: najavi kratki shoutout za sljedeća 3 gift supportera.');
+                    recs.push(recText('boostGifts'));
                 }
-                if (!recs.length) recs.push('Nastavi s dobrim tempom i ukljuci publiku.');
+                if (!recs.length) recs.push(recText('keepTempo'));
                 return recs.slice(0, 6);
             }
 
@@ -16346,7 +16447,11 @@
 
                 const sentimentCounts = insights.sentimentCounts || {};
                 const fallbackBalance = Number(sentimentCounts.positivePct || 0) - Number(sentimentCounts.negativePct || 0);
-                const fallbackScore = Math.max(-4, Math.min(4, fallbackBalance / 25));
+                const totalHits = Number(sentimentCounts.positive || 0) + Number(sentimentCounts.negative || 0);
+                const activitySeed = Math.min(1.4, Math.max(0.25, Number(insights.engagementAvgPerMin || 0) / 6));
+                const fallbackScore = totalHits === 0
+                    ? activitySeed
+                    : Math.max(-4, Math.min(4, fallbackBalance / 25));
                 const fallbackTrend = Array.from({ length: 12 }, (_, i) => ({ minute: i, score: fallbackScore }));
                 const hasTrendSignal = rawScores.some((v) => Math.abs(v) > 0.001);
                 const points = hasTrendSignal ? trend : fallbackTrend;
@@ -16481,9 +16586,15 @@
                     filteredSpikes.slice(-3).forEach((s) => {
                         const li = document.createElement('li');
                         const time = new Date(s.ts).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
-                        li.textContent = s.type === 'viewers'
-                            ? `Viewer spike ${s.delta > 0 ? '+' : ''}${s.delta} @ ${time}`
-                            : `Gift spike +${s.delta} @ ${time}`;
+                        if (s.type === 'viewers') {
+                            li.textContent = `Viewer spike ${s.delta > 0 ? '+' : ''}${s.delta} @ ${time}`;
+                        } else if (s.type === 'gifts') {
+                            li.textContent = `Gift spike +${s.delta} @ ${time}`;
+                        } else if (s.type === 'chat') {
+                            li.textContent = `Chat spike ${s.delta > 0 ? '+' : ''}${s.delta} @ ${time}`;
+                        } else {
+                            li.textContent = `Spike ${s.delta > 0 ? '+' : ''}${s.delta} @ ${time}`;
+                        }
                         spikeListEl.appendChild(li);
                     });
                 }
@@ -16648,14 +16759,16 @@
             function openRecommendationsPopout() {
                 if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) return;
                 const recBg = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopBgColor, '#1f2937');
+                const recText = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopTextColor, '#e5e7eb');
+                const recBorder = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopBorderColor, '#374151');
                 const wrap = document.createElement('div');
                 wrap.style.cssText =
                     'position:fixed;z-index:99998;top:86px;right:16px;width:360px;max-height:55vh;overflow:auto;' +
-                    `background:${recBg};border:1px solid var(--border);border-radius:10px;padding:10px;` +
+                    `background:${recBg};color:${recText};border:1px solid ${recBorder};border-radius:10px;padding:10px;` +
                     'box-shadow:0 16px 40px rgba(0,0,0,.45);';
                 wrap.innerHTML =
                     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
-                    '<div style="font-size:11px;font-weight:700;color:var(--text2)">AI Recommendations</div>' +
+                    `<div style="font-size:11px;font-weight:700;color:${recText}">AI Recommendations</div>` +
                     '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
                     '</div>' +
                     '<ul id="tkaiRecPopList" class="tkai-insights-list"></ul>';
@@ -17766,8 +17879,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const hasSent = /\bsent\b|\bgave\b/i.test(low);
             const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
             const isGift = hasSent || hasGiftWord || giftEls.length > 0;
-            const isSubscriber = /sub|subscriber|subscribe|pretplat|member|joined\s+the\s+live|joined/i.test(low);
-            const isJoin = /\b(joined|joined\s+the\s+live|ulazi|u[sš]ao|u[sš]la)\b/i.test(low);
+            const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
+            const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
             let levelHint = null;
             if (isJoin) {
               const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
@@ -17784,7 +17897,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               user: user || 'unknown',
               text,
               mid,
-                            type: messageType,
+                            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : 'chat')),
               level: levelHint
             });
           }
@@ -17929,6 +18042,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     // Auto-suggest: trigger generateReplies after N new messages
                     if (added > 0 && !isGenerating) {
                         newMsgsSinceAutoGen += added;
+                        scheduleTkaiAutosave('new-data');
                         const autoAfter = Number(DB.getSettings().tkaiAutoSuggestAfter) || 0;
                         if (autoAfter > 0 && newMsgsSinceAutoGen >= autoAfter) {
                             newMsgsSinceAutoGen = 0;
@@ -18080,6 +18194,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 collectedMessages = [];
                 collectedQuestions = [];
                 selectedMsgIds.clear();
+                try { localStorage.removeItem(TKAI_AUTOSAVE_KEY); } catch (_) { }
                 if (repliesEl) {
                     repliesEl.innerHTML = '<div class="tkai-empty">Razgovor očišćen.<br>Pokreni skeniranje za nove poruke.</div>';
                 }
@@ -18173,7 +18288,87 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 } catch (e) { }
             }
 
+            function persistTkaiAutosave(reason = 'interval') {
+                try {
+                    const autosaveEnabledRaw = DB.getSettings().tkaiAutosaveEnabled;
+                    const autosaveEnabled = autosaveEnabledRaw !== false && autosaveEnabledRaw !== 'false';
+                    if (!autosaveEnabled) return;
+                    if (!Array.isArray(collectedMessages) || collectedMessages.length === 0) return;
+                    const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
+                    const payload = {
+                        version: 1,
+                        reason,
+                        updatedAt: new Date().toISOString(),
+                        sessionStartedAt: sessionStartedAt || Date.now(),
+                        liveViewerCount,
+                        peakViewerCount,
+                        topSupporters: Array.isArray(topSupporters) ? topSupporters.slice(0, 20) : [],
+                        viewerSamples: Array.isArray(viewerSamples) ? viewerSamples.slice(-200) : [],
+                        viewerSamplePoints: Array.isArray(viewerSamplePoints) ? viewerSamplePoints.slice(-200) : [],
+                        messages: collectedMessages.slice(-maxKeep),
+                    };
+                    localStorage.setItem(TKAI_AUTOSAVE_KEY, JSON.stringify(payload));
+                } catch (e) {
+                    console.warn('[TikTokAI] autosave failed', e);
+                }
+            }
+
+            function scheduleTkaiAutosave(reason = 'new-data') {
+                if (tkaiAutosaveDebounce) clearTimeout(tkaiAutosaveDebounce);
+                tkaiAutosaveDebounce = setTimeout(() => {
+                    tkaiAutosaveDebounce = null;
+                    persistTkaiAutosave(reason);
+                }, 800);
+            }
+
+            function restoreTkaiAutosaveIfAny() {
+                try {
+                    if (collectedMessages.length > 0) return;
+                    const raw = localStorage.getItem(TKAI_AUTOSAVE_KEY);
+                    if (!raw) return;
+                    const saved = JSON.parse(raw);
+                    const msgs = Array.isArray(saved?.messages)
+                        ? saved.messages.filter((m) => m && String(m.text || '').trim())
+                        : [];
+                    if (!msgs.length) return;
+
+                    const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
+                    collectedMessages = msgs.slice(-maxKeep);
+                    selectedMsgIds.clear();
+                    sessionStartedAt = Number(saved?.sessionStartedAt || 0) || Date.now();
+                    liveViewerCount = Number(saved?.liveViewerCount || 0) || 0;
+                    peakViewerCount = Number(saved?.peakViewerCount || 0) || 0;
+                    topSupporters = Array.isArray(saved?.topSupporters) ? saved.topSupporters.slice(0, 20) : [];
+                    viewerSamples = Array.isArray(saved?.viewerSamples) ? saved.viewerSamples.slice(-200) : [];
+                    viewerSamplePoints = Array.isArray(saved?.viewerSamplePoints) ? saved.viewerSamplePoints.slice(-200) : [];
+
+                    renderMessages();
+                    renderGiftGallery();
+                    updateSessionStatsUI();
+                    if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
+                    showToast('💾 Autosave učitan (' + collectedMessages.length + ' poruka)');
+                } catch (e) {
+                    console.warn('[TikTokAI] autosave restore failed', e);
+                }
+            }
+
+            function initTkaiAutosave() {
+                if (tkaiAutosaveInterval) clearInterval(tkaiAutosaveInterval);
+                const autosaveEnabledRaw = DB.getSettings().tkaiAutosaveEnabled;
+                const autosaveEnabled = autosaveEnabledRaw !== false && autosaveEnabledRaw !== 'false';
+                if (!autosaveEnabled) {
+                    tkaiAutosaveInterval = null;
+                    return;
+                }
+                const seconds = Math.max(10, Number(DB.getSettings().tkaiAutosaveSeconds) || 30);
+                tkaiAutosaveInterval = setInterval(() => {
+                    persistTkaiAutosave('interval');
+                }, seconds * 1000);
+            }
+
             loadCfg();
+            restoreTkaiAutosaveIfAny();
+            initTkaiAutosave();
             [toneEl, readLangEl, translateLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
             contextEl?.addEventListener('input', saveCfg);
             customPromptEl?.addEventListener('input', saveCfg);
@@ -18359,12 +18554,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             document.getElementById('settingsPanel')?.addEventListener('click', e => {
                 const t = e.target.closest('.toggle[data-setting]');
                 if (t && t.dataset.setting && t.dataset.setting.startsWith('tkaiShow')) setTimeout(applyTkaiFeatureToggles, 30);
+                if (t && t.dataset.setting === 'tkaiAutosaveEnabled') setTimeout(initTkaiAutosave, 10);
             });
             document.getElementById('settingsPanel')?.addEventListener('input', e => {
                 const t = e.target.closest('[data-setting]');
                 if (!t || !t.dataset.setting) return;
                 if (t.dataset.setting.startsWith('tkaiBtnColor') || t.dataset.setting === 'tkaiUiScale' || t.dataset.setting === 'tkaiFontScale') {
                     setTimeout(applyTkaiButtonTheme, 10);
+                }
+                if (t.dataset.setting === 'tkaiAutosaveSeconds') {
+                    setTimeout(initTkaiAutosave, 10);
                 }
             });
             applyTkaiFeatureToggles();

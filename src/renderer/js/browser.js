@@ -7220,6 +7220,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let viewerSamplePoints = [];
   let lastViewerSampleAt = 0;
   let lastViewerSampleValue = 0;
+  const TKAI_AUTOSAVE_KEY = "ex_tkai_live_autosave";
+  let tkaiAutosaveInterval = null;
+  let tkaiAutosaveDebounce = null;
   let lastScrapeMeta = null;
   let lastCaptionSpeakKey = "";
   let lastCaptionSpeakAt = 0;
@@ -7361,6 +7364,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       toggleBtn.className = "tkai-scan-btn start";
     }
     setStatus("");
+    persistTkaiAutosave("scan-stop");
     archiveSession("scan-stop");
     updateSessionStatsUI();
   }
@@ -7815,6 +7819,83 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
   function saveTkaiSessions(arr) {
     localStorage.setItem("ex_tkai_sessions", JSON.stringify(arr.slice(0, 120)));
+  }
+
+  function persistTkaiAutosave(reason = "interval") {
+    try {
+      if (!settingEnabled("tkaiAutosaveEnabled", true)) return;
+      if (!Array.isArray(collectedMessages) || collectedMessages.length === 0) return;
+      const maxKeep = parseInt(getTkaiSetting("tkaiMaxMessagesKeep", "80"), 10) || 80;
+      const payload = {
+        version: 1,
+        reason,
+        updatedAt: new Date().toISOString(),
+        sessionStartedAt: sessionStartedAt || Date.now(),
+        liveViewerCount,
+        peakViewerCount,
+        topSupporters: Array.isArray(topSupporters) ? topSupporters.slice(0, 20) : [],
+        viewerSamples: Array.isArray(viewerSamples) ? viewerSamples.slice(-200) : [],
+        viewerSamplePoints: Array.isArray(viewerSamplePoints) ? viewerSamplePoints.slice(-200) : [],
+        messages: collectedMessages.slice(-maxKeep),
+      };
+      localStorage.setItem(TKAI_AUTOSAVE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn("[TikTokAI] autosave failed", e);
+    }
+  }
+
+  function scheduleTkaiAutosave(reason = "new-data") {
+    if (tkaiAutosaveDebounce) clearTimeout(tkaiAutosaveDebounce);
+    tkaiAutosaveDebounce = setTimeout(() => {
+      tkaiAutosaveDebounce = null;
+      persistTkaiAutosave(reason);
+    }, 800);
+  }
+
+  function restoreTkaiAutosaveIfAny() {
+    try {
+      if (collectedMessages.length > 0) return;
+      const raw = localStorage.getItem(TKAI_AUTOSAVE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      const msgs = Array.isArray(saved?.messages)
+        ? saved.messages.filter((m) => m && String(m.text || "").trim())
+        : [];
+      if (!msgs.length) return;
+
+      const maxKeep = parseInt(getTkaiSetting("tkaiMaxMessagesKeep", "80"), 10) || 80;
+      collectedMessages = msgs.slice(-maxKeep);
+      selectedMsgIds.clear();
+      sessionStartedAt = Number(saved?.sessionStartedAt || 0) || Date.now();
+      liveViewerCount = Number(saved?.liveViewerCount || 0) || 0;
+      peakViewerCount = Number(saved?.peakViewerCount || 0) || 0;
+      topSupporters = Array.isArray(saved?.topSupporters) ? saved.topSupporters.slice(0, 20) : [];
+      viewerSamples = Array.isArray(saved?.viewerSamples) ? saved.viewerSamples.slice(-200) : [];
+      viewerSamplePoints = Array.isArray(saved?.viewerSamplePoints)
+        ? saved.viewerSamplePoints.slice(-200)
+        : [];
+
+      renderMessages();
+      updateGiftGallery();
+      updateSessionStatsUI();
+      updateAutoSuggestIndicator();
+      if (msgCountEl) msgCountEl.textContent = collectedMessages.length + " poruka";
+      showToast("💾 Autosave učitan (" + collectedMessages.length + " poruka)");
+    } catch (e) {
+      console.warn("[TikTokAI] autosave restore failed", e);
+    }
+  }
+
+  function initTkaiAutosave() {
+    if (tkaiAutosaveInterval) clearInterval(tkaiAutosaveInterval);
+    if (!settingEnabled("tkaiAutosaveEnabled", true)) {
+      tkaiAutosaveInterval = null;
+      return;
+    }
+    const seconds = Math.max(10, parseInt(getTkaiSetting("tkaiAutosaveSeconds", "30"), 10) || 30);
+    tkaiAutosaveInterval = setInterval(() => {
+      persistTkaiAutosave("interval");
+    }, seconds * 1000);
   }
 
   function getTkaiSessions() {
@@ -8313,6 +8394,17 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       spikes.push({ type: "gifts", delta, ts: now });
     }
 
+    if (!spikes.length && engagementWithPct.length >= 2) {
+      const last = engagementWithPct[engagementWithPct.length - 1];
+      const prev = engagementWithPct[engagementWithPct.length - 2];
+      const delta = Number(last?.count || 0) - Number(prev?.count || 0);
+      const chatThreshold =
+        spikeSensitivity === "high" ? 2 : spikeSensitivity === "low" ? 6 : 4;
+      if (Math.abs(delta) >= chatThreshold && Number(last?.count || 0) >= chatThreshold) {
+        spikes.push({ type: "chat", delta, ts: now, reason: "engagement" });
+      }
+    }
+
     const msgTypeCounts = {
       chat: messages.filter((m) => m.type === "chat").length,
       gift: messages.filter((m) => m.type === "gift" || m.type === "subscriber").length,
@@ -8370,12 +8462,19 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       uniqueSongs.push(s);
     });
 
-    const joinMinLevel = Math.max(
-      0,
-      Number(getTkaiSetting("tkaiJoinMinLevel", 0)),
-    );
+    const isJoinLikeMessage = (m) => {
+      if (!m) return false;
+      if (m.type === "join") return true;
+      const text = String(m.text || "").toLowerCase();
+      if (!text) return false;
+      return /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(
+        text,
+      );
+    };
+
+    const joinMinLevel = Math.max(0, Number(getTkaiSetting("tkaiJoinMinLevel", 0)));
     const joinLevels = messages
-      .filter((m) => m.type === "join")
+      .filter((m) => isJoinLikeMessage(m))
       .map((m) => ({
         user: String(resolveTkaiUserDisplay(m.user || "") || "unknown").slice(0, 40),
         level: extractJoinLevel(m),
@@ -8438,29 +8537,81 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   }
 
   function buildRecommendations(insights) {
+    const resolveRecommendationLang = () => {
+      const raw = String(getTkaiSetting("tkaiReplyLang", "hr") || "hr").toLowerCase();
+      if (raw === "read") {
+        const read = String(getTkaiSetting("tkaiReadLang", "hr") || "hr").toLowerCase();
+        return read && read !== "auto" ? read : "hr";
+      }
+      if (raw === "en_auto") return "en";
+      if (raw === "auto") {
+        const read = String(getTkaiSetting("tkaiReadLang", "hr") || "hr").toLowerCase();
+        return read && read !== "auto" ? read : "hr";
+      }
+      return raw || "hr";
+    };
+
+    const lang = resolveRecommendationLang();
+    const recText = (key, vars = {}) => {
+      const dict = {
+        hr: {
+          thankTop: "Zahvali se top supporteru: {top}.",
+          greetViewers: "Pozdravi nove gledatelje zbog skoka viewera.",
+          praiseGifts: "Pohvali giftove i potakni nove poklone.",
+          answerQuestion: "Odgovori na top pitanje iz chata.",
+          lowMsgQ1: "Malo poruka (1/min): postavi publici pitanje 'Odakle ste i koja vam je omiljena pjesma večeras?'.",
+          lowMsgQ2: "Malo poruka (1/min): pitaj publiku da glasa emoji-em za sljedeću temu ili pjesmu.",
+          boostGifts: "Potakni giftove: najavi kratki shoutout za sljedeća 3 gift supportera.",
+          keepTempo: "Nastavi s dobrim tempom i ukljuci publiku.",
+        },
+        en: {
+          thankTop: "Thank your top supporter: {top}.",
+          greetViewers: "Welcome new viewers after the viewer spike.",
+          praiseGifts: "Highlight gifts and encourage more support.",
+          answerQuestion: "Answer the top question from chat.",
+          lowMsgQ1: "Low chat (1/min): ask the audience where they are from and which song they like tonight.",
+          lowMsgQ2: "Low chat (1/min): ask viewers to vote with emojis for the next topic or song.",
+          boostGifts: "Boost gifts: announce a quick shoutout for the next 3 gift supporters.",
+          keepTempo: "Keep the pace and keep the audience involved.",
+        },
+        de: {
+          thankTop: "Bedanke dich beim Top-Supporter: {top}.",
+          greetViewers: "Begruesse neue Zuschauer nach dem Viewer-Anstieg.",
+          praiseGifts: "Lobe die Gifts und motiviere zu weiteren Geschenken.",
+          answerQuestion: "Beantworte die wichtigste Frage aus dem Chat.",
+          lowMsgQ1: "Wenig Chat (1/min): frage das Publikum, woher es kommt und welches Lied es heute mag.",
+          lowMsgQ2: "Wenig Chat (1/min): lass das Publikum per Emoji fuer das naechste Thema oder Lied abstimmen.",
+          boostGifts: "Mehr Gifts: kuendige einen kurzen Shoutout fuer die naechsten 3 Gift-Supporter an.",
+          keepTempo: "Halte das Tempo und binde das Publikum weiter ein.",
+        },
+      };
+      const pack = dict[lang] || dict.hr;
+      return String(pack[key] || dict.hr[key] || "").replace("{top}", String(vars.top || ""));
+    };
+
     const recs = [];
     const avgPerMin = Number(insights.engagementAvgPerMin || 0);
     if (topSupporters?.length) {
       const top = topSupporters[0]?.user;
-      if (top) recs.push(`Zahvali se top supporteru: ${top}.`);
+      if (top) recs.push(recText("thankTop", { top }));
     }
     if (insights.spikes.some((s) => s.type === "viewers" && s.delta > 0)) {
-      recs.push("Pozdravi nove gledatelje zbog skoka viewera.");
+      recs.push(recText("greetViewers"));
     }
     if (insights.spikes.some((s) => s.type === "gifts")) {
-      recs.push("Pohvali giftove i potakni nove poklone.");
+      recs.push(recText("praiseGifts"));
     }
     if (insights.questions.length) {
-      recs.push("Odgovori na top pitanje iz chata.");
+      recs.push(recText("answerQuestion"));
     }
     if (avgPerMin <= 1) {
-      recs.push("Malo poruka (1/min): postavi publici pitanje 'Odakle ste i koja vam je omiljena pjesma večeras?'.");
-      recs.push("Malo poruka (1/min): pitaj publiku da glasa emoji-em za sljedeću temu ili pjesmu.");
+      recs.push(recText("lowMsgQ1"));
+      recs.push(recText("lowMsgQ2"));
     }
     if (!insights.spikes.some((s) => s.type === "gifts")) {
-      recs.push("Potakni giftove: najavi kratki shoutout za sljedeća 3 gift supportera.");
+      recs.push(recText("boostGifts"));
     }
-    if (!recs.length) recs.push("Nastavi s dobrim tempom i ukljuci publiku.");
+    if (!recs.length) recs.push(recText("keepTempo"));
     return recs.slice(0, 6);
   }
 
@@ -8696,8 +8847,12 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         });
         if (s.type === "viewers") {
           li.textContent = `Viewer spike ${s.delta > 0 ? "+" : ""}${s.delta} @ ${time}`;
-        } else {
+        } else if (s.type === "gifts") {
           li.textContent = `Gift spike +${s.delta} @ ${time}`;
+        } else if (s.type === "chat") {
+          li.textContent = `Chat spike ${s.delta > 0 ? "+" : ""}${s.delta} @ ${time}`;
+        } else {
+          li.textContent = `Spike ${s.delta > 0 ? "+" : ""}${s.delta} @ ${time}`;
         }
         spikeListEl.appendChild(li);
       });
@@ -9086,17 +9241,25 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       getTkaiSetting("tkaiRecPopBgColor", "#1f2937"),
       "#1f2937",
     );
+    const recText = normalizeTkaiHexColor(
+      getTkaiSetting("tkaiRecPopTextColor", "#e5e7eb"),
+      "#e5e7eb",
+    );
+    const recBorder = normalizeTkaiHexColor(
+      getTkaiSetting("tkaiRecPopBorderColor", "#374151"),
+      "#374151",
+    );
     const wrap = document.createElement("div");
     wrap.style.cssText =
       "position:fixed;z-index:99998;top:86px;right:16px;width:360px;max-height:55vh;overflow:auto;" +
-      `background:${recBg};border:1px solid var(--border);border-radius:10px;padding:10px;` +
+      `background:${recBg};color:${recText};border:1px solid ${recBorder};border-radius:10px;padding:10px;` +
       "box-shadow:0 16px 40px rgba(0,0,0,.45);";
     wrap.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
-      '<div style="font-size:11px;font-weight:700;color:var(--text2)">AI Recommendations</div>' +
+      `<div style="font-size:11px;font-weight:700;color:${recText}">AI Recommendations</div>` +
       '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
       '</div>' +
-      '<div id="tkaiRecPopMeta" style="font-size:10px;color:var(--text3);margin-bottom:6px"></div>' +
+      `<div id="tkaiRecPopMeta" style="font-size:10px;color:${recText};opacity:.76;margin-bottom:6px"></div>` +
       '<ul id="tkaiRecPopList" class="tkai-insights-list"></ul>';
     document.body.appendChild(wrap);
     recommendationsPopoutEl = wrap;
@@ -9556,6 +9719,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       pendingForAutoSuggest = 0;
       filterStarredOnly = false;
       sessionStartedAt = Date.now();
+      try {
+        localStorage.removeItem(TKAI_AUTOSAVE_KEY);
+      } catch (_) { }
       renderMessages();
       updateGiftGallery();
       updateSessionStatsUI();
@@ -9822,6 +9988,20 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         </div>
         <div class="s-row">
           <div class="s-row-left">
+            <div class="s-row-label">Autosave chat podataka</div>
+            <div class="s-row-desc">Automatski spremaj skenirane poruke (restore drafta)</div>
+          </div>
+          <div class="toggle on" data-setting="tkaiAutosaveEnabled"></div>
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Autosave interval (sekunde)</div>
+            <div class="s-row-desc">Koliko često spremiti autosave snapshot</div>
+          </div>
+          <input type="number" class="s-input" data-setting="tkaiAutosaveSeconds" min="10" max="300" value="30" style="width:70px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
             <div class="s-row-label">Auto download sesije</div>
             <div class="s-row-desc">Kod auto-save automatski skini JSON datoteku</div>
           </div>
@@ -9875,6 +10055,20 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
             <div class="s-row-desc">Pozadina izdvojenog AI recommendations prozora</div>
           </div>
           <input type="color" class="s-input" data-setting="tkaiRecPopBgColor" value="#1f2937" style="width:56px;height:32px;padding:3px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Boja teksta popouta</div>
+            <div class="s-row-desc">Boja teksta u AI recommendations prozoru</div>
+          </div>
+          <input type="color" class="s-input" data-setting="tkaiRecPopTextColor" value="#e5e7eb" style="width:56px;height:32px;padding:3px">
+        </div>
+        <div class="s-row">
+          <div class="s-row-left">
+            <div class="s-row-label">Boja okvira popouta</div>
+            <div class="s-row-desc">Boja ruba AI recommendations prozora</div>
+          </div>
+          <input type="color" class="s-input" data-setting="tkaiRecPopBorderColor" value="#374151" style="width:56px;height:32px;padding:3px">
         </div>
         <div class="s-row">
           <div class="s-row-left">
@@ -9941,17 +10135,26 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         el.onclick = () => {
           el.classList.toggle("on");
           DB.saveSetting(k, el.classList.contains("on"));
+          if (k === "tkaiAutosaveEnabled" || k === "tkaiAutosaveSeconds") {
+            initTkaiAutosave();
+          }
           showSettingsAutoSaveIndicator();
         };
       } else if (el.tagName === "INPUT" || el.tagName === "SELECT") {
         if (s[k] !== undefined) el.value = s[k];
         el.onchange = () => {
           DB.saveSetting(k, el.value);
+          if (k === "tkaiAutosaveEnabled" || k === "tkaiAutosaveSeconds") {
+            initTkaiAutosave();
+          }
           showSettingsAutoSaveIndicator();
         };
         if (el.tagName === "INPUT")
           el.oninput = () => {
             DB.saveSetting(k, el.value);
+            if (k === "tkaiAutosaveEnabled" || k === "tkaiAutosaveSeconds") {
+              initTkaiAutosave();
+            }
             showSettingsAutoSaveIndicator();
           };
       }
@@ -10634,7 +10837,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         messageType = 'gift';
       } else if (el.querySelector('[data-e2e*="subscribe"], [class*="SubscribeMessage"], [class*="SubscriptionEvent"]')) {
         messageType = 'subscriber';
-      } else if (el.querySelector('[data-e2e*="join"], [class*="JoinMessage"], [class*="JoinEvent"]') || /\b(joined|joined\s+the\s+live|ulazi|u[sš]ao|u[sš]la)\b/i.test(textLower)) {
+      } else if (el.querySelector('[data-e2e*="join"], [class*="JoinMessage"], [class*="JoinEvent"]') || /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(textLower)) {
         messageType = 'join';
       }
 
@@ -10882,6 +11085,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       }
 
       pendingForAutoSuggest += added;
+      scheduleTkaiAutosave("new-data");
 
       renderMessages();
       updateGiftGallery();
@@ -11685,6 +11889,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     if (t.dataset.setting.startsWith("tkaiShow")) {
       setTimeout(applyTkaiFeatureToggles, 30);
     }
+    if (t.dataset.setting === "tkaiAutosaveEnabled") {
+      setTimeout(initTkaiAutosave, 10);
+    }
   });
 
   document.getElementById("settingsPanel")?.addEventListener("input", (e) => {
@@ -11697,12 +11904,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     ) {
       setTimeout(applyTkaiButtonTheme, 10);
     }
+    if (t.dataset.setting === "tkaiAutosaveSeconds") {
+      setTimeout(initTkaiAutosave, 10);
+    }
   });
 
   applyTkaiFeatureToggles();
   applyTkaiButtonTheme();
   updateCcReadButton();
   initInsightCardControls();
+  restoreTkaiAutosaveIfAny();
+  initTkaiAutosave();
 
   spikeAllBtn?.addEventListener("click", () => {
     spikeFilter = "all";
