@@ -45,7 +45,11 @@ app.commandLine.appendSwitch(
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isHeadless =
   process.env.DISPLAY === undefined && process.platform === "linux";
-const forceDisableGpu = process.env.ETHERX_DISABLE_GPU === "1";
+// Linux-safe default: many driver stacks render a black window with HW acceleration.
+// Set ETHERX_ENABLE_GPU=1 to opt back into GPU acceleration.
+const forceDisableGpu =
+  process.env.ETHERX_DISABLE_GPU === "1" ||
+  (process.platform === "linux" && process.env.ETHERX_ENABLE_GPU !== "1");
 const forceDisableGpuSandbox = process.env.ETHERX_DISABLE_GPU_SANDBOX === "1";
 const aggressiveGpuFlags = process.env.ETHERX_GPU_AGGRESSIVE === "1";
 const enableLinuxVaapi = process.env.ETHERX_ENABLE_VAAPI === "1";
@@ -210,6 +214,7 @@ let mainWindow = null;
 let db = null;
 let adBlocker = null;
 let ai = null;
+let _rendererRecoveryAttempted = false;
 const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
 let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
 const _downloadTrackedSessions = new Set();
@@ -967,6 +972,16 @@ function createWindow() {
     }
   });
 
+  // Fallback: avoid permanent black/hidden window if ready-to-show never fires.
+  setTimeout(() => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+        console.warn("⚠️ ready-to-show timeout — forcing window show");
+        mainWindow.show();
+      }
+    } catch (_) { }
+  }, 3500);
+
   // Save bounds on change
   const saveBounds = () => {
     try {
@@ -979,6 +994,39 @@ function createWindow() {
   mainWindow.on("move", saveBounds);
 
   mainWindow.loadFile(path.join(__dirname, "src", "index.html"));
+
+  mainWindow.webContents.on("did-fail-load", (_event, code, desc, url, isMainFrame) => {
+    console.error("❌ did-fail-load:", code, desc, url);
+    if (!isMainFrame) return;
+    try {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+        mainWindow.show();
+      }
+    } catch (_) { }
+  });
+
+  mainWindow.webContents.on("console-message", (_event, level, msg, line, sourceId) => {
+    if (level >= 2) {
+      console.error("[renderer]", msg, "@", sourceId + ":" + line);
+    }
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("❌ render-process-gone:", details.reason, details.exitCode);
+    // One-time Linux safe-mode recovery: relaunch with GPU disabled.
+    if (
+      process.platform === "linux" &&
+      !_rendererRecoveryAttempted &&
+      process.env.ETHERX_DISABLE_GPU !== "1" &&
+      ["launch-failed", "crashed", "oom"].includes(details.reason)
+    ) {
+      _rendererRecoveryAttempted = true;
+      const env = { ...process.env, ETHERX_DISABLE_GPU: "1" };
+      console.warn("⚠️ Relaunching in GPU-safe mode (ETHERX_DISABLE_GPU=1)");
+      app.relaunch({ env });
+      app.quit();
+    }
+  });
 
   // Set dark background on all webviews before content loads (prevents white flash)
   mainWindow.webContents.on("did-attach-webview", (_event, wvContents) => {
