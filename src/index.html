@@ -9449,7 +9449,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.244</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.245</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10385,17 +10385,19 @@
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Auto SongRec na scan trigger</div>
-                                            <div class="s-row-desc">Kad chat detektira signal za pjesmu, automatski pokreni SongRec</div>
+                                            <div class="s-row-desc">Kad chat detektira signal za pjesmu, automatski
+                                                pokreni SongRec</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiAutoSongRecOnScan"></div>
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">SongRec cooldown (sekunde)</div>
-                                            <div class="s-row-desc">Minimalni razmak između auto SongRec pokretanja</div>
+                                            <div class="s-row-desc">Minimalni razmak između auto SongRec pokretanja
+                                            </div>
                                         </div>
-                                        <input type="number" class="s-input" data-setting="tkaiAutoSongRecCooldownSec" min="15"
-                                            max="900" value="45" style="width:70px">
+                                        <input type="number" class="s-input" data-setting="tkaiAutoSongRecCooldownSec"
+                                            min="15" max="900" value="45" style="width:70px">
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -10407,10 +10409,12 @@
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Song DB sample cooldown (sekunde)</div>
-                                            <div class="s-row-desc">Koliko često osvježiti metrike za aktivnu pjesmu</div>
+                                            <div class="s-row-desc">Koliko često osvježiti metrike za aktivnu pjesmu
+                                            </div>
                                         </div>
-                                        <input type="number" class="s-input" data-setting="tkaiSongPerfSampleCooldownSec" min="10"
-                                            max="600" value="30" style="width:70px">
+                                        <input type="number" class="s-input"
+                                            data-setting="tkaiSongPerfSampleCooldownSec" min="10" max="600" value="30"
+                                            style="width:70px">
                                     </div>
                                 </div>
                                 <!-- drawer: AI model override -->
@@ -10844,7 +10848,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.244</span></div>
+                                    v<span id="helpVersionNum2">2.4.245</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11235,18 +11239,23 @@
                         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
                             <button class="tkai-insights-btn" id="tkaiSongRecNowBtn" type="button">SongRec now</button>
                             <button class="tkai-insights-btn" id="tkaiDjCcNowBtn" type="button">DJ CC now</button>
-                            <button class="tkai-insights-btn" id="tkaiOpenSoundboardBtn" type="button">Soundboard</button>
+                            <button class="tkai-insights-btn" id="tkaiOpenSoundboardBtn"
+                                type="button">Soundboard</button>
                             <button class="tkai-insights-btn" id="tkaiFavSoundsQuickBtn" type="button">★ Fav</button>
-                            <span id="tkaiSongToolsStatus" style="font-size:10px;color:var(--text3)">SongRec: idle</span>
+                            <span id="tkaiSongToolsStatus" style="font-size:10px;color:var(--text3)">SongRec:
+                                idle</span>
                         </div>
-                        <div id="tkaiFavSoundsQuickWrap" style="display:none;margin-bottom:6px;padding:6px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03)">
-                            <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Favorite zvukovi (quick play)</div>
+                        <div id="tkaiFavSoundsQuickWrap"
+                            style="display:none;margin-bottom:6px;padding:6px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03)">
+                            <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Favorite zvukovi (quick
+                                play)</div>
                             <div id="tkaiFavSoundsQuickList" style="display:flex;gap:6px;flex-wrap:wrap"></div>
                         </div>
                         <ul class="tkai-song-list" id="tkaiSongList"></ul>
                     </div>
                     <div class="tkai-insights-card" style="flex:1" id="tkaiPieCard">
-                        <div class="tkai-insights-title" title="Raspodjela tipova poruka u sesiji">Pie breakdown<span>◔</span></div>
+                        <div class="tkai-insights-title" title="Raspodjela tipova poruka u sesiji">Pie
+                            breakdown<span>◔</span></div>
                         <div class="tkai-pie-wrap">
                             <div class="tkai-pie-chart" id="tkaiPieChart">
                                 <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
@@ -11261,7 +11270,8 @@
                 <div class="tkai-insights-row">
                     <div class="tkai-insights-card" style="flex:1" id="tkaiSpikesCard">
                         <div class="tkai-card-head">
-                            <div class="tkai-insights-title" title="Viewer, gift i chat spike događaji">Spike events<span>⚡</span></div>
+                            <div class="tkai-insights-title" title="Viewer, gift i chat spike događaji">Spike
+                                events<span>⚡</span></div>
                             <div style="display:flex;gap:6px;align-items:center">
                                 <button class="tkai-insights-btn active" id="tkaiSpikeAll" type="button">All</button>
                                 <button class="tkai-insights-btn" id="tkaiSpikeViewers" type="button">Viewers</button>
@@ -13706,7 +13716,7 @@
                         return;
                     }
                     const summary = buildSummaryObject();
-                    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Session Dashboard PDF</title><style>body{font-family:Arial,sans-serif;padding:18px;color:#0f172a}h1{font-size:20px;margin:0 0 8px}h2{font-size:15px;margin:14px 0 6px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;font-size:12px}</style></head><body><h1>AI Live Chat - Session Dashboard</h1><div>Saved: ${escHtml(new Date(summary.savedAt).toLocaleString('hr-HR'))}</div><div>Messages: ${summary.messageCount} | Duration: ${summary.durationMinutes} min | Peak viewers: ${summary.peakViewers} | Coins: ${summary.totalCoins}</div><h2>Top users</h2><table><thead><tr><th>User</th><th>Total</th><th>Chat</th><th>Gifts</th><th>Coins</th><th>Join</th></tr></thead><tbody>${summary.topUsersByMessages.slice(0,50).map((u)=>`<tr><td>@${escHtml(u.user)}</td><td>${u.total}</td><td>${u.chat}</td><td>${u.gifts}</td><td>${u.coins}</td><td>${u.joins}</td></tr>`).join('')}</tbody></table><h2>Questions</h2><pre>${escHtml(summary.questions.map((q)=>`@${q.user}: ${q.text}`).join('\n') || 'Nema pitanja')}</pre><h2>Answers</h2><pre>${escHtml(summary.answers.map((a)=>`${a.user}: ${a.text}`).join('\n') || 'Nema odgovora')}</pre></body></html>`;
+                    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Session Dashboard PDF</title><style>body{font-family:Arial,sans-serif;padding:18px;color:#0f172a}h1{font-size:20px;margin:0 0 8px}h2{font-size:15px;margin:14px 0 6px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;font-size:12px}</style></head><body><h1>AI Live Chat - Session Dashboard</h1><div>Saved: ${escHtml(new Date(summary.savedAt).toLocaleString('hr-HR'))}</div><div>Messages: ${summary.messageCount} | Duration: ${summary.durationMinutes} min | Peak viewers: ${summary.peakViewers} | Coins: ${summary.totalCoins}</div><h2>Top users</h2><table><thead><tr><th>User</th><th>Total</th><th>Chat</th><th>Gifts</th><th>Coins</th><th>Join</th></tr></thead><tbody>${summary.topUsersByMessages.slice(0, 50).map((u) => `<tr><td>@${escHtml(u.user)}</td><td>${u.total}</td><td>${u.chat}</td><td>${u.gifts}</td><td>${u.coins}</td><td>${u.joins}</td></tr>`).join('')}</tbody></table><h2>Questions</h2><pre>${escHtml(summary.questions.map((q) => `@${q.user}: ${q.text}`).join('\n') || 'Nema pitanja')}</pre><h2>Answers</h2><pre>${escHtml(summary.answers.map((a) => `${a.user}: ${a.text}`).join('\n') || 'Nema odgovora')}</pre></body></html>`;
                     win.document.open();
                     win.document.write(html);
                     win.document.close();
@@ -15396,6 +15406,15 @@
                 const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
                 return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
             }
+            function _tkaiFriendlyValidationMessage(raw) {
+                const msg = String(raw || '').trim();
+                if (!msg) return 'License validation failed.';
+                const lc = msg.toLowerCase();
+                if (lc.includes('invalid api key') || (lc.includes('api key') && (lc.includes('missing') || lc.includes('not configured') || lc.includes('unauthorized')))) {
+                    return 'TKAI API key nije ispravan. Otvori AI Help -> License setup i spremi ispravan API ključ.';
+                }
+                return msg;
+            }
             async function _tkaiValidateRemote(code, hash) {
                 try {
                     const fn = window.etherx?.license?.validateTkaiCode;
@@ -15403,10 +15422,11 @@
                         return { ok: false, valid: false, message: 'License validator is unavailable.' };
                     }
                     const res = await fn(code, hash);
-                    const msg =
-                        (res && res.data && typeof res.data.message === 'string' && res.data.message) ||
-                        (res && typeof res.error === 'string' && res.error) ||
-                        '';
+                    const msg = [
+                        res?.data?.message,
+                        res?.data?.error,
+                        res?.error,
+                    ].find((value) => typeof value === 'string' && value.trim()) || '';
                     return {
                         ok: !!(res && res.ok),
                         valid: !!(res && res.valid),
@@ -15481,7 +15501,7 @@
                 } catch (_) { }
                 const remote = await _tkaiValidateRemote(code, deviceHash || hash);
                 if (!remote.valid && !isLocalValid) {
-                    _tkaiLastValidationMessage = remote.message || 'License validation failed.';
+                    _tkaiLastValidationMessage = _tkaiFriendlyValidationMessage(remote.message);
                     return false;
                 }
                 if (isLocalValid || remote.valid) {
