@@ -9743,6 +9743,28 @@
                 <button class="s-btn-sm" id="btnTkaiGiftGallery">Postavke Gift Galerije</button>
                 <button class="s-btn-sm" id="btnTkaiFanClubGallery">Postavke Fan Club Galerije</button>
               </div>
+              <div style="margin-top:10px">
+                <div style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:4px">Gift katalog (custom)
+                </div>
+                <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Svaki red: <b>coins naziv_gifta</b>
+                  (npr. <b>1500 Galaxy Globe</b>)</div>
+                <textarea class="s-input" id="tkaiGiftCatalogCustom" placeholder="1500 Galaxy Globe\n5 Name shoutout"
+                  style="width:100%;height:96px;font-size:11px;resize:vertical;font-family:monospace"></textarea>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+                  <button class="s-btn-sm" id="btnTkaiGiftImport">Import</button>
+                  <button class="s-btn-sm" id="btnTkaiGiftExportTxt">Export TXT</button>
+                  <button class="s-btn-sm" id="btnTkaiGiftExportJson">Export JSON</button>
+                  <input type="file" id="tkaiGiftImportFile" accept=".txt,.json,text/plain,application/json"
+                    style="display:none">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin-top:8px">
+                  <input class="s-input" id="tkaiGiftQuickName" type="text"
+                    placeholder="Naziv gifta (npr. Nebula Crown)">
+                  <input class="s-input" id="tkaiGiftQuickCoins" type="number" min="1" max="9999999"
+                    placeholder="Coins">
+                  <button class="s-btn-sm" id="btnTkaiGiftQuickAdd">Dodaj gift</button>
+                </div>
+              </div>
             </div>
 
             <div class="s-group" style="margin-top:16px">
@@ -9750,6 +9772,14 @@
                 <div class="s-row-left">
                   <div class="s-row-label" style="font-weight:600">Postavke skeniranja chata</div>
                 </div>
+              </div>
+              <div class="s-row" style="margin-top:8px">
+                <div class="s-row-left">
+                  <div class="s-row-label">Turbo skeniranje (dynamic)</div>
+                  <div class="s-row-desc">Kad je chat aktivan skenira svake 2s, kad je mirno vraća na 4s.</div>
+                </div>
+                <label class="s-toggle"><input type="checkbox" id="tkaiTurboScan" checked><span
+                    class="s-toggle-track"></span></label>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
                 <button class="s-btn-sm" id="btnTkaiAutoScan">Automatsko skeniranje</button>
@@ -13520,10 +13550,61 @@
       let isTranslating = false;
       let holdLActive = false;
       let holdLInterval = null;
+      let turboScanFastUntilTs = 0;
       const translateCache = new Map();
       const STORAGE_KEY = 'ex_tkai_cfg';
       const TKAI_SESSIONS_KEY = 'ex_tkai_sessions';
       const TKAI_SESSION_LIMIT = 120;
+      const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
+      const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
+      const TKAI_SCAN_FAST_WINDOW_MS = 30000;
+      const DEFAULT_GIFT_CATALOG_LINES = [
+        "2199 Jollie's Heartland",
+        "2499 Summer Pass L",
+        "1 Freestyle",
+        "3999 T-Rex skeleton pup",
+        "2199 Lemon Love Booth",
+        "5 Tofu",
+        "10 Friendship Necklace",
+        "10 Heart",
+        "1 Basketball",
+        "2999 Party Bus",
+        "6000 Elephant Nature Reserve",
+        "1500 Galaxy Globe",
+        "20 S Flowers",
+        "1500 Potato floating",
+        "10 Magnifying glass",
+        "1 Alien Pet",
+        "349 Summer Pass M",
+        "1500 Future Encounter",
+        "30 Capybara",
+        "5 Peach",
+        "1500 Wild Mic",
+        "10 Tiny Diny",
+        "12000 Superstar",
+        "3200 Hip-Hop Hen",
+        "20 Perfume",
+        "10000 Sunset Speedway",
+        "7000 Sports Car",
+        "20000 Dolphin",
+        "15 Bravo!",
+        "10 Love Piggy",
+        "6000 Strong Finish",
+        "13999 Spaceship",
+        "30 You are my Jam",
+        "30 U make Miso happy!",
+        "30 You are on a Roll",
+        "10 Slow motion",
+        "7999 Star Throne",
+        "25999 Phoenix",
+        "13500 Summer Pass XL",
+        "5 Overreact",
+        "15000 Pyramids",
+        "20000 TikTok Shuttle",
+        "15000 Time for Family",
+        "5 Name shoutout",
+        "10 Journey Pass"
+      ];
 
       const messagesEl = document.getElementById('tkaiMessages');
       const repliesEl = document.getElementById('tkaiReplies');
@@ -13538,6 +13619,8 @@
       const giftGalleryEl = document.getElementById('tkaiGiftGallery');
       const giftCountEl = document.getElementById('tkaiGiftCount');
       const giftToggleBtn = document.getElementById('tkaiGiftToggle');
+      const coinTotalEl = document.getElementById('tkaiCoinTotal');
+      const supporterCountEl = document.getElementById('tkaiSupporterCount');
       const splitterEl = document.getElementById('tkaiColSplitter');
       const mainEl = panel.querySelector('.tkai-main');
       const chatColEl = panel.querySelector('.tkai-chat-col');
@@ -13545,9 +13628,18 @@
       const readLangEl = document.getElementById('tkaiReadLang');
       const replyLangEl = document.getElementById('tkaiReplyLang');
       const autoTranslateEl = document.getElementById('tkaiAutoTranslate');
+      const turboScanEl = document.getElementById('tkaiTurboScan');
       const countEl = document.getElementById('tkaiCount');
       const contextEl = document.getElementById('tkaiContext');
       const customPromptEl = document.getElementById('tkaiCustomPrompt');
+      const giftCatalogCustomEl = document.getElementById('tkaiGiftCatalogCustom');
+      const btnTkaiGiftImport = document.getElementById('btnTkaiGiftImport');
+      const btnTkaiGiftExportTxt = document.getElementById('btnTkaiGiftExportTxt');
+      const btnTkaiGiftExportJson = document.getElementById('btnTkaiGiftExportJson');
+      const tkaiGiftImportFile = document.getElementById('tkaiGiftImportFile');
+      const tkaiGiftQuickName = document.getElementById('tkaiGiftQuickName');
+      const tkaiGiftQuickCoins = document.getElementById('tkaiGiftQuickCoins');
+      const btnTkaiGiftQuickAdd = document.getElementById('btnTkaiGiftQuickAdd');
       const configToggle = document.getElementById('tkaiConfigToggle');
       const configInner = document.getElementById('tkaiConfigInner');
       const configArrow = document.getElementById('tkaiConfigArrow');
@@ -13565,7 +13657,9 @@
           if (countEl && saved.count) countEl.value = saved.count;
           if (contextEl && saved.context) contextEl.value = saved.context;
           if (customPromptEl && saved.customPrompt) customPromptEl.value = saved.customPrompt;
+          if (giftCatalogCustomEl && saved.giftCatalogCustom) giftCatalogCustomEl.value = saved.giftCatalogCustom;
           if (autoTranslateEl) autoTranslateEl.checked = saved.autoTranslate !== false;
+          if (turboScanEl) turboScanEl.checked = saved.turboScan !== false;
           if (typeof saved.holdL === 'boolean') holdLActive = saved.holdL;
           if (giftGalleryEl && saved.giftCollapsed) giftGalleryEl.classList.add('collapsed');
           if (saved.chatColWidth && panel?.style) {
@@ -13584,9 +13678,11 @@
             readLang: readLangEl?.value,
             replyLang: replyLangEl?.value,
             autoTranslate: autoTranslateEl?.checked !== false,
+            turboScan: turboScanEl?.checked !== false,
             count: countEl?.value,
             context: contextEl?.value,
             customPrompt: customPromptEl?.value,
+            giftCatalogCustom: giftCatalogCustomEl?.value || '',
             holdL: holdLActive === true,
             giftCollapsed: !!giftGalleryEl?.classList.contains('collapsed'),
             chatColWidth: panel?.style?.getPropertyValue('--tkai-chat-col-width') || ''
@@ -13595,6 +13691,150 @@
       }
       function setStatus(html) {
         if (statusEl) statusEl.innerHTML = html;
+      }
+
+      function normalizeGiftKey(value) {
+        return String(value || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      }
+
+      function parseGiftCatalogLines(lines) {
+        const map = new Map();
+        String(lines || '')
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .forEach((line) => {
+            const m = line.match(/^(\d{1,7})\s+(.+)$/);
+            if (!m) return;
+            const coins = Number(m[1] || 0);
+            const name = String(m[2] || '').trim();
+            if (!coins || !name) return;
+            const key = normalizeGiftKey(name);
+            if (!key) return;
+            map.set(key, { name, coins });
+          });
+        return map;
+      }
+
+      const BASE_GIFT_CATALOG_MAP = parseGiftCatalogLines(DEFAULT_GIFT_CATALOG_LINES.join('\n'));
+      let giftCatalogCacheInput = null;
+      let giftCatalogCacheMap = new Map(BASE_GIFT_CATALOG_MAP);
+      let giftCatalogEntriesCache = Array.from(giftCatalogCacheMap.entries()).sort((a, b) => b[0].length - a[0].length);
+
+      function rebuildGiftCatalogCacheIfNeeded() {
+        const customInput = String(giftCatalogCustomEl?.value || '');
+        if (customInput === giftCatalogCacheInput) return;
+        giftCatalogCacheInput = customInput;
+        const merged = new Map(BASE_GIFT_CATALOG_MAP);
+        const custom = parseGiftCatalogLines(customInput);
+        custom.forEach((value, key) => merged.set(key, value));
+        giftCatalogCacheMap = merged;
+        giftCatalogEntriesCache = Array.from(merged.entries()).sort((a, b) => b[0].length - a[0].length);
+      }
+
+      function getGiftCatalogMap() {
+        rebuildGiftCatalogCacheIfNeeded();
+        return giftCatalogCacheMap;
+      }
+
+      function getGiftCatalogEntries() {
+        rebuildGiftCatalogCacheIfNeeded();
+        return giftCatalogEntriesCache;
+      }
+
+      function detectGiftMeta(message, catalogEntries) {
+        const text = String(message?.text || '').trim();
+        const keyText = normalizeGiftKey(text);
+        const entries = Array.isArray(catalogEntries) ? catalogEntries : getGiftCatalogEntries();
+        let found = null;
+        for (const [key, value] of entries) {
+          if (key && keyText.includes(key)) {
+            found = value;
+            break;
+          }
+        }
+
+        const qtyMatch = text.match(/[x×]\s*(\d{1,4})\b/i);
+        const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
+
+        let coins = found ? Number(found.coins || 0) * quantity : 0;
+        if (!coins) {
+          const direct = text.match(/(\d[\d.,]*)\s*(coins?|coin|coina|kovanica|diamonds?)/i);
+          if (direct) {
+            const parsed = Number(String(direct[1] || '').replace(/[^\d]/g, ''));
+            if (Number.isFinite(parsed) && parsed > 0) coins = parsed;
+          }
+        }
+
+        const giftName = found
+          ? found.name
+          : (text.match(/(?:sent|poklonio|poslao)\s+(.+?)(?:\s*[x×]\s*\d+)?$/i)?.[1] || text).slice(0, 80).trim();
+
+        return {
+          giftName: giftName || 'Gift',
+          coins: Math.max(0, Number(coins || 0)),
+          quantity,
+        };
+      }
+
+      function catalogMapToLines(map) {
+        return Array.from(map.values())
+          .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0) || String(a.name || '').localeCompare(String(b.name || '')))
+          .map((row) => `${Number(row.coins || 0)} ${String(row.name || '').trim()}`)
+          .filter(Boolean)
+          .join('\n');
+      }
+
+      function downloadTextFile(fileName, content, mime = 'text/plain;charset=utf-8') {
+        const blob = new Blob([String(content || '')], { type: mime });
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          a.remove();
+          URL.revokeObjectURL(href);
+        }, 0);
+      }
+
+      function applyImportedGiftCatalog(textValue) {
+        const imported = parseGiftCatalogLines(textValue);
+        if (!imported.size) {
+          showToast('⚠️ Import nije uspio: nema valjanih redova.');
+          return;
+        }
+        giftCatalogCustomEl.value = catalogMapToLines(imported);
+        saveCfg();
+        renderGiftGallery();
+        showToast('✅ Gift katalog importiran: ' + imported.size + ' stavki');
+      }
+
+      function parseGiftCatalogJson(text) {
+        try {
+          const data = JSON.parse(String(text || ''));
+          const lines = [];
+          if (Array.isArray(data)) {
+            data.forEach((row) => {
+              const coins = Number(row?.coins || row?.value || 0);
+              const name = String(row?.name || row?.gift || '').trim();
+              if (coins > 0 && name) lines.push(`${coins} ${name}`);
+            });
+            return lines.join('\n');
+          }
+          if (data && typeof data === 'object') {
+            Object.entries(data).forEach(([name, coins]) => {
+              const value = Number(coins || 0);
+              if (value > 0 && name) lines.push(`${value} ${name}`);
+            });
+            return lines.join('\n');
+          }
+        } catch (e) { }
+        return '';
       }
 
       function getStoredTkaiSessions() {
@@ -13775,7 +14015,7 @@
       function stopScanning() {
         const shouldPersistSession = scanActive && sessionDirty && collectedMessages.length > 0;
         scanActive = false;
-        if (scanInterval) clearInterval(scanInterval);
+        if (scanInterval) clearTimeout(scanInterval);
         scanInterval = null;
         if (shouldPersistSession) {
           saveCurrentTkaiSessionToHistory();
@@ -13888,34 +14128,64 @@
         if (!giftEvents.length) {
           giftGalleryEl.innerHTML = '<div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>';
           if (giftCountEl) giftCountEl.textContent = '';
+          if (coinTotalEl) coinTotalEl.textContent = '0';
+          if (supporterCountEl) supporterCountEl.textContent = '0';
           return;
         }
         const aggregated = [];
         const giftMap = new Map();
+        const supporterSet = new Set();
+        const giftCatalogEntries = getGiftCatalogEntries();
+        let totalCoins = 0;
         giftEvents.forEach((message) => {
-          const key = `${message.type || 'chat'}|${message.user}|${message.text}`;
+          const user = String(message.user || 'Chat user').trim() || 'Chat user';
+          const meta = detectGiftMeta(message, giftCatalogEntries);
+          const key = `${message.type || 'chat'}|${user}|${meta.giftName}`;
           if (giftMap.has(key)) {
-            giftMap.get(key).count += 1;
+            const row = giftMap.get(key);
+            row.count += 1;
+            row.totalCoins += Number(meta.coins || 0);
             return;
           }
-          const entry = { ...message, count: 1 };
+          const entry = {
+            ...message,
+            user,
+            giftName: meta.giftName,
+            coins: Number(meta.coins || 0),
+            totalCoins: Number(meta.coins || 0),
+            count: 1,
+          };
           giftMap.set(key, entry);
           aggregated.push(entry);
         });
+        aggregated.sort((a, b) => {
+          const coinDiff = Number(b.totalCoins || 0) - Number(a.totalCoins || 0);
+          if (coinDiff !== 0) return coinDiff;
+          const countDiff = Number(b.count || 0) - Number(a.count || 0);
+          if (countDiff !== 0) return countDiff;
+          return Number(b.ts || 0) - Number(a.ts || 0);
+        });
         giftGalleryEl.innerHTML = '';
         aggregated.forEach((message) => {
+          supporterSet.add(String(message.user || '').toLowerCase());
+          totalCoins += Number(message.totalCoins || 0);
           const row = document.createElement('div');
           row.className = 'tkai-gift-item' + (message.type === 'subscriber' ? ' sub' : '');
           const icon = message.type === 'subscriber' ? '⭐' : '🎁';
           const countBadge = message.count > 1
             ? '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + message.count + '</span>'
             : '';
+          const coinsBadge = Number(message.totalCoins || 0) > 0
+            ? '<span style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(251,191,36,.18);color:#fcd34d;border:1px solid rgba(251,191,36,.28)">🪙 ' + Number(message.totalCoins || 0).toLocaleString('hr-HR') + '</span>'
+            : '';
           row.innerHTML = '<div class="g-user"><span>' + icon + '</span><span>' + escHtml(message.user) + '</span></div>'
-            .replace('</div>', countBadge + '</div>')
-            + '<div>' + escHtml(message.text) + '</div>';
+            .replace('</div>', coinsBadge + countBadge + '</div>')
+            + '<div>' + escHtml(message.giftName || message.text) + '</div>';
           giftGalleryEl.appendChild(row);
         });
-        if (giftCountEl) giftCountEl.textContent = aggregated.length + ' stavki';
+        if (giftCountEl) giftCountEl.textContent = aggregated.length + ' stavki • ' + totalCoins.toLocaleString('hr-HR') + ' 🪙';
+        if (coinTotalEl) coinTotalEl.textContent = totalCoins.toLocaleString('hr-HR');
+        if (supporterCountEl) supporterCountEl.textContent = String(supporterSet.size);
       }
 
       function getLiveSessionTrend() {
@@ -14601,24 +14871,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       async function scrapeTikTokChat() {
         if (!window.electronWebview) {
           setStatus('⚠️ TikTok Chat AI radi u Electron webview modu');
-          return;
+          return 0;
         }
         const tab = getActiveTab();
         if (!tab?.url || !tab.url.includes('tiktok.com')) {
           setStatus('⚠️ Nisi na TikTok stranici');
-          return;
+          return 0;
         }
         const webview = getActiveTikTokWebview();
         if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') {
           setStatus('⚠️ Webview nije spreman');
-          return;
+          return 0;
         }
         try {
           const raw = await webview.executeJavaScript(scraperScript);
           const messages = JSON.parse(raw || '[]');
           if (!Array.isArray(messages) || !messages.length) {
             setStatus('📭 Nema poruka u chatu');
-            return;
+            return 0;
           }
           const existing = new Set(collectedMessages.map(message => message.id));
           let added = 0;
@@ -14644,12 +14914,31 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           if (autoTranslateEl?.checked !== false && readLang !== 'auto' && added > 0) {
             await translateMessagesInPlace(collectedMessages, readLang);
           }
-          renderMessages();
+          if (added > 0) renderMessages();
           setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : (added ? '✅ Dodano ' + added : '✓ Sinkronizirano'));
+          return added;
         } catch (e) {
           console.warn('[TikTokAI] scrape error:', e);
           setStatus('⚠️ Greška pri skeniranju');
+          return 0;
         }
+      }
+
+      function getNextTkaiScanDelayMs() {
+        const turboEnabled = turboScanEl?.checked !== false;
+        if (!turboEnabled) return TKAI_SCAN_INTERVAL_NORMAL_MS;
+        return Date.now() < turboScanFastUntilTs ? TKAI_SCAN_INTERVAL_FAST_MS : TKAI_SCAN_INTERVAL_NORMAL_MS;
+      }
+
+      async function runTkaiScanCycle() {
+        if (!scanActive) return;
+        const added = await scrapeTikTokChat();
+        if ((turboScanEl?.checked !== false) && added > 0) {
+          turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
+        }
+        if (!scanActive) return;
+        if (scanInterval) clearTimeout(scanInterval);
+        scanInterval = setTimeout(runTkaiScanCycle, getNextTkaiScanDelayMs());
       }
 
       async function generateReplies(messages) {
@@ -14726,9 +15015,54 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
       }
 
       loadCfg();
-      [toneEl, readLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+      [toneEl, readLangEl, replyLangEl, autoTranslateEl, turboScanEl, countEl, contextEl, customPromptEl, giftCatalogCustomEl].forEach(el => el?.addEventListener('change', saveCfg));
       contextEl?.addEventListener('input', saveCfg);
       customPromptEl?.addEventListener('input', saveCfg);
+      giftCatalogCustomEl?.addEventListener('input', () => {
+        saveCfg();
+        renderGiftGallery();
+      });
+      btnTkaiGiftImport?.addEventListener('click', () => tkaiGiftImportFile?.click());
+      tkaiGiftImportFile?.addEventListener('change', async (event) => {
+        const file = event?.target?.files?.[0];
+        if (!file) return;
+        const text = await file.text().catch(() => '');
+        const imported = file.name.toLowerCase().endsWith('.json') ? parseGiftCatalogJson(text) : String(text || '');
+        applyImportedGiftCatalog(imported);
+        event.target.value = '';
+      });
+      btnTkaiGiftExportTxt?.addEventListener('click', () => {
+        const merged = getGiftCatalogMap();
+        const body = catalogMapToLines(merged);
+        downloadTextFile('tkai-gift-catalog-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt', body, 'text/plain;charset=utf-8');
+        showToast('⬇️ Gift katalog TXT skinut.');
+      });
+      btnTkaiGiftExportJson?.addEventListener('click', () => {
+        const mergedRows = Array.from(getGiftCatalogMap().values())
+          .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0));
+        downloadTextFile(
+          'tkai-gift-catalog-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json',
+          JSON.stringify(mergedRows, null, 2),
+          'application/json;charset=utf-8'
+        );
+        showToast('⬇️ Gift katalog JSON skinut.');
+      });
+      btnTkaiGiftQuickAdd?.addEventListener('click', () => {
+        const name = String(tkaiGiftQuickName?.value || '').trim();
+        const coins = Number(tkaiGiftQuickCoins?.value || 0);
+        if (!name || !Number.isFinite(coins) || coins <= 0) {
+          showToast('⚠️ Upiši valjan naziv i broj coins.');
+          return;
+        }
+        const lines = String(giftCatalogCustomEl?.value || '').split(/\r?\n/).filter(Boolean);
+        lines.push(`${Math.floor(coins)} ${name}`);
+        giftCatalogCustomEl.value = lines.join('\n');
+        if (tkaiGiftQuickName) tkaiGiftQuickName.value = '';
+        if (tkaiGiftQuickCoins) tkaiGiftQuickCoins.value = '';
+        saveCfg();
+        renderGiftGallery();
+        showToast('✅ Dodan gift: ' + name);
+      });
       readLangEl?.addEventListener('change', async () => {
         if (autoTranslateEl?.checked !== false && (readLangEl?.value || 'auto') !== 'auto') {
           await translateMessagesInPlace(collectedMessages, readLangEl.value);
@@ -14742,6 +15076,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           await translateMessagesInPlace(collectedMessages, readLangEl.value);
         }
         renderMessages();
+      });
+      turboScanEl?.addEventListener('change', () => {
+        saveCfg();
+        if (!scanActive) return;
+        turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
       });
       giftToggleBtn?.addEventListener('click', () => {
         if (!giftGalleryEl) return;
@@ -14792,11 +15131,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         scanActive = true;
         sessionDirty = false;
+        turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
         toggleBtn.textContent = '⏹ Skeniranje OFF';
         toggleBtn.className = 'tkai-scan-btn stop';
         setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
-        scrapeTikTokChat();
-        scanInterval = setInterval(scrapeTikTokChat, 4000);
+        runTkaiScanCycle();
       });
 
       genBtn?.addEventListener('click', () => {
