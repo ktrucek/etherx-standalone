@@ -9449,7 +9449,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.238</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.239</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10216,6 +10216,33 @@
                                         <input type="number" class="s-input" data-setting="tkaiGiftMinCoins" min="0"
                                             value="0" style="width:70px">
                                     </div>
+                                    <div style="margin-top:8px">
+                                        <div
+                                            style="font-size:11px;color:var(--text2);font-weight:600;margin-bottom:4px">
+                                            Gift katalog (custom)</div>
+                                        <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Format:
+                                            <b>coins naziv</b> po retku
+                                        </div>
+                                        <textarea class="s-input" id="tkaiGiftCatalogCustom"
+                                            data-setting="tkaiGiftCatalogCustom"
+                                            placeholder="1500 Galaxy Globe&#10;5 Name shoutout"
+                                            style="width:100%;height:96px;font-size:11px;resize:vertical;font-family:monospace"></textarea>
+                                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+                                            <button class="s-btn-sm" id="btnTkaiGiftImport">Import</button>
+                                            <button class="s-btn-sm" id="btnTkaiGiftExportTxt">Export TXT</button>
+                                            <button class="s-btn-sm" id="btnTkaiGiftExportJson">Export JSON</button>
+                                            <input type="file" id="tkaiGiftImportFile"
+                                                accept=".txt,.json,text/plain,application/json" style="display:none">
+                                        </div>
+                                        <div
+                                            style="display:grid;grid-template-columns:1fr 110px auto;gap:6px;margin-top:8px">
+                                            <input class="s-input" id="tkaiGiftQuickName" type="text"
+                                                placeholder="Naziv gifta">
+                                            <input class="s-input" id="tkaiGiftQuickCoins" type="number" min="1"
+                                                max="9999999" placeholder="Coins">
+                                            <button class="s-btn-sm" id="btnTkaiGiftQuickAdd">Dodaj gift</button>
+                                        </div>
+                                    </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Show Gift Gallery in panel</div>
@@ -10277,6 +10304,13 @@
                                             <option value="6000">6 s</option>
                                             <option value="10000">10 s (quiet)</option>
                                         </select>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Turbo skeniranje (dynamic)</div>
+                                            <div class="s-row-desc">Kad ima novih poruka skenira 2s, inače 4s</div>
+                                        </div>
+                                        <div class="toggle on" data-setting="tkaiTurboScan"></div>
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -10780,7 +10814,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.238</span></div>
+                                    v<span id="helpVersionNum2">2.4.239</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -15195,6 +15229,7 @@
             let isTranslating = false;
             let holdLActive = false;
             let holdLInterval = null;
+            let turboScanFastUntilTs = 0;
             let sessionStartedAt = null;
             let liveViewerCount = 0;
             let peakViewerCount = 0;
@@ -15218,6 +15253,56 @@
             let lastCaptionSpeakAt = 0;
             const translateCache = new Map();
             const STORAGE_KEY = 'ex_tkai_cfg';
+            const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
+            const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
+            const TKAI_SCAN_FAST_WINDOW_MS = 30000;
+            const DEFAULT_GIFT_CATALOG_LINES = [
+                "2199 Jollie's Heartland",
+                "2499 Summer Pass L",
+                "1 Freestyle",
+                "3999 T-Rex skeleton pup",
+                "2199 Lemon Love Booth",
+                "5 Tofu",
+                "10 Friendship Necklace",
+                "10 Heart",
+                "1 Basketball",
+                "2999 Party Bus",
+                "6000 Elephant Nature Reserve",
+                "1500 Galaxy Globe",
+                "20 S Flowers",
+                "1500 Potato floating",
+                "10 Magnifying glass",
+                "1 Alien Pet",
+                "349 Summer Pass M",
+                "1500 Future Encounter",
+                "30 Capybara",
+                "5 Peach",
+                "1500 Wild Mic",
+                "10 Tiny Diny",
+                "12000 Superstar",
+                "3200 Hip-Hop Hen",
+                "20 Perfume",
+                "10000 Sunset Speedway",
+                "7000 Sports Car",
+                "20000 Dolphin",
+                "15 Bravo!",
+                "10 Love Piggy",
+                "6000 Strong Finish",
+                "13999 Spaceship",
+                "30 You are my Jam",
+                "30 U make Miso happy!",
+                "30 You are on a Roll",
+                "10 Slow motion",
+                "7999 Star Throne",
+                "25999 Phoenix",
+                "13500 Summer Pass XL",
+                "5 Overreact",
+                "15000 Pyramids",
+                "20000 TikTok Shuttle",
+                "15000 Time for Family",
+                "5 Name shoutout",
+                "10 Journey Pass"
+            ];
 
             const messagesEl = document.getElementById('tkaiMessages');
             const repliesEl = document.getElementById('tkaiReplies');
@@ -15288,6 +15373,14 @@
             const countEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyCount"]');
             const contextEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiContextCount"]');
             const customPromptEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiCustomPrompt"]');
+            const giftCatalogCustomEl = document.getElementById('tkaiGiftCatalogCustom');
+            const btnTkaiGiftImport = document.getElementById('btnTkaiGiftImport');
+            const btnTkaiGiftExportTxt = document.getElementById('btnTkaiGiftExportTxt');
+            const btnTkaiGiftExportJson = document.getElementById('btnTkaiGiftExportJson');
+            const tkaiGiftImportFile = document.getElementById('tkaiGiftImportFile');
+            const tkaiGiftQuickName = document.getElementById('tkaiGiftQuickName');
+            const tkaiGiftQuickCoins = document.getElementById('tkaiGiftQuickCoins');
+            const btnTkaiGiftQuickAdd = document.getElementById('btnTkaiGiftQuickAdd');
             const configToggle = document.getElementById('tkaiConfigToggle');
             const configInner = document.getElementById('tkaiConfigInner');
             const configArrow = document.getElementById('tkaiConfigArrow');
@@ -15672,6 +15765,8 @@
                 return null;
             }
             function parseCoinsFromText(text) {
+                const meta = detectGiftMetaFromText(text);
+                if (Number(meta.coins || 0) > 0) return Number(meta.coins || 0);
                 const t = String(text || '');
                 const compact = t.match(/(\d+(?:[.,]\d+)?)\s*([km])\s*(coins?|coin|coina|kovanica|diamonds?)/i);
                 if (compact) {
@@ -15693,6 +15788,67 @@
                     if (Number.isFinite(qty) && qty > 0) return qty; // caller množi s gift coin vrijednošću ako zna
                 }
                 return 0;
+            }
+
+            function normalizeGiftKey(value) {
+                return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+            }
+
+            function parseGiftCatalogLines(lines) {
+                const map = new Map();
+                String(lines || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean).forEach((line) => {
+                    const m = line.match(/^(\d{1,7})\s+(.+)$/);
+                    if (!m) return;
+                    const coins = Number(m[1] || 0);
+                    const name = String(m[2] || '').trim();
+                    const key = normalizeGiftKey(name);
+                    if (!coins || !key) return;
+                    map.set(key, { name, coins });
+                });
+                return map;
+            }
+
+            function getGiftCatalogEntries() {
+                try {
+                    const merged = parseGiftCatalogLines(DEFAULT_GIFT_CATALOG_LINES.join('\n'));
+                    const customLines = String(DB.getSettings().tkaiGiftCatalogCustom || '');
+                    parseGiftCatalogLines(customLines).forEach((v, k) => merged.set(k, v));
+                    return Array.from(merged.entries()).sort((a, b) => b[0].length - a[0].length);
+                } catch (_) {
+                    return [];
+                }
+            }
+
+            function detectGiftMetaFromText(text) {
+                const src = String(text || '').trim();
+                const normalized = normalizeGiftKey(src);
+                const entries = getGiftCatalogEntries();
+                let found = null;
+                for (const [key, value] of entries) {
+                    if (key && normalized.includes(key)) {
+                        found = value;
+                        break;
+                    }
+                }
+                const qtyMatch = src.match(/[x×]\s*(\d{1,4})\b/i);
+                const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
+                const coins = found ? Number(found.coins || 0) * quantity : 0;
+                return {
+                    giftName: found ? found.name : src.slice(0, 80),
+                    coins: Math.max(0, Number(coins || 0)),
+                    quantity,
+                };
+            }
+
+            function downloadTextFile(fileName, content, mime = 'text/plain;charset=utf-8') {
+                const blob = new Blob([String(content || '')], { type: mime });
+                const href = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = href;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { a.remove(); URL.revokeObjectURL(href); }, 0);
             }
             function trackViewerSample(value) {
                 const v = Number(value || 0);
@@ -15796,7 +15952,7 @@
             function stopScanning() {
                 saveSessionToHistory();
                 scanActive = false;
-                if (scanInterval) clearInterval(scanInterval);
+                if (scanInterval) clearTimeout(scanInterval);
                 scanInterval = null;
                 if (statsTimerInterval) clearInterval(statsTimerInterval);
                 statsTimerInterval = null;
@@ -17252,35 +17408,46 @@
                 }
                 const aggregated = [];
                 const giftMap = new Map();
+                const supporterSet = new Set();
                 giftEvents.forEach((message) => {
-                    const key = `${message.type || 'chat'}|${message.user}|${message.text}`;
+                    const user = String(message.user || 'Chat user').trim() || 'Chat user';
+                    const meta = detectGiftMetaFromText(message.text || '');
+                    const eventCoins = Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0);
+                    const key = `${message.type || 'chat'}|${user}|${meta.giftName}`;
                     if (giftMap.has(key)) {
-                        giftMap.get(key).count += 1;
+                        const row = giftMap.get(key);
+                        row.count += 1;
+                        row.totalCoins += eventCoins;
                         return;
                     }
-                    const entry = { ...message, count: 1 };
+                    const entry = { ...message, user, giftName: meta.giftName, count: 1, totalCoins: eventCoins };
                     giftMap.set(key, entry);
                     aggregated.push(entry);
                 });
+                aggregated.sort((a, b) => Number(b.totalCoins || 0) - Number(a.totalCoins || 0) || Number(b.count || 0) - Number(a.count || 0));
                 giftGalleryEl.innerHTML = '';
+                let totalCoins = 0;
                 aggregated.forEach((message) => {
+                    supporterSet.add(String(message.user || '').toLowerCase());
+                    totalCoins += Number(message.totalCoins || 0);
                     const row = document.createElement('div');
                     row.className = 'tkai-gift-item' + (message.type === 'subscriber' ? ' sub' : '');
                     const icon = message.type === 'subscriber' ? '⭐' : '🎁';
                     const countBadge = message.count > 1
                         ? '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + message.count + '</span>'
                         : '';
-                    const coins = Number(message.coins || parseCoinsFromText(message.text) || 0);
+                    const coins = Number(message.totalCoins || 0);
                     const coinsBadge = coins > 0 ? '<span style="margin-left:auto;color:#ffd47a">' + formatNum(coins) + ' 🪙</span>' : '';
                     row.innerHTML = '<div class="g-user"><span>' + icon + '</span><span>' + escHtml(message.user) + '</span></div>'
                         .replace('</div>', coinsBadge + countBadge + '</div>')
-                        + '<div>' + escHtml(message.text) + '</div>';
+                        + '<div>' + escHtml(message.giftName || message.text) + '</div>';
                     giftGalleryEl.appendChild(row);
                 });
                 if (giftCountEl) {
-                    const giftStats = computeGiftStats();
-                    giftCountEl.textContent = aggregated.length + ' događaja • ' + formatNum(giftStats.totalCoins) + ' 🪙';
+                    giftCountEl.textContent = aggregated.length + ' događaja • ' + formatNum(totalCoins) + ' 🪙';
                 }
+                if (coinTotalEl) coinTotalEl.textContent = formatNum(totalCoins);
+                if (supporterCountEl) supporterCountEl.textContent = formatNum(supporterSet.size);
                 updateSessionStatsUI();
             }
             function renderMessages() {
@@ -17933,19 +18100,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             async function scrapeTikTokChat() {
                 if (!window.electronWebview) {
                     setStatus('⚠️ TikTok Chat AI radi u Electron webview modu');
-                    return;
+                    return 0;
                 }
                 const tab = getActiveTab();
                 if (!tab?.url || !tab.url.includes('tiktok.com')) {
                     setStatus('⚠️ Nisi na TikTok stranici');
                     updateTkaiStreamOwner('', tab?.url || '');
-                    return;
+                    return 0;
                 }
                 updateTkaiStreamOwner('', tab.url);
                 const webview = getActiveTikTokWebview();
                 if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') {
                     setStatus('⚠️ Webview nije spreman');
-                    return;
+                    return 0;
                 }
                 try {
                     const raw = await webview.executeJavaScript(scraperScript);
@@ -17954,7 +18121,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         const errMsg = parsed && parsed.__scraperError ? parsed.__scraperError : JSON.stringify(parsed);
                         console.warn('[TikTokAI] script error:', errMsg);
                         setStatus('⚠️ Script greška: ' + errMsg.slice(0, 80));
-                        return;
+                        return 0;
                     }
                     const meta = parsed.find(m => m && m.type === '_meta');
                     const messages = parsed.filter(m => m && m.type !== '_meta');
@@ -17996,7 +18163,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     if (!filteredMessages.length) {
                         updateSessionStatsUI();
                         setStatus('📭 Nema novih poruka (filter)');
-                        return;
+                        return 0;
                     }
                     const existing = new Set(collectedMessages.map(message => message.id));
                     const existingCounts = new Map();
@@ -18011,14 +18178,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         const id = message.mid ? `mid:${message.mid}` : baseKey;
                         const allowRepeatGift = (message.type === 'gift' || message.type === 'subscriber') && (existingCounts.get(baseKey) || 0) < 4;
                         if (!existing.has(id)) {
-                            collectedMessages.push({ ...message, id, ts: Date.now(), coins: message.coins || parseCoinsFromText(message.text) });
+                            const giftMeta = detectGiftMetaFromText(message.text || '');
+                            collectedMessages.push({ ...message, id, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text });
                             existing.add(id);
                             existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
                             added += 1;
                             if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
                         } else if (allowRepeatGift) {
                             const repeatId = `${id}:r:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
-                            collectedMessages.push({ ...message, id: repeatId, ts: Date.now(), coins: message.coins || parseCoinsFromText(message.text) });
+                            const giftMeta = detectGiftMetaFromText(message.text || '');
+                            collectedMessages.push({ ...message, id: repeatId, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text });
                             existing.add(repeatId);
                             existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
                             added += 1;
@@ -18051,10 +18220,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             generateReplies(collectedMessages.slice(-10));
                         }
                     }
+                    return added;
                 } catch (e) {
                     console.warn('[TikTokAI] scrape error:', e && e.message ? e.message : (JSON.stringify(e) || String(e)));
                     setStatus('⚠️ Greška: ' + (e && e.message ? e.message.slice(0, 80) : 'executeJavaScript failed'));
+                    return 0;
                 }
+            }
+
+            function getNextTkaiScanDelayMs() {
+                const turboEnabled = DB.getSettings().tkaiTurboScan !== false;
+                if (!turboEnabled) return Math.max(1500, Number(DB.getSettings().tkaiScanIntervalMs) || TKAI_SCAN_INTERVAL_NORMAL_MS);
+                return Date.now() < turboScanFastUntilTs ? TKAI_SCAN_INTERVAL_FAST_MS : TKAI_SCAN_INTERVAL_NORMAL_MS;
+            }
+
+            async function runTkaiScanCycle() {
+                if (!scanActive) return;
+                const added = await scrapeTikTokChat();
+                if (DB.getSettings().tkaiTurboScan !== false && added > 0) {
+                    turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
+                }
+                if (!scanActive) return;
+                if (scanInterval) clearTimeout(scanInterval);
+                scanInterval = setTimeout(runTkaiScanCycle, getNextTkaiScanDelayMs());
             }
 
             async function generateReplies(messages) {
@@ -18370,6 +18558,79 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             restoreTkaiAutosaveIfAny();
             initTkaiAutosave();
             [toneEl, readLangEl, translateLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+
+            btnTkaiGiftImport?.addEventListener('click', () => tkaiGiftImportFile?.click());
+            tkaiGiftImportFile?.addEventListener('change', async (event) => {
+                const file = event?.target?.files?.[0];
+                if (!file) return;
+                const text = await file.text().catch(() => '');
+                let importedLines = String(text || '');
+                if (String(file.name || '').toLowerCase().endsWith('.json')) {
+                    try {
+                        const data = JSON.parse(String(text || ''));
+                        const rows = [];
+                        if (Array.isArray(data)) {
+                            data.forEach((row) => {
+                                const coins = Number(row?.coins || row?.value || 0);
+                                const name = String(row?.name || row?.gift || '').trim();
+                                if (coins > 0 && name) rows.push(`${coins} ${name}`);
+                            });
+                        } else if (data && typeof data === 'object') {
+                            Object.entries(data).forEach(([name, coins]) => {
+                                const value = Number(coins || 0);
+                                if (value > 0 && name) rows.push(`${value} ${name}`);
+                            });
+                        }
+                        importedLines = rows.join('\n');
+                    } catch (_) { }
+                }
+                const parsed = parseGiftCatalogLines(importedLines);
+                if (!parsed.size) {
+                    showToast('⚠️ Import nije uspio: nema valjanih redova.');
+                    event.target.value = '';
+                    return;
+                }
+                const lines = Array.from(parsed.values())
+                    .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0))
+                    .map((v) => `${Number(v.coins || 0)} ${String(v.name || '').trim()}`)
+                    .join('\n');
+                if (giftCatalogCustomEl) giftCatalogCustomEl.value = lines;
+                DB.saveSetting('tkaiGiftCatalogCustom', lines);
+                renderGiftGallery();
+                showToast('✅ Gift katalog importiran: ' + parsed.size + ' stavki');
+                event.target.value = '';
+            });
+            btnTkaiGiftExportTxt?.addEventListener('click', () => {
+                const lines = Array.from(getGiftCatalogEntries().map(([_, v]) => v))
+                    .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0))
+                    .map((v) => `${Number(v.coins || 0)} ${String(v.name || '').trim()}`)
+                    .join('\n');
+                downloadTextFile('tkai-gift-catalog-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt', lines, 'text/plain;charset=utf-8');
+                showToast('⬇️ Gift katalog TXT skinut.');
+            });
+            btnTkaiGiftExportJson?.addEventListener('click', () => {
+                const rows = Array.from(getGiftCatalogEntries().map(([_, v]) => v))
+                    .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0));
+                downloadTextFile('tkai-gift-catalog-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json', JSON.stringify(rows, null, 2), 'application/json;charset=utf-8');
+                showToast('⬇️ Gift katalog JSON skinut.');
+            });
+            btnTkaiGiftQuickAdd?.addEventListener('click', () => {
+                const name = String(tkaiGiftQuickName?.value || '').trim();
+                const coins = Number(tkaiGiftQuickCoins?.value || 0);
+                if (!name || !Number.isFinite(coins) || coins <= 0) {
+                    showToast('⚠️ Upiši valjan naziv i broj coins.');
+                    return;
+                }
+                const current = String(DB.getSettings().tkaiGiftCatalogCustom || '');
+                const lines = current ? (current + '\n') : '';
+                const next = lines + `${Math.floor(coins)} ${name}`;
+                DB.saveSetting('tkaiGiftCatalogCustom', next);
+                if (giftCatalogCustomEl) giftCatalogCustomEl.value = next;
+                if (tkaiGiftQuickName) tkaiGiftQuickName.value = '';
+                if (tkaiGiftQuickCoins) tkaiGiftQuickCoins.value = '';
+                renderGiftGallery();
+                showToast('✅ Dodan gift: ' + name);
+            });
             contextEl?.addEventListener('input', saveCfg);
             customPromptEl?.addEventListener('input', saveCfg);
             readLangEl?.addEventListener('change', async () => {
@@ -18413,14 +18674,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     return;
                 }
                 scanActive = true;
+                turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
                 if (!sessionStartedAt) sessionStartedAt = Date.now();
                 toggleBtn.textContent = '⏹ Skeniranje OFF';
                 toggleBtn.className = 'tkai-scan-btn stop';
                 setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
                 showToast('▶ Skeniranje uključeno');
-                scrapeTikTokChat();
-                const _scanMs = Number(DB.getSettings().tkaiScanIntervalMs) || 4000;
-                scanInterval = setInterval(scrapeTikTokChat, _scanMs);
+                runTkaiScanCycle();
                 statsTimerInterval = setInterval(function () {
                     if (scanActive) {
                         updateSessionStatsUI();
@@ -18505,6 +18765,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 vis('tkaiQuestionsCard', 'tkaiShowQuestions');
                 vis('tkaiPieCard', 'tkaiShowPieBreakdown');
                 vis('tkaiSongsCard', 'tkaiShowSongSection');
+
+                // Safety net: if every insights card ended hidden (bad saved state), bring core cards back.
+                const insightsRoot = document.getElementById('tkaiInsights');
+                if (insightsRoot) {
+                    const cards = Array.from(insightsRoot.querySelectorAll('.tkai-insights-card'));
+                    const visibleCards = cards.filter(c => c.style.display !== 'none');
+                    if (cards.length > 0 && visibleCards.length === 0) {
+                        ['tkaiSpikesCard', 'tkaiRecommendationsCard', 'tkaiPieCard', 'tkaiSongsCard'].forEach((id) => {
+                            const el = document.getElementById(id);
+                            if (el) el.style.display = '';
+                        });
+                    }
+                }
             }
 
             function normalizeTkaiHexColor(value, fallback) {

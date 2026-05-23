@@ -7226,7 +7226,58 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   let lastScrapeMeta = null;
   let lastCaptionSpeakKey = "";
   let lastCaptionSpeakAt = 0;
+  let turboScanFastUntilTs = 0;
   const translateCache = new Map();
+  const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
+  const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
+  const TKAI_SCAN_FAST_WINDOW_MS = 30000;
+  const DEFAULT_GIFT_CATALOG_LINES = [
+    "2199 Jollie's Heartland",
+    "2499 Summer Pass L",
+    "1 Freestyle",
+    "3999 T-Rex skeleton pup",
+    "2199 Lemon Love Booth",
+    "5 Tofu",
+    "10 Friendship Necklace",
+    "10 Heart",
+    "1 Basketball",
+    "2999 Party Bus",
+    "6000 Elephant Nature Reserve",
+    "1500 Galaxy Globe",
+    "20 S Flowers",
+    "1500 Potato floating",
+    "10 Magnifying glass",
+    "1 Alien Pet",
+    "349 Summer Pass M",
+    "1500 Future Encounter",
+    "30 Capybara",
+    "5 Peach",
+    "1500 Wild Mic",
+    "10 Tiny Diny",
+    "12000 Superstar",
+    "3200 Hip-Hop Hen",
+    "20 Perfume",
+    "10000 Sunset Speedway",
+    "7000 Sports Car",
+    "20000 Dolphin",
+    "15 Bravo!",
+    "10 Love Piggy",
+    "6000 Strong Finish",
+    "13999 Spaceship",
+    "30 You are my Jam",
+    "30 U make Miso happy!",
+    "30 You are on a Roll",
+    "10 Slow motion",
+    "7999 Star Throne",
+    "25999 Phoenix",
+    "13500 Summer Pass XL",
+    "5 Overreact",
+    "15000 Pyramids",
+    "20000 TikTok Shuttle",
+    "15000 Time for Family",
+    "5 Name shoutout",
+    "10 Journey Pass",
+  ];
 
   function getTkaiTranslateTargetLang() {
     const preferred = String(getTkaiSetting("tkaiTranslateLang", "auto") || "auto").toLowerCase();
@@ -7339,25 +7390,21 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     }
     updateTkaiStreamOwner("", url);
     scanActive = true;
+    turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
     if (!sessionStartedAt) sessionStartedAt = Date.now();
     if (toggleBtn) {
       toggleBtn.textContent = "⏹ Skeniranje OFF";
       toggleBtn.className = "tkai-scan-btn stop";
     }
     setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
-    scrapeTikTokChat();
-    const scanEveryMs = Math.max(
-      1500,
-      parseInt(getTkaiSetting("tkaiScanIntervalMs", "4000"), 10) || 4000,
-    );
-    scanInterval = setInterval(scrapeTikTokChat, scanEveryMs);
+    runTkaiScanCycle();
     updateSessionStatsUI();
   }
 
   function stopScanning() {
     if (!scanActive) return;
     scanActive = false;
-    if (scanInterval) clearInterval(scanInterval);
+    if (scanInterval) clearTimeout(scanInterval);
     scanInterval = null;
     if (toggleBtn) {
       toggleBtn.textContent = "▶ Skeniranje ON";
@@ -7388,6 +7435,30 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   initAutoScan();
   setInterval(updateSessionStatsUI, 10000);
 
+  function getNextTkaiScanDelayMs() {
+    const turboEnabled = getTkaiSetting("tkaiTurboScan", true) !== false;
+    if (!turboEnabled) {
+      return Math.max(
+        1500,
+        parseInt(getTkaiSetting("tkaiScanIntervalMs", "4000"), 10) || TKAI_SCAN_INTERVAL_NORMAL_MS,
+      );
+    }
+    return Date.now() < turboScanFastUntilTs
+      ? TKAI_SCAN_INTERVAL_FAST_MS
+      : TKAI_SCAN_INTERVAL_NORMAL_MS;
+  }
+
+  async function runTkaiScanCycle() {
+    if (!scanActive) return;
+    const added = await scrapeTikTokChat();
+    if (getTkaiSetting("tkaiTurboScan", true) !== false && added > 0) {
+      turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
+    }
+    if (!scanActive) return;
+    if (scanInterval) clearTimeout(scanInterval);
+    scanInterval = setTimeout(runTkaiScanCycle, getNextTkaiScanDelayMs());
+  }
+
   // ── DOM refs ──
   const messagesEl = document.getElementById("tkaiMessages");
   const repliesEl = document.getElementById("tkaiReplies");
@@ -7409,6 +7480,14 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   const expandStatsBtn = document.getElementById("tkaiExpandStatsBtn");
   const clearBtn = document.getElementById("tkaiClearBtn");
   const holdLBtn = document.getElementById("tkaiHoldLBtn");
+  const giftCatalogCustomEl = document.getElementById("tkaiGiftCatalogCustom");
+  const btnTkaiGiftImport = document.getElementById("btnTkaiGiftImport");
+  const btnTkaiGiftExportTxt = document.getElementById("btnTkaiGiftExportTxt");
+  const btnTkaiGiftExportJson = document.getElementById("btnTkaiGiftExportJson");
+  const tkaiGiftImportFile = document.getElementById("tkaiGiftImportFile");
+  const tkaiGiftQuickName = document.getElementById("tkaiGiftQuickName");
+  const tkaiGiftQuickCoins = document.getElementById("tkaiGiftQuickCoins");
+  const btnTkaiGiftQuickAdd = document.getElementById("btnTkaiGiftQuickAdd");
   const filterStarredBtn = document.getElementById("tkaiFilterStarredBtn");
   const sessionInfoEl = document.getElementById("tkaiSessionInfo");
   const viewerCountEl = document.getElementById("tkaiViewerCount");
@@ -7960,6 +8039,8 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
   }
 
   function parseCoinsFromText(text) {
+    const meta = detectGiftMetaFromText(text);
+    if (Number(meta.coins || 0) > 0) return Number(meta.coins || 0);
     const t = String(text || "");
     const compact = t.match(/(\d+(?:[.,]\d+)?)\s*([km])\s*(coins?|coin|coina|kovanica|diamonds?)/i);
     if (compact) {
@@ -7999,6 +8080,55 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       }
     }
     return 0;
+  }
+
+  function normalizeGiftKey(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  function parseGiftCatalogLines(lines) {
+    const map = new Map();
+    String(lines || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const m = line.match(/^(\d{1,7})\s+(.+)$/);
+        if (!m) return;
+        const coins = Number(m[1] || 0);
+        const name = String(m[2] || "").trim();
+        const key = normalizeGiftKey(name);
+        if (!coins || !key) return;
+        map.set(key, { name, coins });
+      });
+    return map;
+  }
+
+  function getGiftCatalogEntries() {
+    const merged = parseGiftCatalogLines(DEFAULT_GIFT_CATALOG_LINES.join("\n"));
+    parseGiftCatalogLines(getTkaiSetting("tkaiGiftCatalogCustom", "")).forEach((v, k) => merged.set(k, v));
+    return Array.from(merged.entries()).sort((a, b) => b[0].length - a[0].length);
+  }
+
+  function detectGiftMetaFromText(text) {
+    const src = String(text || "").trim();
+    const normalized = normalizeGiftKey(src);
+    const entries = getGiftCatalogEntries();
+    let found = null;
+    for (const [key, value] of entries) {
+      if (key && normalized.includes(key)) {
+        found = value;
+        break;
+      }
+    }
+    const qtyMatch = src.match(/[x×]\s*(\d{1,4})\b/i);
+    const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
+    const coins = found ? Number(found.coins || 0) * quantity : 0;
+    return {
+      giftName: found ? found.name : src.slice(0, 80),
+      coins: Math.max(0, Number(coins || 0)),
+      quantity,
+    };
   }
 
   function isTkaiPanelOpen() {
@@ -9746,6 +9876,97 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     }
   });
 
+  btnTkaiGiftImport?.addEventListener("click", () => tkaiGiftImportFile?.click());
+  tkaiGiftImportFile?.addEventListener("change", async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    const text = await file.text().catch(() => "");
+    let importedLines = String(text || "");
+    if (String(file.name || "").toLowerCase().endsWith(".json")) {
+      try {
+        const data = JSON.parse(String(text || ""));
+        const rows = [];
+        if (Array.isArray(data)) {
+          data.forEach((row) => {
+            const coins = Number(row?.coins || row?.value || 0);
+            const name = String(row?.name || row?.gift || "").trim();
+            if (coins > 0 && name) rows.push(`${coins} ${name}`);
+          });
+        } else if (data && typeof data === "object") {
+          Object.entries(data).forEach(([name, coins]) => {
+            const value = Number(coins || 0);
+            if (value > 0 && name) rows.push(`${value} ${name}`);
+          });
+        }
+        importedLines = rows.join("\n");
+      } catch (_) { }
+    }
+    const parsed = parseGiftCatalogLines(importedLines);
+    if (!parsed.size) {
+      showToast("⚠️ Import nije uspio: nema valjanih redova.");
+      event.target.value = "";
+      return;
+    }
+    const lines = Array.from(parsed.values())
+      .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0))
+      .map((v) => `${Number(v.coins || 0)} ${String(v.name || "").trim()}`)
+      .join("\n");
+    DB.saveSetting("tkaiGiftCatalogCustom", lines);
+    if (giftCatalogCustomEl) giftCatalogCustomEl.value = lines;
+    updateGiftGallery();
+    showToast(`✅ Gift katalog importiran: ${parsed.size} stavki`);
+    event.target.value = "";
+  });
+
+  btnTkaiGiftExportTxt?.addEventListener("click", () => {
+    const lines = getGiftCatalogEntries()
+      .map(([, v]) => v)
+      .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0))
+      .map((v) => `${Number(v.coins || 0)} ${String(v.name || "").trim()}`)
+      .join("\n");
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tkai-gift-catalog-" + new Date().toISOString().replace(/[:.]/g, "-") + ".txt";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 0);
+    showToast("⬇️ Gift katalog TXT skinut.");
+  });
+
+  btnTkaiGiftExportJson?.addEventListener("click", () => {
+    const rows = getGiftCatalogEntries()
+      .map(([, v]) => v)
+      .sort((a, b) => Number(b.coins || 0) - Number(a.coins || 0));
+    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "tkai-gift-catalog-" + new Date().toISOString().replace(/[:.]/g, "-") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 0);
+    showToast("⬇️ Gift katalog JSON skinut.");
+  });
+
+  btnTkaiGiftQuickAdd?.addEventListener("click", () => {
+    const name = String(tkaiGiftQuickName?.value || "").trim();
+    const coins = Number(tkaiGiftQuickCoins?.value || 0);
+    if (!name || !Number.isFinite(coins) || coins <= 0) {
+      showToast("⚠️ Upiši valjan naziv i broj coins.");
+      return;
+    }
+    const current = String(getTkaiSetting("tkaiGiftCatalogCustom", "") || "");
+    const next = (current ? current + "\n" : "") + `${Math.floor(coins)} ${name}`;
+    DB.saveSetting("tkaiGiftCatalogCustom", next);
+    if (giftCatalogCustomEl) giftCatalogCustomEl.value = next;
+    if (tkaiGiftQuickName) tkaiGiftQuickName.value = "";
+    if (tkaiGiftQuickCoins) tkaiGiftQuickCoins.value = "";
+    updateGiftGallery();
+    showToast("✅ Dodan gift: " + name);
+  });
+
   // AI Live Chat Settings Buttons
   const btnCustomCategories = document.getElementById(
     "btnTkaiCustomCategories",
@@ -10913,8 +11134,30 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       (m) => m.type === "gift" || m.type === "subscriber",
     );
     const minCoins =
-      parseInt(getTkaiSetting("tkaiMinGiftCoins", "0"), 10) || 0;
-    const visibleGifts = gifts.filter((g) => Number(g.coins || 0) >= minCoins);
+      parseInt(getTkaiSetting("tkaiGiftMinCoins", "0"), 10) || 0;
+    const grouped = new Map();
+    gifts.forEach((g) => {
+      const meta = detectGiftMetaFromText(g.text || "");
+      const user = String(g.user || "Chat user").trim() || "Chat user";
+      const coins = Number(g.coins || meta.coins || parseCoinsFromText(g.text) || 0);
+      const key = `${g.type || "gift"}|${user}|${meta.giftName}`;
+      if (grouped.has(key)) {
+        const row = grouped.get(key);
+        row.count += 1;
+        row.totalCoins += coins;
+      } else {
+        grouped.set(key, {
+          ...g,
+          user,
+          giftName: meta.giftName,
+          count: 1,
+          totalCoins: coins,
+        });
+      }
+    });
+    const visibleGifts = Array.from(grouped.values())
+      .filter((g) => Number(g.totalCoins || 0) >= minCoins)
+      .sort((a, b) => Number(b.totalCoins || 0) - Number(a.totalCoins || 0) || Number(b.count || 0) - Number(a.count || 0));
     if (gifts.length === 0) {
       giftGalleryEl.innerHTML =
         '<div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>';
@@ -10923,19 +11166,21 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
     }
 
     giftGalleryEl.innerHTML = "";
-    visibleGifts.slice(-15).forEach((g) => {
+    visibleGifts.slice(0, 15).forEach((g) => {
       const item = document.createElement("div");
       item.className = "tkai-gift-item" + (g.type === "subscriber" ? " sub" : "");
       item.style.borderLeft =
         g.type === "gift" ? "3px solid #ff5f56" : "3px solid #667eea";
-      const giftCoins = Number(g.coins || 0);
+      const giftCoins = Number(g.totalCoins || 0);
+      const countBadge = g.count > 1 ? `<span style="margin-left:6px;color:#fff;font-size:10px;background:rgba(255,255,255,.14);padding:1px 6px;border-radius:999px">x${g.count}</span>` : "";
       item.innerHTML = `
         <div class="g-user">
           <span class="tk-badge ${g.type}">${g.type === "gift" ? "🎁" : "⭐"}</span>
           <span class="u-name" style="color:var(--accent)">${escHtml(g.user)}</span>
           ${giftCoins > 0 ? `<span style="margin-left:auto;color:#ffd47a">${formatNum(giftCoins)} 🪙</span>` : ""}
+          ${countBadge}
         </div>
-        <div class="tkai-msg-text" style="font-weight:600">${escHtml(g.text)}</div>
+        <div class="tkai-msg-text" style="font-weight:600">${escHtml(g.giftName || g.text)}</div>
       `;
       giftGalleryEl.appendChild(item);
     });
@@ -10943,7 +11188,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
     const countEl = document.getElementById("tkaiGiftCount");
     if (countEl) {
-      const totalCoins = gifts.reduce((sum, g) => sum + Number(g.coins || 0), 0);
+      const totalCoins = visibleGifts.reduce((sum, g) => sum + Number(g.totalCoins || 0), 0);
       countEl.textContent = `${visibleGifts.length}/${gifts.length} događaja • ${formatNum(totalCoins)} 🪙`;
     }
     updateSessionStatsUI();
@@ -10951,15 +11196,15 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
 
   // ── Scrape chat from active tab ──
   async function scrapeTikTokChat() {
-    if (!window.electronWebview) return;
+    if (!window.electronWebview) return 0;
     const tab = getActiveTab();
-    if (!tab) return;
+    if (!tab) return 0;
     const url = tab.url || "";
     const isTikTok = url.includes("tiktok.com");
     if (!isTikTok) {
       setStatus("⚠️ Nisi na TikTok stranici");
       updateTkaiStreamOwner("", url);
-      return;
+      return 0;
     }
     updateTkaiStreamOwner("", url);
     try {
@@ -10967,7 +11212,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       const wv = getTabWebview(tab.id);
       if (!wv || typeof wv.executeJavaScript !== "function") {
         setStatus("⚠️ Webview nije spreman");
-        return;
+        return 0;
       }
       const raw = await safeWebviewExecute(
         wv,
@@ -10983,7 +11228,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       }
       if (!Array.isArray(msgs) || msgs.length === 0) {
         setStatus("📭 Nema poruka u chatu");
-        return;
+        return 0;
       }
 
       const meta = msgs.find((m) => m && m.type === "_meta");
@@ -11039,7 +11284,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         }
         updateSessionStatsUI();
         updateAutoSuggestIndicator();
-        return;
+        return 0;
       }
 
       // Merge with existing (avoid duplicates by text+user)
@@ -11052,6 +11297,9 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         const key = m.user + ":" + m.text;
         if (!existing.has(key)) {
           if (!m.ts) m.ts = Date.now();
+          const giftMeta = detectGiftMetaFromText(m.text || "");
+          m.coins = Number(m.coins || giftMeta.coins || parseCoinsFromText(m.text) || 0);
+          m.giftName = m.giftName || giftMeta.giftName || m.text;
           collectedMessages.push(m);
           existing.add(key);
           added++;
@@ -11062,7 +11310,7 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
       if (added === 0) {
         updateSessionStatsUI();
         updateAutoSuggestIndicator();
-        return;
+        return 0;
       }
 
       // Keep last 50 messages
@@ -11096,9 +11344,11 @@ document.getElementById("mi-emoji")?.addEventListener("click", () => {
         msgCountEl.textContent = collectedMessages.length + " poruka";
       updateAutoSuggestIndicator();
       scheduleAutoSuggest();
+      return added;
     } catch (e) {
       setStatus("⚠️ Greška pri skeniranju");
       console.warn("[TikTokAI] scrape error:", e);
+      return 0;
     }
   }
 
