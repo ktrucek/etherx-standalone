@@ -9449,7 +9449,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.240</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.241</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10814,7 +10814,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.240</span></div>
+                                    v<span id="helpVersionNum2">2.4.241</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11137,7 +11137,7 @@
                     </div>
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Ukupno gift 🎁</div>
-                        <div class="tkai-stat-value" id="tkaiGiftCount">0</div>
+                        <div class="tkai-stat-value" id="tkaiGiftEventCount">0</div>
                     </div>
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Pitanja ❓</div>
@@ -11202,7 +11202,54 @@
                         <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs &amp; DJ
                             CC<span>♫</span>
                         </div>
+                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+                            <button class="tkai-insights-btn" id="tkaiSongRecNowBtn" type="button">SongRec now</button>
+                            <button class="tkai-insights-btn" id="tkaiDjCcNowBtn" type="button">DJ CC now</button>
+                            <span id="tkaiSongToolsStatus" style="font-size:10px;color:var(--text3)">SongRec: idle</span>
+                        </div>
                         <ul class="tkai-song-list" id="tkaiSongList"></ul>
+                    </div>
+                    <div class="tkai-insights-card" style="flex:1" id="tkaiPieCard">
+                        <div class="tkai-insights-title" title="Raspodjela tipova poruka u sesiji">Pie breakdown<span>◔</span></div>
+                        <div class="tkai-pie-wrap">
+                            <div class="tkai-pie-chart" id="tkaiPieChart">
+                                <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
+                            </div>
+                            <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
+                        </div>
+                        <ul class="tkai-insights-list" id="tkaiPieSummary">
+                            <li>Nema podataka za pie.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="tkai-insights-row">
+                    <div class="tkai-insights-card" style="flex:1" id="tkaiSpikesCard">
+                        <div class="tkai-card-head">
+                            <div class="tkai-insights-title" title="Viewer, gift i chat spike događaji">Spike events<span>⚡</span></div>
+                            <div style="display:flex;gap:6px;align-items:center">
+                                <button class="tkai-insights-btn active" id="tkaiSpikeAll" type="button">All</button>
+                                <button class="tkai-insights-btn" id="tkaiSpikeViewers" type="button">Viewers</button>
+                                <button class="tkai-insights-btn" id="tkaiSpikeGifts" type="button">Gifts</button>
+                            </div>
+                        </div>
+                        <ul class="tkai-insights-list" id="tkaiSpikeList">
+                            <li>Nema spikeova.</li>
+                        </ul>
+                    </div>
+                    <div class="tkai-insights-card" style="flex:1" id="tkaiRecommendationsCard">
+                        <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span>
+                        </div>
+                        <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
+                    </div>
+                </div>
+                <div class="tkai-insights-row">
+                    <div class="tkai-insights-card" style="flex:1" id="tkaiQuestionsCard">
+                        <div class="tkai-insights-title" title="Sva pitanja iz chata ove sesije">Pitanja iz chata ❓
+                        </div>
+                        <div id="tkaiQuestionsList" style="max-height:140px;overflow-y:auto;margin-top:4px">
+                            <div style="color:var(--text3);font-size:10px;padding:2px 0">Nema detektiranih pitanja.
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="tkai-insights-row">
@@ -11229,23 +11276,6 @@
                         <div id="tkaiShadowbanUserStats"
                             style="margin-top:6px;max-height:120px;overflow-y:auto;font-size:10px;color:var(--text2)">
                         </div>
-                    </div>
-                </div>
-                <div class="tkai-insights-row">
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiQuestionsCard">
-                        <div class="tkai-insights-title" title="Sva pitanja iz chata ove sesije">Pitanja iz chata ❓
-                        </div>
-                        <div id="tkaiQuestionsList" style="max-height:140px;overflow-y:auto;margin-top:4px">
-                            <div style="color:var(--text3);font-size:10px;padding:2px 0">Nema detektiranih pitanja.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="tkai-insights-row">
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiRecommendationsCard">
-                        <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span>
-                        </div>
-                        <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
                     </div>
                 </div>
             </div>
@@ -15320,6 +15350,7 @@
             const msgCountEl = document.getElementById('tkaiMsgCount');
             const giftGalleryEl = document.getElementById('tkaiGiftGallery');
             const giftCountEl = document.getElementById('tkaiGiftCount');
+            const giftEventCountEl = document.getElementById('tkaiGiftEventCount');
             const giftToggleBtn = document.getElementById('tkaiGiftToggle');
             const filterStarredBtn = document.getElementById('tkaiFilterStarredBtn');
             const sessionInfoEl = document.getElementById('tkaiSessionInfo');
@@ -16151,8 +16182,14 @@
                         });
                     perMinuteSentiment.set(minute, (perMinuteSentiment.get(minute) || 0) + score);
                 });
-                const engagement = Array.from(perMinute.entries()).sort((a, b) => a[0] - b[0]).slice(-12)
-                    .map(([minute, count]) => ({ minute, count }));
+                const engagementBase = Array.from(perMinute.entries()).sort((a, b) => a[0] - b[0]);
+                const latestMinute = engagementBase.length
+                    ? Number(engagementBase[engagementBase.length - 1][0] || 0)
+                    : Math.max(0, Math.floor((now - sessionStart) / 60000));
+                const engagement = Array.from({ length: 12 }, (_, idx) => {
+                    const minute = Math.max(0, latestMinute - (11 - idx));
+                    return { minute, count: Number(perMinute.get(minute) || 0) };
+                });
                 const totalEngagement = engagement.reduce((acc, e) => acc + e.count, 0);
                 const engagementWithPct = engagement.map((e) => ({
                     minute: e.minute,
@@ -16581,6 +16618,9 @@
                 });
                 const line = coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
                 const area = `${coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} ${coords[coords.length - 1].x.toFixed(1)},${(height - padBottom).toFixed(1)} ${coords[0].x.toFixed(1)},${(height - padBottom).toFixed(1)}`;
+                const dots = coords.map((p) =>
+                    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="rgba(167,243,208,.95)" stroke="rgba(6,95,70,.65)" stroke-width="0.8"></circle>`
+                ).join('');
                 const first = vals[0] || 0;
                 const last = vals[vals.length - 1] || 0;
                 const delta = last - first;
@@ -16590,6 +16630,7 @@
                     `<polyline fill="none" stroke="rgba(148,163,184,.35)" stroke-width="1" points="${padX},${(height - padBottom).toFixed(1)} ${(width - padX).toFixed(1)},${(height - padBottom).toFixed(1)}"/>` +
                     `<polygon points="${area}" fill="rgba(45,212,191,.22)"></polygon>` +
                     `<polyline fill="none" stroke="rgba(94,234,212,.96)" stroke-width="2.1" points="${line}"></polyline>` +
+                    dots +
                     `</svg>`;
                 if (engagementAreaMetaEl) {
                     engagementAreaMetaEl.textContent = `Trend ${dir} ${delta > 0 ? '+' : ''}${formatNum(delta)} • zadnje ${formatNum(last)}/min`;
@@ -17107,26 +17148,126 @@
 
             function syncLiveDashboardPopout() {
                 if (!liveDashboardPopout || !document.body.contains(liveDashboardPopout)) return;
+                const panelMain = panel?.querySelector('.tkai-main');
+                const giftHeader = giftGalleryEl?.previousElementSibling && giftGalleryEl.previousElementSibling.classList.contains('tkai-col-header')
+                    ? giftGalleryEl.previousElementSibling
+                    : null;
+                const footer = panel?.querySelector('.tkai-footer');
                 const stats = document.getElementById('tkaiStatsStrip');
                 const supporters = document.getElementById('tkaiTopSupporters');
                 const users = document.getElementById('tkaiUserSummary');
                 const insights = document.getElementById('tkaiInsights');
-                const chat = document.getElementById('tkaiMessages');
+                const giftGallery = document.getElementById('tkaiGiftGallery');
+                const outMain = liveDashboardPopout.querySelector('#tkaiLiveOutMain');
+                const outGiftHeader = liveDashboardPopout.querySelector('#tkaiLiveOutGiftHead');
+                const outGiftGallery = liveDashboardPopout.querySelector('#tkaiLiveOutGiftGallery');
                 const outStats = liveDashboardPopout.querySelector('#tkaiLiveOutStats');
                 const outSupporters = liveDashboardPopout.querySelector('#tkaiLiveOutSupporters');
                 const outUsers = liveDashboardPopout.querySelector('#tkaiLiveOutUsers');
                 const outInsights = liveDashboardPopout.querySelector('#tkaiLiveOutInsights');
-                const outChat = liveDashboardPopout.querySelector('#tkaiLiveOutChat');
+                const outFooter = liveDashboardPopout.querySelector('#tkaiLiveOutFooter');
                 const outMeta = liveDashboardPopout.querySelector('#tkaiLiveOutMeta');
+                if (outMain && panelMain) outMain.innerHTML = panelMain.innerHTML;
+                if (outGiftHeader && giftHeader) outGiftHeader.innerHTML = giftHeader.innerHTML;
+                if (outGiftGallery && giftGallery) outGiftGallery.innerHTML = giftGallery.innerHTML;
                 if (outStats && stats) outStats.innerHTML = stats.innerHTML;
                 if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
                 if (outUsers && users) outUsers.innerHTML = users.innerHTML;
                 if (outInsights && insights) outInsights.innerHTML = insights.innerHTML;
-                if (outChat && chat) outChat.innerHTML = chat.innerHTML;
+                if (outFooter && footer) outFooter.innerHTML = footer.innerHTML;
                 if (outMeta) {
                     const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
-                    outMeta.textContent = 'Live: ' + formatNum(collectedMessages.length) + ' poruka • ' + elapsedMin + ' min • viewers ' + formatNum(liveViewerCount);
+                    const streamOwner = String(streamOwnerHandle || '').trim();
+                    const ownerLabel = streamOwner ? (' • @' + streamOwner.replace(/^@+/, '')) : '';
+                    outMeta.textContent = 'Live: ' + formatNum(collectedMessages.length) + ' poruka • ' + elapsedMin + ' min • viewers ' + formatNum(liveViewerCount) + ownerLabel;
                 }
+            }
+
+            function getMainPanelElementById(id) {
+                if (!id) return null;
+                try {
+                    return panel?.querySelector('#' + CSS.escape(id)) || null;
+                } catch (_) {
+                    return panel?.querySelector('#' + id.replace(/[^a-zA-Z0-9\-_:.]/g, '')) || null;
+                }
+            }
+
+            function bindLiveDashboardPopoutEvents() {
+                if (!liveDashboardPopout) return;
+
+                liveDashboardPopout.addEventListener('click', async (event) => {
+                    const button = event.target.closest('button');
+                    if (button) {
+                        if (button.id === 'tkaiLiveDashClose') {
+                            closeLiveDashboardPopout();
+                            return;
+                        }
+                        if (button.id === 'tkaiLiveSongRecNow') {
+                            if (typeof window.runSongRecRecognition === 'function') window.runSongRecRecognition(true);
+                            return;
+                        }
+                        if (button.id === 'tkaiLiveDjCcNow') {
+                            if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
+                            return;
+                        }
+                        if (button.classList.contains('tkai-reply-copy')) {
+                            const replyCard = button.closest('.tkai-reply-card');
+                            const replyText = replyCard?.querySelector('.tkai-reply-text')?.textContent?.trim() || '';
+                            if (!replyText) return;
+                            try {
+                                await navigator.clipboard.writeText(replyText);
+                                button.textContent = '✅ Kopirano!';
+                                button.classList.add('copied');
+                                setTimeout(() => {
+                                    button.textContent = '📋 Kopiraj';
+                                    button.classList.remove('copied');
+                                }, 2000);
+                            } catch (_) {
+                                showToast('⚠️ Kopiranje nije uspjelo');
+                            }
+                            return;
+                        }
+                        const originalBtn = getMainPanelElementById(button.id);
+                        if (originalBtn && originalBtn !== button) {
+                            originalBtn.click();
+                            return;
+                        }
+                    }
+
+                    const msgRow = event.target.closest('#tkaiLiveOutMain .tkai-msg');
+                    if (!msgRow) return;
+                    const clonedRows = Array.from(liveDashboardPopout.querySelectorAll('#tkaiLiveOutMain .tkai-msg'));
+                    const originalRows = Array.from(document.querySelectorAll('#tiktokAIPanel #tkaiMessages .tkai-msg'));
+                    const idx = clonedRows.indexOf(msgRow);
+                    if (idx >= 0 && originalRows[idx]) originalRows[idx].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                });
+
+                liveDashboardPopout.addEventListener('contextmenu', (event) => {
+                    const msgRow = event.target.closest('#tkaiLiveOutMain .tkai-msg');
+                    if (!msgRow) return;
+                    event.preventDefault();
+                    const clonedRows = Array.from(liveDashboardPopout.querySelectorAll('#tkaiLiveOutMain .tkai-msg'));
+                    const originalRows = Array.from(document.querySelectorAll('#tiktokAIPanel #tkaiMessages .tkai-msg'));
+                    const idx = clonedRows.indexOf(msgRow);
+                    if (idx < 0 || !originalRows[idx]) return;
+                    originalRows[idx].dispatchEvent(new MouseEvent('contextmenu', {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: event.clientX,
+                        clientY: event.clientY
+                    }));
+                });
+
+                const syncControlValue = (control, eventName) => {
+                    if (!control?.id) return;
+                    const original = getMainPanelElementById(control.id);
+                    if (!original || original === control) return;
+                    if ('checked' in control && 'checked' in original) original.checked = !!control.checked;
+                    if ('value' in control && 'value' in original) original.value = control.value;
+                    original.dispatchEvent(new Event(eventName, { bubbles: true }));
+                };
+                liveDashboardPopout.addEventListener('change', (event) => syncControlValue(event.target.closest('select, input, textarea'), 'change'));
+                liveDashboardPopout.addEventListener('input', (event) => syncControlValue(event.target.closest('select, input, textarea'), 'input'));
             }
 
             function closeLiveDashboardPopout() {
@@ -17163,22 +17304,26 @@
                     '</div>' +
                     '<div style="display:flex;gap:8px;align-items:center">' +
                     '<button id="tkaiLiveSongRecNow" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">🎧 SongRec now</button>' +
+                    '<button id="tkaiLiveDjCcNow" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">💬 DJ CC now</button>' +
                     '<button id="tkaiLiveDashClose" class="panel-close" style="position:static">×</button>' +
                     '</div>' +
                     '</div>' +
-                    '<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
-                    '<div style="overflow:auto;padding-right:4px">' +
+                    '<div style="display:grid;grid-template-columns:minmax(560px,1.25fr) minmax(360px,.95fr);gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
+                    '<div style="display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:4px">' +
+                    '<div id="tkaiLiveOutMain" style="min-height:360px"></div>' +
+                    '<div id="tkaiLiveOutGiftHead"></div>' +
+                    '<div id="tkaiLiveOutGiftGallery" class="tkai-gift-gallery"></div>' +
+                    '</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:2px">' +
                     '<div id="tkaiLiveOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
                     '<div id="tkaiLiveOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
                     '<div id="tkaiLiveOutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
                     '<div id="tkaiLiveOutInsights" class="tkai-insights"></div>' +
-                    '</div>' +
-                    '<div style="display:flex;flex-direction:column;gap:8px;overflow:hidden">' +
-                    '<div style="font-size:11px;color:#cbd5e1;padding:2px 4px">💬 Live chat stream</div>' +
-                    '<div id="tkaiLiveOutChat" class="tkai-messages" style="flex:1;max-height:none"></div>' +
+                    '<div id="tkaiLiveOutFooter"></div>' +
                     '</div>' +
                     '</div>';
                 document.body.appendChild(liveDashboardPopout);
+                bindLiveDashboardPopoutEvents();
 
                 const head = liveDashboardPopout.querySelector('#tkaiLiveDashHead');
                 let dragging = false;
@@ -17203,13 +17348,6 @@
                 head?.addEventListener('pointercancel', () => { dragging = false; });
 
                 liveDashboardPopout.querySelector('#tkaiLiveDashClose')?.addEventListener('click', closeLiveDashboardPopout);
-                liveDashboardPopout.querySelector('#tkaiLiveSongRecNow')?.addEventListener('click', () => {
-                    if (typeof window.runSongRecRecognition === 'function') {
-                        window.runSongRecRecognition(true);
-                    } else {
-                        showToast('SongRec funkcija nije dostupna. Osvježi aplikaciju.');
-                    }
-                });
 
                 syncLiveDashboardPopout();
                 liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
@@ -17339,8 +17477,7 @@
                 const uniqueUsers = new Set(collectedMessages.map(m => m.user).filter(Boolean)).size;
                 const uniqueUsersEl = document.getElementById('tkaiUniqueUsers');
                 if (uniqueUsersEl) uniqueUsersEl.textContent = formatNum(uniqueUsers);
-                const giftCountEl2 = document.getElementById('tkaiGiftCount');
-                if (giftCountEl2) giftCountEl2.textContent = formatNum(giftStats.gifts.length);
+                if (giftEventCountEl) giftEventCountEl.textContent = formatNum(giftStats.gifts.length);
                 // Use the running collectedQuestions count (all unique questions this session)
                 const questionCountEl = document.getElementById('tkaiQuestionCount');
                 if (questionCountEl) questionCountEl.textContent = formatNum(collectedQuestions.length);
@@ -17762,6 +17899,67 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     } catch (_) {}
           return maxViewer;
         }
+        function isVisibleNode(el) {
+          if (!el || el.nodeType !== 1) return true;
+          const style = window.getComputedStyle(el);
+          return !style || (style.display !== 'none' && style.visibility !== 'hidden');
+        }
+        function isAuxiliaryText(text) {
+          const t = String(text || '').replace(/\s+/g, ' ').trim();
+          if (!t) return true;
+          if (/^(?:follow|share|reply|report|like|gift|send gift)$/i.test(t)) return true;
+          if (/^(?:host|mod|moderator|admin|vip|team|joined|join|live|pk)$/i.test(t)) return true;
+          if (/^(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}$/i.test(t)) return true;
+          if (/^(?:top|rank)\s*[:#-]?\s*\d{1,3}$/i.test(t)) return true;
+          if (/^[#@]?\d{1,3}$/.test(t)) return true;
+          return false;
+        }
+        function cleanChatText(rawText, user) {
+          let text = String(rawText || '').replace(/\s+/g, ' ').trim();
+          if (!text) return '';
+          if (user) {
+            const userEsc = String(user).replace(/[|{}()[\]\\^$+*?.-]/g, '\\$&');
+            text = text.replace(new RegExp('^\\s*' + userEsc + '\\s*[:\\-–—]?\\s*', 'i'), '');
+          }
+          return text
+            .replace(/\b(?:host|mod|moderator|admin|vip|team)\b/gi, ' ')
+            .replace(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
+            .replace(/\b(?:top|rank)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/^[:\-\s]+/, '')
+            .trim();
+        }
+        function collectCandidateTextParts(root, user) {
+          const selector = [
+            '[data-e2e="chat-message-text"]',
+            '[data-e2e="message-text"]',
+            '[data-e2e="webcast-live-comment"]',
+            '[data-e2e="webcast-live-message"]',
+            '[data-e2e="webcast-message"]',
+            '[data-e2e="live-comment-text"]',
+            '[class*="MessageText"]',
+            '[class*="CommentText"]',
+            '[class*="message-content"]',
+            '[class*="chat-content"]',
+            '[class*="SpanMessage"]',
+            '[class*="comment-text"]',
+            'p',
+            'span'
+          ].join(',');
+          const parts = [];
+          try {
+            root.querySelectorAll(selector).forEach((node) => {
+              if (!node || !isVisibleNode(node)) return;
+              if (node.querySelector(selector)) return;
+              const txt = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+              if (!txt) return;
+              if (user && txt.toLowerCase() === String(user).trim().toLowerCase()) return;
+              if (isAuxiliaryText(txt)) return;
+              parts.push(txt);
+            });
+          } catch (_) {}
+          return parts.filter((part, idx, arr) => arr.indexOf(part) === idx);
+        }
         function getTopSupportersFromPage() {
           const rows = [];
           const leaderboardSelectors = [
@@ -17923,10 +18121,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     const looksCounter = /^(?:\d[\d.,\s]*[km]?)(?:\+)?(?:\s*(?:viewers?|gledatelja|watching|coins?|diamonds?))?$/i.test(t);
                     const onlyNumericOrPunct = /^[\d\s.,:+\-x×/%|()[\]#*]+$/.test(t);
                     const sameAsUser = !!user && t.toLowerCase() === String(user).trim().toLowerCase();
+                    const maybeStandaloneChatNumber = messageType === 'chat' && !!user && /^\d{1,6}$/.test(t.replace(/\s+/g, ''));
 
-                    if (sameAsUser || looksCounter || onlyNumericOrPunct) return true;
+                    if (sameAsUser || looksCounter) return true;
+                    if (onlyNumericOrPunct && !maybeStandaloneChatNumber) return true;
                     if (messageType === 'chat' && letterCount === 0 && emojiCount === 0) return true;
-                    if (messageType === 'chat' && digitCount > 0 && letterCount === 0 && t.length < 28) return true;
+                    if (messageType === 'chat' && digitCount > 0 && letterCount === 0 && t.length < 28 && !maybeStandaloneChatNumber) return true;
                     return false;
                 }
 
@@ -18011,17 +18211,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           })();
           const user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
           const textBase = textEl ? textEl.textContent.trim() : '';
-          const assembledText = textNodes
+          const candidateParts = collectCandidateTextParts(el, user);
+          const assembledText = candidateParts.join(' ').trim();
+          const fallbackParts = textNodes
             .map(n => (n.textContent || '').replace(/[\s]+/g, ' ').trim())
             .filter(Boolean)
             .filter((part, idx, arr) => arr.indexOf(part) === idx)
-            .join(' ')
-            .trim();
-          let rawText = (assembledText || textBase || el.textContent || '').trim().slice(0, 1200);
-          if (user) {
-            const userEsc = String(user).replace(/[|{}()[\]\\^$+*?.-]/g, '\\$&');
-            rawText = rawText.replace(new RegExp('^\\s*' + userEsc + '\\s*[:\\-–—]?\\s*', 'i'), '');
-          }
+            .filter(part => !isAuxiliaryText(part))
+            .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
+          let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
           
           // Hvati nagrade, emotikone, specijalne znakove
           const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
@@ -18035,10 +18233,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (eAlt && !rawText.includes(eAlt) && eAlt.length < 30) rawText += ' ' + eAlt;
           });
           
-          const cleaned = rawText
-            .replace(/[\s]+/g, ' ')
-            .replace(/^[:\-\s]+/, '')
-            .trim();
+          const cleaned = cleanChatText(rawText, user);
           const text = cleaned.slice(0, 900);
           if (text && text.length > 1) {
             const low = text.toLowerCase();
