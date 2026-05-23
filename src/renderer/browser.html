@@ -13351,10 +13351,20 @@
                 document.getElementById('settingsPanel')?.classList.remove('open');
                 togglePanel('tiktokAIPanel');
             });
+            const openLiveDashboardSafely = () => {
+                const openFn = (typeof openLiveDashboardPopout === 'function')
+                    ? openLiveDashboardPopout
+                    : (typeof window.openLiveDashboardPopout === 'function' ? window.openLiveDashboardPopout : null);
+                if (!openFn) {
+                    showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
+                    return;
+                }
+                openFn();
+            };
             document.getElementById('btnTkaiToolsOpenLive')?.addEventListener('click', () => {
                 document.getElementById('settingsPanel')?.classList.remove('open');
                 togglePanel('tiktokAIPanel');
-                openLiveDashboardPopout();
+                openLiveDashboardSafely();
             });
             document.getElementById('btnTkaiToolsExportJson')?.addEventListener('click', () => {
                 document.getElementById('tkaiExportBtn')?.click();
@@ -18269,12 +18279,15 @@
                 }
             }
 
+            window.openLiveDashboardPopout = openLiveDashboardPopout;
+            window.closeLiveDashboardPopout = closeLiveDashboardPopout;
+
             expandChatBtn?.addEventListener('click', () => {
                 if (chatPopout && document.body.contains(chatPopout)) { closeChatPopout(); } else { openChatPopout(); }
             });
             expandLiveBtn?.addEventListener('click', () => {
                 if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
-                else openLiveDashboardPopout();
+                else openLiveDashboardSafely();
             });
             recJumpBtn?.addEventListener('click', () => {
                 openRecommendationsPopout();
