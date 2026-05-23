@@ -1003,12 +1003,317 @@
             })();
 
             // Session history + merge + stats
+            function getRecentTkaiSessions() {
+                try {
+                    const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+                    return Array.isArray(sessions) ? sessions.slice(-10).reverse() : [];
+                } catch (_) {
+                    return [];
+                }
+            }
+            function buildTkaiSessionAnalytics(session) {
+                const nowTs = Date.now();
+                const messages = Array.isArray(session?.messages) ? session.messages.slice() : [];
+                const normalizeTs = (m) => Number(m?.ts || m?.timestamp || 0) || 0;
+                const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
+                const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, other: 0 };
+                const userStatsMap = new Map();
+                const questions = [];
+                const answers = [];
+                let coinsTotal = Number(session?.totalCoins || 0);
+                let joinsTotal = 0;
+                sorted.forEach((m) => {
+                    const type = String(m?.type || 'chat').toLowerCase();
+                    if (typeCounts[type] !== undefined) typeCounts[type] += 1;
+                    else typeCounts.other += 1;
+                    if (type === 'join') joinsTotal += 1;
+                    const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
+                    const user = String(m?.user || '').trim() || 'Unknown';
+                    const userKey = user.toLowerCase();
+                    const coins = Number(m?.coins || 0);
+                    if (coins > 0 && Number(session?.totalCoins || 0) <= 0) coinsTotal += coins;
+                    if (!userStatsMap.has(userKey)) {
+                        userStatsMap.set(userKey, { user, total: 0, chat: 0, gifts: 0, joins: 0, coins: 0 });
+                    }
+                    const row = userStatsMap.get(userKey);
+                    row.total += 1;
+                    if (type === 'gift' || type === 'subscriber') row.gifts += 1;
+                    else if (type === 'join') row.joins += 1;
+                    else row.chat += 1;
+                    row.coins += Math.max(0, coins);
+
+                    const isQuestion = text.includes('?') || /^(kako|zasto|sto|sta|kada|gdje|tko|ko|why|what|when|where|how)\b/i.test(text);
+                    if (isQuestion && text) questions.push({ user, text, ts: normalizeTs(m) || nowTs });
+                    if (/^system\b/i.test(user) && text) answers.push({ user, text, ts: normalizeTs(m) || nowTs });
+                });
+                const uniqueUsers = userStatsMap.size;
+                const usersByMessages = Array.from(userStatsMap.values()).sort((a, b) => b.total - a.total || b.coins - a.coins);
+                const usersByCoins = Array.from(userStatsMap.values()).sort((a, b) => b.coins - a.coins || b.gifts - a.gifts);
+                const firstTs = sorted.length ? normalizeTs(sorted[0]) : 0;
+                const lastTs = sorted.length ? normalizeTs(sorted[sorted.length - 1]) : 0;
+                const durationMin = Number(session?.sessionMinutes || 0) || (firstTs && lastTs && lastTs > firstTs ? Math.max(1, Math.floor((lastTs - firstTs) / 60000)) : 0);
+                const peakViewers = Number(session?.peakViewers || session?.viewerCount || 0);
+                const startTs = firstTs || (lastTs ? Math.max(0, lastTs - durationMin * 60000) : nowTs);
+                const perMinuteMap = new Map();
+                sorted.forEach((m) => {
+                    const ts = normalizeTs(m);
+                    if (!ts) return;
+                    const minute = Math.max(0, Math.floor((ts - startTs) / 60000));
+                    perMinuteMap.set(minute, (perMinuteMap.get(minute) || 0) + 1);
+                });
+                const chartPoints = Math.max(8, Math.min(40, Number(DB.getSettings().tkaiChartPointCount || 16)));
+                const latestMinute = perMinuteMap.size ? Math.max(...Array.from(perMinuteMap.keys())) : Math.max(0, durationMin);
+                const timeline = Array.from({ length: chartPoints }, (_, idx) => {
+                    const minute = Math.max(0, latestMinute - (chartPoints - 1 - idx));
+                    return { minute, count: Number(perMinuteMap.get(minute) || 0) };
+                });
+                const songEvents = extractSongEventsFromMessages(sorted, nowTs, 400);
+                const songPerformance = Object.entries(getSongPerfDb())
+                    .map(([, row]) => {
+                        const samples = Math.max(1, Number(row.samples || 0));
+                        return {
+                            title: String(row.title || ''),
+                            plays: Number(row.plays || 0),
+                            samples,
+                            avgEngagement: Number((Number(row.engagementSum || 0) / samples).toFixed(2)),
+                            avgSentiment: Number((Number(row.sentimentSum || 0) / samples).toFixed(2)),
+                            lastSeen: Number(row.lastSeen || 0)
+                        };
+                    })
+                    .filter((r) => r.title)
+                    .sort((a, b) => b.avgEngagement - a.avgEngagement || b.lastSeen - a.lastSeen)
+                    .slice(0, 120);
+                return {
+                    messages: sorted,
+                    typeCounts,
+                    uniqueUsers,
+                    usersByMessages,
+                    usersByCoins,
+                    questions: questions.slice(-80),
+                    answers: answers.slice(-80),
+                    joinsTotal,
+                    coinsTotal: Math.max(0, Math.round(coinsTotal)),
+                    durationMin,
+                    peakViewers,
+                    timeline,
+                    songs: songEvents,
+                    songPerformance
+                };
+            }
+            function renderTkaiSessionTimelineSvg(timeline) {
+                const points = Array.isArray(timeline) ? timeline.slice() : [];
+                if (!points.length) return '';
+                const width = 780;
+                const height = 160;
+                const padX = 10;
+                const padTop = 12;
+                const padBottom = 20;
+                const vals = points.map((p) => Number(p.count || 0));
+                const maxV = Math.max(1, ...vals);
+                const minV = Math.min(...vals);
+                const range = Math.max(1, maxV - minV);
+                const coords = vals.map((v, i) => {
+                    const x = points.length === 1 ? width / 2 : padX + (i / (points.length - 1)) * (width - padX * 2);
+                    const y = padTop + ((maxV - v) / range) * (height - padTop - padBottom);
+                    return { x, y };
+                });
+                const line = coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+                const area = `${line} ${coords[coords.length - 1].x.toFixed(1)},${(height - padBottom).toFixed(1)} ${coords[0].x.toFixed(1)},${(height - padBottom).toFixed(1)}`;
+                const dots = coords.map((p) =>
+                    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="rgba(167,243,208,.95)" stroke="rgba(6,95,70,.65)" stroke-width="0.8"></circle>`
+                ).join('');
+                return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">`
+                    + `<polyline fill="none" stroke="rgba(148,163,184,.45)" stroke-width="1" points="${padX},${(height - padBottom).toFixed(1)} ${(width - padX).toFixed(1)},${(height - padBottom).toFixed(1)}"/>`
+                    + `<polygon points="${area}" fill="rgba(45,212,191,.2)"></polygon>`
+                    + `<polyline fill="none" stroke="rgba(45,212,191,.96)" stroke-width="2.2" points="${line}"></polyline>`
+                    + dots
+                    + `</svg>`;
+            }
+            function openTkaiSessionStatsDashboard(session, indexLabel) {
+                const sessionData = session || {};
+                const analytics = buildTkaiSessionAnalytics(sessionData);
+                const stamp = String(sessionData.savedAt || sessionData.exportedAt || new Date().toISOString()).replace(/[:.]/g, '-');
+                const baseName = `tkai-session-stats-${stamp}`;
+                const buildSummaryObject = () => ({
+                    savedAt: sessionData.savedAt || sessionData.exportedAt || new Date().toISOString(),
+                    messageCount: analytics.messages.length,
+                    durationMinutes: analytics.durationMin,
+                    peakViewers: analytics.peakViewers,
+                    totalCoins: analytics.coinsTotal,
+                    uniqueUsers: analytics.uniqueUsers,
+                    joins: analytics.joinsTotal,
+                    typeCounts: analytics.typeCounts,
+                    topUsersByMessages: analytics.usersByMessages.slice(0, 50),
+                    topUsersByCoins: analytics.usersByCoins.slice(0, 50),
+                    questions: analytics.questions,
+                    answers: analytics.answers,
+                    timeline: analytics.timeline,
+                    songs: analytics.songs
+                });
+                const buildCsvText = () => {
+                    const esc = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+                    const lines = [];
+                    lines.push(['section', 'key', 'value'].map(esc).join(','));
+                    lines.push(['summary', 'messages', analytics.messages.length].map(esc).join(','));
+                    lines.push(['summary', 'duration_min', analytics.durationMin].map(esc).join(','));
+                    lines.push(['summary', 'peak_viewers', analytics.peakViewers].map(esc).join(','));
+                    lines.push(['summary', 'coins', analytics.coinsTotal].map(esc).join(','));
+                    lines.push(['summary', 'unique_users', analytics.uniqueUsers].map(esc).join(','));
+                    lines.push(['summary', 'joins', analytics.joinsTotal].map(esc).join(','));
+                    Object.entries(analytics.typeCounts || {}).forEach(([k, v]) => {
+                        lines.push(['type_count', k, v].map(esc).join(','));
+                    });
+                    lines.push(['', '', ''].map(esc).join(','));
+                    lines.push(['users', 'user', 'total', 'chat', 'gifts', 'coins', 'joins'].map(esc).join(','));
+                    analytics.usersByMessages.forEach((u) => {
+                        lines.push(['users', u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map(esc).join(','));
+                    });
+                    lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+                    lines.push(['questions', 'user', 'text', 'timestamp'].map(esc).join(','));
+                    analytics.questions.forEach((q) => {
+                        lines.push(['questions', q.user, q.text, new Date(Number(q.ts || Date.now())).toISOString()].map(esc).join(','));
+                    });
+                    lines.push(['', '', '', ''].map(esc).join(','));
+                    lines.push(['songs', 'source', 'title', 'timestamp'].map(esc).join(','));
+                    analytics.songs.forEach((s) => {
+                        lines.push(['songs', s.source, s.title, new Date(Number(s.ts || Date.now())).toISOString()].map(esc).join(','));
+                    });
+                    lines.push(['', '', '', ''].map(esc).join(','));
+                    lines.push(['answers', 'user', 'text', 'timestamp'].map(esc).join(','));
+                    analytics.answers.forEach((a) => {
+                        lines.push(['answers', a.user, a.text, new Date(Number(a.ts || Date.now())).toISOString()].map(esc).join(','));
+                    });
+                    return lines.join('\n');
+                };
+                const buildTxtText = () => {
+                    const rows = [];
+                    rows.push('AI Live Chat - Session Dashboard');
+                    rows.push(`Saved: ${new Date(sessionData.savedAt || sessionData.exportedAt || Date.now()).toLocaleString('hr-HR')}`);
+                    rows.push(`Messages: ${analytics.messages.length}`);
+                    rows.push(`Duration: ${analytics.durationMin} min`);
+                    rows.push(`Peak viewers: ${analytics.peakViewers}`);
+                    rows.push(`Coins: ${analytics.coinsTotal}`);
+                    rows.push(`Unique users: ${analytics.uniqueUsers}`);
+                    rows.push(`Joins: ${analytics.joinsTotal}`);
+                    rows.push('');
+                    rows.push('Type counts:');
+                    Object.entries(analytics.typeCounts || {}).forEach(([k, v]) => rows.push(`- ${k}: ${v}`));
+                    rows.push('');
+                    rows.push('Top users:');
+                    analytics.usersByMessages.slice(0, 30).forEach((u, i) => {
+                        rows.push(`${i + 1}. @${u.user} | total ${u.total} | chat ${u.chat} | gifts ${u.gifts} | coins ${u.coins} | join ${u.joins}`);
+                    });
+                    rows.push('');
+                    rows.push('Songs list:');
+                    analytics.songs.slice(-200).forEach((s) => rows.push(`[${new Date(Number(s.ts || Date.now())).toLocaleTimeString('hr-HR')}] ${String(s.source || 'chat').toUpperCase()} - ${s.title}`));
+                    rows.push('');
+                    rows.push('Questions:');
+                    analytics.questions.slice(-80).forEach((q) => rows.push(`@${q.user}: ${q.text}`));
+                    rows.push('');
+                    rows.push('Answers (system/AI):');
+                    analytics.answers.slice(-80).forEach((a) => rows.push(`${a.user}: ${a.text}`));
+                    return rows.join('\n');
+                };
+                const exportSessionStatsPdf = () => {
+                    const win = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=800');
+                    if (!win) {
+                        showToast('⚠️ Popup blokiran. Dopusti popup pa probaj PDF ponovno.');
+                        return;
+                    }
+                    const summary = buildSummaryObject();
+                    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Session Dashboard PDF</title><style>body{font-family:Arial,sans-serif;padding:18px;color:#0f172a}h1{font-size:20px;margin:0 0 8px}h2{font-size:15px;margin:14px 0 6px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;font-size:12px}</style></head><body><h1>AI Live Chat - Session Dashboard</h1><div>Saved: ${escHtml(new Date(summary.savedAt).toLocaleString('hr-HR'))}</div><div>Messages: ${summary.messageCount} | Duration: ${summary.durationMinutes} min | Peak viewers: ${summary.peakViewers} | Coins: ${summary.totalCoins}</div><h2>Top users</h2><table><thead><tr><th>User</th><th>Total</th><th>Chat</th><th>Gifts</th><th>Coins</th><th>Join</th></tr></thead><tbody>${summary.topUsersByMessages.slice(0,50).map((u)=>`<tr><td>@${escHtml(u.user)}</td><td>${u.total}</td><td>${u.chat}</td><td>${u.gifts}</td><td>${u.coins}</td><td>${u.joins}</td></tr>`).join('')}</tbody></table><h2>Questions</h2><pre>${escHtml(summary.questions.map((q)=>`@${q.user}: ${q.text}`).join('\n') || 'Nema pitanja')}</pre><h2>Answers</h2><pre>${escHtml(summary.answers.map((a)=>`${a.user}: ${a.text}`).join('\n') || 'Nema odgovora')}</pre></body></html>`;
+                    win.document.open();
+                    win.document.write(html);
+                    win.document.close();
+                    setTimeout(() => { try { win.focus(); win.print(); } catch (_) { } }, 250);
+                };
+                const modal = document.createElement('div');
+                modal.id = 'tkaiSessionStatsDashboard';
+                modal.style.cssText =
+                    'position:fixed;inset:34px 2vw 2vh 2vw;z-index:100004;background:#0b1220;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden;';
+                const type = analytics.typeCounts;
+                const total = Math.max(1, analytics.messages.length);
+                const typeRows = [
+                    { label: 'Chat', value: type.chat, color: '#60a5fa' },
+                    { label: 'Gifts', value: type.gift + type.subscriber, color: '#f97316' },
+                    { label: 'Join', value: type.join, color: '#a78bfa' },
+                    { label: 'CC', value: type.caption, color: '#38bdf8' },
+                    { label: 'Songs', value: type.song, color: '#22c55e' }
+                ];
+                const donut = `conic-gradient(${typeRows.reduce((acc, row, i) => {
+                    const prev = typeRows.slice(0, i).reduce((s, r) => s + r.value, 0);
+                    const next = prev + row.value;
+                    const a = ((prev / total) * 100).toFixed(2);
+                    const b = ((next / total) * 100).toFixed(2);
+                    acc.push(`${row.color} ${a}% ${b}%`);
+                    return acc;
+                }, []).join(', ')})`;
+                const topUsersHtml = analytics.usersByMessages.slice(0, 25).map((u, idx) =>
+                    `<tr><td style="padding:4px 6px;color:#9ec6ff">#${idx + 1} @${escHtml(u.user)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.total)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.chat)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.gifts)}</td><td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(u.coins)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.joins)}</td></tr>`
+                ).join('');
+                const questionsHtml = analytics.questions.slice(-50).reverse().map((q) =>
+                    `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#a5b4fc">@${escHtml(q.user)}</span>: ${escHtml(q.text)}</div>`
+                ).join('') || '<div style="color:#94a3b8">Nema pitanja u sesiji.</div>';
+                const songsHtml = analytics.songs.slice(-120).reverse().map((s) =>
+                    `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(String(s.source || '').toUpperCase())}</span>: ${escHtml(s.title)}</div>`
+                ).join('') || '<div style="color:#94a3b8">Nema detektiranih pjesama.</div>';
+                const answersHtml = analytics.answers.slice(-50).reverse().map((a) =>
+                    `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(a.user)}</span>: ${escHtml(a.text)}</div>`
+                ).join('') || '<div style="color:#94a3b8">Nema system/AI odgovora u sesiji.</div>';
+                const timelineSvg = renderTkaiSessionTimelineSvg(analytics.timeline);
+
+                modal.innerHTML =
+                    `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:linear-gradient(135deg,#0f766e,#0b5d67)">`
+                    + `<div><div style="font-weight:700;font-size:14px">AI Live Chat - Session Dashboard ${indexLabel ? '#' + indexLabel : ''}</div><div style="font-size:11px;color:rgba(255,255,255,.8)">${new Date(sessionData.savedAt || sessionData.exportedAt || Date.now()).toLocaleString('hr-HR')}</div></div>`
+                    + `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button id="tkaiSessExportCsv" class="s-btn-sm" style="font-size:10px;padding:3px 8px">CSV</button><button id="tkaiSessExportTxt" class="s-btn-sm" style="font-size:10px;padding:3px 8px">TXT</button><button id="tkaiSessExportPdf" class="s-btn-sm" style="font-size:10px;padding:3px 8px">PDF</button><button id="tkaiSessExportJson" class="s-btn-sm" style="font-size:10px;padding:3px 8px">JSON</button><button id="tkaiSessionStatsClose" class="panel-close" style="position:static">x</button></div>`
+                    + `</div>`
+                    + `<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:10px;padding:10px;overflow:hidden;height:calc(100% - 56px)">`
+                    + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:4px">`
+                    + `<div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px">`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Poruke</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.messages.length)}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Giftovi</div><div style="font-size:20px;font-weight:700">${formatNum(type.gift + type.subscriber)}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Joinovi</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.joinsTotal)}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Coini</div><div style="font-size:20px;font-weight:700;color:#fbbf24">${formatNum(analytics.coinsTotal)}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Jedinstveni users</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.uniqueUsers)}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Trajanje</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.durationMin)} min</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Peak viewers</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.peakViewers)}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Pitanja / odgovori</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.questions.length)} / ${formatNum(analytics.answers.length)}</div></div>`
+                    + `</div>`
+                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Poruke kroz vrijeme (scan timeline)</div><div style="height:160px">${timelineSvg}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
+                    + `</div>`
+                    + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto">`
+                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:8px">Raspodjela tipova poruka</div><div style="display:flex;gap:12px;align-items:center"><div style="width:130px;height:130px;border-radius:50%;background:${donut};position:relative"><div style="position:absolute;inset:27px;border-radius:50%;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:11px;color:#cbd5e1">${formatNum(total)}<br>total</div></div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px">${typeRows.map((r) => `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${r.color}"></span>${r.label}: <b>${formatNum(r.value)}</b></div>`).join('')}</div></div></div>`
+                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
+                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Odgovori (system/AI)</div><div style="max-height:220px;overflow:auto;font-size:11px">${answersHtml}</div></div>`
+                    + `</div>`
+                    + `</div>`;
+                const close = () => { modal.remove(); };
+                modal.querySelector('#tkaiSessionStatsClose')?.addEventListener('click', close);
+                modal.querySelector('#tkaiSessExportCsv')?.addEventListener('click', () => {
+                    downloadTextFile(baseName + '.csv', buildCsvText(), 'text/csv;charset=utf-8');
+                    showToast('⬇️ Session stats CSV skinut.');
+                });
+                modal.querySelector('#tkaiSessExportTxt')?.addEventListener('click', () => {
+                    downloadTextFile(baseName + '.txt', buildTxtText(), 'text/plain;charset=utf-8');
+                    showToast('⬇️ Session stats TXT skinut.');
+                });
+                modal.querySelector('#tkaiSessExportJson')?.addEventListener('click', () => {
+                    downloadTextFile(baseName + '.json', JSON.stringify(buildSummaryObject(), null, 2), 'application/json;charset=utf-8');
+                    showToast('⬇️ Session stats JSON skinut.');
+                });
+                modal.querySelector('#tkaiSessExportPdf')?.addEventListener('click', () => {
+                    exportSessionStatsPdf();
+                });
+                modal.addEventListener('click', (ev) => { if (ev.target === modal) close(); });
+                document.body.appendChild(modal);
+            }
             function renderTkaiSessionHistory() {
                 const listEl = document.getElementById('tkaiSessionHistoryList');
                 if (!listEl) return;
                 try {
-                    const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-                    const recent = sessions.slice(-10).reverse();
+                    const recent = getRecentTkaiSessions();
                     if (!recent.length) {
                         listEl.innerHTML = '<div style="color:var(--text3);padding:8px 0">Nema spremljenih sesija.<br>Sesije se automatski spremi nakon zaustavljanja skeniranja.</div>';
                         return;
@@ -1045,8 +1350,7 @@
                     // Download button
                     listEl.querySelectorAll('.tkai-btn-sess-dl').forEach(btn => {
                         btn.addEventListener('click', () => {
-                            const sess = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-                            const item = sess.slice(-10).reverse()[+btn.dataset.si];
+                            const item = getRecentTkaiSessions()[+btn.dataset.si];
                             if (!item) return;
                             const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
                             const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -1058,43 +1362,9 @@
                     // Inline stats button
                     listEl.querySelectorAll('.tkai-btn-sess-stats').forEach(btn => {
                         btn.addEventListener('click', () => {
-                            const block = listEl.querySelector('.tkai-sess-stats-block[data-si="' + btn.dataset.si + '"]');
-                            if (!block) return;
-                            if (block.style.display !== 'none') { block.style.display = 'none'; return; }
-                            const sess = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-                            const s = sess.slice(-10).reverse()[+btn.dataset.si];
+                            const s = getRecentTkaiSessions()[+btn.dataset.si];
                             if (!s) return;
-                            const msgs = s.messages || [];
-                            const gifts = msgs.filter(m => m.type === 'gift');
-                            const users = [...new Set(msgs.map(m => m.user).filter(Boolean))];
-                            const topU = Object.entries(msgs.reduce((a, m) => { if (m.user) a[m.user] = (a[m.user] || 0) + 1; return a; }, {}))
-                                .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([u, c]) => u + ' (' + c + ')').join(', ');
-                            // Use saved questions array if available, otherwise count '?' messages
-                            const savedQs = Array.isArray(s.questions) ? s.questions : [];
-                            const qs = savedQs.length || msgs.filter(m => m.text && m.text.includes('?')).length;
-                            const questionsHtml = savedQs.length
-                                ? '<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,.08);padding-top:6px">'
-                                + '<div style="color:var(--text2);font-size:10px;margin-bottom:3px">❓ Pitanja iz sesije:</div>'
-                                + '<div style="max-height:100px;overflow-y:auto">'
-                                + savedQs.slice(0, 20).map(q =>
-                                    '<div style="font-size:10px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)">'
-                                    + (q.user ? '<b style="color:#a5b4fc">' + escHtml(String(q.user).slice(0, 20)) + '</b>: ' : '')
-                                    + escHtml(String(q.text || '').slice(0, 100))
-                                    + '</div>'
-                                ).join('')
-                                + '</div></div>'
-                                : '';
-                            block.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
-                                + '<span>💬 Poruke: <b style="color:var(--text2)">' + msgs.length + '</b></span>'
-                                + '<span>👤 Jedinstveni: <b style="color:var(--text2)">' + users.length + '</b></span>'
-                                + '<span>🎁 Giftovi: <b style="color:var(--text2)">' + gifts.length + '</b></span>'
-                                + '<span>🪙 Coini: <b style="color:var(--text2)">' + (s.totalCoins || 0) + '</b></span>'
-                                + '<span>❓ Pitanja: <b style="color:var(--text2)">' + qs + '</b></span>'
-                                + '<span>⏱ Trajanje: <b style="color:var(--text2)">' + (s.sessionMinutes || '—') + ' min</b></span>'
-                                + '</div>'
-                                + (topU ? '<div style="margin-top:4px">🏆 Top: ' + topU + '</div>' : '')
-                                + questionsHtml;
-                            block.style.display = '';
+                            openTkaiSessionStatsDashboard(s, Number(btn.dataset.si) + 1);
                         });
                     });
                 } catch (e) {
@@ -2839,7 +3109,10 @@
             let viewerSamplePoints = [];
             let lastViewerSampleAt = 0;
             let lastViewerSampleValue = 0;
+            let lastSongPerfSampleAt = 0;
+            let lastSongPerfSongKey = '';
             const TKAI_AUTOSAVE_KEY = 'ex_tkai_live_autosave';
+            const TKAI_SONG_PERF_DB_KEY = 'ex_tkai_song_perf_db';
             let tkaiAutosaveInterval = null;
             let tkaiAutosaveDebounce = null;
             let spikeFilter = 'all';
@@ -2851,6 +3124,24 @@
             const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
             const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
             const TKAI_SCAN_FAST_WINDOW_MS = 30000;
+            function getSongPerfDb() {
+                try {
+                    const db = JSON.parse(localStorage.getItem(TKAI_SONG_PERF_DB_KEY) || '{}');
+                    return db && typeof db === 'object' ? db : {};
+                } catch (_) {
+                    return {};
+                }
+            }
+            function saveSongPerfDb(db) {
+                try { localStorage.setItem(TKAI_SONG_PERF_DB_KEY, JSON.stringify(db || {})); } catch (_) { }
+            }
+            function normalizeSongTitleKey(title) {
+                return String(title || '')
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ')
+                    .replace(/[^a-z0-9čćđšž _\-]/gi, '')
+                    .trim();
+            }
             const DEFAULT_GIFT_CATALOG_LINES = [
                 "2199 Jollie's Heartland",
                 "2499 Summer Pass L",
@@ -2953,6 +3244,10 @@
             const spikeAllBtn = document.getElementById('tkaiSpikeAll');
             const spikeViewersBtn = document.getElementById('tkaiSpikeViewers');
             const spikeGiftsBtn = document.getElementById('tkaiSpikeGifts');
+            const openSoundboardBtn = document.getElementById('tkaiOpenSoundboardBtn');
+            const favSoundsQuickBtn = document.getElementById('tkaiFavSoundsQuickBtn');
+            const favSoundsQuickWrap = document.getElementById('tkaiFavSoundsQuickWrap');
+            const favSoundsQuickList = document.getElementById('tkaiFavSoundsQuickList');
             const layoutFoldBtn = document.getElementById('tkaiLayoutFoldBtn');
             const layoutUnfoldBtn = document.getElementById('tkaiLayoutUnfoldBtn');
             const layoutLockBtn = document.getElementById('tkaiLayoutLockBtn');
@@ -3120,31 +3415,53 @@
                 if (!Number.isFinite(n)) return '0';
                 return n.toLocaleString('hr-HR');
             }
+            function setSongToolStatus(text) {
+                document.querySelectorAll('#tkaiSongToolsStatus, #tkaiSongRecStatus, #tkaiLiveSongToolsStatus').forEach((node) => {
+                    if (node) node.textContent = String(text || '');
+                });
+            }
+            function setSongToolButtonState(tool, busy) {
+                const isSongRec = tool === 'songrec';
+                const ids = isSongRec
+                    ? ['#tkaiSongRecNowBtn', '#tkaiLiveSongRecNow']
+                    : ['#tkaiDjCcNowBtn', '#tkaiLiveDjCcNow'];
+                const idleLabel = isSongRec ? 'SongRec now' : 'DJ CC now';
+                const busyLabel = isSongRec ? 'SongRec...' : 'DJ CC...';
+                ids.forEach((sel) => {
+                    document.querySelectorAll(sel).forEach((btn) => {
+                        btn.disabled = !!busy;
+                        btn.textContent = busy ? busyLabel : idleLabel;
+                    });
+                });
+            }
             async function runSongRecRecognition(manualTrigger) {
-                const statusNode = document.getElementById('tkaiSongToolsStatus') || document.getElementById('tkaiSongRecStatus');
+                setSongToolButtonState('songrec', true);
                 if (!window.etherx?.songrec?.recognize) {
-                    if (statusNode) statusNode.textContent = 'SongRec: API nije dostupan';
+                    setSongToolStatus('SongRec: API nije dostupan');
                     if (manualTrigger) showToast('SongRec API nije dostupan. Provjeri preload/main integraciju.');
+                    setSongToolButtonState('songrec', false);
                     return;
                 }
 
                 const cfg = DB.getSettings() || {};
                 const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
                 const timeoutMs = Math.max(2000, Math.min(25000, Number(cfg.tkaiSongRecTimeoutMs || 12000) || 12000));
-                if (statusNode) statusNode.textContent = 'SongRec: slusam...';
+                setSongToolStatus('SongRec: slusam...');
 
                 try {
                     const result = await window.etherx.songrec.recognize({ command, timeoutMs });
                     if (!result?.ok) {
-                        if (statusNode) statusNode.textContent = 'SongRec: greska';
+                        setSongToolStatus('SongRec: greska');
                         if (manualTrigger) showToast('SongRec greska: ' + (result?.error || 'nepoznata greska'));
+                        setSongToolButtonState('songrec', false);
                         return;
                     }
 
                     const title = String(result.title || '').trim();
                     if (!title) {
-                        if (statusNode) statusNode.textContent = 'SongRec: nema detekcije';
+                        setSongToolStatus('SongRec: nema detekcije');
                         if (manualTrigger) showToast('SongRec nije prepoznao pjesmu.');
+                        setSongToolButtonState('songrec', false);
                         return;
                     }
 
@@ -3159,35 +3476,40 @@
                     const maxLen = Math.max(120, Number(DB.getSettings().tkaiMsgBuffer || 300));
                     if (collectedMessages.length > maxLen) collectedMessages = collectedMessages.slice(-maxLen);
 
-                    if (statusNode) statusNode.textContent = 'SongRec: ' + title;
+                    setSongToolStatus('SongRec: ' + title);
                     renderMessages();
                     updateSessionStatsUI();
                     if (manualTrigger) showToast('🎵 SongRec: ' + title);
                 } catch (err) {
-                    if (statusNode) statusNode.textContent = 'SongRec: greska';
+                    setSongToolStatus('SongRec: greska');
                     if (manualTrigger) showToast('SongRec poziv nije uspio: ' + String(err?.message || err));
+                } finally {
+                    setSongToolButtonState('songrec', false);
                 }
             }
             window.runSongRecRecognition = runSongRecRecognition;
             async function runDjCcNow(manualTrigger) {
-                const statusNode = document.getElementById('tkaiSongToolsStatus') || document.getElementById('tkaiSongRecStatus');
+                setSongToolButtonState('djcc', true);
                 if (!window.electronWebview) {
-                    if (statusNode) statusNode.textContent = 'DJ CC: webview nije dostupan';
+                    setSongToolStatus('DJ CC: webview nije dostupan');
                     if (manualTrigger) showToast('DJ CC radi u Electron webview modu.');
+                    setSongToolButtonState('djcc', false);
                     return;
                 }
                 const tab = getActiveTab();
                 if (!tab?.url || !tab.url.includes('tiktok.com')) {
-                    if (statusNode) statusNode.textContent = 'DJ CC: otvori TikTok Live';
+                    setSongToolStatus('DJ CC: otvori TikTok Live');
                     if (manualTrigger) showToast('Otvori TikTok Live pa klikni DJ CC now.');
+                    setSongToolButtonState('djcc', false);
                     return;
                 }
                 const webview = getActiveTikTokWebview();
                 if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') {
-                    if (statusNode) statusNode.textContent = 'DJ CC: webview nije spreman';
+                    setSongToolStatus('DJ CC: webview nije spreman');
+                    setSongToolButtonState('djcc', false);
                     return;
                 }
-                if (statusNode) statusNode.textContent = 'DJ CC: citam...';
+                setSongToolStatus('DJ CC: citam...');
                 const script = String.raw`(() => {
                   const selectors = [
                     '[class*="webcast-caption"]',
@@ -3223,8 +3545,9 @@
                     const lines = await webview.executeJavaScript(script);
                     const text = Array.isArray(lines) ? String(lines[lines.length - 1] || '').trim() : '';
                     if (!text) {
-                        if (statusNode) statusNode.textContent = 'DJ CC: nema aktivnog captiona';
+                        setSongToolStatus('DJ CC: nema aktivnog captiona');
                         if (manualTrigger) showToast('Nema aktivnog DJ CC / caption teksta.');
+                        setSongToolButtonState('djcc', false);
                         return;
                     }
                     const msg = {
@@ -3240,11 +3563,13 @@
                     renderMessages();
                     updateSessionStatsUI();
                     await handleIncomingCaption(msg).catch(() => { });
-                    if (statusNode) statusNode.textContent = 'DJ CC: ' + msg.text.slice(0, 64);
+                    setSongToolStatus('DJ CC: ' + msg.text.slice(0, 64));
                     if (manualTrigger) showToast('DJ CC: ' + msg.text.slice(0, 80));
                 } catch (err) {
-                    if (statusNode) statusNode.textContent = 'DJ CC: greska';
+                    setSongToolStatus('DJ CC: greska');
                     if (manualTrigger) showToast('DJ CC poziv nije uspio: ' + String(err?.message || err));
+                } finally {
+                    setSongToolButtonState('djcc', false);
                 }
             }
             window.runDjCcNow = runDjCcNow;
@@ -3774,6 +4099,37 @@
                 }
                 if (supporterCountEl) supporterCountEl.textContent = formatNum(supportersCount || 0);
             }
+            function extractSongEventsFromMessages(sourceMessages, nowTs = Date.now(), maxItems = 120) {
+                const base = Array.isArray(sourceMessages) ? sourceMessages : [];
+                const songRegex = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\s*[:\-]?\s*([^\n]{3,120})/i;
+                const quoteRegex = /["']([^"']{4,90})["']/;
+                const out = [];
+                base.forEach((m) => {
+                    const type = String(m?.type || '').toLowerCase();
+                    const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
+                    if (!text) return;
+                    let title = '';
+                    if (type === 'song') {
+                        title = text;
+                    } else if (type === 'caption' || type === 'chat') {
+                        const match = text.match(songRegex);
+                        if (match) title = String(match[1] || '').trim();
+                        if (!title) {
+                            const quoted = text.match(quoteRegex);
+                            if (quoted && /(music|song|dj|pjesma|beat|track)/i.test(text)) {
+                                title = String(quoted[1] || '').trim();
+                            }
+                        }
+                    }
+                    if (!title) return;
+                    out.push({
+                        title: title.slice(0, 90),
+                        source: type || 'chat',
+                        ts: Number(m?.ts || m?.timestamp || nowTs)
+                    });
+                });
+                return out.slice(-Math.max(10, Number(maxItems || 120)));
+            }
             function computeInsightsSnapshot() {
                 const now = Date.now();
                 const messages = collectedMessages.slice(-200);
@@ -4026,35 +4382,7 @@
                     pct: Math.round((row.value / msgTypeTotal) * 100)
                 }));
 
-                const songs = [];
-                const songRegex = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\s*[:\-]?\s*([^\n]{3,120})/i;
-                const quoteRegex = /["']([^"']{4,90})["']/;
-                messages
-                    .filter((m) => m.type === 'caption' || m.type === 'chat')
-                    .forEach((m) => {
-                        const text = String(m.text || '').trim();
-                        if (!text) return;
-                        let title = '';
-                        const match = text.match(songRegex);
-                        if (match) title = String(match[1] || '').trim();
-                        if (!title) {
-                            const quoted = text.match(quoteRegex);
-                            if (quoted && /(music|song|dj|pjesma|beat|track)/i.test(text)) {
-                                title = String(quoted[1] || '').trim();
-                            }
-                        }
-                        if (!title) return;
-                        songs.push({ title: title.slice(0, 90), source: m.type, ts: Number(m.ts || now) });
-                    });
-
-                const uniqueSongs = [];
-                const songSet = new Set();
-                songs.forEach((s) => {
-                    const key = s.title.toLowerCase();
-                    if (songSet.has(key)) return;
-                    songSet.add(key);
-                    uniqueSongs.push(s);
-                });
+                const songEvents = extractSongEventsFromMessages(messages, now, 180);
 
                 const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
                 const isJoinLikeMessage = (m) => {
@@ -4113,7 +4441,7 @@
                         neutralPct
                     },
                     pieBreakdown,
-                    songs: uniqueSongs.slice(0, 8),
+                    songs: songEvents.slice(-30).reverse(),
                     joinLevels: joinSource.slice(-120).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
                     joinBuckets,
                     spikeDebug: {
@@ -4532,7 +4860,8 @@
                                     hour: '2-digit',
                                     minute: '2-digit'
                                 });
-                                li.textContent = `${s.source === 'caption' ? 'DJ CC' : 'Chat'} • ${s.title} @ ${time}`;
+                                const sourceLabel = s.source === 'song' ? 'SongRec' : s.source === 'caption' ? 'DJ CC' : 'Chat';
+                                li.textContent = `${sourceLabel} • ${s.title} @ ${time}`;
                                 songListEl.appendChild(li);
                             });
                         }
@@ -4578,10 +4907,14 @@
                 }
             }
             function updateSpikeFilterButtons() {
-                if (!spikeAllBtn || !spikeViewersBtn || !spikeGiftsBtn) return;
-                spikeAllBtn.classList.toggle('active', spikeFilter === 'all');
-                spikeViewersBtn.classList.toggle('active', spikeFilter === 'viewers');
-                spikeGiftsBtn.classList.toggle('active', spikeFilter === 'gifts');
+                const syncById = (id, isActive) => {
+                    document.querySelectorAll('#' + id).forEach((btn) => {
+                        btn.classList.toggle('active', !!isActive);
+                    });
+                };
+                syncById('tkaiSpikeAll', spikeFilter === 'all');
+                syncById('tkaiSpikeViewers', spikeFilter === 'viewers');
+                syncById('tkaiSpikeGifts', spikeFilter === 'gifts');
             }
             function syncRecommendationsPopout(recommendations) {
                 if (!recommendationsPopoutBodyEl) return;
@@ -4680,6 +5013,379 @@
             let chatPopoutMirrorTimer = null;
             let liveDashboardPopout = null;
             let liveDashboardTimer = null;
+            let lastAutoSongRecAt = 0;
+            let autoSongRecInFlight = false;
+            let tkaiSoundboardPopout = null;
+            let tkaiAudioCtx = null;
+            let tkaiCurrentAudio = null;
+            let tkaiSoundboardCategory = 'all';
+            const TKAI_SOUNDBOARD_KEY = 'ex_tkai_soundboard_sounds';
+            const TKAI_SOUNDBOARD_FAV_KEY = 'ex_tkai_soundboard_favorites';
+            const TKAI_DEFAULT_SOUNDS = [
+                { id: 'builtin_airhorn', name: 'Airhorn', type: 'builtin', category: 'hype' },
+                { id: 'builtin_sad', name: 'Sad Trombone', type: 'builtin', category: 'meme' },
+                { id: 'builtin_boing', name: 'Boing', type: 'builtin', category: 'meme' },
+                { id: 'builtin_drum', name: 'Drum Roll', type: 'builtin', category: 'hype' },
+                { id: 'builtin_laugh', name: 'Laugh FX', type: 'builtin', category: 'meme' },
+                { id: 'builtin_applause', name: 'Applause', type: 'builtin', category: 'hype' },
+                { id: 'builtin_wow', name: 'WOW', type: 'builtin', category: 'meme' },
+                { id: 'builtin_hype_up', name: 'Hype Up', type: 'builtin', category: 'hype' },
+                { id: 'builtin_hype_drop', name: 'Hype Drop', type: 'builtin', category: 'hype' },
+                { id: 'builtin_victory', name: 'Victory Stinger', type: 'builtin', category: 'game' },
+                { id: 'builtin_fail', name: 'Fail Buzzer', type: 'builtin', category: 'game' },
+                { id: 'builtin_alarm', name: 'Red Alert', type: 'builtin', category: 'alerts' },
+                { id: 'builtin_suspense', name: 'Suspense', type: 'builtin', category: 'alerts' },
+                { id: 'builtin_laser', name: 'Laser Zap', type: 'builtin', category: 'game' },
+                { id: 'builtin_riser', name: 'Riser', type: 'builtin', category: 'hype' },
+                { id: 'builtin_coin', name: 'Coin Ding', type: 'builtin', category: 'money' },
+                { id: 'builtin_cash', name: 'Cash Register', type: 'builtin', category: 'money' },
+                { id: 'builtin_bell', name: 'Bell Hit', type: 'builtin', category: 'alerts' },
+                { id: 'builtin_clap_short', name: 'Clap Short', type: 'builtin', category: 'hype' },
+                { id: 'builtin_whistle', name: 'Ref Whistle', type: 'builtin', category: 'alerts' },
+                { id: 'builtin_horn_hit', name: 'Stadium Horn', type: 'builtin', category: 'hype' },
+                { id: 'builtin_record_scratch', name: 'Record Scratch', type: 'builtin', category: 'meme' },
+                { id: 'builtin_glitch', name: 'Glitch Hit', type: 'builtin', category: 'alerts' },
+                { id: 'builtin_8bit_win', name: '8-bit Win', type: 'builtin', category: 'game' },
+                { id: 'builtin_8bit_lose', name: '8-bit Lose', type: 'builtin', category: 'game' },
+                { id: 'builtin_transition', name: 'Transition Whoosh', type: 'builtin', category: 'hype' }
+            ];
+
+            function getTkaiAudioContext() {
+                if (!tkaiAudioCtx) tkaiAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                return tkaiAudioCtx;
+            }
+            function playToneSequence(sequence) {
+                const ctx = getTkaiAudioContext();
+                let t = ctx.currentTime + 0.02;
+                sequence.forEach((step) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = step.type || 'sine';
+                    osc.frequency.setValueAtTime(Number(step.f || 440), t);
+                    gain.gain.setValueAtTime(0.0001, t);
+                    gain.gain.exponentialRampToValueAtTime(Math.max(0.001, Number(step.g || 0.25)), t + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.03, Number(step.d || 0.14)));
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(t);
+                    osc.stop(t + Math.max(0.03, Number(step.d || 0.14)) + 0.02);
+                    t += Math.max(0.03, Number(step.gap || step.d || 0.14));
+                });
+            }
+            function playBuiltInSound(soundId) {
+                const note = (f, d = 0.1, g = 0.22, type = 'square', gap = d) => ({ f, d, g, type, gap });
+                if (soundId === 'builtin_airhorn') {
+                    playToneSequence([{ f: 680, d: 0.16, g: 0.28, type: 'sawtooth' }, { f: 620, d: 0.14, g: 0.28, type: 'sawtooth' }, { f: 700, d: 0.2, g: 0.28, type: 'sawtooth' }]);
+                    return;
+                }
+                if (soundId === 'builtin_sad') {
+                    playToneSequence([{ f: 440, d: 0.2, g: 0.22, type: 'triangle' }, { f: 370, d: 0.2, g: 0.2, type: 'triangle' }, { f: 300, d: 0.24, g: 0.2, type: 'triangle' }]);
+                    return;
+                }
+                if (soundId === 'builtin_boing') {
+                    playToneSequence([{ f: 220, d: 0.08, g: 0.2, type: 'square' }, { f: 380, d: 0.06, g: 0.22, type: 'square' }, { f: 280, d: 0.08, g: 0.2, type: 'square' }, { f: 460, d: 0.1, g: 0.2, type: 'square' }]);
+                    return;
+                }
+                if (soundId === 'builtin_drum') {
+                    playToneSequence([{ f: 120, d: 0.06, g: 0.18, type: 'triangle' }, { f: 160, d: 0.05, g: 0.18, type: 'triangle' }, { f: 210, d: 0.05, g: 0.2, type: 'triangle' }, { f: 280, d: 0.08, g: 0.22, type: 'triangle' }]);
+                    return;
+                }
+                if (soundId === 'builtin_laugh') {
+                    playToneSequence([{ f: 520, d: 0.05, g: 0.18, type: 'square' }, { f: 640, d: 0.05, g: 0.18, type: 'square' }, { f: 560, d: 0.05, g: 0.18, type: 'square' }, { f: 700, d: 0.07, g: 0.2, type: 'square' }, { f: 620, d: 0.09, g: 0.2, type: 'square' }]);
+                    return;
+                }
+                if (soundId === 'builtin_applause') {
+                    playToneSequence([note(400, 0.04, 0.14, 'triangle', 0.05), note(530, 0.04, 0.14, 'triangle', 0.05), note(460, 0.04, 0.14, 'triangle', 0.05), note(610, 0.04, 0.14, 'triangle', 0.05), note(480, 0.04, 0.14, 'triangle', 0.05), note(660, 0.06, 0.16, 'triangle', 0.06)]);
+                    return;
+                }
+                if (soundId === 'builtin_wow') {
+                    playToneSequence([note(320, 0.12, 0.2, 'sine', 0.12), note(480, 0.14, 0.22, 'sine', 0.14), note(380, 0.15, 0.2, 'sine', 0.15)]);
+                    return;
+                }
+                if (soundId === 'builtin_hype_up') {
+                    playToneSequence([note(260, 0.08, 0.18, 'sawtooth', 0.08), note(320, 0.08, 0.18, 'sawtooth', 0.08), note(420, 0.08, 0.2, 'sawtooth', 0.08), note(560, 0.08, 0.22, 'sawtooth', 0.08), note(760, 0.12, 0.24, 'sawtooth', 0.12)]);
+                    return;
+                }
+                if (soundId === 'builtin_hype_drop') {
+                    playToneSequence([note(820, 0.08, 0.22, 'sawtooth', 0.08), note(620, 0.08, 0.22, 'sawtooth', 0.08), note(480, 0.1, 0.22, 'sawtooth', 0.1), note(320, 0.12, 0.22, 'sawtooth', 0.12)]);
+                    return;
+                }
+                if (soundId === 'builtin_victory') {
+                    playToneSequence([note(523, 0.1, 0.2, 'triangle', 0.1), note(659, 0.1, 0.2, 'triangle', 0.1), note(784, 0.14, 0.24, 'triangle', 0.14)]);
+                    return;
+                }
+                if (soundId === 'builtin_fail') {
+                    playToneSequence([note(420, 0.14, 0.2, 'square', 0.14), note(350, 0.18, 0.2, 'square', 0.18)]);
+                    return;
+                }
+                if (soundId === 'builtin_alarm') {
+                    playToneSequence([note(780, 0.1, 0.22, 'square', 0.1), note(560, 0.1, 0.22, 'square', 0.1), note(780, 0.1, 0.22, 'square', 0.1), note(560, 0.14, 0.22, 'square', 0.14)]);
+                    return;
+                }
+                if (soundId === 'builtin_suspense') {
+                    playToneSequence([note(180, 0.16, 0.18, 'sine', 0.16), note(220, 0.18, 0.18, 'sine', 0.18), note(260, 0.2, 0.2, 'sine', 0.2), note(300, 0.24, 0.22, 'sine', 0.24)]);
+                    return;
+                }
+                if (soundId === 'builtin_laser') {
+                    playToneSequence([note(960, 0.04, 0.2, 'sawtooth', 0.04), note(740, 0.04, 0.2, 'sawtooth', 0.04), note(560, 0.05, 0.2, 'sawtooth', 0.05), note(420, 0.06, 0.2, 'sawtooth', 0.06)]);
+                    return;
+                }
+                if (soundId === 'builtin_riser') {
+                    playToneSequence([note(220, 0.08, 0.14, 'triangle', 0.08), note(280, 0.08, 0.14, 'triangle', 0.08), note(360, 0.08, 0.16, 'triangle', 0.08), note(460, 0.08, 0.18, 'triangle', 0.08), note(600, 0.1, 0.2, 'triangle', 0.1), note(760, 0.12, 0.22, 'triangle', 0.12)]);
+                    return;
+                }
+                if (soundId === 'builtin_coin') {
+                    playToneSequence([note(880, 0.06, 0.2, 'sine', 0.06), note(1320, 0.08, 0.24, 'sine', 0.08)]);
+                    return;
+                }
+                if (soundId === 'builtin_cash') {
+                    playToneSequence([note(700, 0.05, 0.18, 'square', 0.05), note(880, 0.05, 0.18, 'square', 0.05), note(980, 0.05, 0.18, 'square', 0.05), note(1320, 0.1, 0.22, 'triangle', 0.1)]);
+                    return;
+                }
+                if (soundId === 'builtin_bell') {
+                    playToneSequence([note(1040, 0.16, 0.2, 'sine', 0.16), note(820, 0.14, 0.14, 'sine', 0.14)]);
+                    return;
+                }
+                if (soundId === 'builtin_clap_short') {
+                    playToneSequence([note(380, 0.03, 0.14, 'triangle', 0.04), note(520, 0.03, 0.14, 'triangle', 0.04), note(420, 0.03, 0.14, 'triangle', 0.04)]);
+                    return;
+                }
+                if (soundId === 'builtin_whistle') {
+                    playToneSequence([note(1200, 0.06, 0.22, 'sine', 0.06), note(960, 0.08, 0.2, 'sine', 0.08), note(1200, 0.1, 0.22, 'sine', 0.1)]);
+                    return;
+                }
+                if (soundId === 'builtin_horn_hit') {
+                    playToneSequence([note(240, 0.16, 0.26, 'sawtooth', 0.16), note(320, 0.14, 0.24, 'sawtooth', 0.14), note(260, 0.16, 0.24, 'sawtooth', 0.16)]);
+                    return;
+                }
+                if (soundId === 'builtin_record_scratch') {
+                    playToneSequence([note(900, 0.03, 0.18, 'square', 0.03), note(760, 0.03, 0.18, 'square', 0.03), note(620, 0.03, 0.18, 'square', 0.03), note(500, 0.04, 0.18, 'square', 0.04), note(420, 0.05, 0.18, 'square', 0.05)]);
+                    return;
+                }
+                if (soundId === 'builtin_glitch') {
+                    playToneSequence([note(360, 0.03, 0.18, 'square', 0.03), note(920, 0.03, 0.18, 'square', 0.03), note(300, 0.03, 0.18, 'square', 0.03), note(1080, 0.04, 0.18, 'square', 0.04)]);
+                    return;
+                }
+                if (soundId === 'builtin_8bit_win') {
+                    playToneSequence([note(659, 0.08, 0.2, 'square', 0.08), note(784, 0.08, 0.2, 'square', 0.08), note(988, 0.12, 0.22, 'square', 0.12)]);
+                    return;
+                }
+                if (soundId === 'builtin_8bit_lose') {
+                    playToneSequence([note(494, 0.09, 0.2, 'square', 0.09), note(392, 0.1, 0.2, 'square', 0.1), note(294, 0.13, 0.22, 'square', 0.13)]);
+                    return;
+                }
+                if (soundId === 'builtin_transition') {
+                    playToneSequence([note(280, 0.06, 0.16, 'triangle', 0.06), note(360, 0.06, 0.16, 'triangle', 0.06), note(460, 0.06, 0.18, 'triangle', 0.06), note(580, 0.06, 0.18, 'triangle', 0.06), note(740, 0.08, 0.2, 'triangle', 0.08)]);
+                }
+            }
+            function getSoundboardList() {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(TKAI_SOUNDBOARD_KEY) || '[]');
+                    return [...TKAI_DEFAULT_SOUNDS, ...(Array.isArray(saved) ? saved : [])];
+                } catch (_) {
+                    return [...TKAI_DEFAULT_SOUNDS];
+                }
+            }
+            function getSoundboardFavoritesSet() {
+                try {
+                    const rows = JSON.parse(localStorage.getItem(TKAI_SOUNDBOARD_FAV_KEY) || '[]');
+                    if (!Array.isArray(rows)) return new Set();
+                    return new Set(rows.map((x) => String(x || '')).filter(Boolean));
+                } catch (_) {
+                    return new Set();
+                }
+            }
+            function setSoundboardFavoritesSet(favSet) {
+                const rows = Array.from(favSet || []).map((x) => String(x || '')).filter(Boolean).slice(0, 500);
+                localStorage.setItem(TKAI_SOUNDBOARD_FAV_KEY, JSON.stringify(rows));
+            }
+            function renderFavSoundsQuickPanel() {
+                if (!favSoundsQuickList) return;
+                const favSet = getSoundboardFavoritesSet();
+                const favItems = getSoundboardList().filter((it) => favSet.has(String(it.id || '')));
+                favSoundsQuickList.innerHTML = favItems.map((item) =>
+                    `<button class="tkai-insights-btn tkai-fav-quick-play" data-sid="${escHtml(item.id)}" type="button" style="padding:2px 8px;font-size:10px">${escHtml(item.name)}</button>`
+                ).join('') || '<span style="font-size:10px;color:var(--text3)">Nema favorita. Dodaj ⭐ u Soundboard prozoru.</span>';
+            }
+            function setSoundboardCustomList(rows) {
+                const custom = Array.isArray(rows) ? rows.filter((r) => r && r.type === 'file').map((r) => ({ ...r, category: 'custom' })) : [];
+                localStorage.setItem(TKAI_SOUNDBOARD_KEY, JSON.stringify(custom.slice(0, 120)));
+            }
+            function stopSoundboardPlayback() {
+                if (tkaiCurrentAudio) {
+                    try { tkaiCurrentAudio.pause(); } catch (_) { }
+                    tkaiCurrentAudio = null;
+                }
+            }
+            function playSoundboardItem(item) {
+                if (!item) return;
+                stopSoundboardPlayback();
+                if (item.type === 'builtin') {
+                    playBuiltInSound(item.id);
+                    showToast('🔊 ' + item.name);
+                    return;
+                }
+                if (item.type === 'file' && item.dataUrl) {
+                    const audio = new Audio(item.dataUrl);
+                    tkaiCurrentAudio = audio;
+                    audio.play().then(() => {
+                        showToast('🔊 ' + item.name);
+                    }).catch((err) => {
+                        showToast('⚠️ Ne mogu pustiti zvuk: ' + String(err?.message || err));
+                    });
+                }
+            }
+            function renderSoundboardList() {
+                if (!tkaiSoundboardPopout) return;
+                const listEl = tkaiSoundboardPopout.querySelector('#tkaiSoundboardList');
+                if (!listEl) return;
+                const allItems = getSoundboardList();
+                const favSet = getSoundboardFavoritesSet();
+                const items = tkaiSoundboardCategory === 'all'
+                    ? allItems
+                    : tkaiSoundboardCategory === 'favorites'
+                        ? allItems.filter((it) => favSet.has(String(it.id || '')))
+                    : allItems.filter((it) => String(it.category || (it.type === 'file' ? 'custom' : 'other')) === tkaiSoundboardCategory);
+                const categoryButtons = tkaiSoundboardPopout.querySelectorAll('.tkai-sound-cat');
+                categoryButtons.forEach((btn) => {
+                    btn.classList.toggle('active', btn.dataset.cat === tkaiSoundboardCategory);
+                });
+                listEl.innerHTML = items.map((item) => {
+                    const builtIn = item.type === 'builtin';
+                    const isFav = favSet.has(String(item.id || ''));
+                    return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+                        <button class="tkai-insights-btn tkai-sound-play" data-sid="${escHtml(item.id)}" style="padding:2px 8px">▶</button>
+                        <div style="flex:1;font-size:11px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.name)}</div>
+                        <button class="tkai-insights-btn tkai-sound-fav" data-sid="${escHtml(item.id)}" style="padding:2px 7px">${isFav ? '★' : '☆'}</button>
+                        <div style="font-size:10px;color:var(--text3)">${escHtml(String(item.category || (builtIn ? 'builtin' : 'custom')).toUpperCase())}</div>
+                        ${builtIn ? '' : `<button class="tkai-insights-btn tkai-sound-del" data-sid="${escHtml(item.id)}" style="padding:2px 8px">✕</button>`}
+                    </div>`;
+                }).join('') || '<div style="font-size:11px;color:var(--text3);padding:10px 4px">Nema zvukova u ovoj kategoriji.</div>';
+            }
+            function openTkaiSoundboard() {
+                if (tkaiSoundboardPopout && document.body.contains(tkaiSoundboardPopout)) {
+                    tkaiSoundboardPopout.style.display = '';
+                    renderSoundboardList();
+                    return;
+                }
+                tkaiSoundboardPopout = document.createElement('div');
+                tkaiSoundboardPopout.id = 'tkaiSoundboardPopout';
+                tkaiSoundboardPopout.style.cssText =
+                    'position:fixed;z-index:100002;top:72px;right:22px;width:360px;height:500px;background:var(--surface,#1a1a2e);border:1px solid var(--border,rgba(255,255,255,.14));border-radius:12px;color:var(--text,#e2e8f0);display:flex;flex-direction:column;box-shadow:0 14px 42px rgba(0,0,0,.6);overflow:hidden;resize:both;min-width:300px;min-height:320px;';
+                tkaiSoundboardPopout.innerHTML =
+                    '<div id="tkaiSoundboardHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:linear-gradient(135deg,#1f2937,#111827);cursor:move">' +
+                    '<div style="font-size:12px;font-weight:700">TikTok AI Soundboard</div>' +
+                    '<button id="tkaiSoundboardClose" class="panel-close" style="position:static">×</button>' +
+                    '</div>' +
+                    '<div style="padding:10px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;gap:6px;flex-wrap:wrap">' +
+                    '<button id="tkaiSoundUploadBtn" class="tkai-insights-btn" type="button">+ Add sound</button>' +
+                    '<button id="tkaiSoundStopBtn" class="tkai-insights-btn" type="button">■ Stop</button>' +
+                    '<input id="tkaiSoundUploadInput" type="file" accept="audio/*" style="display:none">' +
+                    '<div style="font-size:10px;color:var(--text3);width:100%">Za mikrofon output koristi virtual audio cable / monitor u OBS-u.</div>' +
+                    '</div>' +
+                    '<div style="padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;gap:6px;flex-wrap:wrap">' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="all" type="button" style="padding:2px 7px">All</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="favorites" type="button" style="padding:2px 7px">Fav</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="hype" type="button" style="padding:2px 7px">Hype</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="meme" type="button" style="padding:2px 7px">Meme</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="alerts" type="button" style="padding:2px 7px">Alerts</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="game" type="button" style="padding:2px 7px">Game</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="money" type="button" style="padding:2px 7px">Money</button>' +
+                    '<button class="tkai-insights-btn tkai-sound-cat" data-cat="custom" type="button" style="padding:2px 7px">Custom</button>' +
+                    '</div>' +
+                    '<div id="tkaiSoundboardList" style="flex:1;overflow:auto;padding:8px 10px"></div>';
+                document.body.appendChild(tkaiSoundboardPopout);
+                tkaiSoundboardCategory = 'all';
+                renderSoundboardList();
+
+                tkaiSoundboardPopout.querySelector('#tkaiSoundboardClose')?.addEventListener('click', () => {
+                    tkaiSoundboardPopout.remove();
+                    tkaiSoundboardPopout = null;
+                    stopSoundboardPlayback();
+                });
+                tkaiSoundboardPopout.querySelector('#tkaiSoundUploadBtn')?.addEventListener('click', () => {
+                    tkaiSoundboardPopout.querySelector('#tkaiSoundUploadInput')?.click();
+                });
+                tkaiSoundboardPopout.querySelector('#tkaiSoundStopBtn')?.addEventListener('click', () => {
+                    stopSoundboardPlayback();
+                    showToast('⏹️ Zaustavljen zvuk');
+                });
+                tkaiSoundboardPopout.querySelector('#tkaiSoundUploadInput')?.addEventListener('change', async (ev) => {
+                    const file = ev?.target?.files?.[0];
+                    if (!file) return;
+                    const name = String(file.name || 'Sound').replace(/\.[^/.]+$/, '').slice(0, 60);
+                    try {
+                        const dataUrl = await new Promise((resolve, reject) => {
+                            const fr = new FileReader();
+                            fr.onload = () => resolve(String(fr.result || ''));
+                            fr.onerror = () => reject(fr.error || new Error('File read error'));
+                            fr.readAsDataURL(file);
+                        });
+                        const current = getSoundboardList().filter((r) => r.type === 'file');
+                        current.push({ id: 'file_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), name, type: 'file', dataUrl });
+                        setSoundboardCustomList(current);
+                        renderSoundboardList();
+                        showToast('✅ Dodan zvuk: ' + name);
+                    } catch (err) {
+                        showToast('⚠️ Upload nije uspio: ' + String(err?.message || err));
+                    } finally {
+                        ev.target.value = '';
+                    }
+                });
+                tkaiSoundboardPopout.addEventListener('click', (ev) => {
+                    const catBtn = ev.target.closest('.tkai-sound-cat');
+                    if (catBtn) {
+                        tkaiSoundboardCategory = String(catBtn.dataset.cat || 'all');
+                        renderSoundboardList();
+                        return;
+                    }
+                    const playBtn = ev.target.closest('.tkai-sound-play');
+                    if (playBtn) {
+                        const item = getSoundboardList().find((r) => r.id === playBtn.dataset.sid);
+                        playSoundboardItem(item);
+                        return;
+                    }
+                    const favBtn = ev.target.closest('.tkai-sound-fav');
+                    if (favBtn) {
+                        const sid = String(favBtn.dataset.sid || '');
+                        if (!sid) return;
+                        const favSet = getSoundboardFavoritesSet();
+                        if (favSet.has(sid)) favSet.delete(sid);
+                        else favSet.add(sid);
+                        setSoundboardFavoritesSet(favSet);
+                        renderSoundboardList();
+                        return;
+                    }
+                    const delBtn = ev.target.closest('.tkai-sound-del');
+                    if (delBtn) {
+                        const sid = String(delBtn.dataset.sid || '');
+                        const current = getSoundboardList().filter((r) => r.type === 'file' && r.id !== sid);
+                        setSoundboardCustomList(current);
+                        renderSoundboardList();
+                        showToast('🗑️ Zvuk obrisan');
+                    }
+                });
+
+                const head = tkaiSoundboardPopout.querySelector('#tkaiSoundboardHead');
+                let dragging = false;
+                let dx = 0;
+                let dy = 0;
+                head?.addEventListener('pointerdown', (e) => {
+                    if (e.target.closest('button')) return;
+                    dragging = true;
+                    dx = e.clientX - tkaiSoundboardPopout.getBoundingClientRect().left;
+                    dy = e.clientY - tkaiSoundboardPopout.getBoundingClientRect().top;
+                    head.setPointerCapture(e.pointerId);
+                });
+                head?.addEventListener('pointermove', (e) => {
+                    if (!dragging) return;
+                    tkaiSoundboardPopout.style.left = Math.max(0, e.clientX - dx) + 'px';
+                    tkaiSoundboardPopout.style.top = Math.max(40, e.clientY - dy) + 'px';
+                    tkaiSoundboardPopout.style.right = 'auto';
+                });
+                head?.addEventListener('pointerup', () => { dragging = false; });
+                head?.addEventListener('pointercancel', () => { dragging = false; });
+            }
 
             function openChatPopout() {
                 if (chatPopout && document.body.contains(chatPopout)) {
@@ -4792,6 +5498,19 @@
 
             function syncLiveDashboardPopout() {
                 if (!liveDashboardPopout || !document.body.contains(liveDashboardPopout)) return;
+                const keepScroll = (container, renderFn) => {
+                    if (!container || typeof renderFn !== 'function') return;
+                    const prevTop = container.scrollTop;
+                    const prevHeight = container.scrollHeight;
+                    const nearBottom = prevTop + container.clientHeight >= prevHeight - 36;
+                    renderFn();
+                    if (nearBottom) {
+                        container.scrollTop = container.scrollHeight;
+                        return;
+                    }
+                    const delta = container.scrollHeight - prevHeight;
+                    container.scrollTop = Math.max(0, prevTop + delta);
+                };
                 const panelMain = panel?.querySelector('.tkai-main');
                 const giftHeader = giftGalleryEl?.previousElementSibling && giftGalleryEl.previousElementSibling.classList.contains('tkai-col-header')
                     ? giftGalleryEl.previousElementSibling
@@ -4811,9 +5530,9 @@
                 const outInsights = liveDashboardPopout.querySelector('#tkaiLiveOutInsights');
                 const outFooter = liveDashboardPopout.querySelector('#tkaiLiveOutFooter');
                 const outMeta = liveDashboardPopout.querySelector('#tkaiLiveOutMeta');
-                if (outMain && panelMain) outMain.innerHTML = panelMain.innerHTML;
+                keepScroll(outMain, () => { if (outMain && panelMain) outMain.innerHTML = panelMain.innerHTML; });
+                keepScroll(outGiftGallery, () => { if (outGiftGallery && giftGallery) outGiftGallery.innerHTML = giftGallery.innerHTML; });
                 if (outGiftHeader && giftHeader) outGiftHeader.innerHTML = giftHeader.innerHTML;
-                if (outGiftGallery && giftGallery) outGiftGallery.innerHTML = giftGallery.innerHTML;
                 if (outStats && stats) outStats.innerHTML = stats.innerHTML;
                 if (outSupporters && supporters) outSupporters.innerHTML = supporters.innerHTML;
                 if (outUsers && users) outUsers.innerHTML = users.innerHTML;
@@ -4852,6 +5571,13 @@
                         }
                         if (button.id === 'tkaiLiveDjCcNow') {
                             if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
+                            return;
+                        }
+                        if (button.id === 'tkaiSpikeAll' || button.id === 'tkaiSpikeViewers' || button.id === 'tkaiSpikeGifts') {
+                            spikeFilter = button.id === 'tkaiSpikeViewers' ? 'viewers' : button.id === 'tkaiSpikeGifts' ? 'gifts' : 'all';
+                            updateSpikeFilterButtons();
+                            updateInsightsUI();
+                            syncLiveDashboardPopout();
                             return;
                         }
                         if (button.classList.contains('tkai-reply-copy')) {
@@ -4952,18 +5678,18 @@
                     '<button id="tkaiLiveDashClose" class="panel-close" style="position:static">×</button>' +
                     '</div>' +
                     '</div>' +
-                    '<div style="display:grid;grid-template-columns:minmax(560px,1.25fr) minmax(360px,.95fr);gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
-                    '<div style="display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:4px">' +
-                    '<div id="tkaiLiveOutMain" style="min-height:360px"></div>' +
-                    '<div id="tkaiLiveOutGiftHead"></div>' +
-                    '<div id="tkaiLiveOutGiftGallery" class="tkai-gift-gallery"></div>' +
-                    '</div>' +
+                    '<div style="display:grid;grid-template-columns:minmax(360px,.95fr) minmax(560px,1.25fr);gap:10px;padding:10px;height:calc(100% - 52px);overflow:hidden">' +
                     '<div style="display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:2px">' +
                     '<div id="tkaiLiveOutStats" class="tkai-stats-strip" style="margin-bottom:8px"></div>' +
                     '<div id="tkaiLiveOutSupporters" class="tkai-top-supporters" style="margin-bottom:8px"></div>' +
                     '<div id="tkaiLiveOutUsers" class="tkai-user-summary" style="margin-bottom:8px"></div>' +
                     '<div id="tkaiLiveOutInsights" class="tkai-insights"></div>' +
                     '<div id="tkaiLiveOutFooter"></div>' +
+                    '</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:4px">' +
+                    '<div id="tkaiLiveOutMain" style="min-height:360px"></div>' +
+                    '<div id="tkaiLiveOutGiftHead"></div>' +
+                    '<div id="tkaiLiveOutGiftGallery" class="tkai-gift-gallery"></div>' +
                     '</div>' +
                     '</div>';
                 document.body.appendChild(liveDashboardPopout);
@@ -5239,6 +5965,9 @@
                     renderGiftGallery();
                     return;
                 }
+                const prevTop = messagesEl.scrollTop;
+                const prevHeight = messagesEl.scrollHeight;
+                const nearBottom = prevTop + messagesEl.clientHeight >= prevHeight - 36;
                 messagesEl.innerHTML = '';
                 const targetLang = getTranslateTargetLang();
                 const showTranslated = targetLang !== 'auto';
@@ -5287,7 +6016,12 @@
                         lastTargeted.scrollIntoView({ block: 'center', behavior: 'smooth' });
                     }
                 } else {
-                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                    if (nearBottom) {
+                        messagesEl.scrollTop = messagesEl.scrollHeight;
+                    } else {
+                        const delta = messagesEl.scrollHeight - prevHeight;
+                        messagesEl.scrollTop = Math.max(0, prevTop + delta);
+                    }
                 }
                 if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
                 renderGiftGallery();
@@ -6072,10 +6806,66 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (!turboEnabled) return Math.max(1500, Number(DB.getSettings().tkaiScanIntervalMs) || TKAI_SCAN_INTERVAL_NORMAL_MS);
                 return Date.now() < turboScanFastUntilTs ? TKAI_SCAN_INTERVAL_FAST_MS : TKAI_SCAN_INTERVAL_NORMAL_MS;
             }
+            function trackActiveSongPerformance() {
+                const cfg = DB.getSettings();
+                if (cfg.tkaiSongPerfTracking === false) return;
+                const now = Date.now();
+                const sampleCooldownSec = Math.max(10, Number(cfg.tkaiSongPerfSampleCooldownSec || 30) || 30);
+                if (now - lastSongPerfSampleAt < sampleCooldownSec * 1000) return;
+                const songEvents = extractSongEventsFromMessages(collectedMessages, now, 300);
+                const active = songEvents.length ? songEvents[songEvents.length - 1] : null;
+                if (!active || !active.title) return;
+                if (now - Number(active.ts || 0) > 45 * 60 * 1000) return;
+                const songKey = normalizeSongTitleKey(active.title);
+                if (!songKey) return;
+                const insights = computeInsightsSnapshot();
+                const avgEngagement = Number(insights?.engagementAvgPerMin || 0);
+                const sent = insights?.sentimentCounts || {};
+                const sentimentScore = Number(sent.positive || 0) - Number(sent.negative || 0);
+                const db = getSongPerfDb();
+                const row = db[songKey] || {
+                    title: active.title,
+                    plays: 0,
+                    samples: 0,
+                    engagementSum: 0,
+                    sentimentSum: 0,
+                    firstSeen: now,
+                    lastSeen: now
+                };
+                if (lastSongPerfSongKey !== songKey) row.plays = Number(row.plays || 0) + 1;
+                row.samples = Number(row.samples || 0) + 1;
+                row.engagementSum = Number(row.engagementSum || 0) + avgEngagement;
+                row.sentimentSum = Number(row.sentimentSum || 0) + sentimentScore;
+                row.lastSeen = now;
+                row.title = active.title;
+                db[songKey] = row;
+                saveSongPerfDb(db);
+                lastSongPerfSongKey = songKey;
+                lastSongPerfSampleAt = now;
+            }
 
             async function runTkaiScanCycle() {
                 if (!scanActive) return;
                 const added = await scrapeTikTokChat();
+                trackActiveSongPerformance();
+                const autoSongRecEnabledRaw = DB.getSettings().tkaiAutoSongRecOnScan;
+                const autoSongRecEnabled = autoSongRecEnabledRaw !== false && autoSongRecEnabledRaw !== 'false';
+                if (autoSongRecEnabled && !autoSongRecInFlight) {
+                    const cooldownSec = Math.max(15, Number(DB.getSettings().tkaiAutoSongRecCooldownSec || 45) || 45);
+                    const recent = collectedMessages.slice(-20);
+                    const hasSongSignal = recent.some((m) => {
+                        const type = String(m?.type || '').toLowerCase();
+                        const text = String(m?.text || '').toLowerCase();
+                        return type === 'caption' || /\b(now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\b/i.test(text);
+                    });
+                    if (hasSongSignal && Date.now() - lastAutoSongRecAt >= cooldownSec * 1000 && typeof window.runSongRecRecognition === 'function') {
+                        autoSongRecInFlight = true;
+                        lastAutoSongRecAt = Date.now();
+                        window.runSongRecRecognition(false)
+                            .catch(() => { })
+                            .finally(() => { autoSongRecInFlight = false; });
+                    }
+                }
                 if (DB.getSettings().tkaiTurboScan !== false && added > 0) {
                     turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
                 }
@@ -6475,6 +7265,23 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             });
             document.getElementById('tkaiDjCcNowBtn')?.addEventListener('click', () => {
                 if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
+            });
+            openSoundboardBtn?.addEventListener('click', () => {
+                openTkaiSoundboard();
+            });
+            favSoundsQuickBtn?.addEventListener('click', () => {
+                if (!favSoundsQuickWrap) return;
+                const isOpen = favSoundsQuickWrap.style.display !== 'none';
+                favSoundsQuickWrap.style.display = isOpen ? 'none' : '';
+                favSoundsQuickBtn.classList.toggle('active', !isOpen);
+                if (!isOpen) renderFavSoundsQuickPanel();
+            });
+            favSoundsQuickList?.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('.tkai-fav-quick-play');
+                if (!btn) return;
+                const sid = String(btn.dataset.sid || '');
+                const item = getSoundboardList().find((r) => String(r.id || '') === sid);
+                if (item) playSoundboardItem(item);
             });
             contextEl?.addEventListener('input', saveCfg);
             customPromptEl?.addEventListener('input', saveCfg);
