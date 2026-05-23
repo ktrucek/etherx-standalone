@@ -78,6 +78,87 @@ success() { echo -e "${GREEN}[✓]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $*"; }
 error()   { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
 
+validate_etherx_download_links() {
+  local page_url="https://etherx.io/browser.html"
+  local release_api="https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest"
+  local page_html=""
+  local release_json=""
+  local latest_tag=""
+  local live_broken=0
+  local expected_missing=0
+  local -a live_urls=()
+  local -a expected_names=()
+
+  info "Post-deploy check: validating EtherX.io download links"
+
+  page_html="$(curl -fsSL "$page_url" 2>/dev/null || true)"
+  if [[ -z "$page_html" ]]; then
+    warn "Could not fetch $page_url — skipping live link validation"
+    return 0
+  fi
+
+  mapfile -t live_urls < <(printf '%s' "$page_html" | python3 - <<'PY'
+import re
+import sys
+
+html = sys.stdin.read()
+urls = sorted(set(re.findall(r'https://github\.com/ktrucek/etherx-standalone/releases/download/[^"\'\s<]+', html)))
+for url in urls:
+    print(url)
+PY
+)
+
+  if [[ ${#live_urls[@]} -eq 0 ]]; then
+    warn "No GitHub release download URLs found on $page_url"
+    return 0
+  fi
+
+  for url in "${live_urls[@]}"; do
+    local code
+    code="$(curl -sIL "$url" | awk 'toupper($0) ~ /^HTTP\// {c=$2} END{print c}')"
+    code="${code:-000}"
+    if [[ "$code" =~ ^[45] ]]; then
+      warn "Live link broken ($code): $url"
+      ((live_broken++))
+    fi
+  done
+
+  if [[ $live_broken -eq 0 ]]; then
+    success "All live GitHub download links on EtherX.io are reachable"
+  fi
+
+  release_json="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: etherx-deploy-script' "$release_api" 2>/dev/null || true)"
+  if [[ -z "$release_json" ]]; then
+    warn "Could not fetch latest GitHub release metadata — skipping expected-link comparison"
+    return 0
+  fi
+
+  latest_tag="$(printf '%s' "$release_json" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('tag_name',''))" 2>/dev/null || true)"
+  mapfile -t expected_names < <(printf '%s' "$release_json" | python3 -c "import sys, json; d=json.load(sys.stdin); [print(a.get('name','')) for a in d.get('assets',[]) if a.get('name')]" 2>/dev/null || true)
+
+  if [[ -z "$latest_tag" || ${#expected_names[@]} -eq 0 ]]; then
+    warn "Latest release metadata missing tag/assets — skipping expected-link comparison"
+    return 0
+  fi
+
+  if [[ "$latest_tag" != "v$NEW_VERSION" ]]; then
+    warn "Latest release is $latest_tag (deploy target is v$NEW_VERSION); assets may still be building"
+  fi
+
+  for asset_name in "${expected_names[@]}"; do
+    if ! printf '%s\n' "${live_urls[@]}" | grep -Fq "/$latest_tag/$asset_name"; then
+      warn "Missing on live page: https://github.com/ktrucek/etherx-standalone/releases/download/$latest_tag/$asset_name"
+      ((expected_missing++))
+    fi
+  done
+
+  if [[ $expected_missing -eq 0 ]]; then
+    success "Live page contains all assets from latest GitHub release ($latest_tag)"
+  else
+    warn "Live page is missing $expected_missing asset link(s) from latest GitHub release ($latest_tag)"
+  fi
+}
+
 _load_env_file() {
   local fp="$1"
   if [[ -f "$fp" ]]; then
@@ -422,6 +503,8 @@ if [[ "$NO_PUSH" == false ]]; then
         warn "Failed to update kriptoentuzijasti.io endpoint: $KRIPTOAPI_RESPONSE"
       fi
     fi
+
+    validate_etherx_download_links
     
   else
     warn "GitHub push failed"
@@ -444,10 +527,12 @@ echo -e "  🐙 GitHub:    ${CYAN}https://github.com/ktrucek/etherx-standalone${
 echo -e "  🌐 EtherX.io: ${CYAN}https://etherx.io/browser.html${NC}"
 echo ""
 echo -e "  📥 Download URLs (after Actions build completes):"
-echo -e "     🍎 macOS arm64 DMG: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-arm64.dmg${NC}"
+echo -e "     🍎 macOS arm64 ZIP: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-arm64.zip${NC}"
 echo -e "     🍎 macOS x64 ZIP:   ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-x64.zip${NC}"
 echo -e "     🪟 Windows EXE:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.exe${NC}"
+echo -e "     🪟 Windows ZIP:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.zip${NC}"
 echo -e "     🐧 Linux AppImage:  ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.AppImage${NC}"
+echo -e "     🐧 Linux DEB:       ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.deb${NC}"
 echo ""
 if [[ "$NO_PUSH" == false ]]; then
   echo -e "  ${YELLOW}🚀 GitHub Actions će buildati Linux + Windows + macOS...${NC}"

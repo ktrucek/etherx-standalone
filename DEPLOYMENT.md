@@ -14,6 +14,8 @@ cd /var/www/vhosts/kriptoentuzijasti.io/AI\ projekt/browser/standalone-browser/
 3. ✅ Commits changes to git
 4. ✅ Creates git tag `vX.Y.Z`
 5. ✅ Pushes to GitHub (triggers build)
+6. ✅ Updates EtherX.io page via API (if website env vars are configured)
+7. ✅ Runs post-deploy check for broken live download links
 
 ---
 
@@ -138,15 +140,11 @@ Wait ~20-30 minutes for build to complete.
 
 ### 2. `src/index.html` (line 7623)
 
-```html
+````html
 <span id="helpVersionNum">2.4.29</span>
-```
-
-### 3. `src/index.html` (line 8006)
-
-```html
+```y ### 3. `src/index.html` (line 8006) ```html
 <span id="helpVersionNum2">2.4.29</span>
-```
+````
 
 ### 4. Git tag
 
@@ -279,9 +277,32 @@ https://github.com/ktrucek/etherx-standalone/releases/tag/vX.Y.Z
 
 ## Environment Variables (deploy.sh)
 
-None required for automated deploy.
+`deploy.sh` loads secrets from:
 
-For manual GitHub API access:
+- `${DEPLOY_SECRETS_FILE}` (if set), otherwise `~/.config/etherx/deploy.env`
+- fallback: `.env.local` in this repo
+
+Required for push to GitHub:
+
+```bash
+export GITHUB_TOKEN_DEPLOY="ghp_..."
+```
+
+Required for automatic EtherX website update:
+
+```bash
+export ETHERX_API_URL="https://etherx.io/api/update_version.php"
+export ETHERX_API_KEY="your_secret_key"
+```
+
+Optional for kriptoentuzijasti API sync:
+
+```bash
+export ETHERX_KRIPTO_API_URL="https://api.kriptoentuzijasti.io/version"
+export ETHERX_KRIPTO_API_KEY="your_secret_key"
+```
+
+Manual GitHub API access (optional):
 
 ```bash
 export GITHUB_TOKEN="ghp_..."
