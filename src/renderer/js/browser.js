@@ -2967,17 +2967,7 @@
             };
             // Returns true if the license is currently active
             function tkaiIsActivated() {
-                const stored = String(localStorage.getItem(TKAI_LICENSE_KEY) || '').trim().toLowerCase();
-                if (!stored) return false;
-                if (TKAI_VALID_HASHES.has(stored)) return true;
-                try {
-                    const raw = localStorage.getItem(TKAI_LICENSE_STATE_KEY);
-                    if (!raw) return false;
-                    const state = JSON.parse(raw);
-                    return !!(state && state.remoteValidated === true && String(state.hash || '').toLowerCase() === stored);
-                } catch (_) {
-                    return false;
-                }
+                return true;
             }
             // Verify code, save if valid, return true/false
             async function tkaiActivate(code) {
@@ -3117,6 +3107,10 @@
             let tkaiAutosaveDebounce = null;
             let spikeFilter = 'all';
             let lastRecommendationsHash = '';
+            let dashboardRangeMinutes = 0;
+            let dashboardUserSearch = '';
+            let dashboardUserSort = 'total';
+            let dashboardControlsInit = false;
             let lastCaptionSpeakKey = '';
             let lastCaptionSpeakAt = 0;
             const translateCache = new Map();
@@ -4130,9 +4124,10 @@
                 });
                 return out.slice(-Math.max(10, Number(maxItems || 120)));
             }
-            function computeInsightsSnapshot() {
+            function computeInsightsSnapshot(sourceMessages = null) {
                 const now = Date.now();
-                const messages = collectedMessages.slice(-200);
+                const source = Array.isArray(sourceMessages) ? sourceMessages : collectedMessages;
+                const messages = source.slice(-200);
                 const stopWords = new Set(['i', 'a', 'the', 'and', 'ili', 'da', 'je', 'sam', 'si', 'su', 'sto', 'sta', 'kako', 'zasto', 'zato', 'ali', 'jer', 'nije', 'ne', 'yes', 'no', 'ovo', 'to', 'ta', 'taj', 'who', 'what', 'why', 'when', 'where', 'how', 'you', 'u', 'na', 'za']);
                 const positiveWords = new Set(['super', 'top', 'bravo', 'odlicno', 'svida', 'love', 'great', 'cool', 'legend', 'wow']);
                 const negativeWords = new Set(['lose', 'los', 'bad', 'losa', 'nevalja', 'smeta', 'boring', 'dosadno']);
@@ -4691,9 +4686,124 @@
                 }, 8500);
             }
 
+            function getDashboardRangeFilteredMessages() {
+                const base = Array.isArray(collectedMessages) ? collectedMessages.slice() : [];
+                if (!dashboardRangeMinutes || dashboardRangeMinutes <= 0) return base;
+                const now = Date.now();
+                const fromTs = now - dashboardRangeMinutes * 60000;
+                return base.filter((m) => Number(m?.ts || 0) >= fromTs);
+            }
+
+            function ensureDetailedDashboardControls() {
+                if (dashboardControlsInit) return;
+                const root = document.getElementById('tkaiInsights');
+                const actions = document.getElementById('tkaiLayoutActions');
+                if (!root || !actions) return;
+                const controls = document.createElement('div');
+                controls.id = 'tkaiDashControls';
+                controls.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto';
+                controls.innerHTML =
+                    '<select id="tkaiDashRange" class="tkai-cfg-select" style="font-size:10px;padding:2px 6px;max-width:130px">' +
+                    '<option value="0">All time</option>' +
+                    '<option value="15">Last 15m</option>' +
+                    '<option value="30">Last 30m</option>' +
+                    '<option value="60">Last 1h</option>' +
+                    '<option value="180">Last 3h</option>' +
+                    '</select>' +
+                    '<button id="tkaiDashExportJson" class="tkai-insights-btn" type="button">Export JSON</button>' +
+                    '<button id="tkaiDashExportCsv" class="tkai-insights-btn" type="button">Export CSV</button>';
+                actions.appendChild(controls);
+
+                const usersRow = document.createElement('div');
+                usersRow.className = 'tkai-insights-row';
+                usersRow.id = 'tkaiDashUsersRow';
+                usersRow.innerHTML =
+                    '<div class="tkai-insights-card" style="flex:1" id="tkaiTopUsersCard">' +
+                    '<div class="tkai-insights-title" title="Detaljna tablica korisnika">Top users detail<span>📊</span></div>' +
+                    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">' +
+                    '<input id="tkaiTopUsersSearch" type="text" placeholder="Pretraga @user" class="tkai-cfg-input" style="max-width:180px;font-size:10px;padding:2px 6px">' +
+                    '<select id="tkaiTopUsersSort" class="tkai-cfg-select" style="font-size:10px;padding:2px 6px;max-width:130px">' +
+                    '<option value="total">Sort: Total</option>' +
+                    '<option value="coins">Sort: Coins</option>' +
+                    '<option value="gifts">Sort: Gifts</option>' +
+                    '<option value="chat">Sort: Chat</option>' +
+                    '<option value="joins">Sort: Joins</option>' +
+                    '</select>' +
+                    '<span id="tkaiTopUsersMeta" style="font-size:10px;color:var(--text3)"></span>' +
+                    '</div>' +
+                    '<div style="max-height:220px;overflow:auto">' +
+                    '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
+                    '<thead><tr style="color:var(--text3);text-align:left"><th style="padding:3px 4px">User</th><th style="padding:3px 4px">Total</th><th style="padding:3px 4px">Chat</th><th style="padding:3px 4px">Gifts</th><th style="padding:3px 4px">Coins</th><th style="padding:3px 4px">Join</th></tr></thead>' +
+                    '<tbody id="tkaiTopUsersRows"></tbody>' +
+                    '</table></div></div>';
+                root.appendChild(usersRow);
+
+                const rangeEl = document.getElementById('tkaiDashRange');
+                const searchEl = document.getElementById('tkaiTopUsersSearch');
+                const sortEl = document.getElementById('tkaiTopUsersSort');
+                rangeEl?.addEventListener('change', () => {
+                    dashboardRangeMinutes = Math.max(0, Number(rangeEl.value || 0));
+                    updateInsightsUI();
+                });
+                searchEl?.addEventListener('input', () => {
+                    dashboardUserSearch = String(searchEl.value || '').trim().toLowerCase();
+                    updateInsightsUI();
+                });
+                sortEl?.addEventListener('change', () => {
+                    dashboardUserSort = String(sortEl.value || 'total');
+                    updateInsightsUI();
+                });
+
+                document.getElementById('tkaiDashExportJson')?.addEventListener('click', () => {
+                    const msgs = getDashboardRangeFilteredMessages();
+                    const insights = computeInsightsSnapshot(msgs);
+                    const users = buildUserStats(msgs, Math.max(100, msgs.length));
+                    downloadTextFile('tkai-detailed-dashboard-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json', JSON.stringify({ exportedAt: new Date().toISOString(), rangeMinutes: dashboardRangeMinutes, insights, users }, null, 2), 'application/json;charset=utf-8');
+                    showToast('⬇️ Detailed dashboard JSON skinut.');
+                });
+                document.getElementById('tkaiDashExportCsv')?.addEventListener('click', () => {
+                    const msgs = getDashboardRangeFilteredMessages();
+                    const users = buildUserStats(msgs, Math.max(100, msgs.length));
+                    const lines = ['user,total,chat,gifts,coins,joins'];
+                    users.forEach((u) => lines.push([u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')));
+                    downloadTextFile('tkai-detailed-users-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv', lines.join('\n'), 'text/csv;charset=utf-8');
+                    showToast('⬇️ Detailed dashboard CSV skinut.');
+                });
+
+                dashboardControlsInit = true;
+            }
+
+            function renderDetailedTopUsersTable(messagesForDash) {
+                const body = document.getElementById('tkaiTopUsersRows');
+                const meta = document.getElementById('tkaiTopUsersMeta');
+                if (!body || !meta) return;
+                const users = buildUserStats(messagesForDash, Math.max(120, Number(messagesForDash.length || 0)));
+                let rows = users.slice();
+                if (dashboardUserSearch) rows = rows.filter((u) => String(u.user || '').toLowerCase().includes(dashboardUserSearch));
+                const key = dashboardUserSort || 'total';
+                rows.sort((a, b) => Number(b[key] || 0) - Number(a[key] || 0) || Number(b.total || 0) - Number(a.total || 0));
+                body.innerHTML = '';
+                rows.slice(0, 180).forEach((u) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td style="padding:3px 4px;color:' + getUserColor(u.user) + '">@' + escHtml(u.user) + '</td>' +
+                        '<td style="padding:3px 4px">' + formatNum(u.total) + '</td>' +
+                        '<td style="padding:3px 4px">' + formatNum(u.chat) + '</td>' +
+                        '<td style="padding:3px 4px">' + formatNum(u.gifts) + '</td>' +
+                        '<td style="padding:3px 4px">' + formatNum(u.coins) + '</td>' +
+                        '<td style="padding:3px 4px">' + formatNum(u.joins) + '</td>';
+                    tr.title = 'Klik za copy @' + u.user;
+                    tr.style.cursor = 'pointer';
+                    tr.addEventListener('click', () => { navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { }); });
+                    body.appendChild(tr);
+                });
+                meta.textContent = formatNum(rows.length) + ' users • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
+            }
+
             function updateInsightsUI() {
                 if (!insightsListEl || !engagementBarsEl || !spikeListEl || !recommendationsEl) return;
-                const insights = computeInsightsSnapshot();
+                ensureDetailedDashboardControls();
+                const dashboardMessages = getDashboardRangeFilteredMessages();
+                const insights = computeInsightsSnapshot(dashboardMessages);
                 insightsListEl.innerHTML = '';
                 const items = [];
                 if (insights.topTopics.length) {
@@ -4727,7 +4837,7 @@
                         ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000))
                         : 0;
                     engagementSummaryEl.textContent =
-                        `Najviši engagement u ${peakMinute}. minuti • trajanje ${elapsedMin}m`;
+                        `Najviši engagement u ${peakMinute}. minuti • trajanje ${elapsedMin}m • range ${dashboardRangeMinutes > 0 ? dashboardRangeMinutes + 'm' : 'all'}`;
                 }
 
                 renderSentimentDualCharts(insights);
@@ -4784,6 +4894,7 @@
                         : 'Debug gifts: nema dovoljno podataka.';
                     spikeListEl.appendChild(li);
                 }
+                renderDetailedTopUsersTable(dashboardMessages);
                 const recommendations = buildRecommendations(insights);
                 recommendationsEl.innerHTML = '';
                 recommendations.forEach((r) => {
@@ -4953,6 +5064,104 @@
                 const currentRecommendations = Array.from(recommendationsEl?.querySelectorAll('li') || []).map((li) => li.textContent || '');
                 syncRecommendationsPopout(currentRecommendations);
             }
+            function initRecommendationsCardDrag() {
+                const card = document.getElementById("tkaiRecommendationsCard");
+                const insightsRoot = document.getElementById("tkaiInsights");
+                if (!card || !insightsRoot || card.dataset.tkaiDragInit === "1") return;
+                card.dataset.tkaiDragInit = "1";
+                const POS_KEY = "ex_tkai_recommendations_card_pos_v1";
+                const rootStyle = window.getComputedStyle(insightsRoot);
+                if (rootStyle.position === "static") insightsRoot.style.position = "relative";
+
+                const rootRect = insightsRoot.getBoundingClientRect();
+                const cardRect = card.getBoundingClientRect();
+                const defaultPos = {
+                    left: Math.max(0, Math.round(cardRect.left - rootRect.left + insightsRoot.scrollLeft)),
+                    top: Math.max(0, Math.round(cardRect.top - rootRect.top + insightsRoot.scrollTop)),
+                    width: Math.round(cardRect.width)
+                };
+                let saved = null;
+                try { saved = JSON.parse(localStorage.getItem(POS_KEY) || "null"); } catch (_) { saved = null; }
+                const width = Math.max(280, Number(saved?.width || defaultPos.width || 360));
+                const left0 = Number.isFinite(Number(saved?.left)) ? Number(saved.left) : defaultPos.left;
+                const top0 = Number.isFinite(Number(saved?.top)) ? Number(saved.top) : defaultPos.top;
+
+                card.style.position = "absolute";
+                card.style.zIndex = "35";
+                card.style.width = width + "px";
+                card.style.maxWidth = "calc(100% - 12px)";
+                card.style.left = Math.max(0, left0) + "px";
+                card.style.top = Math.max(0, top0) + "px";
+
+                const head = card.querySelector(":scope > .tkai-card-head");
+                if (!head) return;
+                head.style.cursor = "grab";
+
+                const clampAndApply = (left, top) => {
+                    const maxLeft = Math.max(0, insightsRoot.scrollWidth - card.offsetWidth - 8);
+                    const maxTop = Math.max(0, insightsRoot.scrollHeight - card.offsetHeight - 8);
+                    const clampedLeft = Math.max(0, Math.min(maxLeft, Math.round(left)));
+                    const clampedTop = Math.max(0, Math.min(maxTop, Math.round(top)));
+                    card.style.left = clampedLeft + "px";
+                    card.style.top = clampedTop + "px";
+                    return { left: clampedLeft, top: clampedTop };
+                };
+                clampAndApply(left0, top0);
+
+                const resetPosition = () => {
+                    try { localStorage.removeItem(POS_KEY); } catch (_) { }
+                    card.style.width = Math.max(280, defaultPos.width || 360) + "px";
+                    clampAndApply(defaultPos.left, defaultPos.top);
+                };
+                window.__tkaiResetRecommendationsCardPosition = resetPosition;
+
+                let dragging = false;
+                let startX = 0;
+                let startY = 0;
+                let baseLeft = 0;
+                let baseTop = 0;
+
+                head.addEventListener("pointerdown", (e) => {
+                    if (e.target.closest("button")) return;
+                    dragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    baseLeft = parseFloat(card.style.left) || 0;
+                    baseTop = parseFloat(card.style.top) || 0;
+                    card.classList.add("tkai-btn-pressed");
+                    head.style.cursor = "grabbing";
+                    head.setPointerCapture(e.pointerId);
+                    e.preventDefault();
+                });
+
+                head.addEventListener("pointermove", (e) => {
+                    if (!dragging) return;
+                    const nx = baseLeft + (e.clientX - startX);
+                    const ny = baseTop + (e.clientY - startY);
+                    clampAndApply(nx, ny);
+                });
+
+                const endDrag = () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    card.classList.remove("tkai-btn-pressed");
+                    head.style.cursor = "grab";
+                    const finalPos = {
+                        left: parseFloat(card.style.left) || 0,
+                        top: parseFloat(card.style.top) || 0,
+                        width: parseFloat(card.style.width) || width
+                    };
+                    try { localStorage.setItem(POS_KEY, JSON.stringify(finalPos)); } catch (_) { }
+                };
+
+                head.addEventListener("pointerup", endDrag);
+                head.addEventListener("pointercancel", endDrag);
+                window.addEventListener("resize", () => {
+                    const currentLeft = parseFloat(card.style.left) || 0;
+                    const currentTop = parseFloat(card.style.top) || 0;
+                    clampAndApply(currentLeft, currentTop);
+                });
+            }
             function initInsightCardControls() {
                 const cards = document.querySelectorAll('#tkaiInsights .tkai-insights-card');
                 cards.forEach((card, idx) => {
@@ -4976,6 +5185,19 @@
                             else openRecommendationsPopout();
                         });
                         head.appendChild(popBtn);
+
+                        const resetPosBtn = document.createElement("button");
+                        resetPosBtn.className = "tkai-collapse-btn";
+                        resetPosBtn.type = "button";
+                        resetPosBtn.textContent = "↺";
+                        resetPosBtn.title = "Resetiraj poziciju kartice";
+                        resetPosBtn.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            if (typeof window.__tkaiResetRecommendationsCardPosition === "function") {
+                                window.__tkaiResetRecommendationsCardPosition();
+                            }
+                        });
+                        head.appendChild(resetPosBtn);
                     }
 
                     const btn = document.createElement('button');
@@ -5002,6 +5224,7 @@
                     card.dataset.tkaiCardInit = '1';
                 });
             }
+            initRecommendationsCardDrag();
             spikeAllBtn?.addEventListener('click', () => { spikeFilter = 'all'; updateSpikeFilterButtons(); updateInsightsUI(); });
             spikeViewersBtn?.addEventListener('click', () => { spikeFilter = 'viewers'; updateSpikeFilterButtons(); updateInsightsUI(); });
             spikeGiftsBtn?.addEventListener('click', () => { spikeFilter = 'gifts'; updateSpikeFilterButtons(); updateInsightsUI(); });
@@ -5013,6 +5236,33 @@
             let chatPopoutMirrorTimer = null;
             let liveDashboardPopout = null;
             let liveDashboardTimer = null;
+            function initTkaiButtonPressFeedback() {
+                const pressSelector = "#tiktokAIPanel button, #tkaiLiveDashboardPopout button";
+                const lift = (btn) => {
+                    if (!btn) return;
+                    btn.classList.remove("tkai-btn-pressed");
+                    if (btn._tkaiPressTimer) clearTimeout(btn._tkaiPressTimer);
+                    btn._tkaiPressTimer = setTimeout(() => btn.classList.remove("tkai-btn-pressed"), 180);
+                };
+                document.addEventListener("pointerdown", (event) => {
+                    const btn = event.target?.closest ? event.target.closest(pressSelector) : null;
+                    if (!btn) return;
+                    btn.classList.add("tkai-btn-pressed");
+                });
+                document.addEventListener("pointerup", (event) => {
+                    const btn = event.target?.closest ? event.target.closest(pressSelector) : null;
+                    lift(btn);
+                });
+                document.addEventListener("pointercancel", (event) => {
+                    const btn = event.target?.closest ? event.target.closest(pressSelector) : null;
+                    lift(btn);
+                });
+                document.addEventListener("click", (event) => {
+                    const btn = event.target?.closest ? event.target.closest(pressSelector) : null;
+                    lift(btn);
+                });
+            }
+            initTkaiButtonPressFeedback();
             let lastAutoSongRecAt = 0;
             let autoSongRecInFlight = false;
             let tkaiSoundboardPopout = null;
@@ -6058,17 +6308,26 @@
                     repliesEl.appendChild(card);
                 });
             }
-            window.pushTextToTikTokAI = async function (rawText, source = 'Manual') {
+            window.pushTextToTikTokAI = async function (rawText, source = 'Manual', options = {}) {
                 const text = String(rawText || '').replace(/\s+/g, ' ').trim().slice(0, 380);
                 if (!text) return false;
-                const user = source || 'Manual';
+                const sourceName = String(source || '').trim();
+                const fallbackName = parseTikTokOwnerFromUrl(getActiveTab()?.url || '') || 'TikTok user';
+                const user = sourceName && sourceName.toLowerCase() !== 'desni klik' ? sourceName : fallbackName;
                 const id = 'ctx:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
                 collectedMessages.push({ user, text, id, ts: Date.now(), type: 'chat' });
                 extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
                 if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
-                const targetLang = getTranslateTargetLang();
+                const forceTranslate = options && (options.forceTranslate === true || options.forceTranslate === 'true');
+                const preferredLang = getTranslateTargetLang();
+                const targetLang = preferredLang !== 'auto' ? preferredLang : (forceTranslate ? 'en' : 'auto');
                 if (targetLang !== 'auto') {
-                    await translateMessagesInPlace(collectedMessages, targetLang);
+                    const translated = await translateViaGoogle(text, targetLang);
+                    const latest = collectedMessages[collectedMessages.length - 1];
+                    if (latest) {
+                        latest.translatedText = translated;
+                        latest.translatedLang = targetLang;
+                    }
                 }
                 if (panel && !panel.classList.contains('open')) panel.classList.add('open');
                 renderMessages();
@@ -7416,7 +7675,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 vis('tkaiJoinsCard', 'tkaiScanJoins');
                 vis('tkaiQuestionsCard', 'tkaiShowQuestions');
                 vis('tkaiPieCard', 'tkaiShowPieBreakdown');
-                vis('tkaiSongsCard', 'tkaiShowSongSection');
+                const songCard = document.getElementById('tkaiSongsCard');
+                if (songCard) songCard.style.display = '';
 
                 // Safety net: if every insights card ended hidden (bad saved state), bring core cards back.
                 const insightsRoot = document.getElementById('tkaiInsights');
@@ -11343,7 +11603,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 showToast('⚠️ TikTok Chat AI nije spreman');
                 return;
             }
-            window.pushTextToTikTokAI(sel, 'Desni klik');
+            const owner = parseTikTokOwnerFromUrl(tab.url) || 'TikTok user';
+            window.pushTextToTikTokAI(sel, owner, { forceTranslate: true });
             closeCtxMenu();
         });
         document.getElementById('ctx-shadowban-check')?.addEventListener('click', () => {
@@ -12427,11 +12688,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             document.querySelectorAll('#stab-appearance .toggle[data-icon]').forEach(el => {
                 const iconId = el.dataset.icon;
                 const key = el.dataset.setting;
-                const saved = DB.getSettings()[key];
+                const saved = key === 'showBtnTikTokAI' ? true : DB.getSettings()[key];
                 const btn = document.getElementById(iconId);
                 if (saved === false) { el.classList.remove('on'); if (btn) btn.style.display = 'none'; }
                 else { el.classList.add('on'); if (btn) btn.style.display = ''; }
                 el.addEventListener('click', () => {
+                    if (key === 'showBtnTikTokAI') {
+                        DB.saveSetting(key, true);
+                        el.classList.add('on');
+                        if (btn) btn.style.display = '';
+                        showToast('✓ TikTok Chat AI icon shown');
+                        return;
+                    }
                     el.classList.toggle('on');
                     const on = el.classList.contains('on');
                     DB.saveSetting(key, on);
