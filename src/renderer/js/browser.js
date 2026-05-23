@@ -6018,8 +6018,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (outFooter && footer) outFooter.innerHTML = footer.innerHTML;
         if (outMeta) {
             const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
-            const streamOwner = String(streamOwnerHandle || '').trim();
-            const ownerLabel = streamOwner ? (' • @' + streamOwner.replace(/^@+/, '')) : '';
+            const streamOwner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
+            const ownerLabel = streamOwner && streamOwner !== '-' ? (' • @' + streamOwner) : '';
             outMeta.textContent = 'Live: ' + formatNum(collectedMessages.length) + ' poruka • ' + elapsedMin + ' min • viewers ' + formatNum(liveViewerCount) + ownerLabel;
         }
     }
