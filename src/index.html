@@ -9470,7 +9470,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.247</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.248</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10869,7 +10869,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.247</span></div>
+                                    v<span id="helpVersionNum2">2.4.248</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -20129,11 +20129,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     tkaiMinBtn.title = minimized ? 'Proširi' : 'Spusti / proširi';
                 }
             };
-            try {
-                applyTkaiMinimized(localStorage.getItem(TKAI_MIN_KEY) === '1');
-            } catch (_) {
-                applyTkaiMinimized(false);
-            }
+            // Always open expanded so the panel remains easy to control.
+            applyTkaiMinimized(false);
+            try { localStorage.removeItem(TKAI_MIN_KEY); } catch (_) { }
             tkaiMinBtn?.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const next = !panel.classList.contains('tkai-minimized');
@@ -20257,15 +20255,37 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             (function makePanelResizable() {
                 if (!panel) return;
                 const TKAI_SIZE_KEY = 'ex_tkai_panel_size';
+                const DEFAULT_W = 460;
+                const DEFAULT_H = 580;
                 const MIN_W = 360, MIN_H = 340;
+                function getMaxHeight() {
+                    const chromeH = document.querySelector('.tab-bar')?.getBoundingClientRect()?.top;
+                    const topBoundary = Number.isFinite(chromeH) ? Math.max(0, chromeH) : 90;
+                    return Math.max(MIN_H, window.innerHeight - topBoundary - 10);
+                }
+                function clampPanelSize(width, height) {
+                    const maxW = Math.max(MIN_W, window.innerWidth - 20);
+                    const maxH = getMaxHeight();
+                    const w = Math.max(MIN_W, Math.min(Number(width) || DEFAULT_W, maxW));
+                    const h = Math.max(MIN_H, Math.min(Number(height) || Math.min(DEFAULT_H, maxH), maxH));
+                    return { w, h };
+                }
+                function applyPanelSize(width, height) {
+                    const size = clampPanelSize(width, height);
+                    panel.style.width = size.w + 'px';
+                    panel.style.height = size.h + 'px';
+                }
                 try {
                     const s = JSON.parse(localStorage.getItem(TKAI_SIZE_KEY) || 'null');
-                    if (s && s.width) panel.style.width = s.width + 'px';
-                    if (s && s.height) panel.style.height = s.height + 'px';
+                    applyPanelSize(s?.width, s?.height);
                 } catch (_) { }
                 function saveSize() {
                     try { localStorage.setItem(TKAI_SIZE_KEY, JSON.stringify({ width: panel.offsetWidth, height: panel.offsetHeight })); } catch (_) { }
                 }
+                window.addEventListener('resize', () => {
+                    applyPanelSize(panel.offsetWidth, panel.offsetHeight);
+                    saveSize();
+                });
                 ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
                     const h = document.createElement('div');
                     h.className = 'tkai-resize-handle tkai-resize-' + dir;
@@ -20284,15 +20304,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         const onMove = e2 => {
                             if (!resizing) return;
                             const dx = e2.clientX - sx, dy = e2.clientY - sy;
-                            if (dir.includes('e')) panel.style.width = Math.max(MIN_W, sw + dx) + 'px';
-                            if (dir.includes('s')) panel.style.height = Math.max(MIN_H, sh + dy) + 'px';
+                            const maxW = Math.max(MIN_W, window.innerWidth - 20);
+                            const maxH = getMaxHeight();
+                            if (dir.includes('e')) panel.style.width = Math.max(MIN_W, Math.min(sw + dx, maxW)) + 'px';
+                            if (dir.includes('s')) panel.style.height = Math.max(MIN_H, Math.min(sh + dy, maxH)) + 'px';
                             if (dir.includes('w')) {
-                                const nw = Math.max(MIN_W, sw - dx);
+                                const nw = Math.max(MIN_W, Math.min(sw - dx, maxW));
                                 panel.style.width = nw + 'px';
                                 panel.style.left = (sl + sw - nw) + 'px';
                             }
                             if (dir === 'n' || dir === 'ne' || dir === 'nw') {
-                                const nh = Math.max(MIN_H, sh - dy);
+                                const nh = Math.max(MIN_H, Math.min(sh - dy, maxH));
                                 panel.style.height = nh + 'px';
                                 // Keep bottom anchored while moving only the top edge.
                                 panel.style.bottom = sb + 'px';
