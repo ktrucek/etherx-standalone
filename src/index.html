@@ -9470,7 +9470,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.246</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.247</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10869,7 +10869,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.246</span></div>
+                                    v<span id="helpVersionNum2">2.4.247</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -20266,7 +20266,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 function saveSize() {
                     try { localStorage.setItem(TKAI_SIZE_KEY, JSON.stringify({ width: panel.offsetWidth, height: panel.offsetHeight })); } catch (_) { }
                 }
-                ['ne', 'nw', 'se', 'sw'].forEach(dir => {
+                ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
                     const h = document.createElement('div');
                     h.className = 'tkai-resize-handle tkai-resize-' + dir;
                     panel.appendChild(h);
@@ -20294,7 +20294,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             if (dir === 'n' || dir === 'ne' || dir === 'nw') {
                                 const nh = Math.max(MIN_H, sh - dy);
                                 panel.style.height = nh + 'px';
-                                panel.style.bottom = (sb + sh - nh) + 'px';
+                                // Keep bottom anchored while moving only the top edge.
+                                panel.style.bottom = sb + 'px';
                             }
                         };
                         const onUp = () => {
