@@ -3101,6 +3101,7 @@
             let lastViewerSampleValue = 0;
             let lastSongPerfSampleAt = 0;
             let lastSongPerfSongKey = '';
+            let giftCatalogFromPage = [];
             const TKAI_AUTOSAVE_KEY = 'ex_tkai_live_autosave';
             const TKAI_SONG_PERF_DB_KEY = 'ex_tkai_song_perf_db';
             let tkaiAutosaveInterval = null;
@@ -3129,6 +3130,28 @@
             function saveSongPerfDb(db) {
                 try { localStorage.setItem(TKAI_SONG_PERF_DB_KEY, JSON.stringify(db || {})); } catch (_) { }
             }
+            function setGiftCatalogFromPage(rows) {
+                try {
+                    const seen = new Set();
+                    giftCatalogFromPage = (Array.isArray(rows) ? rows : [])
+                        .map((row) => {
+                            const name = String(row?.name || '').trim();
+                            let coins = Number(row?.coins || 0);
+                            if (/\b(?:rose|ruza|ruža)\b/i.test(name)) coins = 1;
+                            return { name, coins };
+                        })
+                        .filter((row) => row.name && Number.isFinite(row.coins) && row.coins > 0)
+                        .filter((row) => {
+                            const key = normalizeGiftKey(row.name);
+                            if (!key || seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                        })
+                        .slice(0, 400);
+                } catch (_) {
+                    giftCatalogFromPage = [];
+                }
+            }
             function normalizeSongTitleKey(title) {
                 return String(title || '')
                     .toLowerCase()
@@ -3146,6 +3169,50 @@
                 "10 Friendship Necklace",
                 "10 Heart",
                 "1 Basketball",
+                "1 Munja",
+                "1 klapna",
+                "199 Najbolji film",
+                "3000 Crveni tepih",
+                "7000 Ceremonija proboja",
+                "800 Epski pijanist",
+                "1500 Provjera paljenja",
+                "349 Ukulele svirač",
+                "1 svjetleći štapić",
+                "1 Ti si super",
+                "1 Pop",
+                "6 Božanskih prstiju",
+                "1 Krhotina nade",
+                "4000 Gaming tipkovnica",
+                "999 Kiša darova",
+                "3999 štene kostura T-Rexa",
+                "20 Ljetno sunce",
+                "10 Ogrlica prijateljstva",
+                "1500 Pod kontrolom",
+                "2500 Svemirski pas",
+                "90 Obitelj",
+                "5 tofua",
+                "1500 Budući susret",
+                "1500 Divlji mikrofon",
+                "1600 Pobjednička srijeda",
+                "20000 Fantazija dvorca",
+                "20 S Cvijeće",
+                "20 Parfem",
+                "10 Usporena snimka",
+                "49 Ljubav prema znakovnom jeziku",
+                "30 U igri ste",
+                "10 zlatnih boksačkih rukavica",
+                "10 Pastir",
+                "7000 Sportski automobil",
+                "25999 Vulkan",
+                "7999 Leon u gondoli",
+                "30 Usreći Mišo!",
+                "13999 Svemirski brod",
+                "5 Izvikivanje imena",
+                "30 Ti si moj Džem",
+                "30 Zvjezdano prijestolje",
+                "15000 piramida",
+                "15000 vremena za obitelj",
+                "10 putna karta",
                 "2999 Party Bus",
                 "6000 Elephant Nature Reserve",
                 "1500 Galaxy Globe",
@@ -3232,6 +3299,7 @@
             const pieSummaryEl = document.getElementById('tkaiPieSummary');
             const songListEl = document.getElementById('tkaiSongList');
             const joinLevelListEl = document.getElementById('tkaiJoinLevelList');
+            const shareEventsListEl = document.getElementById('tkaiShareEventsList');
             const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
             const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
             const shadowbanUserStatsEl = document.getElementById('tkaiShadowbanUserStats');
@@ -3247,6 +3315,7 @@
             const layoutLockBtn = document.getElementById('tkaiLayoutLockBtn');
             let recommendationsPopoutEl = null;
             let recommendationsPopoutBodyEl = null;
+            let recommendationsPopoutAutoCloseTimer = null;
             let dashboardLayoutLocked = DB.getSettings().tkaiDashboardLayoutLocked !== false;
             let dashboardLayoutFolded = DB.getSettings().tkaiDashboardLayoutFolded === true;
             let lastShadowbanUserStats = [];
@@ -3427,6 +3496,7 @@
                         btn.textContent = busy ? busyLabel : idleLabel;
                     });
                 });
+                setTkaiButtonState(ids, { active: !!busy, busy: !!busy });
             }
             async function runSongRecRecognition(manualTrigger) {
                 setSongToolButtonState('songrec', true);
@@ -3441,6 +3511,7 @@
                 const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
                 const timeoutMs = Math.max(2000, Math.min(25000, Number(cfg.tkaiSongRecTimeoutMs || 12000) || 12000));
                 setSongToolStatus('SongRec: slusam...');
+                if (manualTrigger) showToast('▶ SongRec pokrenut');
 
                 try {
                     const result = await window.etherx.songrec.recognize({ command, timeoutMs });
@@ -3790,21 +3861,44 @@
 
             function parseGiftCatalogLines(lines) {
                 const map = new Map();
-                String(lines || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean).forEach((line) => {
-                    const m = line.match(/^(\d{1,7})\s+(.+)$/);
-                    if (!m) return;
-                    const coins = Number(m[1] || 0);
-                    const name = String(m[2] || '').trim();
-                    const key = normalizeGiftKey(name);
-                    if (!coins || !key) return;
-                    map.set(key, { name, coins });
-                });
+                String(lines || '')
+                    .split(/\r?\n/)
+                    .map(v => v.trim())
+                    .filter(Boolean)
+                    .forEach((line) => {
+                        const text = String(line || '').replace(/\s+/g, ' ').trim();
+                        if (!text) return;
+                        const patterns = [
+                            { kind: 'num_name', re: /^unknown[·•|:\-]?\s*(\d{1,7})\s+(.+)$/i },
+                            { kind: 'num_name', re: /^(\d{1,7})\s+(.+)$/i },
+                            { kind: 'name_num', re: /^(.+?)\s*[·•|:\-]\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i },
+                            { kind: 'name_num', re: /^(.+?)\s+(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i }
+                        ];
+                        for (const pattern of patterns) {
+                            const m = text.match(pattern.re);
+                            if (!m) continue;
+                            const coins = pattern.kind === 'num_name' ? Number(m[1] || 0) : Number(m[2] || 0);
+                            const name = pattern.kind === 'num_name' ? m[2] : m[1];
+                            const key = normalizeGiftKey(name);
+                            if (!coins || !key) return;
+                            const row = { name: String(name || '').trim(), coins };
+                            if (/^(?:rose|ruza|ruža)$/i.test(row.name) || /\b(?:rose|ruza|ruža)\b/i.test(row.name)) {
+                                row.coins = 1;
+                            }
+                            map.set(key, row);
+                            return;
+                        }
+                    });
                 return map;
             }
 
             function getGiftCatalogEntries() {
                 try {
                     const merged = parseGiftCatalogLines(DEFAULT_GIFT_CATALOG_LINES.join('\n'));
+                    giftCatalogFromPage.forEach((row) => {
+                        const key = normalizeGiftKey(row.name);
+                        if (key && row.coins > 0) merged.set(key, { name: row.name, coins: row.coins });
+                    });
                     const customLines = String(DB.getSettings().tkaiGiftCatalogCustom || '');
                     parseGiftCatalogLines(customLines).forEach((v, k) => merged.set(k, v));
                     return Array.from(merged.entries()).sort((a, b) => b[0].length - a[0].length);
@@ -3824,12 +3918,15 @@
                         break;
                     }
                 }
-                const qtyMatch = src.match(/[x×]\s*(\d{1,4})\b/i);
+                const qtyMatch = src.match(/\b(?:x|×)\s*(\d{1,4})\b/i);
                 const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
-                const coins = found ? Number(found.coins || 0) * quantity : 0;
+                let unitCoins = found ? Number(found.coins || 0) : 0;
+                if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
+                const coins = unitCoins * quantity;
                 return {
                     giftName: found ? found.name : src.slice(0, 80),
                     coins: Math.max(0, Number(coins || 0)),
+                    unitCoins: Math.max(0, Number(unitCoins || 0)),
                     quantity,
                 };
             }
@@ -4360,24 +4457,31 @@
                     gift: messages.filter((m) => m.type === 'gift' || m.type === 'subscriber').length,
                     caption: messages.filter((m) => m.type === 'caption').length,
                     song: messages.filter((m) => m.type === 'song').length,
-                    join: messages.filter((m) => m.type === 'join').length
+                    join: messages.filter((m) => m.type === 'join').length,
+                    share: messages.filter((m) => m.type === 'share').length
                 };
                 const msgTypeTotal = Math.max(
                     1,
-                    msgTypeCounts.chat + msgTypeCounts.gift + msgTypeCounts.caption + msgTypeCounts.song + msgTypeCounts.join
+                    msgTypeCounts.chat + msgTypeCounts.gift + msgTypeCounts.caption + msgTypeCounts.song + msgTypeCounts.join + msgTypeCounts.share
                 );
                 const pieBreakdown = [
                     { key: 'chat', label: 'Chat', color: '#60a5fa', value: msgTypeCounts.chat },
                     { key: 'gift', label: 'Gifts', color: '#f97316', value: msgTypeCounts.gift },
                     { key: 'caption', label: 'CC', color: '#a78bfa', value: msgTypeCounts.caption },
                     { key: 'song', label: 'Songs', color: '#22c55e', value: msgTypeCounts.song },
-                    { key: 'join', label: 'Join', color: '#6b7280', value: msgTypeCounts.join }
+                    { key: 'join', label: 'Join', color: '#6b7280', value: msgTypeCounts.join },
+                    { key: 'share', label: 'Share', color: '#f472b6', value: msgTypeCounts.share }
                 ].map((row) => ({
                     ...row,
                     pct: Math.round((row.value / msgTypeTotal) * 100)
                 }));
 
                 const songEvents = extractSongEventsFromMessages(messages, now, 180);
+                const shareEvents = messages
+                    .filter((m) => m && m.type === 'share')
+                    .map((m) => ({ user: String(m.user || '').slice(0, 40) || 'unknown', text: String(m.text || '').slice(0, 160), ts: Number(m.ts || now) }))
+                    .slice(-120)
+                    .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
 
                 const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
                 const isJoinLikeMessage = (m) => {
@@ -4437,6 +4541,7 @@
                     },
                     pieBreakdown,
                     songs: songEvents.slice(-30).reverse(),
+                    shareEvents,
                     joinLevels: joinSource.slice(-120).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
                     joinBuckets,
                     spikeDebug: {
@@ -4979,6 +5084,23 @@
                     }
                 }
 
+                if (shareEventsListEl) {
+                    shareEventsListEl.innerHTML = '';
+                    const shares = Array.isArray(insights.shareEvents) ? insights.shareEvents : [];
+                    if (!shares.length) {
+                        const li = document.createElement('li');
+                        li.textContent = 'Nema share eventova u trenutnom rasponu.';
+                        shareEventsListEl.appendChild(li);
+                    } else {
+                        shares.slice(0, 80).forEach((entry) => {
+                            const li = document.createElement('li');
+                            const when = new Date(Number(entry.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+                            li.innerHTML = '<span style="color:' + getUserColor(entry.user) + '">@' + escHtml(String(entry.user || '').replace(/^@+/, '')) + '</span> • ' + escHtml(entry.text || 'shared the LIVE') + ' • ' + when;
+                            shareEventsListEl.appendChild(li);
+                        });
+                    }
+                }
+
                 if (joinLevelListEl) {
                     joinLevelListEl.innerHTML = '';
                     const joins = Array.isArray(insights.joinLevels) ? insights.joinLevels : [];
@@ -5036,33 +5158,129 @@
                     recommendationsPopoutBodyEl.appendChild(li);
                 });
             }
+            function getRecommendationsPopoutAutoCloseMs() {
+                const raw = Number(DB.getSettings().tkaiRecPopAutoCloseSec ?? 18);
+                const sec = Number.isFinite(raw) ? raw : 18;
+                if (sec <= 0) return 0;
+                return Math.max(5, sec) * 1000;
+            }
+            function scheduleRecommendationsPopoutAutoClose() {
+                if (recommendationsPopoutAutoCloseTimer) clearTimeout(recommendationsPopoutAutoCloseTimer);
+                const ms = getRecommendationsPopoutAutoCloseMs();
+                if (!ms) return;
+                recommendationsPopoutAutoCloseTimer = setTimeout(() => {
+                    recommendationsPopoutAutoCloseTimer = null;
+                    closeRecommendationsPopout();
+                }, ms);
+            }
             function closeRecommendationsPopout() {
+                if (recommendationsPopoutAutoCloseTimer) {
+                    clearTimeout(recommendationsPopoutAutoCloseTimer);
+                    recommendationsPopoutAutoCloseTimer = null;
+                }
                 if (recommendationsPopoutEl) recommendationsPopoutEl.remove();
                 recommendationsPopoutEl = null;
                 recommendationsPopoutBodyEl = null;
             }
             function openRecommendationsPopout() {
-                if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) return;
+                if (recommendationsPopoutEl && document.body.contains(recommendationsPopoutEl)) {
+                    scheduleRecommendationsPopoutAutoClose();
+                    return;
+                }
                 const recBg = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopBgColor, '#1f2937');
                 const recText = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopTextColor, '#e5e7eb');
                 const recBorder = normalizeTkaiHexColor(DB.getSettings().tkaiRecPopBorderColor, '#374151');
+                const POP_KEY = 'ex_tkai_recommendations_popout_pos_v1';
+                const saved = (() => {
+                    try { return JSON.parse(localStorage.getItem(POP_KEY) || 'null'); } catch (_) { return null; }
+                })();
+                const width = Math.max(320, Math.min(460, Number(saved?.width || 360) || 360));
+                const defaultLeft = Math.max(12, window.innerWidth - width - 18);
+                const defaultTop = 86;
+                const clamp = (left, top) => ({
+                    left: Math.max(8, Math.min(Math.max(8, window.innerWidth - width - 8), Math.round(left))),
+                    top: Math.max(56, Math.min(Math.max(56, window.innerHeight - 180), Math.round(top)))
+                });
+                const startPos = clamp(Number(saved?.left ?? defaultLeft), Number(saved?.top ?? defaultTop));
                 const wrap = document.createElement('div');
                 wrap.style.cssText =
-                    'position:fixed;z-index:99998;top:86px;right:16px;width:360px;max-height:55vh;overflow:auto;' +
+                    'position:fixed;z-index:99998;left:' + startPos.left + 'px;top:' + startPos.top + 'px;width:' + width + 'px;max-width:min(92vw,460px);max-height:55vh;overflow:auto;' +
                     `background:${recBg};color:${recText};border:1px solid ${recBorder};border-radius:10px;padding:10px;` +
                     'box-shadow:0 16px 40px rgba(0,0,0,.45);';
                 wrap.innerHTML =
-                    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+                    '<div id="tkaiRecPopHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;cursor:move">' +
+                    '<div style="display:flex;flex-direction:column;gap:4px;min-width:0">' +
                     `<div style="font-size:11px;font-weight:700;color:${recText}">AI Recommendations</div>` +
+                    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;color:rgba(255,255,255,.75)">' +
+                    '<span>Timeout</span>' +
+                    '<select id="tkaiRecPopTimeout" class="tkai-cfg-select" style="font-size:10px;padding:1px 6px;max-width:92px">' +
+                    '<option value="0">Off</option>' +
+                    '<option value="5">5s</option>' +
+                    '<option value="10">10s</option>' +
+                    '<option value="18">18s</option>' +
+                    '<option value="30">30s</option>' +
+                    '</select>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:6px">' +
                     '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
+                    '</div>' +
                     '</div>' +
                     '<ul id="tkaiRecPopList" class="tkai-insights-list"></ul>';
                 document.body.appendChild(wrap);
                 recommendationsPopoutEl = wrap;
                 recommendationsPopoutBodyEl = wrap.querySelector('#tkaiRecPopList');
+                const timeoutSel = wrap.querySelector('#tkaiRecPopTimeout');
+                if (timeoutSel) {
+                    const current = Math.max(0, Number(DB.getSettings().tkaiRecPopAutoCloseSec || 18) || 18);
+                    timeoutSel.value = String([0, 5, 10, 18, 30].includes(current) ? current : 18);
+                    timeoutSel.addEventListener('change', () => {
+                        const sec = Math.max(0, Number(timeoutSel.value || 0) || 0);
+                        DB.saveSetting('tkaiRecPopAutoCloseSec', sec);
+                        scheduleRecommendationsPopoutAutoClose();
+                        showToast(sec > 0 ? ('⏱ Timeout: ' + sec + 's') : '⏱ Timeout isključen');
+                    });
+                }
                 wrap.querySelector('#tkaiRecPopClose')?.addEventListener('click', closeRecommendationsPopout);
+                const head = wrap.querySelector('#tkaiRecPopHead');
+                let dragging = false;
+                let dx = 0;
+                let dy = 0;
+                const persistPos = () => {
+                    try {
+                        localStorage.setItem(POP_KEY, JSON.stringify({
+                            left: parseFloat(wrap.style.left) || startPos.left,
+                            top: parseFloat(wrap.style.top) || startPos.top,
+                            width: wrap.offsetWidth || width
+                        }));
+                    } catch (_) { }
+                };
+                head?.addEventListener('pointerdown', (e) => {
+                    if (e.target.closest('button')) return;
+                    dragging = true;
+                    dx = e.clientX - wrap.getBoundingClientRect().left;
+                    dy = e.clientY - wrap.getBoundingClientRect().top;
+                    head.setPointerCapture(e.pointerId);
+                    wrap.classList.add('tkai-btn-pressed');
+                    e.preventDefault();
+                });
+                head?.addEventListener('pointermove', (e) => {
+                    if (!dragging) return;
+                    const next = clamp(e.clientX - dx, e.clientY - dy);
+                    wrap.style.left = next.left + 'px';
+                    wrap.style.top = next.top + 'px';
+                });
+                const endDrag = () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    wrap.classList.remove('tkai-btn-pressed');
+                    persistPos();
+                };
+                head?.addEventListener('pointerup', endDrag);
+                head?.addEventListener('pointercancel', endDrag);
                 const currentRecommendations = Array.from(recommendationsEl?.querySelectorAll('li') || []).map((li) => li.textContent || '');
                 syncRecommendationsPopout(currentRecommendations);
+                scheduleRecommendationsPopoutAutoClose();
             }
             function initRecommendationsCardDrag() {
                 const card = document.getElementById("tkaiRecommendationsCard");
@@ -5985,8 +6203,9 @@
                 else openLiveDashboardPopout();
             });
             recJumpBtn?.addEventListener('click', () => {
+                openRecommendationsPopout();
                 document.getElementById('tkaiRecommendationsCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                showToast('📌 Recommendations');
+                showToast('📌 Recommendations otvoren');
                 recJumpBtn.classList.remove('live');
                 recJumpBtn.style.display = 'none';
             });
@@ -6190,11 +6409,10 @@
                     const row = document.createElement('div');
                     row.className = 'tkai-gift-item' + (message.type === 'subscriber' ? ' sub' : '');
                     const icon = message.type === 'subscriber' ? '⭐' : '🎁';
-                    const countBadge = message.count > 1
-                        ? '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + message.count + '</span>'
-                        : '';
+                    const countBadge = '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + (message.count || 1) + '</span>';
                     const coins = Number(message.totalCoins || 0);
-                    const coinsBadge = coins > 0 ? '<span style="margin-left:auto;color:#ffd47a">' + formatNum(coins) + ' 🪙</span>' : '';
+                    const unitCoins = Number(message.unitCoins || 0);
+                    const coinsBadge = coins > 0 ? '<span style="margin-left:auto;color:#ffd47a" title="' + (unitCoins > 0 ? ('1x = ' + formatNum(unitCoins) + ' 🪙') : 'gift value') + '">' + formatNum(coins) + ' 🪙</span>' : '';
                     row.innerHTML = '<div class="g-user"><span>' + icon + '</span><span>' + escHtml(message.user) + '</span></div>'
                         .replace('</div>', coinsBadge + countBadge + '</div>')
                         + '<div>' + escHtml(message.giftName || message.text) + '</div>';
@@ -6231,7 +6449,9 @@
                         ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,195,74,.25);color:#ffd278;border:1px solid rgba(255,210,120,.35)">🎁 gift</span>'
                         : (message.type === 'subscriber'
                             ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(120,200,255,.22);color:#bde7ff;border:1px solid rgba(150,220,255,.35)">⭐ sub</span>'
-                            : '');
+                            : (message.type === 'share'
+                                ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(244,114,182,.18);color:#f9a8d4;border:1px solid rgba(244,114,182,.35)">↗ share</span>'
+                                : ''));
                     const showCaptionTranslation = message.type === 'caption' && !!message.translatedText;
                     const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation) && message.translatedText
                         ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff">' + escHtml(message.translatedText) + '</div>'
@@ -6457,9 +6677,79 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           const mul = m[2] === 'm' ? 1000000 : m[2] === 'k' ? 1000 : 1;
           return Math.round(base * mul);
         }
+        function getGiftCatalogFromPage() {
+          const rows = [];
+          const seen = new Set();
+          const selectors = [
+            '[data-e2e*="gift"]',
+            '[class*="gift"]',
+            '[class*="Gift"]',
+            '[aria-label*="gift"]',
+            '[aria-label*="Gift"]',
+            '[title*="gift"]',
+            '[title*="Gift"]'
+          ];
+          const genericNoise = /^(?:send gift|gift gallery|gifts?|coins?|diamonds?|close|open|next|prev|back|sort|filter|search|select|unknown)$/i;
+          const addRow = (name, coins) => {
+            const cleanName = String(name || '').replace(/\s+/g, ' ').trim();
+            const price = Number(coins || 0);
+            if (!cleanName || !Number.isFinite(price) || price <= 0) return;
+            const key = cleanName.toLowerCase().replace(/[^a-z0-9čćđšž]+/gi, ' ').trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            rows.push({ name: cleanName.slice(0, 80), coins: price });
+          };
+          const tryParse = (txt) => {
+            const t = String(txt || '').replace(/\s+/g, ' ').trim();
+            if (!t || t.length > 160 || genericNoise.test(t)) return;
+            const patterns = [
+              { kind: 'num_name', re: /^unknown[·•|:\-]?\s*(\d{1,7})\s+(.+)$/i },
+              { kind: 'num_name', re: /^(\d{1,7})\s+(.+)$/i },
+              { kind: 'name_num', re: /^(.+?)\s*[·•|:\-]\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i },
+              { kind: 'name_num', re: /^(.+?)\s+(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i }
+            ];
+            for (const pattern of patterns) {
+              const m = t.match(pattern.re);
+              if (!m) continue;
+              const coins = pattern.kind === 'num_name' ? Number(m[1] || 0) : Number(m[2] || 0);
+              const name = pattern.kind === 'num_name' ? m[2] : m[1];
+              if (Number.isFinite(coins) && coins > 0 && name) {
+                addRow(name, coins);
+                return;
+              }
+            }
+          };
+          try {
+            document.querySelectorAll(selectors.join(',')).forEach((el) => {
+              const txt = String(
+                el?.getAttribute('aria-label')
+                || el?.getAttribute('title')
+                || el?.textContent
+                || el?.getAttribute('alt')
+                || ''
+              ).replace(/\s+/g, ' ').trim();
+              if (txt) tryParse(txt);
+              const parentTxt = String(el?.parentElement?.textContent || '').replace(/\s+/g, ' ').trim();
+              if (parentTxt && parentTxt !== txt) tryParse(parentTxt);
+            });
+          } catch (_) {}
+          return rows.slice(0, 200);
+        }
+
         function getViewerCount() {
           let maxViewer = 0;
-          // 1) Try JS window globals that TikTok populates for live rooms
+          const blockedContext = /(coins?|diamonds?|gifts?|likes?|shares?|followers?|hearts?|rose|galaxy|lion|castle|rocket|top\s*viewer|leaderboard|rank)/i;
+          const viewerHint = /(viewers?|watching(?:\s+now)?|spectators?|audience|gledatelja|gleda)/i;
+          const tryTake = (raw, contextText) => {
+            const txt = String(raw || '').replace(/\s+/g, ' ').trim();
+            const ctx = String(contextText || txt).replace(/\s+/g, ' ').trim();
+            if (!txt) return;
+            if (blockedContext.test(ctx) && !viewerHint.test(ctx)) return;
+            const m = txt.match(/(\d[\d.,\s]*[km]?)(?:\+)?/i);
+            if (!m) return;
+            const v = parseNumberLike(m[1]);
+            if (Number.isFinite(v) && v > maxViewer && v < 5000000) maxViewer = v;
+          };
           try {
             const initProps = window.__INIT_PROPS__ || {};
             const liveKey = Object.keys(initProps).find(k => /live/i.test(k));
@@ -6474,66 +6764,54 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               window.webcast?.state?.room?.userCount,
             ];
             for (const c of candidates) {
-              if (c != null) {
-                const v = parseNumberLike(String(c));
-                if (v > maxViewer) maxViewer = v;
-              }
+              if (c != null) tryTake(String(c), 'viewer count');
             }
           } catch (_) {}
-          // 2) Try aria-label attributes
           try {
             document.querySelectorAll('[aria-label]').forEach(function(el) {
               const label = el.getAttribute('aria-label') || '';
-              if (/viewer|watching|spectator|audience/i.test(label)) {
-                const m = label.match(/(\d[\d.,\s]*[km]?)/i);
-                if (m) { const v = parseNumberLike(m[1]); if (v > maxViewer) maxViewer = v; }
-              }
+              if (!viewerHint.test(label) || blockedContext.test(label)) return;
+              tryTake(label, label);
             });
           } catch (_) {}
-          // 3) DOM selectors (prioritise stable data-e2e, then class fragments)
           const viewerSelectors = [
             '[data-e2e="live-room-viewer-count"]',
             '[data-e2e="live-room-info-viewer-count"]',
             '[data-e2e*="viewer-count"]',
-            '[data-e2e*="viewer"]',
+            '[data-e2e*="watching"]',
             '[class*="ViewerCount"]',
             '[class*="viewerCount"]',
             '[class*="WatchCount"]',
-            '[class*="viewer"]',
-            '[class*="Viewer"]',
-            '[class*="audience"]',
-            '[class*="Audience"]'
+            '[class*="watch-count"]'
           ];
           for (const sel of viewerSelectors) {
             try {
               document.querySelectorAll(sel).forEach(function(el) {
                 const txt = (el.textContent || '').trim();
+                const ctx = ((el.getAttribute('aria-label') || '') + ' ' + (el.closest('[aria-label]')?.getAttribute('aria-label') || '') + ' ' + (el.parentElement?.textContent || '')).trim();
                 if (!txt) return;
-                const m = txt.match(/(\d[\d.,\s]*[km]?)(?:\+)?\s*(viewers?|gledatelja|watching|spectators?)?/i);
-                if (!m) return;
-                const v = parseNumberLike(m[1]);
-                if (v > maxViewer) maxViewer = v;
+                if (blockedContext.test(ctx) && !viewerHint.test(ctx)) return;
+                tryTake(txt, ctx);
               });
             } catch (_) {}
           }
-                    // 4) Broader text fallback (localized labels and compact banners)
-                    try {
-                        const patterns = [
-                            /(\d[\d.,\s]*[km]?)\s*(?:viewers?|watching(?:\s+now)?|spectators?|gledatelja|gleda|uživo)/i,
-                            /(?:viewers?|watching|gledatelja|gleda)\s*[:\-]?\s*(\d[\d.,\s]*[km]?)/i,
-                        ];
-                        document.querySelectorAll('span, div').forEach(function(el) {
-                            const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
-                            if (!txt || txt.length > 42) return;
-                            for (const p of patterns) {
-                                const m = txt.match(p);
-                                if (!m) continue;
-                                const v = parseNumberLike(m[1]);
-                                if (v > maxViewer) maxViewer = v;
-                                break;
-                            }
-                        });
-                    } catch (_) {}
+          try {
+            const patterns = [
+              /(\d[\d.,\s]*[km]?)\s*(?:viewers?|watching(?:\s+now)?|spectators?|gledatelja|gleda)/i,
+              /(?:viewers?|watching|spectators?|gledatelja|gleda)\s*[:\-]?\s*(\d[\d.,\s]*[km]?)/i,
+            ];
+            document.querySelectorAll('span, div').forEach(function(el) {
+              const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+              if (!txt || txt.length > 48) return;
+              if (blockedContext.test(txt) && !viewerHint.test(txt)) return;
+              for (const p of patterns) {
+                const m = txt.match(p);
+                if (!m) continue;
+                tryTake(m[1], txt);
+                break;
+              }
+            });
+          } catch (_) {}
           return maxViewer;
         }
         function isVisibleNode(el) {
@@ -6842,7 +7120,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             // 6) Regex on full text: "Username: message" or "Username sent gift"
             const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
             if (colMatch && colMatch[1]) return colMatch[1].trim();
-            const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined)\b/i);
+            const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)\b/i);
             if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
             return '';
           })();
@@ -6880,6 +7158,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isGift = hasSent || hasGiftWord || giftEls.length > 0;
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
+            const isShare = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i.test(low);
             let levelHint = null;
             if (isJoin) {
               const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
@@ -6889,19 +7168,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               }
             }
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : 'chat'));
+                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
                         if (isLikelyNoiseChatText(text, user, messageType)) return;
 
                         results.push({
               user: user || 'unknown',
               text,
               mid,
-                            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : 'chat')),
+                            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : 'chat'))),
               level: levelHint
             });
           }
         });
         const viewerCount = getViewerCount();
+        const giftCatalog = getGiftCatalogFromPage();
         const topSupporters = getTopSupportersFromPage();
         const streamOwner = (() => {
           const pathMatch = String(location.pathname || '').match(/\/@([^\/?#]+)/i);
@@ -6924,7 +7204,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           }
           return '';
         })();
-        results.push({ type: '_meta', viewerCount: viewerCount, topSupporters: topSupporters, streamOwner: streamOwner });
+        results.push({ type: '_meta', viewerCount: viewerCount, topSupporters: topSupporters, streamOwner: streamOwner, giftCatalog: giftCatalog });
         return JSON.stringify(results);
         } catch(e) { return JSON.stringify({__scraperError: String(e && e.message ? e.message : e)}); }
       })()`;
@@ -6965,6 +7245,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             liveViewerCount = v;
                             peakViewerCount = Math.max(peakViewerCount, v);
                             trackViewerSample(v);
+                        }
+                        if (Array.isArray(meta.giftCatalog) && meta.giftCatalog.length) {
+                            setGiftCatalogFromPage(meta.giftCatalog);
                         }
                         if (Array.isArray(meta.topSupporters) && meta.topSupporters.length) {
                             topSupporters = meta.topSupporters
@@ -7011,7 +7294,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         const allowRepeatGift = (message.type === 'gift' || message.type === 'subscriber') && (existingCounts.get(baseKey) || 0) < 4;
                         if (!existing.has(id)) {
                             const giftMeta = detectGiftMetaFromText(message.text || '');
-                            collectedMessages.push({ ...message, id, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text });
+                            collectedMessages.push({ ...message, id, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                             existing.add(id);
                             existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
                             added += 1;
@@ -7019,7 +7302,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         } else if (allowRepeatGift) {
                             const repeatId = `${id}:r:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
                             const giftMeta = detectGiftMetaFromText(message.text || '');
-                            collectedMessages.push({ ...message, id: repeatId, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text });
+                            collectedMessages.push({ ...message, id: repeatId, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                             existing.add(repeatId);
                             existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
                             added += 1;
@@ -7269,14 +7552,38 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             function clearConversation() {
                 collectedMessages = [];
                 collectedQuestions = [];
+                topSupporters = [];
+                viewerSamples = [];
+                viewerSamplePoints = [];
+                liveViewerCount = 0;
+                peakViewerCount = 0;
+                lastViewerSampleAt = 0;
+                lastViewerSampleValue = 0;
+                sessionStartedAt = null;
+                targetedChatUser = '';
+                _cardiffSentiment = null;
+                _cardiffSentimentAt = 0;
+                lastShadowbanUserStats = [];
                 selectedMsgIds.clear();
+                starredMsgIds.clear();
+                filterStarredActive = false;
+                if (filterStarredBtn) {
+                    filterStarredBtn.textContent = '⭐ Sve';
+                    filterStarredBtn.style.background = '';
+                }
                 try { localStorage.removeItem(TKAI_AUTOSAVE_KEY); } catch (_) { }
+                if (tkaiAutosaveDebounce) {
+                    clearTimeout(tkaiAutosaveDebounce);
+                    tkaiAutosaveDebounce = null;
+                }
                 if (repliesEl) {
                     repliesEl.innerHTML = '<div class="tkai-empty">Razgovor očišćen.<br>Pokreni skeniranje za nove poruke.</div>';
                 }
                 renderMessages();
                 renderGiftGallery();
+                updateSessionStatsUI();
                 setStatus('🧹 Razgovor očišćen');
+                showToast('🧹 Session očišćen');
             }
 
             function exportConversation() {
