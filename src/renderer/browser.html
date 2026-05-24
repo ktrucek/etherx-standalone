@@ -5295,7 +5295,7 @@
         .tkai-sentiment-bars {
             display: block;
             width: 100%;
-            height: 96px;
+            height: 64px;
             border: 1px solid rgba(148, 163, 184, .25);
             border-radius: 8px;
             background: linear-gradient(180deg, rgba(15, 23, 42, .55), rgba(15, 23, 42, .12));
@@ -5305,7 +5305,7 @@
 
         .tkai-sentiment-wave {
             width: 100%;
-            height: 90px;
+            height: 64px;
             border: 1px solid rgba(94, 234, 212, .24);
             border-radius: 8px;
             background: linear-gradient(180deg, rgba(30, 64, 175, .22), rgba(15, 23, 42, .18));
@@ -5362,7 +5362,7 @@
         .tkai-sentiment-bar {
             flex: 1;
             border-radius: 3px;
-            min-height: 4px;
+            min-height: 3px;
             background: rgba(255, 255, 255, .08);
             overflow: hidden;
             display: flex;
@@ -10626,6 +10626,17 @@
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
+                                            <div class="s-row-label">〰 Sentiment momentum mode</div>
+                                            <div class="s-row-desc">Izaberi prikaz: Bars ili Wave</div>
+                                        </div>
+                                        <select class="s-select" data-setting="tkaiSentimentMomentumMode"
+                                            style="max-width:130px">
+                                            <option value="bars">Bars</option>
+                                            <option value="wave">Wave</option>
+                                        </select>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
                                             <div class="s-row-label">🎁 Show Gift Gallery</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiShowGiftGallery"></div>
@@ -10656,6 +10667,19 @@
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
+                                            <div class="s-row-label">🔔 Recommendations popout/jump</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiRecommendationsPopoutEnabled"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">⛔ Auto-skok Recommendations</div>
+                                            <div class="s-row-desc">Ako je ugašeno, neće više skakati/popoutati</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiRecommendationJumpPulseEnabled"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
                                             <div class="s-row-label">❓ Show Chat Questions</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiShowQuestions"></div>
@@ -10665,6 +10689,30 @@
                                             <div class="s-row-label">◔ Show Pie breakdown</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiShowPieBreakdown"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">◔ Pie uključuje Join</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiPieIncludeJoin"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">◔ Pie uključuje Share</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiPieIncludeShare"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">◔ Pie uključuje CC</div>
+                                        </div>
+                                        <div class="toggle on" data-setting="tkaiPieIncludeCaption"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">◔ Pie uključuje Songs</div>
+                                        </div>
+                                        <div class="toggle on" data-setting="tkaiPieIncludeSong"></div>
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -11293,6 +11341,12 @@
                         <ul class="tkai-insights-list" id="tkaiPieSummary">
                             <li>Nema podataka za pie.</li>
                         </ul>
+                        <div class="tkai-insights-card" style="margin-top:8px" id="tkaiRecommendationsCard">
+                            <div class="tkai-insights-title" title="Preporuke za streamera">
+                                Recommendations<span>→</span>
+                            </div>
+                            <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
+                        </div>
                     </div>
                 </div>
                 <div class="tkai-insights-row">
@@ -11309,11 +11363,6 @@
                         <ul class="tkai-insights-list" id="tkaiSpikeList">
                             <li>Nema spikeova.</li>
                         </ul>
-                    </div>
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiRecommendationsCard">
-                        <div class="tkai-insights-title" title="Preporuke za streamera">Recommendations<span>→</span>
-                        </div>
-                        <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
                     </div>
                 </div>
                 <div class="tkai-insights-row">
@@ -11362,7 +11411,7 @@
             <button class="tkai-gen-btn" id="tkaiClearBtn"
                 style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
         </div>
-        <button class="tkai-rec-jump-btn" id="tkaiRecJumpBtn">🔔 Preporuke</button>
+        <button class="tkai-rec-jump-btn" id="tkaiRecJumpBtn" style="display:none">🔔 Preporuke</button>
     </div>
     </div>
     </div>
@@ -17182,17 +17231,18 @@
                 const hasTrendSignal = rawScores.some((v) => Math.abs(v) > 0.001);
                 const points = hasTrendSignal ? trend : fallbackTrend;
                 const scores = points.map((s) => Number(s.score || 0));
+                const mode = String(DB.getSettings().tkaiSentimentMomentumMode || 'bars').toLowerCase();
 
                 const width = 320;
-                const hLine = 64;
-                const hWave = 56;
+                const hBars = 58;
+                const hWave = 58;
                 const pad = 6;
                 const maxAbs = Math.max(1, ...scores.map((v) => Math.abs(v)));
                 sentimentTrendEl.innerHTML = '';
                 points.forEach((p) => {
                     const score = Number(p.score || 0);
                     const ratio = Math.min(1, Math.abs(score) / maxAbs);
-                    const h = Math.max(4, Math.round(ratio * 32));
+                    const h = Math.max(3, Math.round(ratio * 22));
                     const bar = document.createElement('div');
                     bar.className = 'tkai-sentiment-bar';
                     const posPart = document.createElement('div');
@@ -17201,10 +17251,12 @@
                     negPart.className = 'tkai-sentiment-stack-neg';
                     if (score > 0) {
                         posPart.style.height = `${Math.max(2, h)}px`;
+                        posPart.style.background = `linear-gradient(180deg, rgba(52,211,153,.95), rgba(34,197,94,.88))`;
                         negPart.style.height = '1px';
                     } else if (score < 0) {
                         posPart.style.height = '1px';
                         negPart.style.height = `${Math.max(2, h)}px`;
+                        negPart.style.background = `linear-gradient(180deg, rgba(251,113,133,.95), rgba(239,68,68,.88))`;
                     } else {
                         posPart.style.height = '1px';
                         negPart.style.height = '1px';
@@ -17214,18 +17266,22 @@
                     bar.appendChild(negPart);
                     sentimentTrendEl.appendChild(bar);
                 });
+                sentimentTrendEl.style.display = mode === 'bars' ? '' : 'none';
 
                 if (sentimentWaveEl) {
+                    const midY = hWave / 2;
                     const wavePts = scores.map((v, i) => {
                         const x = scores.length === 1 ? width / 2 : pad + (i / (scores.length - 1)) * (width - pad * 2);
-                        const y = hWave - 8 - ((Math.abs(v) / maxAbs) * (hWave - 18));
+                        const y = midY - ((v / maxAbs) * (hWave / 2 - 8));
                         return `${x.toFixed(1)},${y.toFixed(1)}`;
                     }).join(' ');
                     sentimentWaveEl.innerHTML =
                         `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="none" aria-hidden="true">` +
-                        `<polygon points="${wavePts} ${width - pad},${hWave - 6} ${pad},${hWave - 6}" fill="rgba(94,234,212,.24)"></polygon>` +
-                        `<polyline fill="none" stroke="rgba(45,212,191,.92)" stroke-width="1.8" points="${wavePts}"></polyline>` +
+                        `<defs><linearGradient id="tkaiSentWaveGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22d3ee"/><stop offset="50%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#f472b6"/></linearGradient></defs>` +
+                        `<line x1="${pad}" y1="${midY.toFixed(1)}" x2="${(width - pad).toFixed(1)}" y2="${midY.toFixed(1)}" stroke="rgba(148,163,184,.26)" stroke-width="1" />` +
+                        `<polyline fill="none" stroke="url(#tkaiSentWaveGrad)" stroke-width="2" points="${wavePts}"></polyline>` +
                         `</svg>`;
+                    sentimentWaveEl.style.display = mode === 'wave' ? '' : 'none';
                 }
 
                 const avg = scores.reduce((acc, n) => acc + n, 0) / Math.max(1, scores.length);
@@ -17464,15 +17520,19 @@
                     li.textContent = r;
                     recommendationsEl.appendChild(li);
                 });
+                const popEnabled = DB.getSettings().tkaiRecommendationsPopoutEnabled === true;
                 const currentHash = JSON.stringify(recommendations);
                 if (currentHash !== lastRecommendationsHash) {
                     lastRecommendationsHash = currentHash;
-                    pulseRecommendationJump();
-                    if (recommendations.length > 0) {
+                    if (popEnabled) {
+                        pulseRecommendationJump();
+                    }
+                    if (popEnabled && recommendations.length > 0) {
                         openRecommendationsPopout();
                     }
                 }
-                syncRecommendationsPopout(recommendations);
+                if (popEnabled) syncRecommendationsPopout(recommendations);
+                else closeRecommendationsPopout();
 
                 if (pieChartEl && pieLegendEl && pieCenterEl) {
                     const parts = Array.isArray(insights.pieBreakdown) ? insights.pieBreakdown : [];
@@ -18290,6 +18350,11 @@
                 else openLiveDashboardSafely();
             });
             recJumpBtn?.addEventListener('click', () => {
+                if (DB.getSettings().tkaiRecommendationsPopoutEnabled !== true) {
+                    document.getElementById('tkaiRecommendationsCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    showToast('📌 Recommendations u Pie sekciji');
+                    return;
+                }
                 openRecommendationsPopout();
                 document.getElementById('tkaiRecommendationsCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 showToast('📌 Recommendations otvoren');
@@ -20046,6 +20111,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 vis('tkaiPieCard', 'tkaiShowPieBreakdown');
                 const songCard = document.getElementById('tkaiSongsCard');
                 if (songCard) songCard.style.display = '';
+                if (recJumpBtn) {
+                    const popEnabled = s.tkaiRecommendationsPopoutEnabled === true;
+                    if (!popEnabled) {
+                        recJumpBtn.style.display = 'none';
+                        recJumpBtn.classList.remove('live');
+                    }
+                }
 
                 // Safety net: if every insights card ended hidden (bad saved state), bring core cards back.
                 const insightsRoot = document.getElementById('tkaiInsights');

@@ -2289,9 +2289,58 @@ function setupIPC() {
   );
 
   // ── SongRec helpers (local song recognition CLI) ──────────────────────────
+  ipcMain.handle("songrec:listOutputs", async () => {
+    const run = (bin, args = []) =>
+      new Promise((resolve) => {
+        execFile(
+          bin,
+          args,
+          { windowsHide: true, timeout: 3500, maxBuffer: 1024 * 1024 },
+          (error, stdout) => {
+            if (error) {
+              resolve({ ok: false, rows: [] });
+              return;
+            }
+            const lines = String(stdout || "")
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter(Boolean);
+            resolve({ ok: true, rows: lines });
+          },
+        );
+      });
+
+    const parsed = [];
+    const out = await run("pactl", ["list", "short", "sinks"]);
+    if (out.ok) {
+      out.rows.forEach((line) => {
+        const parts = line.split(/\t+/);
+        const id = String(parts[1] || "").trim();
+        if (!id) return;
+        const desc = String(parts[1] || id).trim();
+        parsed.push({ id, label: desc });
+      });
+    }
+
+    if (!parsed.length) {
+      return { ok: true, outputs: [] };
+    }
+
+    const uniq = [];
+    const seen = new Set();
+    parsed.forEach((row) => {
+      const key = String(row.id || "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      uniq.push(row);
+    });
+    return { ok: true, outputs: uniq };
+  });
+
   ipcMain.handle("songrec:recognize", async (_e, options) => {
     const cfg = options || {};
     const command = String(cfg.command || "songrec").trim() || "songrec";
+    const outputDevice = String(cfg.outputDevice || "").trim();
     const timeoutMs = Math.max(
       2000,
       Math.min(25000, Number(cfg.timeoutMs || 12000) || 12000),
@@ -2324,6 +2373,8 @@ function setupIPC() {
     if (command === "songrec") {
       attempts.push({ bin: "/usr/bin/songrec", args: ["recognize"] });
       attempts.push({ bin: "/usr/local/bin/songrec", args: ["recognize"] });
+      attempts.push({ bin: "/bin/songrec", args: ["recognize"] });
+      attempts.push({ bin: "/snap/bin/songrec", args: ["recognize"] });
       attempts.push({
         bin: "flatpak",
         args: ["run", "com.github.marinm.songrec", "recognize"],
@@ -2347,6 +2398,9 @@ function setupIPC() {
             windowsHide: true,
             timeout: timeoutMs,
             maxBuffer: 1024 * 1024,
+            env: outputDevice
+              ? { ...process.env, PULSE_SINK: outputDevice }
+              : process.env,
           },
           (error, stdout, stderr) => {
             if (error) {

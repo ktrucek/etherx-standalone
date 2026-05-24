@@ -229,6 +229,7 @@ contextBridge.exposeInMainWorld('etherx', {
   // ── SongRec (local song recognition CLI) ───────────────────────────────────
   songrec: {
     recognize: (options) => ipcRenderer.invoke('songrec:recognize', options),
+    listOutputs: () => ipcRenderer.invoke('songrec:listOutputs'),
   },
 
   // ── App ───────────────────────────────────────────────────────────────────────

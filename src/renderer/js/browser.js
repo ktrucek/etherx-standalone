@@ -2637,7 +2637,15 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'HuggingFace');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        if (!response.ok || data.error) {
+            if (response.status === 402) {
+                throw new Error(
+                    'HuggingFace HTTP 402 (Payment Required): model zahtijeva aktivan billing/credits na HF routeru. ' +
+                    'Dodaj credits na HuggingFace ili prebaci provider na OpenRouter i koristi model "meta-llama/llama-3.3-70b-instruct".'
+                );
+            }
+            throw new Error(data.error?.message || ('HTTP ' + response.status));
+        }
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
