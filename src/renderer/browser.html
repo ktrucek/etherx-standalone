@@ -11430,7 +11430,14 @@
                         </div>
                     </div>
                 </div>
-                <div class="tkai-insights-row">
+                <div class="tkai-insights-row triple">
+                    <div class="tkai-insights-card" id="tkaiGiftStatsCard">
+                        <div class="tkai-insights-title" title="Detaljna statistika giftova i giftera">Gift stats<span>🪙</span></div>
+                        <div class="tkai-metric-top" id="tkaiGiftStatsMeta">0 giftova • 0 tipova</div>
+                        <ul class="tkai-insights-list" id="tkaiGiftStatsList">
+                            <li>Nema gift statistike.</li>
+                        </ul>
+                    </div>
                     <div class="tkai-insights-card" id="tkaiJoinsCard">
                         <div class="tkai-insights-title" title="Novi ulasci u chat i procjena levela">Join level
                             feed<span>👋</span></div>
@@ -13743,6 +13750,7 @@
                 const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
                 const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, other: 0 };
                 const userStatsMap = new Map();
+                const giftTypeMap = new Map();
                 const questions = [];
                 const answers = [];
                 let coinsTotal = Number(session?.totalCoins || 0);
@@ -13766,6 +13774,16 @@
                     else if (type === 'join') row.joins += 1;
                     else row.chat += 1;
                     row.coins += Math.max(0, coins);
+
+                    if (type === 'gift' || type === 'subscriber') {
+                        const giftName = String(m?.giftName || text || 'Unknown gift').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Unknown gift';
+                        const giftRow = giftTypeMap.get(giftName) || { giftName, events: 0, quantity: 0, coins: 0, users: new Set() };
+                        giftRow.events += 1;
+                        giftRow.quantity += Math.max(1, Number(m?.quantity || 1));
+                        giftRow.coins += Math.max(0, coins);
+                        if (user && user !== 'Unknown') giftRow.users.add(user);
+                        giftTypeMap.set(giftName, giftRow);
+                    }
 
                     const isQuestion = text.includes('?') || /^(kako|zasto|sto|sta|kada|gdje|tko|ko|why|what|when|where|how)\b/i.test(text);
                     if (isQuestion && text) questions.push({ user, text, ts: normalizeTs(m) || nowTs });
@@ -13794,12 +13812,17 @@
                 });
                 const songs = extractSongEventsFromMessages(sorted, nowTs, 500);
                 const songPerformance = buildSongPerformanceFromDb(songs.map((s) => s.title));
+                const topGiftTypes = Array.from(giftTypeMap.values())
+                    .map((row) => ({ giftName: row.giftName, events: row.events, quantity: row.quantity, coins: row.coins, users: row.users.size }))
+                    .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events)
+                    .slice(0, 80);
                 return {
                     messages: sorted,
                     typeCounts,
                     uniqueUsers,
                     usersByMessages,
                     usersByCoins,
+                    topGiftTypes,
                     questions: questions.slice(-80),
                     answers: answers.slice(-80),
                     joinsTotal,
@@ -13856,6 +13879,7 @@
                     typeCounts: analytics.typeCounts,
                     topUsersByMessages: analytics.usersByMessages.slice(0, 50),
                     topUsersByCoins: analytics.usersByCoins.slice(0, 50),
+                    topGiftTypes: analytics.topGiftTypes,
                     questions: analytics.questions,
                     answers: analytics.answers,
                     timeline: analytics.timeline,
@@ -13881,6 +13905,11 @@
                         lines.push(['users', u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map(esc).join(','));
                     });
                     lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+                    lines.push(['gift_types', 'gift_name', 'events', 'quantity', 'coins', 'users'].map(esc).join(','));
+                    analytics.topGiftTypes.forEach((g) => {
+                        lines.push(['gift_types', g.giftName, g.events, g.quantity, g.coins, g.users].map(esc).join(','));
+                    });
+                    lines.push(['', '', '', '', '', ''].map(esc).join(','));
                     lines.push(['questions', 'user', 'text', 'timestamp'].map(esc).join(','));
                     analytics.questions.forEach((q) => {
                         lines.push(['questions', q.user, q.text, new Date(Number(q.ts || Date.now())).toISOString()].map(esc).join(','));
@@ -13919,6 +13948,11 @@
                     rows.push('Top users:');
                     analytics.usersByMessages.slice(0, 30).forEach((u, i) => {
                         rows.push(`${i + 1}. @${u.user} | total ${u.total} | chat ${u.chat} | gifts ${u.gifts} | coins ${u.coins} | join ${u.joins}`);
+                    });
+                    rows.push('');
+                    rows.push('Gift types:');
+                    analytics.topGiftTypes.slice(0, 40).forEach((g, i) => {
+                        rows.push(`${i + 1}. ${g.giftName} | coins ${g.coins} | qty ${g.quantity} | events ${g.events} | users ${g.users}`);
                     });
                     rows.push('');
                     rows.push('Songs list:');
@@ -13980,6 +14014,9 @@
                 const songPerfHtml = analytics.songPerformance.slice(0, 80).map((s, idx) =>
                     `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#9ec6ff">#${idx + 1} ${escHtml(s.title)}</span><div style="font-size:10px;color:#cbd5e1">plays ${formatNum(s.plays)} • avg engage ${formatNum(s.avgEngagement)} • avg sentiment ${formatNum(s.avgSentiment)} • samples ${formatNum(s.samples)}</div></div>`
                 ).join('') || '<div style="color:#94a3b8">Song performance DB je prazna.</div>';
+                const giftTypesHtml = analytics.topGiftTypes.slice(0, 80).map((g, idx) =>
+                    `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#fcd34d">#${idx + 1} ${escHtml(g.giftName)}</span><div style="font-size:10px;color:#cbd5e1">coins ${formatNum(g.coins)} • qty ${formatNum(g.quantity)} • events ${formatNum(g.events)} • users ${formatNum(g.users)}</div></div>`
+                ).join('') || '<div style="color:#94a3b8">Nema gift događaja u sesiji.</div>';
                 const answersHtml = analytics.answers.slice(-50).reverse().map((a) =>
                     `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(a.user)}</span>: ${escHtml(a.text)}</div>`
                 ).join('') || '<div style="color:#94a3b8">Nema system/AI odgovora u sesiji.</div>';
@@ -13990,8 +14027,15 @@
                     + `<div><div style="font-weight:700;font-size:14px">AI Live Chat - Session Dashboard ${indexLabel ? '#' + indexLabel : ''}</div><div style="font-size:11px;color:rgba(255,255,255,.8)">${new Date(sessionData.savedAt || sessionData.exportedAt || Date.now()).toLocaleString('hr-HR')}</div></div>`
                     + `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button id="tkaiSessExportCsv" class="s-btn-sm" style="font-size:10px;padding:3px 8px">CSV</button><button id="tkaiSessExportTxt" class="s-btn-sm" style="font-size:10px;padding:3px 8px">TXT</button><button id="tkaiSessExportPdf" class="s-btn-sm" style="font-size:10px;padding:3px 8px">PDF</button><button id="tkaiSessExportJson" class="s-btn-sm" style="font-size:10px;padding:3px 8px">JSON</button><button id="tkaiSessionStatsClose" class="panel-close" style="position:static">x</button></div>`
                     + `</div>`
-                    + `<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:10px;padding:10px;overflow:hidden;height:calc(100% - 56px)">`
-                    + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:4px">`
+                    + `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)">`
+                    + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessOverview">Overview</button>`
+                    + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessUsers">Users</button>`
+                    + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessGifts">Gifts</button>`
+                    + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessQuestions">Questions</button>`
+                    + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessSongs">Songs</button>`
+                    + `</div>`
+                    + `<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:10px;padding:10px;overflow:hidden;height:calc(100% - 102px)">`
+                    + `<div id="tkaiSessOverview" style="display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:4px">`
                     + `<div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px">`
                     + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Poruke</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.messages.length)}</div></div>`
                     + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Giftovi</div><div style="font-size:20px;font-weight:700">${formatNum(type.gift + type.subscriber)}</div></div>`
@@ -14003,18 +14047,26 @@
                     + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Pitanja / odgovori</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.questions.length)} / ${formatNum(analytics.answers.length)}</div></div>`
                     + `</div>`
                     + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Poruke kroz vrijeme (scan timeline)</div><div style="height:160px">${timelineSvg}</div></div>`
-                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
+                    + `<div id="tkaiSessUsers" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
                     + `</div>`
                     + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto">`
                     + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:8px">Raspodjela tipova poruka</div><div style="display:flex;gap:12px;align-items:center"><div style="width:130px;height:130px;border-radius:50%;background:${donut};position:relative"><div style="position:absolute;inset:27px;border-radius:50%;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:11px;color:#cbd5e1">${formatNum(total)}<br>total</div></div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px">${typeRows.map((r) => `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${r.color}"></span>${r.label}: <b>${formatNum(r.value)}</b></div>`).join('')}</div></div></div>`
-                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
+                    + `<div id="tkaiSessGifts" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Gift breakdown</div><div style="max-height:220px;overflow:auto;font-size:11px">${giftTypesHtml}</div></div>`
+                    + `<div id="tkaiSessSongs" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
                     + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Song performance (engagement/sentiment)</div><div style="max-height:180px;overflow:auto;font-size:11px">${songPerfHtml}</div></div>`
-                    + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
+                    + `<div id="tkaiSessQuestions" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
                     + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Odgovori (system/AI)</div><div style="max-height:220px;overflow:auto;font-size:11px">${answersHtml}</div></div>`
                     + `</div>`
                     + `</div>`;
                 const close = () => { modal.remove(); };
                 modal.querySelector('#tkaiSessionStatsClose')?.addEventListener('click', close);
+                modal.querySelectorAll('.tkai-sess-nav').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const targetId = btn.getAttribute('data-target');
+                        const target = targetId ? modal.querySelector('#' + targetId) : null;
+                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                });
                 modal.querySelector('#tkaiSessExportCsv')?.addEventListener('click', () => {
                     downloadTextFile(baseName + '.csv', buildCsvText(), 'text/csv;charset=utf-8');
                     showToast('⬇️ Session stats CSV skinut.');
@@ -14063,7 +14115,7 @@
                             + (gifts ? '<span>🎁 ' + gifts + '</span>' : '')
                             + '</div></div>'
                             + '<div style="display:flex;gap:4px">'
-                            + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Statistike" style="font-size:10px;padding:2px 6px">📊</button>'
+                            + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Otvori statistiku sesije" style="font-size:10px;padding:2px 8px">📊 Statistika</button>'
                             + '<button class="s-btn-sm tkai-btn-sess-dl" data-si="' + i + '" title="Skini JSON" style="font-size:10px;padding:2px 6px">⬇️</button>'
                             + '</div>'
                             + '</div>'
@@ -14071,26 +14123,25 @@
                             + '</div>';
                     }).join('');
 
-                    // Download button
-                    listEl.querySelectorAll('.tkai-btn-sess-dl').forEach(btn => {
-                        btn.addEventListener('click', () => {
-                            const item = getRecentTkaiSessions()[+btn.dataset.si];
+                    listEl.onclick = (event) => {
+                        const statsBtn = event.target.closest('.tkai-btn-sess-stats');
+                        if (statsBtn) {
+                            const s = getRecentTkaiSessions()[+statsBtn.dataset.si];
+                            if (!s) return;
+                            openTkaiSessionStatsDashboard(s, Number(statsBtn.dataset.si) + 1);
+                            return;
+                        }
+                        const dlBtn = event.target.closest('.tkai-btn-sess-dl');
+                        if (dlBtn) {
+                            const item = getRecentTkaiSessions()[+dlBtn.dataset.si];
                             if (!item) return;
                             const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
                             const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
                             a.download = 'tkai-session-' + (item.savedAt || '').replace(/[:.]/g, '-') + '.json'; a.click();
                             setTimeout(() => URL.revokeObjectURL(a.href), 0);
-                        });
-                    });
-
-                    // Inline stats button
-                    listEl.querySelectorAll('.tkai-btn-sess-stats').forEach(btn => {
-                        btn.addEventListener('click', () => {
-                            const s = getRecentTkaiSessions()[+btn.dataset.si];
-                            if (!s) return;
-                            openTkaiSessionStatsDashboard(s, Number(btn.dataset.si) + 1);
-                        });
-                    });
+                            return;
+                        }
+                    };
                 } catch (e) {
                     listEl.innerHTML = '<div style="color:var(--text3)">Greška pri učitavanju sesija.</div>';
                 }
@@ -16036,6 +16087,8 @@
             const pieSummaryEl = document.getElementById('tkaiPieSummary');
             const songListEl = document.getElementById('tkaiSongList');
             const joinLevelListEl = document.getElementById('tkaiJoinLevelList');
+            const giftStatsMetaEl = document.getElementById('tkaiGiftStatsMeta');
+            const giftStatsListEl = document.getElementById('tkaiGiftStatsList');
             const shareEventsListEl = document.getElementById('tkaiShareEventsList');
             const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
             const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
@@ -17208,6 +17261,37 @@
                     .slice(-120)
                     .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
 
+                const giftScanBase = (Array.isArray(source) ? source : messages).filter((m) => m && (m.type === 'gift' || m.type === 'subscriber')).slice(-400);
+                const giftTypeMap = new Map();
+                const giftUserMap = new Map();
+                let giftEventsTotal = 0;
+                let giftCoinsTotal = 0;
+                giftScanBase.forEach((m) => {
+                    const giftName = String(m.giftName || detectGiftMetaFromText(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
+                    const user = String(m.user || 'unknown').trim().slice(0, 40) || 'unknown';
+                    const quantity = Math.max(1, Number(m.quantity || 1));
+                    const coins = Math.max(0, Number(m.coins || 0));
+                    giftEventsTotal += 1;
+                    giftCoinsTotal += coins;
+                    const typeRow = giftTypeMap.get(giftName) || { giftName, events: 0, quantity: 0, coins: 0 };
+                    typeRow.events += 1;
+                    typeRow.quantity += quantity;
+                    typeRow.coins += coins;
+                    giftTypeMap.set(giftName, typeRow);
+                    const userRow = giftUserMap.get(user) || { user, events: 0, quantity: 0, coins: 0 };
+                    userRow.events += 1;
+                    userRow.quantity += quantity;
+                    userRow.coins += coins;
+                    giftUserMap.set(user, userRow);
+                });
+                const giftDetails = {
+                    totalEvents: giftEventsTotal,
+                    totalCoins: giftCoinsTotal,
+                    uniqueGiftTypes: giftTypeMap.size,
+                    topGiftTypes: Array.from(giftTypeMap.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events).slice(0, 12),
+                    topGifters: Array.from(giftUserMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events).slice(0, 12)
+                };
+
                 const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
                 const isJoinLikeMessage = (m) => {
                     if (!m) return false;
@@ -17278,6 +17362,7 @@
                     pieBreakdown,
                     songs: songEvents.slice(-30).reverse(),
                     shareEvents,
+                    giftDetails,
                     joinLevels: joinSource.slice(-120).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
                     joinBuckets,
                     spikeDebug: {
@@ -17849,18 +17934,49 @@
                     }
                 }
 
+                if (giftStatsListEl) {
+                    giftStatsListEl.innerHTML = '';
+                    const giftDetails = insights.giftDetails || {};
+                    const topGiftTypes = Array.isArray(giftDetails.topGiftTypes) ? giftDetails.topGiftTypes : [];
+                    const topGifters = Array.isArray(giftDetails.topGifters) ? giftDetails.topGifters : [];
+                    if (giftStatsMetaEl) giftStatsMetaEl.textContent = `${formatNum(giftDetails.totalEvents || 0)} giftova • ${formatNum(giftDetails.uniqueGiftTypes || 0)} tipova • ${formatNum(giftDetails.totalCoins || 0)} 🪙`;
+                    if (!topGiftTypes.length) {
+                        const li = document.createElement('li');
+                        li.textContent = 'Nema gift statistike u trenutnom rasponu.';
+                        giftStatsListEl.appendChild(li);
+                    } else {
+                        topGiftTypes.slice(0, 6).forEach((row, idx) => {
+                            const li = document.createElement('li');
+                            li.innerHTML = `<span style="color:#fcd34d">#${idx + 1} ${escHtml(row.giftName || 'Gift')}</span> • ${formatNum(row.coins || 0)} 🪙 • qty ${formatNum(row.quantity || 0)} • evt ${formatNum(row.events || 0)}`;
+                            giftStatsListEl.appendChild(li);
+                        });
+                        if (topGifters.length) {
+                            const divider = document.createElement('li');
+                            divider.style.marginTop = '4px';
+                            divider.style.color = 'var(--text3)';
+                            divider.textContent = 'Top gifteri:';
+                            giftStatsListEl.appendChild(divider);
+                            topGifters.slice(0, 4).forEach((row) => {
+                                const li = document.createElement('li');
+                                li.innerHTML = `<span style="color:${getUserColor(row.user)}">@${escHtml(row.user || 'unknown')}</span> • ${formatNum(row.coins || 0)} 🪙 • evt ${formatNum(row.events || 0)}`;
+                                giftStatsListEl.appendChild(li);
+                            });
+                        }
+                    }
+                }
+
                 if (joinLevelListEl) {
                     joinLevelListEl.innerHTML = '';
-                    const joins = Array.isArray(insights.joinLevels) ? insights.joinLevels : [];
+                    const joins = (Array.isArray(insights.joinLevels) ? insights.joinLevels : []).filter((j) => Number(j?.level || 0) > 0);
                     const buckets = insights.joinBuckets || {};
                     const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
                     const summary = document.createElement('li');
                     summary.textContent =
-                        `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
+                        `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)}`;
                     joinLevelListEl.appendChild(summary);
                     if (!joins.length) {
                         const li = document.createElement('li');
-                        li.textContent = 'Nema join eventova za odabrani minimum levela (provjeri Join scan i min level).';
+                        li.textContent = 'Nema join eventova s poznatim levelom za odabrani minimum.';
                         joinLevelListEl.appendChild(li);
                     } else {
                         joins.slice(0, 80).forEach((j) => {
@@ -17881,7 +17997,7 @@
                                 navigator.clipboard.writeText(value).then(() => showToast('📋 Kopirano: ' + value.trim())).catch(() => { });
                             });
                             li.appendChild(mention);
-                            li.appendChild(document.createTextNode(` • lvl ${j.level ? formatNum(j.level) : '?'} @ ${when}`));
+                            li.appendChild(document.createTextNode(` • lvl ${formatNum(j.level || 0)} @ ${when}`));
                             joinLevelListEl.appendChild(li);
                         });
                     }
@@ -20016,6 +20132,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 const replyLang = replyLangEl?.value || 'hr';
                 const giftStats = computeGiftStats();
                 const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 200);
+                const detailedInsights = computeInsightsSnapshot(collectedMessages);
                 const payload = {
                     exportedAt: new Date().toISOString(),
                     targetLanguage: targetLang,
@@ -20027,6 +20144,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     totalCoins: giftStats.totalCoins,
                     mergedUsers: buildUserStats(collectedMessages, userLimit),
                     dailyStats: buildDailyStats(collectedMessages, userLimit),
+                    giftDetails: detailedInsights.giftDetails || {},
                     messages: collectedMessages.map(message => ({
                         user: message.user,
                         text: message.text,
@@ -20034,6 +20152,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         translatedLang: message.translatedLang || '',
                         type: message.type || 'chat',
                         coins: message.coins || 0,
+                        giftName: message.giftName || '',
+                        giftRawText: message.giftRawText || '',
+                        quantity: Number(message.quantity || 0),
+                        unitCoins: Number(message.unitCoins || 0),
+                        giftDetectedFromCatalog: message.giftDetectedFromCatalog === true,
                         timestamp: message.ts || Date.now()
                     }))
                 };
