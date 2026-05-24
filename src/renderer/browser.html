@@ -9472,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.256</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.257</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10952,7 +10952,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.256</span></div>
+                                    v<span id="helpVersionNum2">2.4.257</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -27038,7 +27038,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                         consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
                         return;
                     }
-                } catch (e) { /* corrupt session, fall through */ }
+                } catch (e) {
+                    try {
+                        localStorage.removeItem('ex_session_tabs_' + windowId);
+                        localStorage.removeItem('ex_session_active_' + windowId);
+                    } catch (_) { }
+                }
             }
             const url = getInitialUrl();
             createTab(url); renderQuickLinks();
@@ -28142,12 +28147,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             });
         });
         document.getElementById('sClearSessionStorage')?.addEventListener('click', () => {
-            window.customConfirm('Clear session storage?', (c) => {
+            window.customConfirm('Clear session storage?\n\nThis clears only temporary in-memory page data for the current window. Saved tabs and browser data stay intact.', (c) => {
                 if (!c) return;
                 sessionStorage.clear();
-                localStorage.removeItem('ex_session_tabs');
-                localStorage.removeItem('ex_session_active');
-                showToast('⚡ Session storage cleared');
+                showToast('⚡ Session storage cleared — saved tabs kept');
             });
         });
         document.getElementById('sClearServiceWorker')?.addEventListener('click', () => {
