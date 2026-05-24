@@ -9472,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.255</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.256</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10345,6 +10345,13 @@
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
+                                            <div class="s-row-label">Viewer sample interval (sekunde)</div>
+                                            <div class="s-row-desc">Minimalni razmak između zapisa za Viewers i Viewer trend</div>
+                                        </div>
+                                        <input type="number" class="s-input" data-setting="tkaiViewerSampleIntervalSec" min="2" max="120" value="8" style="width:70px">
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
                                             <div class="s-row-label">Auto-generate suggestions</div>
                                             <div class="s-row-desc">Auto-generate AI replies after N new messages (0 =
                                                 off)</div>
@@ -10945,7 +10952,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.255</span></div>
+                                    v<span id="helpVersionNum2">2.4.256</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11244,6 +11251,7 @@
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Viewers</div>
                         <div class="tkai-stat-value" id="tkaiViewerCount">-</div>
+                        <div id="tkaiViewerSampleMeta" style="font-size:9px;color:var(--text3);margin-top:2px">Čekam očitanje</div>
                     </div>
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Gift Coins</div>
@@ -15958,6 +15966,7 @@
             const filterStarredBtn = document.getElementById('tkaiFilterStarredBtn');
             const sessionInfoEl = document.getElementById('tkaiSessionInfo');
             const viewerCountEl = document.getElementById('tkaiViewerCount');
+            const viewerSampleMetaEl = document.getElementById('tkaiViewerSampleMeta');
             const coinTotalEl = document.getElementById('tkaiCoinTotal');
             const supporterCountEl = document.getElementById('tkaiSupporterCount');
             const topSupportersEl = document.getElementById('tkaiTopSupporters');
@@ -16581,7 +16590,7 @@
                 const v = Number(value || 0);
                 if (!Number.isFinite(v) || v <= 0) return;
                 const now = Date.now();
-                const minGapMs = 8000;
+                const minGapMs = Math.max(2000, (Number(DB.getSettings().tkaiViewerSampleIntervalSec || 8) || 8) * 1000);
                 if (now - lastViewerSampleAt < minGapMs && v === lastViewerSampleValue) return;
                 viewerSamples.push(v);
                 viewerSamplePoints.push({ ts: now, value: v });
@@ -18693,6 +18702,15 @@
                     else if (peakViewerCount > 0) viewerCountEl.textContent = 'peak ' + formatNum(peakViewerCount);
                     else viewerCountEl.textContent = '0';
                 }
+                if (viewerSampleMetaEl) {
+                    if (lastViewerSampleAt > 0) {
+                        const ageSec = Math.max(0, Math.floor((Date.now() - lastViewerSampleAt) / 1000));
+                        const sampleSec = Math.max(2, Number(DB.getSettings().tkaiViewerSampleIntervalSec || 8) || 8);
+                        viewerSampleMetaEl.textContent = 'sample ' + formatNum(sampleSec) + 's • zadnje ' + formatNum(ageSec) + 's';
+                    } else {
+                        viewerSampleMetaEl.textContent = 'Čekam očitanje';
+                    }
+                }
                 if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
                 // ── Nove statistike ──────────────────────────────────────────────
                 const msgsPerMin = elapsedMin > 0 ? (collectedMessages.length / elapsedMin).toFixed(1) : '-';
@@ -19159,15 +19177,34 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               tryTake(label, label);
             });
           } catch (_) {}
+          try {
+            const directTikTokViewerSelectors = [
+              "#tiktok-live-main-container-id > div.bg-UIPageFlat1.tiktok-q76ycn.eayczbk0 > div.tiktok-i9gxme.eayczbk1 > div > div.relative.flex.flex-col.flex-shrink-0.rounded-\\[16px\\].my-12.bg-UIPageFlat2.border-l-\\[0\\.5px\\].overflow-hidden.ltr\\:mr-12.rtl\\:ml-12 > div.relative.w-full.flex.flex-col.flex-grow.overflow-hidden.rounded-\\[inherit\\] > div > div.w-full.h-auto.flex.flex-col.bg-UIPageFlat2.will-change-\\[height\\].absolute > div.w-full.h-30.px-16.pt-12.mb-4.flex.justify-between.items-center > div.flex.justify-start.items-center > div.P4-Medium.font-semibold.text-UIText1.ltr\\:mr-6.rtl\\:ml-6",
+              "#tiktok-live-main-container-id div.P4-Medium.font-semibold.text-UIText1.ltr\\:mr-6.rtl\\:ml-6"
+            ];
+            for (const sel of directTikTokViewerSelectors) {
+              const el = document.querySelector(sel);
+              const txt = (el?.textContent || "").replace(/\s+/g, " ").trim();
+              if (!txt) continue;
+              tryTake(txt, "direct tiktok viewers header");
+              break;
+            }
+          } catch (_) {}
           const viewerSelectors = [
             '[data-e2e="live-room-viewer-count"]',
             '[data-e2e="live-room-info-viewer-count"]',
             '[data-e2e*="viewer-count"]',
             '[data-e2e*="watching"]',
+            '[data-e2e*="user-count"]',
+            '[data-e2e*="audience"]',
             '[class*="ViewerCount"]',
             '[class*="viewerCount"]',
             '[class*="WatchCount"]',
-            '[class*="watch-count"]'
+            '[class*="watch-count"]',
+            '[class*="Audience"]',
+            '[class*="audience"]',
+            '[class*="UserCount"]',
+            '[class*="userCount"]'
           ];
           for (const sel of viewerSelectors) {
             try {
@@ -19195,6 +19232,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 tryTake(m[1], txt);
                 break;
               }
+            });
+          } catch (_) {}
+          try {
+            document.querySelectorAll('span, div, strong, p').forEach(function(el) {
+              const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+              if (!txt || txt.length > 24) return;
+              const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+              if (!rect || rect.width <= 0 || rect.height <= 0) return;
+              if (rect.top < 0 || rect.top > window.innerHeight * 0.24) return;
+              if (rect.left < window.innerWidth * 0.62) return;
+              const closestLabel = el.closest('[aria-label]')?.getAttribute('aria-label') || '';
+              const ownLabel = el.getAttribute('aria-label') || '';
+              const title = el.getAttribute('title') || '';
+              const ctx = (ownLabel + ' ' + closestLabel + ' ' + title + ' ' + (el.parentElement?.textContent || '')).replace(/\s+/g, ' ').trim();
+              const looksPlainCounter = /^(?:\d[\d.,\s]*[km]?)(?:\+)?$/.test(txt);
+              if (!viewerHint.test(ctx) && !looksPlainCounter) return;
+              if (blockedContext.test(ctx) && !viewerHint.test(ctx)) return;
+              tryTake(txt, ctx || 'top-right live header');
             });
           } catch (_) {}
           return maxViewer;
@@ -19277,11 +19332,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (!txt || txt.length < 4) return;
                 const r = txt.match(/#?\s*([1-9])\s*[.)-]?\s*(.{2,40}?)\s+(\d[\d.,\s]*[km]?)(?:\s*(coins?|coin|coina|kovanica|diamonds?))?/i);
                 if (!r) return;
-                rows.push({
-                  rank: parseInt(r[1], 10) || 99,
-                  user: String(r[2] || '').trim().slice(0, 40),
-                  coins: parseNumberLike(r[3])
-                });
+                pushRow(r[1], r[2], r[3], sel);
               });
             } catch (_) {}
           }
@@ -19289,7 +19340,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           rows.forEach((row) => {
             if (!row.user) return;
             const prev = dedupe.get(row.user);
-            if (!prev || row.coins > prev.coins) dedupe.set(row.user, row);
+            if (!prev || row.coins > prev.coins || (row.coins === prev.coins && row.rank < prev.rank)) dedupe.set(row.user, row);
           });
           return Array.from(dedupe.values())
             .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
@@ -24656,7 +24707,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 this.value = '';
             });
             document.getElementById('btnExportData')?.addEventListener('click', () => {
-                const data = { bookmarks: DB.getBookmarks(), history: DB.getHistory(), settings: DB.getSettings(), extensions: JSON.parse(localStorage.getItem('ex_extensions') || '[]'), exportDate: new Date().toISOString(), browser: 'EtherX' };
+                let aiLiveChatConfig = {};
+                try { aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {}; } catch (_) { aiLiveChatConfig = {}; }
+                const data = { bookmarks: DB.getBookmarks(), history: DB.getHistory(), settings: DB.getSettings(), aiLiveChatConfig, extensions: JSON.parse(localStorage.getItem('ex_extensions') || '[]'), exportDate: new Date().toISOString(), browser: 'EtherX' };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'etherx-export-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
                 showToast('Data exported successfully');
@@ -29385,7 +29438,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             // ── Backup ───────────────────────────────────────────────────────────────
             document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
                 const allSettings = await window.etherx?.settings?.get?.() || {};
-                const json = JSON.stringify(allSettings, null, 2);
+                let aiLiveChatConfig = {};
+                try { aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {}; } catch (_) { aiLiveChatConfig = {}; }
+                const payload = {
+                    exportedAt: new Date().toISOString(),
+                    settings: allSettings,
+                    aiLiveChatConfig
+                };
+                const json = JSON.stringify(payload, null, 2);
                 const blob = new Blob([json], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -29405,7 +29465,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     const text = await file.text();
                     try {
                         const imported = JSON.parse(text);
-                        await window.etherx?.settings?.set?.(imported);
+                        const normalizedSettings = imported && typeof imported === 'object' && imported.settings && typeof imported.settings === 'object'
+                            ? imported.settings
+                            : imported;
+                        const aiLiveChatConfig = imported && typeof imported === 'object' && imported.aiLiveChatConfig && typeof imported.aiLiveChatConfig === 'object'
+                            ? imported.aiLiveChatConfig
+                            : null;
+                        await window.etherx?.settings?.set?.(normalizedSettings);
+                        if (aiLiveChatConfig) localStorage.setItem('ex_tkai_cfg', JSON.stringify(aiLiveChatConfig));
                         alert('Postavke uspješno učitane. Browser će se restartirati.');
                         window.location.reload();
                     } catch (err) {

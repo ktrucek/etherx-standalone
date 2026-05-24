@@ -5147,115 +5147,7 @@
         }
 
         #tkaiSentimentLabCard {
-            min-height: 248px;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(74, 222, 128, .24);
-            border-radius: 14px;
-            padding: 10px 10px 12px;
-            background:
-                radial-gradient(circle at top right, rgba(74, 222, 128, .16), transparent 34%),
-                linear-gradient(180deg, rgba(10, 28, 19, .96), rgba(8, 20, 15, .98));
-            box-shadow: inset 0 1px 0 rgba(187, 247, 208, .05), 0 14px 30px rgba(0, 0, 0, .24);
-        }
-
-        #tkaiSentimentLabCard::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            background: linear-gradient(135deg, rgba(187, 247, 208, .07), transparent 34%, transparent 68%, rgba(34, 197, 94, .08));
-        }
-
-        #tkaiSentimentLabCard .tkai-insights-title {
-            margin-bottom: 0;
-            font-size: 11px;
-            letter-spacing: .9px;
-            color: #d1fae5;
-        }
-
-        #tkaiSentimentLabCard .tkai-insights-title span {
-            color: #86efac;
-            margin-left: 6px;
-        }
-
-        .tkai-momentum-head {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 6px;
-        }
-
-        .tkai-momentum-badge {
-            font-size: 9px;
-            font-weight: 800;
-            letter-spacing: .8px;
-            text-transform: uppercase;
-            color: #dcfce7;
-            padding: 4px 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(74, 222, 128, .28);
-            background: linear-gradient(180deg, rgba(34, 197, 94, .24), rgba(21, 128, 61, .18));
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
-        }
-
-        .tkai-momentum-sub {
-            position: relative;
-            z-index: 1;
-            margin-bottom: 10px;
-            font-size: 10px;
-            line-height: 1.45;
-            color: rgba(209, 250, 229, .78);
-        }
-
-        .tkai-momentum-labels {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            margin: 7px 2px 0;
-        }
-
-        .tkai-momentum-label {
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: .55px;
-            text-transform: uppercase;
-            color: rgba(187, 247, 208, .66);
-        }
-
-
-        .tkai-momentum-frame {
-            position: relative;
-            z-index: 1;
-            padding: 8px;
-            border-radius: 12px;
-            background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
-            border: 1px solid rgba(74, 222, 128, .10);
-        }
-
-        #tkaiSentimentAtmosphere {
-            position: relative;
-            z-index: 1;
-            margin-top: 10px;
-            padding: 8px 10px;
-            border-radius: 10px;
-            border: 1px solid rgba(74, 222, 128, .16);
-            background: linear-gradient(180deg, rgba(21, 128, 61, .16), rgba(8, 20, 15, .16));
-            color: #d1fae5;
-            font-size: 10px;
-            line-height: 1.45;
-            letter-spacing: .15px;
-        }
-
-        #tkaiSentimentAtmosphere strong {
-            color: #86efac;
-            font-weight: 800;
+            min-height: 220px;
         }
 
         .tkai-insights-row>.tkai-insights-card:only-child {
@@ -5404,25 +5296,23 @@
             display: block;
             width: 100%;
             max-width: 520px;
-            height: 68px;
-            border: 1px solid rgba(74, 222, 128, .22);
-            border-radius: 12px;
-            background: linear-gradient(180deg, rgba(8, 28, 20, .92), rgba(8, 22, 17, .78));
-            padding: 6px;
+            height: 64px;
+            border: 1px solid rgba(148, 163, 184, .25);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(15, 23, 42, .55), rgba(15, 23, 42, .12));
+            padding: 4px;
             margin: 4px auto 0;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.04), inset 0 -18px 32px rgba(21, 128, 61, .10);
         }
 
         .tkai-sentiment-wave {
             width: 100%;
             max-width: 520px;
-            height: 72px;
-            border: 1px solid rgba(74, 222, 128, .28);
-            border-radius: 12px;
-            background: linear-gradient(180deg, rgba(12, 38, 24, .92), rgba(8, 22, 17, .78));
-            padding: 6px;
-            margin: 8px auto 0;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.05), inset 0 -20px 34px rgba(34, 197, 94, .08);
+            height: 64px;
+            border: 1px solid rgba(94, 234, 212, .24);
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(30, 64, 175, .22), rgba(15, 23, 42, .18));
+            padding: 4px;
+            margin: 6px auto 0;
         }
 
         .tkai-sentiment-meta {
@@ -5473,28 +5363,25 @@
 
         .tkai-sentiment-bar {
             flex: 1;
-            border-radius: 5px;
+            border-radius: 3px;
             min-height: 3px;
-            background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
-            border: 1px solid rgba(74, 222, 128, .08);
+            background: rgba(255, 255, 255, .08);
             overflow: hidden;
             display: flex;
             flex-direction: column;
             justify-content: flex-end;
             gap: 1px;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
         }
 
         .tkai-sentiment-stack-pos {
             width: 100%;
-            background: linear-gradient(180deg, rgba(110, 231, 183, .98), rgba(34, 197, 94, .88));
+            background: linear-gradient(180deg, rgba(34, 197, 94, .95), rgba(22, 163, 74, .85));
             min-height: 1px;
-            box-shadow: 0 0 10px rgba(74, 222, 128, .18);
         }
 
         .tkai-sentiment-stack-neg {
             width: 100%;
-            background: linear-gradient(180deg, rgba(74, 222, 128, .52), rgba(21, 128, 61, .82));
+            background: linear-gradient(180deg, rgba(248, 113, 113, .95), rgba(220, 38, 38, .85));
             min-height: 1px;
         }
 
@@ -9585,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.240</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.256</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10213,6 +10100,14 @@
 
                                 <div class="s-row">
                                     <div class="s-row-left">
+                                        <div class="s-row-label">AI Live Chat audio</div>
+                                        <div class="s-row-desc">Master ON/OFF za glas i zvučne efekte</div>
+                                    </div>
+                                    <div class="toggle" data-setting="tkaiAudioEnabled"></div>
+                                </div>
+
+                                <div class="s-row">
+                                    <div class="s-row-left">
                                         <div class="s-row-label">Boja glavnih AI gumba</div>
                                         <div class="s-row-desc">Primjenjuje se na "Generiraj" i pomoćne AI akcije</div>
                                     </div>
@@ -10447,6 +10342,13 @@
                                             <div class="s-row-desc">Kad ima novih poruka skenira 2s, inače 4s</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiTurboScan"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Viewer sample interval (sekunde)</div>
+                                            <div class="s-row-desc">Minimalni razmak između zapisa za Viewers i Viewer trend</div>
+                                        </div>
+                                        <input type="number" class="s-input" data-setting="tkaiViewerSampleIntervalSec" min="2" max="120" value="8" style="width:70px">
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -10742,11 +10644,10 @@
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">〰 Sentiment momentum mode</div>
-                                            <div class="s-row-desc">Wave se sada prikazuje ispod bars u TikTok Chat AI.</div>
+                                            <div class="s-row-desc">Izaberi prikaz: Bars ili Wave</div>
                                         </div>
                                         <select class="s-select" data-setting="tkaiSentimentMomentumMode"
                                             style="max-width:130px">
-                                            <option value="both">Both</option>
                                             <option value="bars">Bars</option>
                                             <option value="wave">Wave</option>
                                         </select>
@@ -10938,7 +10839,13 @@
                                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
                                         <label style="font-size:11px;color:var(--text3)">SongRec command</label>
                                         <input type="text" class="s-input" data-setting="tkaiSongRecCommand"
-                                            value="songrec" style="width:170px;font-family:monospace;font-size:11px">
+                                            value="songrec" style="width:230px;font-family:monospace;font-size:11px"
+                                            placeholder="songrec ili /putanja/do/songrec">
+                                        <label style="font-size:11px;color:var(--text3)">Output device</label>
+                                        <select class="s-select" data-setting="tkaiSongRecOutputDevice"
+                                            style="min-width:230px;max-width:320px;font-size:11px">
+                                            <option value="">System default</option>
+                                        </select>
                                         <label style="font-size:11px;color:var(--text3)">Timeout (ms)</label>
                                         <input type="number" class="s-input" data-setting="tkaiSongRecTimeoutMs"
                                             min="2000" max="25000" value="12000" style="width:90px">
@@ -11045,7 +10952,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.240</span></div>
+                                    v<span id="helpVersionNum2">2.4.256</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11344,6 +11251,7 @@
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Viewers</div>
                         <div class="tkai-stat-value" id="tkaiViewerCount">-</div>
+                        <div id="tkaiViewerSampleMeta" style="font-size:9px;color:var(--text3);margin-top:2px">Čekam očitanje</div>
                     </div>
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Gift Coins</div>
@@ -11415,18 +11323,11 @@
                     </div>
                     <div class="tkai-insights-row">
                         <div class="tkai-insights-card hero" id="tkaiSentimentLabCard">
-                            <div class="tkai-momentum-head">
-                                <div class="tkai-insights-title" title="Linija i valovi zelenog momentuma live">Zeleni
-                                    momentum<span>〰</span></div>
-                                <div class="tkai-momentum-badge">Live pulse</div>
-                            </div>
-                            <div class="tkai-momentum-sub">Momentum pregled spaja ritam chata i giftova u jedinstveni zeleni signal.</div>
-                            <div class="tkai-momentum-frame">
-                                <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
-                                <div class="tkai-momentum-labels"><span class="tkai-momentum-label">Pulse bars</span><span class="tkai-momentum-label">Wave line</span></div>
-                                <div class="tkai-sentiment-wave" id="tkaiSentimentWave"></div>
-                            </div>
-                            <div class="tkai-metric-bottom" id="tkaiSentimentAtmosphere">Atmosfera: <strong>neutralna</strong></div>
+                            <div class="tkai-insights-title" title="Linija i valovi sentimenta live">Sentiment
+                                momentum<span>〰</span></div>
+                            <div class="tkai-sentiment-bars" id="tkaiSentimentTrend"></div>
+                            <div class="tkai-sentiment-wave" id="tkaiSentimentWave"></div>
+                            <div class="tkai-metric-bottom" id="tkaiSentimentAtmosphere">Atmosfera: neutralna</div>
                         </div>
                     </div>
                 </div>
@@ -11545,6 +11446,7 @@
         </div>
         <div class="tkai-footer">
             <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
+            <button class="tkai-gen-btn" id="tkaiAudioToggleBtn" style="font-size:11px">🔇 AI Audio OFF</button>
             <button class="tkai-gen-btn" id="tkaiCcReadBtn" style="font-size:11px">💬🔊 CC Read OFF</button>
             <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
             <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
@@ -15218,6 +15120,7 @@
         // ── AI Page Summarizer (multi-provider) ────────────────────────────────
         const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
         const LOCAL_AI_DEFAULT_BASE_URL = 'http://127.0.0.1:11434/v1';
+        const OLLAMA_REMOTE_DEFAULT_BASE_URL = 'https://your-ollama-server.example.com/v1';
         function getSelectedAiModel() {
             const sel = document.getElementById('settingsAiModel');
             if (sel && sel.value) return sel.value;
@@ -15279,7 +15182,7 @@
                 groqApiKey: document.getElementById('settingsGroqKey')?.value?.trim() || settings.groqApiKey || settings.groq_api_key || '',
                 openrouterApiKey: document.getElementById('settingsOpenrouterKey')?.value?.trim() || settings.openrouterApiKey || settings.openrouter_api_key || '',
                 hfApiKey: document.getElementById('settingsHfToken')?.value?.trim() || settings.hfApiKey || settings.hf_api_key || '',
-                ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || 'http://localhost:11434/v1'),
+                ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL),
             };
         }
         async function runAiTextRequest(prompt, opts = {}) {
@@ -15417,7 +15320,10 @@
             }
 
             if (provider === 'ollama') {
-                const baseUrl = normalizeLocalAiBaseUrl(opts.baseUrl || runtime.ollamaBaseUrl || 'http://localhost:11434/v1');
+                const baseUrl = normalizeLocalAiBaseUrl(opts.baseUrl || runtime.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL);
+                if (/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/v1/i.test(baseUrl)) {
+                    throw new Error('Ollama localhost je isključen. Postavi online Ollama endpoint u AI postavkama.');
+                }
                 const response = await fetchWith202Retry(baseUrl + '/chat/completions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -15871,7 +15777,6 @@
             let holdLInterval = null;
             let turboScanFastUntilTs = 0;
             let sessionStartedAt = null;
-            let joinFeedFreshSinceTs = 0;
             let liveViewerCount = 0;
             let peakViewerCount = 0;
             let topSupporters = [];
@@ -16042,6 +15947,7 @@
             const messagesEl = document.getElementById('tkaiMessages');
             const repliesEl = document.getElementById('tkaiReplies');
             const toggleBtn = document.getElementById('tkaiBtnToggle');
+            const audioToggleBtn = document.getElementById('tkaiAudioToggleBtn');
             const genBtn = document.getElementById('tkaiGenBtn');
             const genAllBtn = document.getElementById('tkaiGenAllBtn');
             const ccReadBtn = document.getElementById('tkaiCcReadBtn');
@@ -16060,6 +15966,7 @@
             const filterStarredBtn = document.getElementById('tkaiFilterStarredBtn');
             const sessionInfoEl = document.getElementById('tkaiSessionInfo');
             const viewerCountEl = document.getElementById('tkaiViewerCount');
+            const viewerSampleMetaEl = document.getElementById('tkaiViewerSampleMeta');
             const coinTotalEl = document.getElementById('tkaiCoinTotal');
             const supporterCountEl = document.getElementById('tkaiSupporterCount');
             const topSupportersEl = document.getElementById('tkaiTopSupporters');
@@ -16165,8 +16072,44 @@
                 return code || 'en-US';
             }
 
+            function isTkaiAudioEnabled() {
+                return DB.getSettings().tkaiAudioEnabled === true;
+            }
+
             function isCcReadEnabled() {
-                return DB.getSettings().tkaiCcReadEnabled === true;
+                return isTkaiAudioEnabled() && DB.getSettings().tkaiCcReadEnabled === true;
+            }
+
+            function updateTkaiAudioButton() {
+                if (!audioToggleBtn) return;
+                const on = isTkaiAudioEnabled();
+                audioToggleBtn.textContent = on ? '🔊 AI Audio ON' : '🔇 AI Audio OFF';
+                audioToggleBtn.style.opacity = on ? '1' : '.85';
+                audioToggleBtn.style.boxShadow = on ? '0 0 0 1px rgba(125,211,252,.45) inset' : 'none';
+            }
+
+            async function refreshTkaiSongRecOutputs() {
+                const select = document.querySelector('#stab-ai-live-chat [data-setting="tkaiSongRecOutputDevice"]');
+                if (!select) return;
+                const current = String(DB.getSettings().tkaiSongRecOutputDevice || '').trim();
+                let outputs = [];
+                try {
+                    const res = await window.etherx?.songrec?.listOutputs?.();
+                    outputs = Array.isArray(res?.outputs) ? res.outputs : [];
+                } catch (_) { }
+
+                const opts = ['<option value="">System default</option>']
+                    .concat(outputs.map((out) => {
+                        const id = escHtml(String(out?.id || '').trim());
+                        const label = escHtml(String(out?.label || out?.id || '').trim() || 'Audio output');
+                        return `<option value="${id}">${label}</option>`;
+                    }));
+                select.innerHTML = opts.join('');
+                if (current && outputs.some((out) => String(out?.id || '').trim() === current)) {
+                    select.value = current;
+                } else {
+                    select.value = '';
+                }
             }
 
             function updateCcReadButton() {
@@ -16179,6 +16122,7 @@
 
             function speakCaptionText(text, langCode) {
                 const clean = String(text || '').trim();
+                if (!isTkaiAudioEnabled()) return;
                 if (!clean || !('speechSynthesis' in window) || !window.speechSynthesis) return;
                 const langTag = mapLangForSpeech(langCode || getCcTargetLang());
                 const key = `${langTag}::${clean}`;
@@ -16294,12 +16238,13 @@
 
                 const cfg = DB.getSettings() || {};
                 const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
+                const outputDevice = String(cfg.tkaiSongRecOutputDevice || '').trim();
                 const timeoutMs = Math.max(2000, Math.min(25000, Number(cfg.tkaiSongRecTimeoutMs || 12000) || 12000));
                 setSongToolStatus('SongRec: slusam...');
                 if (manualTrigger) showToast('▶ SongRec pokrenut');
 
                 try {
-                    const result = await window.etherx.songrec.recognize({ command, timeoutMs });
+                    const result = await window.etherx.songrec.recognize({ command, timeoutMs, outputDevice });
                     if (!result?.ok) {
                         setSongToolStatus('SongRec: greska');
                         if (manualTrigger) showToast('SongRec greska: ' + (result?.error || 'nepoznata greska'));
@@ -16546,71 +16491,17 @@
                     const n = parseInt(String(direct[1]).replace(/[^\d]/g, ''), 10);
                     if (Number.isFinite(n)) return n;
                 }
+                // "sent Rose x15" ili "sent × 3" — gift quantity (1 gift ≈ poklonski event, vraćamo 1 po komadu)
+                const xqty = t.match(/[×x]\s*(\d+)/i);
+                if (xqty) {
+                    const qty = parseInt(xqty[1], 10);
+                    if (Number.isFinite(qty) && qty > 0) return qty; // caller množi s gift coin vrijednošću ako zna
+                }
                 return 0;
             }
 
             function normalizeGiftKey(value) {
-                return String(value || '')
-                    .normalize('NFKD')
-                    .replace(/[̀-ͯ]/g, '')
-                    .toLowerCase()
-                    .replace(/['’`]/g, '')
-                    .replace(/&/g, ' and ')
-                    .replace(/[^a-z0-9]+/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-            }
-
-            function getGiftNameVariants(name) {
-                const base = normalizeGiftKey(name);
-                const variants = new Set();
-                if (!base) return [];
-                variants.add(base);
-
-                const tokens = base.split(' ').filter(Boolean);
-                if (tokens.length >= 2) {
-                    if (tokens[0] && tokens[0].length === 1) {
-                        variants.add(tokens.slice(1).join(' '));
-                    }
-                    if (tokens[tokens.length - 1] && tokens[tokens.length - 1].length > 3 && tokens[tokens.length - 1].endsWith('s')) {
-                        variants.add(tokens.slice(0, -1).concat(tokens[tokens.length - 1].slice(0, -1)).join(' '));
-                    }
-                } else if (base.length > 3 && base.endsWith('s')) {
-                    variants.add(base.slice(0, -1));
-                }
-
-                return Array.from(variants).filter(Boolean);
-            }
-
-            function buildGiftSearchCandidates(text) {
-                const src = String(text || '');
-                const normalized = normalizeGiftKey(src);
-                const candidates = new Set();
-                if (normalized) candidates.add(normalized);
-
-                const rawVariants = [
-                    src.match(/\b(?:sent|gave|gifted|sends?|poklonio|poklonila|poslao|poslala|salje|šalje)\b\s+(.+)$/i)?.[1] || '',
-                    src.match(/\b(?:gift|poklon|dar)\b\s*[:\-]?\s*(.+)$/i)?.[1] || ''
-                ];
-                rawVariants.forEach((part) => {
-                    const cleaned = normalizeGiftKey(part);
-                    if (cleaned) candidates.add(cleaned);
-                });
-
-                Array.from(candidates).forEach((candidate) => {
-                    const stripped = candidate
-                        .replace(/\b(?:sent|gave|gifted|sends?|poklonio|poklonila|poslao|poslala|salje|salja|poklon|gift|gifts|dar|coins?|coin|diamonds?)\b/g, ' ')
-                        .replace(/\b(?:x|times?)\s*\d{1,4}\b/g, ' ')
-                        .replace(/\b\d{1,4}\s*(?:x|times?)\b/g, ' ')
-                        .replace(/\s+/g, ' ')
-                        .trim();
-                    if (stripped) candidates.add(stripped);
-                });
-
-                return Array.from(candidates)
-                    .map((v) => v.trim())
-                    .filter(Boolean)
-                    .sort((a, b) => b.length - a.length);
+                return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
             }
 
             function parseGiftCatalogLines(lines) {
@@ -16648,19 +16539,13 @@
 
             function getGiftCatalogEntries() {
                 try {
-                    const merged = new Map();
-                    const addRow = (row) => {
-                        const coins = Number(row?.coins || 0);
-                        const name = String(row?.name || '').trim();
-                        if (!name || !Number.isFinite(coins) || coins <= 0) return;
-                        getGiftNameVariants(name).forEach((key) => {
-                            if (key) merged.set(key, { name, coins });
-                        });
-                    };
-                    parseGiftCatalogLines(DEFAULT_GIFT_CATALOG_LINES.join('\n')).forEach((row) => addRow(row));
-                    giftCatalogFromPage.forEach((row) => addRow(row));
+                    const merged = parseGiftCatalogLines(DEFAULT_GIFT_CATALOG_LINES.join('\n'));
+                    giftCatalogFromPage.forEach((row) => {
+                        const key = normalizeGiftKey(row.name);
+                        if (key && row.coins > 0) merged.set(key, { name: row.name, coins: row.coins });
+                    });
                     const customLines = String(DB.getSettings().tkaiGiftCatalogCustom || '');
-                    parseGiftCatalogLines(customLines).forEach((row) => addRow(row));
+                    parseGiftCatalogLines(customLines).forEach((v, k) => merged.set(k, v));
                     return Array.from(merged.entries()).sort((a, b) => b[0].length - a[0].length);
                 } catch (_) {
                     return [];
@@ -16669,22 +16554,13 @@
 
             function detectGiftMetaFromText(text) {
                 const src = String(text || '').trim();
-                const candidates = buildGiftSearchCandidates(src);
+                const normalized = normalizeGiftKey(src);
                 const entries = getGiftCatalogEntries();
                 let found = null;
-                let bestScore = -1;
                 for (const [key, value] of entries) {
-                    if (!key) continue;
-                    for (const candidate of candidates) {
-                        if (!candidate) continue;
-                        let score = -1;
-                        if (candidate === key) score = 10000 + key.length;
-                        else if (candidate.startsWith(key + ' ') || candidate.endsWith(' ' + key) || candidate.includes(' ' + key + ' ')) score = 5000 + key.length;
-                        else if (candidate.includes(key)) score = 1000 + key.length;
-                        if (score > bestScore) {
-                            bestScore = score;
-                            found = value;
-                        }
+                    if (key && normalized.includes(key)) {
+                        found = value;
+                        break;
                     }
                 }
                 const qtyMatch = src.match(/\b(?:x|×)\s*(\d{1,4})\b/i);
@@ -16714,7 +16590,7 @@
                 const v = Number(value || 0);
                 if (!Number.isFinite(v) || v <= 0) return;
                 const now = Date.now();
-                const minGapMs = 8000;
+                const minGapMs = Math.max(2000, (Number(DB.getSettings().tkaiViewerSampleIntervalSec || 8) || 8) * 1000);
                 if (now - lastViewerSampleAt < minGapMs && v === lastViewerSampleValue) return;
                 viewerSamples.push(v);
                 viewerSamplePoints.push({ ts: now, value: v });
@@ -17546,7 +17422,7 @@
                 const hasTrendSignal = rawScores.some((v) => Math.abs(v) > 0.001);
                 const points = hasTrendSignal ? trend : fallbackTrend;
                 const scores = points.map((s) => Number(s.score || 0));
-                const mode = String(DB.getSettings().tkaiSentimentMomentumMode || 'both').toLowerCase();
+                const mode = String(DB.getSettings().tkaiSentimentMomentumMode || 'bars').toLowerCase();
 
                 const width = 320;
                 const hBars = 58;
@@ -17581,7 +17457,7 @@
                     bar.appendChild(negPart);
                     sentimentTrendEl.appendChild(bar);
                 });
-                sentimentTrendEl.style.display = '';
+                sentimentTrendEl.style.display = mode === 'bars' ? '' : 'none';
 
                 if (sentimentWaveEl) {
                     const midY = hWave / 2;
@@ -17591,13 +17467,12 @@
                         return `${x.toFixed(1)},${y.toFixed(1)}`;
                     }).join(' ');
                     sentimentWaveEl.innerHTML =
-                        `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="none" aria-hidden="true">` +
-                        `<defs><linearGradient id="tkaiSentWaveGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#bbf7d0"/><stop offset="48%" stop-color="#4ade80"/><stop offset="100%" stop-color="#15803d"/></linearGradient></defs>` +
-                        `<line x1="${pad}" y1="${midY.toFixed(1)}" x2="${(width - pad).toFixed(1)}" y2="${midY.toFixed(1)}" stroke="rgba(110,231,183,.18)" stroke-width="1" />` +
-                        `<polyline fill="none" stroke="rgba(74,222,128,.14)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" points="${wavePts}"></polyline>` +
-                        `<polyline fill="none" stroke="url(#tkaiSentWaveGrad)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" points="${wavePts}"></polyline>` +
+                        `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
+                        `<defs><linearGradient id="tkaiSentWaveGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22d3ee"/><stop offset="50%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#f472b6"/></linearGradient></defs>` +
+                        `<line x1="${pad}" y1="${midY.toFixed(1)}" x2="${(width - pad).toFixed(1)}" y2="${midY.toFixed(1)}" stroke="rgba(148,163,184,.26)" stroke-width="1" />` +
+                        `<polyline fill="none" stroke="url(#tkaiSentWaveGrad)" stroke-width="2" points="${wavePts}"></polyline>` +
                         `</svg>`;
-                    sentimentWaveEl.style.display = '';
+                    sentimentWaveEl.style.display = mode === 'wave' ? '' : 'none';
                 }
 
                 const avg = scores.reduce((acc, n) => acc + n, 0) / Math.max(1, scores.length);
@@ -17606,7 +17481,7 @@
                 const tempo = variance >= 2 ? 'visoka dinamika' : 'mirniji ritam';
                 if (sentimentAtmosphereEl) {
                     const source = hasTrendSignal ? 'live trend' : 'fallback trend';
-                    sentimentAtmosphereEl.innerHTML = `Atmosfera: <strong>${mood}</strong> • ${tempo} • score ${avg > 0 ? '+' : ''}${avg.toFixed(2)} <span style="color:rgba(187,247,208,.72)">(${source})</span>`;
+                    sentimentAtmosphereEl.textContent = `Atmosfera: ${mood} • ${tempo} • score ${avg > 0 ? '+' : ''}${avg.toFixed(2)} (${source})`;
                 }
             }
 
@@ -18705,7 +18580,16 @@
             });
             expandLiveBtn?.addEventListener('click', () => {
                 if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
-                else openLiveDashboardSafely();
+                else {
+                    const openFn = (typeof openLiveDashboardPopout === 'function')
+                        ? openLiveDashboardPopout
+                        : (typeof window.openLiveDashboardPopout === 'function' ? window.openLiveDashboardPopout : null);
+                    if (!openFn) {
+                        showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
+                        return;
+                    }
+                    openFn();
+                }
             });
             recJumpBtn?.addEventListener('click', () => {
                 if (DB.getSettings().tkaiRecommendationsPopoutEnabled !== true) {
@@ -18818,6 +18702,15 @@
                     else if (peakViewerCount > 0) viewerCountEl.textContent = 'peak ' + formatNum(peakViewerCount);
                     else viewerCountEl.textContent = '0';
                 }
+                if (viewerSampleMetaEl) {
+                    if (lastViewerSampleAt > 0) {
+                        const ageSec = Math.max(0, Math.floor((Date.now() - lastViewerSampleAt) / 1000));
+                        const sampleSec = Math.max(2, Number(DB.getSettings().tkaiViewerSampleIntervalSec || 8) || 8);
+                        viewerSampleMetaEl.textContent = 'sample ' + formatNum(sampleSec) + 's • zadnje ' + formatNum(ageSec) + 's';
+                    } else {
+                        viewerSampleMetaEl.textContent = 'Čekam očitanje';
+                    }
+                }
                 if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
                 // ── Nove statistike ──────────────────────────────────────────────
                 const msgsPerMin = elapsedMin > 0 ? (collectedMessages.length / elapsedMin).toFixed(1) : '-';
@@ -18922,19 +18815,10 @@
                     const countBadge = '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + (message.count || 1) + '</span>';
                     const coins = Number(message.totalCoins || 0);
                     const unitCoins = Number(message.unitCoins || 0);
-                    const debugSource = message.giftDetectedFromCatalog === false ? 'fallback' : 'catalog';
-                    const debugRaw = String(message.giftRawText || message.text || '').trim();
-                    const debugLine = '<div style="margin-top:4px;font-size:10px;line-height:1.35;color:rgba(226,232,240,.72);word-break:break-word">'
-                        + 'debug: ' + escHtml(debugRaw || '-')
-                        + ' -> ' + escHtml(String(message.giftName || message.text || '-'))
-                        + ' | unit ' + formatNum(unitCoins) + ' | qty ' + formatNum(message.quantity || 1)
-                        + ' | total ' + formatNum(coins) + ' | ' + escHtml(debugSource)
-                        + '</div>';
                     const coinsBadge = coins > 0 ? '<span style="margin-left:auto;color:#ffd47a" title="' + (unitCoins > 0 ? ('1x = ' + formatNum(unitCoins) + ' 🪙') : 'gift value') + '">' + formatNum(coins) + ' 🪙</span>' : '';
                     row.innerHTML = '<div class="g-user"><span>' + icon + '</span><span>' + escHtml(message.user) + '</span></div>'
                         .replace('</div>', coinsBadge + countBadge + '</div>')
-                        + '<div>' + escHtml(message.giftName || message.text) + '</div>'
-                        + debugLine;
+                        + '<div>' + escHtml(message.giftName || message.text) + '</div>';
                     giftGalleryEl.appendChild(row);
                 });
                 if (giftCountEl) {
@@ -19293,15 +19177,34 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               tryTake(label, label);
             });
           } catch (_) {}
+          try {
+            const directTikTokViewerSelectors = [
+              "#tiktok-live-main-container-id > div.bg-UIPageFlat1.tiktok-q76ycn.eayczbk0 > div.tiktok-i9gxme.eayczbk1 > div > div.relative.flex.flex-col.flex-shrink-0.rounded-\\[16px\\].my-12.bg-UIPageFlat2.border-l-\\[0\\.5px\\].overflow-hidden.ltr\\:mr-12.rtl\\:ml-12 > div.relative.w-full.flex.flex-col.flex-grow.overflow-hidden.rounded-\\[inherit\\] > div > div.w-full.h-auto.flex.flex-col.bg-UIPageFlat2.will-change-\\[height\\].absolute > div.w-full.h-30.px-16.pt-12.mb-4.flex.justify-between.items-center > div.flex.justify-start.items-center > div.P4-Medium.font-semibold.text-UIText1.ltr\\:mr-6.rtl\\:ml-6",
+              "#tiktok-live-main-container-id div.P4-Medium.font-semibold.text-UIText1.ltr\\:mr-6.rtl\\:ml-6"
+            ];
+            for (const sel of directTikTokViewerSelectors) {
+              const el = document.querySelector(sel);
+              const txt = (el?.textContent || "").replace(/\s+/g, " ").trim();
+              if (!txt) continue;
+              tryTake(txt, "direct tiktok viewers header");
+              break;
+            }
+          } catch (_) {}
           const viewerSelectors = [
             '[data-e2e="live-room-viewer-count"]',
             '[data-e2e="live-room-info-viewer-count"]',
             '[data-e2e*="viewer-count"]',
             '[data-e2e*="watching"]',
+            '[data-e2e*="user-count"]',
+            '[data-e2e*="audience"]',
             '[class*="ViewerCount"]',
             '[class*="viewerCount"]',
             '[class*="WatchCount"]',
-            '[class*="watch-count"]'
+            '[class*="watch-count"]',
+            '[class*="Audience"]',
+            '[class*="audience"]',
+            '[class*="UserCount"]',
+            '[class*="userCount"]'
           ];
           for (const sel of viewerSelectors) {
             try {
@@ -19329,6 +19232,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 tryTake(m[1], txt);
                 break;
               }
+            });
+          } catch (_) {}
+          try {
+            document.querySelectorAll('span, div, strong, p').forEach(function(el) {
+              const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+              if (!txt || txt.length > 24) return;
+              const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+              if (!rect || rect.width <= 0 || rect.height <= 0) return;
+              if (rect.top < 0 || rect.top > window.innerHeight * 0.24) return;
+              if (rect.left < window.innerWidth * 0.62) return;
+              const closestLabel = el.closest('[aria-label]')?.getAttribute('aria-label') || '';
+              const ownLabel = el.getAttribute('aria-label') || '';
+              const title = el.getAttribute('title') || '';
+              const ctx = (ownLabel + ' ' + closestLabel + ' ' + title + ' ' + (el.parentElement?.textContent || '')).replace(/\s+/g, ' ').trim();
+              const looksPlainCounter = /^(?:\d[\d.,\s]*[km]?)(?:\+)?$/.test(txt);
+              if (!viewerHint.test(ctx) && !looksPlainCounter) return;
+              if (blockedContext.test(ctx) && !viewerHint.test(ctx)) return;
+              tryTake(txt, ctx || 'top-right live header');
             });
           } catch (_) {}
           return maxViewer;
@@ -19411,11 +19332,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (!txt || txt.length < 4) return;
                 const r = txt.match(/#?\s*([1-9])\s*[.)-]?\s*(.{2,40}?)\s+(\d[\d.,\s]*[km]?)(?:\s*(coins?|coin|coina|kovanica|diamonds?))?/i);
                 if (!r) return;
-                rows.push({
-                  rank: parseInt(r[1], 10) || 99,
-                  user: String(r[2] || '').trim().slice(0, 40),
-                  coins: parseNumberLike(r[3])
-                });
+                pushRow(r[1], r[2], r[3], sel);
               });
             } catch (_) {}
           }
@@ -19423,7 +19340,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           rows.forEach((row) => {
             if (!row.user) return;
             const prev = dedupe.get(row.user);
-            if (!prev || row.coins > prev.coins) dedupe.set(row.user, row);
+            if (!prev || row.coins > prev.coins || (row.coins === prev.coins && row.rank < prev.rank)) dedupe.set(row.user, row);
           });
           return Array.from(dedupe.values())
             .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
@@ -19829,17 +19746,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
                         if (!existing.has(id)) {
                             const giftMeta = detectGiftMetaFromText(message.text || '');
-                            collectedMessages.push({
-                                ...message,
-                                id,
-                                ts: nowTs,
-                                coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text),
-                                giftName: giftMeta.giftName || message.text,
-                                quantity: giftMeta.quantity || 1,
-                                unitCoins: giftMeta.unitCoins || 0,
-                                giftRawText: String(message.text || ''),
-                                giftDetectedFromCatalog: Number(giftMeta.unitCoins || 0) > 0
-                            });
+                            collectedMessages.push({ ...message, id, ts: nowTs, coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                             existing.add(id);
                             existingRecent.set(recentKey, nowTs);
                             added += 1;
@@ -20095,7 +20002,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 lastViewerSampleAt = 0;
                 lastViewerSampleValue = 0;
                 sessionStartedAt = null;
-                joinFeedFreshSinceTs = 0;
                 targetedChatUser = '';
                 _cardiffSentiment = null;
                 _cardiffSentimentAt = 0;
@@ -20261,7 +20167,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
                     collectedMessages = msgs.slice(-maxKeep);
                     selectedMsgIds.clear();
-                    joinFeedFreshSinceTs = Date.now();
                     sessionStartedAt = Number(saved?.sessionStartedAt || 0) || Date.now();
                     liveViewerCount = Number(saved?.liveViewerCount || 0) || 0;
                     peakViewerCount = Number(saved?.peakViewerCount || 0) || 0;
@@ -20414,7 +20319,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }
                 scanActive = true;
                 turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
-                joinFeedFreshSinceTs = Date.now();
                 if (!sessionStartedAt) sessionStartedAt = Date.now();
                 toggleBtn.textContent = '⏹ Skeniranje OFF';
                 toggleBtn.className = 'tkai-scan-btn stop';
@@ -20432,12 +20336,27 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
             ccReadBtn?.addEventListener('click', () => {
                 const next = !isCcReadEnabled();
+                if (!isTkaiAudioEnabled() && next) {
+                    DB.saveSetting('tkaiAudioEnabled', true);
+                }
                 DB.saveSetting('tkaiCcReadEnabled', next);
+                updateTkaiAudioButton();
                 updateCcReadButton();
                 if (!next && 'speechSynthesis' in window && window.speechSynthesis) {
                     speechSynthesis.cancel();
                 }
                 showToast(next ? '💬🔊 CC čitanje uključeno' : '💬🔇 CC čitanje isključeno');
+            });
+
+            audioToggleBtn?.addEventListener('click', () => {
+                const next = !isTkaiAudioEnabled();
+                DB.saveSetting('tkaiAudioEnabled', next);
+                updateTkaiAudioButton();
+                updateCcReadButton();
+                if (!next && 'speechSynthesis' in window && window.speechSynthesis) {
+                    speechSynthesis.cancel();
+                }
+                showToast(next ? '🔊 AI audio uključen' : '🔇 AI audio isključen');
             });
 
             document.querySelector('#stab-ai-live-chat [data-setting="tkaiCcReadEnabled"]')?.addEventListener('click', () => {
@@ -20449,7 +20368,23 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }, 0);
             });
 
+            document.querySelector('#stab-ai-live-chat [data-setting="tkaiAudioEnabled"]')?.addEventListener('click', () => {
+                setTimeout(() => {
+                    updateTkaiAudioButton();
+                    updateCcReadButton();
+                    if (!isTkaiAudioEnabled() && 'speechSynthesis' in window && window.speechSynthesis) {
+                        speechSynthesis.cancel();
+                    }
+                }, 0);
+            });
+
+            document.querySelector('#stab-ai-live-chat [data-setting="tkaiSongRecOutputDevice"]')?.addEventListener('change', () => {
+                showToast('🎧 SongRec output uređaj spremljen');
+            });
+
             updateCcReadButton();
+            updateTkaiAudioButton();
+            refreshTkaiSongRecOutputs();
 
             genBtn?.addEventListener('click', () => {
                 const selected = selectedMsgIds.size
@@ -20501,15 +20436,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 vis('tkaiShadowbanCard', 'tkaiShowShadowban');
                 vis('tkaiSpikesCard', 'tkaiShowSpikes');
                 vis('tkaiRecommendationsCard', 'tkaiShowRecommendations');
-                const joinsCard = document.getElementById('tkaiJoinsCard');
-                if (joinsCard) joinsCard.style.display = '';
+                vis('tkaiJoinsCard', 'tkaiScanJoins');
                 vis('tkaiQuestionsCard', 'tkaiShowQuestions');
                 vis('tkaiPieCard', 'tkaiShowPieBreakdown');
                 const songCard = document.getElementById('tkaiSongsCard');
                 if (songCard) songCard.style.display = '';
                 if (recJumpBtn) {
                     const popEnabled = s.tkaiRecommendationsPopoutEnabled === true;
-                    if (!popEnabled) {
+                    const jumpEnabled = s.tkaiRecommendationJumpPulseEnabled === true;
+                    if (!popEnabled || !jumpEnabled) {
                         recJumpBtn.style.display = 'none';
                         recJumpBtn.classList.remove('live');
                     }
@@ -21847,7 +21782,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     maxOutputTokens: 2000,
                     systemPrompt: `Ti si profesionalni prevoditelj. Prevedi tekst precizno i prirodno na zadani jezik.`
                 });
-                setTranslateResult(resultEl, translated || '(prazan odgovor)');
+                if (!String(translated || '').trim()) {
+                    const fallback = await translateViaGoogle(trimmed, lang);
+                    setTranslateResult(resultEl, fallback || '(prazan odgovor)');
+                } else {
+                    setTranslateResult(resultEl, translated);
+                }
             } catch (e) {
                 setTranslateResult(resultEl, '❌ ' + (e.message || String(e)));
             } finally {
@@ -24767,7 +24707,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 this.value = '';
             });
             document.getElementById('btnExportData')?.addEventListener('click', () => {
-                const data = { bookmarks: DB.getBookmarks(), history: DB.getHistory(), settings: DB.getSettings(), extensions: JSON.parse(localStorage.getItem('ex_extensions') || '[]'), exportDate: new Date().toISOString(), browser: 'EtherX' };
+                let aiLiveChatConfig = {};
+                try { aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {}; } catch (_) { aiLiveChatConfig = {}; }
+                const data = { bookmarks: DB.getBookmarks(), history: DB.getHistory(), settings: DB.getSettings(), aiLiveChatConfig, extensions: JSON.parse(localStorage.getItem('ex_extensions') || '[]'), exportDate: new Date().toISOString(), browser: 'EtherX' };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'etherx-export-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
                 showToast('Data exported successfully');
@@ -25736,7 +25678,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 });
             })();
             if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
-            if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || 'http://localhost:11434/v1';
+            if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL;
             getStoredApiKey('gemini').then(gk => {
                 if (gk && geminiKeyEl) geminiKeyEl.value = gk;
                 getStoredApiKey('openai').then(ok_ => {
@@ -25834,7 +25776,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                         const d = await r.json();
                         models = (d.data || []).map(m => m.id).filter(Boolean).sort();
                     } else if (provider === 'ollama') {
-                        const baseUrl = normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || 'http://localhost:11434/v1');
+                        const baseUrl = normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || OLLAMA_REMOTE_DEFAULT_BASE_URL);
                         const r = await fetch(baseUrl + '/models').catch(() => null);
                         if (!r || !r.ok) throw new Error('Ollama nije dostupan na ' + baseUrl);
                         const d = await r.json();
@@ -25907,7 +25849,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 const lBaseUrl = normalizeLocalAiBaseUrl(localBaseUrlEl?.value);
                 const grKey = groqKeyEl?.value.trim() || '';
                 const orKey = openrouterKeyEl?.value.trim() || '';
-                const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || 'http://localhost:11434/v1');
+                const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || OLLAMA_REMOTE_DEFAULT_BASE_URL);
                 DB.saveSetting('aiProvider', p);
                 DB.saveSetting('aiModel', modelSel.value);
                 DB.saveSetting('translateAiProvider', document.getElementById('settingsTranslateProvider')?.value || '__main__');
@@ -29496,7 +29438,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             // ── Backup ───────────────────────────────────────────────────────────────
             document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
                 const allSettings = await window.etherx?.settings?.get?.() || {};
-                const json = JSON.stringify(allSettings, null, 2);
+                let aiLiveChatConfig = {};
+                try { aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {}; } catch (_) { aiLiveChatConfig = {}; }
+                const payload = {
+                    exportedAt: new Date().toISOString(),
+                    settings: allSettings,
+                    aiLiveChatConfig
+                };
+                const json = JSON.stringify(payload, null, 2);
                 const blob = new Blob([json], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -29516,7 +29465,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     const text = await file.text();
                     try {
                         const imported = JSON.parse(text);
-                        await window.etherx?.settings?.set?.(imported);
+                        const normalizedSettings = imported && typeof imported === 'object' && imported.settings && typeof imported.settings === 'object'
+                            ? imported.settings
+                            : imported;
+                        const aiLiveChatConfig = imported && typeof imported === 'object' && imported.aiLiveChatConfig && typeof imported.aiLiveChatConfig === 'object'
+                            ? imported.aiLiveChatConfig
+                            : null;
+                        await window.etherx?.settings?.set?.(normalizedSettings);
+                        if (aiLiveChatConfig) localStorage.setItem('ex_tkai_cfg', JSON.stringify(aiLiveChatConfig));
                         alert('Postavke uspješno učitane. Browser će se restartirati.');
                         window.location.reload();
                     } catch (err) {

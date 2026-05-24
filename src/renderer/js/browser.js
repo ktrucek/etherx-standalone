@@ -17008,7 +17008,7 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         document.getElementById('bmSearchInput').value = '';
         _bmRenderTree();
         _bmRenderList();
-        document.getElementById('bmSearchInput').focus();
+        document.getElementById('bmSearchInput').focus();nasta
     };
 
     document.getElementById('closeBmManager').addEventListener('click', () => {

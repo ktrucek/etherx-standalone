@@ -366,18 +366,14 @@ except Exception as e:
 PYEOF
 fi
 
-# ── Optional: keep browser.html in sync with src/index.html ──────────────────
+# ── Keep browser.html in sync with src/index.html ────────────────────────────
 TARGET_BROWSER_HTML="src/renderer/browser.html"
-if [[ "$SYNC_BROWSER_HTML" == true ]]; then
-  if [[ -f "$TARGET_BROWSER_HTML" ]]; then
-    info "Syncing $TARGET_BROWSER_HTML ← src/index.html"
-    cp -f "src/index.html" "$TARGET_BROWSER_HTML"
-    success "$TARGET_BROWSER_HTML synced from src/index.html"
-  else
-    warn "No browser.html target found at $TARGET_BROWSER_HTML — skipping sync"
-  fi
+if [[ -f "$TARGET_BROWSER_HTML" ]]; then
+  info "Syncing $TARGET_BROWSER_HTML ← src/index.html"
+  cp -f "src/index.html" "$TARGET_BROWSER_HTML"
+  success "$TARGET_BROWSER_HTML synced from src/index.html"
 else
-  info "Skipping browser.html sync (use --sync-browser-html to force sync from src/index.html)"
+  warn "No browser.html target found at $TARGET_BROWSER_HTML — skipping sync"
 fi
 
 # ── Git commit and tag ─────────────────────────────────────────────────────────
