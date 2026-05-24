@@ -5295,22 +5295,24 @@
         .tkai-sentiment-bars {
             display: block;
             width: 100%;
+            max-width: 520px;
             height: 64px;
             border: 1px solid rgba(148, 163, 184, .25);
             border-radius: 8px;
             background: linear-gradient(180deg, rgba(15, 23, 42, .55), rgba(15, 23, 42, .12));
             padding: 4px;
-            margin-top: 4px;
+            margin: 4px auto 0;
         }
 
         .tkai-sentiment-wave {
             width: 100%;
+            max-width: 520px;
             height: 64px;
             border: 1px solid rgba(94, 234, 212, .24);
             border-radius: 8px;
             background: linear-gradient(180deg, rgba(30, 64, 175, .22), rgba(15, 23, 42, .18));
             padding: 4px;
-            margin-top: 6px;
+            margin: 6px auto 0;
         }
 
         .tkai-sentiment-meta {
@@ -9470,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.252</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.253</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10700,6 +10702,18 @@
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
+                                            <div class="s-row-label">◔ Pie uključuje Chat</div>
+                                        </div>
+                                        <div class="toggle on" data-setting="tkaiPieIncludeChat"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">◔ Pie uključuje Gifts</div>
+                                        </div>
+                                        <div class="toggle on" data-setting="tkaiPieIncludeGift"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
                                             <div class="s-row-label">◔ Pie uključuje Join</div>
                                         </div>
                                         <div class="toggle" data-setting="tkaiPieIncludeJoin"></div>
@@ -10931,7 +10945,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.252</span></div>
+                                    v<span id="helpVersionNum2">2.4.253</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -13419,11 +13433,16 @@
                 const openFn = (typeof openLiveDashboardPopout === 'function')
                     ? openLiveDashboardPopout
                     : (typeof window.openLiveDashboardPopout === 'function' ? window.openLiveDashboardPopout : null);
-                if (!openFn) {
-                    showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
+                if (openFn) {
+                    openFn();
                     return;
                 }
-                openFn();
+                const liveBtn = document.getElementById('tkaiExpandLiveBtn');
+                if (liveBtn) {
+                    setTimeout(() => liveBtn.click(), 60);
+                    return;
+                }
+                showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
             };
             document.getElementById('btnTkaiToolsOpenLive')?.addEventListener('click', () => {
                 document.getElementById('settingsPanel')?.classList.remove('open');
@@ -17040,6 +17059,8 @@
                     pct: Math.round((row.value / msgTypeTotal) * 100)
                 })).filter((row) => {
                     const cfg = DB.getSettings();
+                    if (row.key === 'chat') return cfg.tkaiPieIncludeChat !== false;
+                    if (row.key === 'gift') return cfg.tkaiPieIncludeGift !== false;
                     if (row.key === 'join') return cfg.tkaiPieIncludeJoin === true;
                     if (row.key === 'share') return cfg.tkaiPieIncludeShare === true;
                     if (row.key === 'caption') return cfg.tkaiPieIncludeCaption !== false;
@@ -17814,6 +17835,7 @@
                     '</div>' +
                     '</div>' +
                     '<div style="display:flex;align-items:center;gap:6px">' +
+                    '<button id="tkaiRecPopStop" class="tkai-collapse-btn" title="Zaustavi recommendations skakanje">⛔</button>' +
                     '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
                     '</div>' +
                     '</div>' +
@@ -17833,6 +17855,16 @@
                     });
                 }
                 wrap.querySelector('#tkaiRecPopClose')?.addEventListener('click', closeRecommendationsPopout);
+                wrap.querySelector('#tkaiRecPopStop')?.addEventListener('click', () => {
+                    DB.saveSetting('tkaiRecommendationsPopoutEnabled', false);
+                    DB.saveSetting('tkaiRecommendationJumpPulseEnabled', false);
+                    if (recJumpBtn) {
+                        recJumpBtn.style.display = 'none';
+                        recJumpBtn.classList.remove('live');
+                    }
+                    closeRecommendationsPopout();
+                    showToast('⛔ Recommendations skakanje ugašeno');
+                });
                 const head = wrap.querySelector('#tkaiRecPopHead');
                 let dragging = false;
                 let dx = 0;
@@ -19359,7 +19391,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
             return '';
           })();
-          const user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
+          let user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
           const textBase = textEl ? textEl.textContent.trim() : '';
           const candidateParts = collectCandidateTextParts(el, user);
           const assembledText = candidateParts.join(' ').trim();
@@ -19384,7 +19416,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           });
           
           const cleaned = cleanChatText(rawText, user);
-          const text = cleaned.slice(0, 900);
+                    const text = cleaned.slice(0, 900);
           if (text && text.length > 1) {
             const low = text.toLowerCase();
             // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
@@ -19394,6 +19426,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
             const isShare = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i.test(low);
+                        if ((!user || String(user).toLowerCase() === 'unknown') && (isGift || isJoin || isShare)) {
+                            const fromText = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)\b/i);
+                            if (fromText && fromText[1]) user = fromText[1].trim().slice(0, 60);
+                        }
             let levelHint = null;
             if (isJoin) {
               const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
@@ -19405,10 +19441,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
                         const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
                         if (isLikelyNoiseChatText(text, user, messageType)) return;
-                        if ((messageType === 'gift' || messageType === 'join') && (!user || String(user).toLowerCase() === 'unknown')) return;
+                        if ((messageType === 'gift' || messageType === 'join' || messageType === 'share') && (!user || String(user).toLowerCase() === 'unknown')) return;
                         const looksLikeCatalogGiftLine = /^(?:unknown\s*[·•|:\-]?\s*)?\d{1,7}\s+[^\s].*$/i.test(text)
                             || /^[^\d]{2,40}\s*[·•|:\-]\s*\d{1,7}(?:\s*(?:coins?|diamonds?|🪙))?$/i.test(text);
-                        if (messageType === 'gift' && looksLikeCatalogGiftLine && !/\b(?:sent|gave)\b/i.test(low)) return;
+                        if (looksLikeCatalogGiftLine && !/\b(?:sent|gave)\b/i.test(low)) return;
 
                         results.push({
               user: user || 'unknown',
@@ -19520,25 +19556,30 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         return 0;
                     }
                     const existing = new Set(collectedMessages.map(message => message.id));
-                    const existingCounts = new Map();
+                    const existingRecent = new Map();
                     collectedMessages.forEach(message => {
-                        const k = `${message.type || 'chat'}:${message.user}:${message.text}`;
-                        existingCounts.set(k, (existingCounts.get(k) || 0) + 1);
+                        const k = `${message.type || 'chat'}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
+                        existingRecent.set(k, Number(message.ts || 0));
                     });
                     const incomingSeen = new Set();
                     let added = 0;
                     const incomingCaptions = [];
+                    const nowTs = Date.now();
+                    const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
                     filteredMessages.forEach((message) => {
                         const baseKey = `${message.type || 'chat'}:${message.user}:${message.text}`;
                         const inKey = `${message.mid || ''}|${message.type || ''}|${message.user || ''}|${message.text || ''}`;
                         if (incomingSeen.has(inKey)) return;
                         incomingSeen.add(inKey);
                         const id = message.mid ? `mid:${message.mid}` : baseKey;
+                        const recentKey = `${message.type || 'chat'}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
+                        const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
+                        if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
                         if (!existing.has(id)) {
                             const giftMeta = detectGiftMetaFromText(message.text || '');
-                            collectedMessages.push({ ...message, id, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
+                            collectedMessages.push({ ...message, id, ts: nowTs, coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                             existing.add(id);
-                            existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
+                            existingRecent.set(recentKey, nowTs);
                             added += 1;
                             if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
                         }
@@ -25704,7 +25745,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 try {
                     const sample = 'Hello world, this is a translation test.';
                     const tr = await window.etherx?.ai?.translate?.(sample, 'hr');
-                    const out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
+                    let out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
+                    if (!String(out || '').trim()) {
+                        out = await translateViaGoogle(sample, 'hr');
+                    }
                     tests.push({ ok: !!out, name: 'Prijevod (AI manager)', detail: out ? 'Radi ✓ — "' + String(out).slice(0, 80) + '"' : 'Prazan odgovor' });
                 } catch (e) {
                     tests.push({ ok: false, name: 'Prijevod (AI manager)', detail: e.message });
