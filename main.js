@@ -219,6 +219,77 @@ const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
 let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
 const _downloadTrackedSessions = new Set();
 let _envBootstrapDone = false;
+const RENDERER_STORAGE_FILE = "renderer-storage.json";
+let rendererStorageCache = null;
+
+function _getRendererStorageFilePath() {
+  return path.join(app.getPath("userData"), RENDERER_STORAGE_FILE);
+}
+
+function _loadRendererStorage() {
+  if (rendererStorageCache) return rendererStorageCache;
+
+  try {
+    const storagePath = _getRendererStorageFilePath();
+    if (!fs.existsSync(storagePath)) {
+      rendererStorageCache = {};
+      return rendererStorageCache;
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(storagePath, "utf8"));
+    rendererStorageCache =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? Object.fromEntries(
+          Object.entries(parsed).map(([key, value]) => [
+            String(key),
+            String(value ?? ""),
+          ]),
+        )
+        : {};
+  } catch (error) {
+    console.error("Renderer storage load failed:", error.message);
+    rendererStorageCache = {};
+  }
+
+  return rendererStorageCache;
+}
+
+function _persistRendererStorage() {
+  try {
+    const storagePath = _getRendererStorageFilePath();
+    fs.mkdirSync(path.dirname(storagePath), { recursive: true });
+    fs.writeFileSync(
+      storagePath,
+      JSON.stringify(rendererStorageCache || {}, null, 2),
+      "utf8",
+    );
+    return { ok: true };
+  } catch (error) {
+    console.error("Renderer storage save failed:", error.message);
+    return { ok: false, error: error.message };
+  }
+}
+
+function _getRendererStorageSnapshot() {
+  return { ..._loadRendererStorage() };
+}
+
+function _setRendererStorageItem(key, value) {
+  const store = _loadRendererStorage();
+  store[String(key)] = String(value ?? "");
+  return _persistRendererStorage();
+}
+
+function _removeRendererStorageItem(key) {
+  const store = _loadRendererStorage();
+  delete store[String(key)];
+  return _persistRendererStorage();
+}
+
+function _clearRendererStorage() {
+  rendererStorageCache = {};
+  return _persistRendererStorage();
+}
 
 function _parseEnvLocalText(raw) {
   const out = {};
@@ -1590,6 +1661,18 @@ function setupIPC() {
   ipcMain.on("get-window-id", (event) => {
     event.returnValue =
       BrowserWindow.fromWebContents(event.sender)?.id || "main";
+  });
+  ipcMain.on("storage:getSnapshot", (event) => {
+    event.returnValue = _getRendererStorageSnapshot();
+  });
+  ipcMain.on("storage:setItem", (event, key, value) => {
+    event.returnValue = _setRendererStorageItem(key, value);
+  });
+  ipcMain.on("storage:removeItem", (event, key) => {
+    event.returnValue = _removeRendererStorageItem(key);
+  });
+  ipcMain.on("storage:clear", (event) => {
+    event.returnValue = _clearRendererStorage();
   });
 
   const noDb = () => ({ ok: false, error: "Database not available" });

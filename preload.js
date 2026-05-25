@@ -249,6 +249,13 @@ contextBridge.exposeInMainWorld('etherx', {
     chooseProfilePicture: () => ipcRenderer.invoke('app:chooseProfilePicture'),
   },
 
+  storage: {
+    getSnapshot: () => ipcRenderer.sendSync('storage:getSnapshot'),
+    setItem: (key, value) => ipcRenderer.sendSync('storage:setItem', key, value),
+    removeItem: (key) => ipcRenderer.sendSync('storage:removeItem', key),
+    clear: () => ipcRenderer.sendSync('storage:clear'),
+  },
+
   // ── DevTools ──────────────────────────────────────────────────────────────────
   devtools: {
     toggle: () => ipcRenderer.send('devtools:toggle'),

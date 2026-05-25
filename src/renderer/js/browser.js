@@ -34,6 +34,61 @@ if (!window.electronWebview) {
     const _ntpEl = document.getElementById('ntpPage');
     if (_ntpEl) _ntpEl.style.display = 'flex';
 }
+const localStorage = (() => {
+    const nativeStorage = window.localStorage;
+    if (!window.electronWebview || !window.etherx?.storage?.getSnapshot) {
+        return nativeStorage;
+    }
+
+    try {
+        const snapshot = window.etherx.storage.getSnapshot() || {};
+        const cache = new Map(Object.entries(snapshot).map(([key, value]) => [String(key), String(value ?? '')]));
+
+        // Migrate any values still sitting in Chromium's file-origin storage into
+        // a stable file under userData so packaged updates do not look like a reset.
+        try {
+            for (let index = 0; index < nativeStorage.length; index += 1) {
+                const key = nativeStorage.key(index);
+                if (key == null || cache.has(key)) continue;
+                const value = nativeStorage.getItem(key);
+                if (value == null) continue;
+                cache.set(key, String(value));
+                window.etherx.storage.setItem(key, value);
+            }
+        } catch (_) { }
+
+        return {
+            getItem(key) {
+                const normalizedKey = String(key);
+                return cache.has(normalizedKey) ? cache.get(normalizedKey) : null;
+            },
+            setItem(key, value) {
+                const normalizedKey = String(key);
+                const normalizedValue = String(value);
+                cache.set(normalizedKey, normalizedValue);
+                window.etherx.storage.setItem(normalizedKey, normalizedValue);
+            },
+            removeItem(key) {
+                const normalizedKey = String(key);
+                cache.delete(normalizedKey);
+                window.etherx.storage.removeItem(normalizedKey);
+            },
+            clear() {
+                cache.clear();
+                window.etherx.storage.clear();
+            },
+            key(index) {
+                return Array.from(cache.keys())[index] ?? null;
+            },
+            get length() {
+                return cache.size;
+            }
+        };
+    } catch (error) {
+        console.error('Persistent storage bridge unavailable:', error);
+        return nativeStorage;
+    }
+})();
 let _ctxSelectionText = '';
 let _ctxIsEditable = false;
 let _lastSavePromptKey = '';
@@ -17008,7 +17063,7 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         document.getElementById('bmSearchInput').value = '';
         _bmRenderTree();
         _bmRenderList();
-        document.getElementById('bmSearchInput').focus();nasta
+        document.getElementById('bmSearchInput').focus(); nasta
     };
 
     document.getElementById('closeBmManager').addEventListener('click', () => {

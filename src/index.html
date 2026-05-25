@@ -9472,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.257</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.258</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10346,9 +10346,11 @@
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Viewer sample interval (sekunde)</div>
-                                            <div class="s-row-desc">Minimalni razmak između zapisa za Viewers i Viewer trend</div>
+                                            <div class="s-row-desc">Minimalni razmak između zapisa za Viewers i Viewer
+                                                trend</div>
                                         </div>
-                                        <input type="number" class="s-input" data-setting="tkaiViewerSampleIntervalSec" min="2" max="120" value="8" style="width:70px">
+                                        <input type="number" class="s-input" data-setting="tkaiViewerSampleIntervalSec"
+                                            min="2" max="120" value="8" style="width:70px">
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -10952,7 +10954,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.257</span></div>
+                                    v<span id="helpVersionNum2">2.4.258</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -11251,7 +11253,8 @@
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Viewers</div>
                         <div class="tkai-stat-value" id="tkaiViewerCount">-</div>
-                        <div id="tkaiViewerSampleMeta" style="font-size:9px;color:var(--text3);margin-top:2px">Čekam očitanje</div>
+                        <div id="tkaiViewerSampleMeta" style="font-size:9px;color:var(--text3);margin-top:2px">Čekam
+                            očitanje</div>
                     </div>
                     <div class="tkai-stat-card">
                         <div class="tkai-stat-label">Gift Coins</div>
@@ -11333,7 +11336,8 @@
                 </div>
                 <div class="tkai-insights-row triple">
                     <div class="tkai-insights-card" id="tkaiGiftStatsCard">
-                        <div class="tkai-insights-title" title="Detaljna statistika giftova i giftera">Gift stats<span>🪙</span></div>
+                        <div class="tkai-insights-title" title="Detaljna statistika giftova i giftera">Gift
+                            stats<span>🪙</span></div>
                         <div class="tkai-metric-top" id="tkaiGiftStatsMeta">0 giftova • 0 tipova</div>
                         <ul class="tkai-insights-list" id="tkaiGiftStatsList">
                             <li>Nema gift statistike.</li>
@@ -12634,6 +12638,61 @@
             const _ntpEl = document.getElementById('ntpPage');
             if (_ntpEl) _ntpEl.style.display = 'flex';
         }
+        const localStorage = (() => {
+            const nativeStorage = window.localStorage;
+            if (!window.electronWebview || !window.etherx?.storage?.getSnapshot) {
+                return nativeStorage;
+            }
+
+            try {
+                const snapshot = window.etherx.storage.getSnapshot() || {};
+                const cache = new Map(Object.entries(snapshot).map(([key, value]) => [String(key), String(value ?? '')]));
+
+                // Migrate any values still sitting in Chromium's file-origin storage into
+                // a stable file under userData so packaged updates do not look like a reset.
+                try {
+                    for (let index = 0; index < nativeStorage.length; index += 1) {
+                        const key = nativeStorage.key(index);
+                        if (key == null || cache.has(key)) continue;
+                        const value = nativeStorage.getItem(key);
+                        if (value == null) continue;
+                        cache.set(key, String(value));
+                        window.etherx.storage.setItem(key, value);
+                    }
+                } catch (_) { }
+
+                return {
+                    getItem(key) {
+                        const normalizedKey = String(key);
+                        return cache.has(normalizedKey) ? cache.get(normalizedKey) : null;
+                    },
+                    setItem(key, value) {
+                        const normalizedKey = String(key);
+                        const normalizedValue = String(value);
+                        cache.set(normalizedKey, normalizedValue);
+                        window.etherx.storage.setItem(normalizedKey, normalizedValue);
+                    },
+                    removeItem(key) {
+                        const normalizedKey = String(key);
+                        cache.delete(normalizedKey);
+                        window.etherx.storage.removeItem(normalizedKey);
+                    },
+                    clear() {
+                        cache.clear();
+                        window.etherx.storage.clear();
+                    },
+                    key(index) {
+                        return Array.from(cache.keys())[index] ?? null;
+                    },
+                    get length() {
+                        return cache.size;
+                    }
+                };
+            } catch (error) {
+                console.error('Persistent storage bridge unavailable:', error);
+                return nativeStorage;
+            }
+        })();
         let _ctxSelectionText = '';
         let _ctxIsEditable = false;
         let _lastSavePromptKey = '';
@@ -17178,7 +17237,7 @@
                 };
                 const joinSeen = new Set();
                 const joinScanBase = (Array.isArray(source) ? source : messages).slice(-(Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 300) || 300)));
-                const freshJoinCutoff = Number(joinFeedFreshSinceTs || 0);
+                const freshJoinCutoff = Number(sessionStartedAt || 0);
                 const joinSource = joinScanBase
                     .filter((m) => isJoinLikeMessage(m))
                     .filter((m) => !freshJoinCutoff || Number(m?.ts || now) >= freshJoinCutoff)
