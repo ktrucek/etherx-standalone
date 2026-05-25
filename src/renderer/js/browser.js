@@ -3919,12 +3919,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const n = parseInt(String(direct[1]).replace(/[^\d]/g, ''), 10);
             if (Number.isFinite(n)) return n;
         }
-        // "sent Rose x15" ili "sent × 3" — gift quantity (1 gift ≈ poklonski event, vraćamo 1 po komadu)
-        const xqty = t.match(/[×x]\s*(\d+)/i);
-        if (xqty) {
-            const qty = parseInt(xqty[1], 10);
-            if (Number.isFinite(qty) && qty > 0) return qty; // caller množi s gift coin vrijednošću ako zna
-        }
         return 0;
     }
 
@@ -6462,14 +6456,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const user = String(message.user || 'Chat user').trim() || 'Chat user';
             const meta = detectGiftMetaFromText(message.text || '');
             const eventCoins = Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0);
+            const eventUnitCoins = Number(message.unitCoins || meta.unitCoins || 0);
+            const eventQuantity = Math.max(1, Number(message.quantity || meta.quantity || 1));
             const key = `${message.type || 'chat'}|${user}|${meta.giftName}`;
             if (giftMap.has(key)) {
                 const row = giftMap.get(key);
                 row.count += 1;
                 row.totalCoins += eventCoins;
+                row.totalQuantity += eventQuantity;
+                if (!row.unitCoins && eventUnitCoins > 0) row.unitCoins = eventUnitCoins;
                 return;
             }
-            const entry = { ...message, user, giftName: meta.giftName, count: 1, totalCoins: eventCoins };
+            const entry = { ...message, user, giftName: meta.giftName, count: 1, totalCoins: eventCoins, totalQuantity: eventQuantity, unitCoins: eventUnitCoins || Number(message.unitCoins || 0) || 0 };
             giftMap.set(key, entry);
             aggregated.push(entry);
         });
@@ -6485,7 +6483,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const countBadge = '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + (message.count || 1) + '</span>';
             const coins = Number(message.totalCoins || 0);
             const unitCoins = Number(message.unitCoins || 0);
-            const coinsBadge = coins > 0 ? '<span style="margin-left:auto;color:#ffd47a" title="' + (unitCoins > 0 ? ('1x = ' + formatNum(unitCoins) + ' 🪙') : 'gift value') + '">' + formatNum(coins) + ' 🪙</span>' : '';
+            const quantity = Math.max(1, Number(message.totalQuantity || message.quantity || 1));
+            const coinsBadge = unitCoins > 0
+                ? '<span style="margin-left:auto;color:#ffd47a" title="Ukupno ' + formatNum(coins) + ' 🪙">'
+                + formatNum(unitCoins) + ' 🪙' + (quantity > 1 ? (' × ' + formatNum(quantity)) : '')
+                + '</span>'
+                : (coins > 0 ? '<span style="margin-left:auto;color:#ffd47a" title="gift value">' + formatNum(coins) + ' 🪙</span>' : '');
             row.innerHTML = '<div class="g-user"><span>' + icon + '</span><span>' + escHtml(message.user) + '</span></div>'
                 .replace('</div>', coinsBadge + countBadge + '</div>')
                 + '<div>' + escHtml(message.giftName || message.text) + '</div>';
