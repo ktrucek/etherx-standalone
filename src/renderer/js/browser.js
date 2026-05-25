@@ -7118,169 +7118,202 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     return false;
                 }
 
-                items.slice(-45).forEach((el, index) => {
-          const userEl = el.querySelector(
-            '[data-e2e="chat-message-user-name"],'
-            + '[data-e2e="user-name"],'
-            + '[data-e2e="message-owner-name"],'
-            + '[data-e2e="comment-username"],'
-            + '[data-e2e="chat-username"],'
-            + '[data-e2e="webcast-live-user-name"],'
-            + '[data-e2e="live-user-name"],'
-            + '[class*="DisplayName"],'
-            + '[class*="UserName"]:not([class*="avatar"]),'
-            + '[class*="Username"]:not([class*="avatar"]),'
-            + '[class*="user-name"],'
-            + '[class*="AuthorName"],'
-            + '[class*="NickName"],'
-            + '[class*="nickname"],'
-            + 'strong, b'
-          );
-          const textEl = el.querySelector(
-            '[data-e2e="chat-message-text"],'
-            + '[data-e2e="message-text"],'
-            + '[data-e2e="webcast-live-comment"],'
-            + '[data-e2e="webcast-live-message"],'
-            + '[data-e2e="webcast-message"],'
-            + '[data-e2e="live-comment-text"],'
-            + '[class*="MessageText"],'
-            + '[class*="CommentText"],'
-            + '[class*="message-content"],'
-            + '[class*="chat-content"],'
-            + '[class*="GiftText"],'
-            + '[class*="GiftMessage"],'
-            + '[class*="Subscribe"],'
-            + '[class*="SpanMessage"],'
-            + '[class*="comment-text"],'
-            + 'p, span'
-          );
-          const textNodes = Array.from(el.querySelectorAll(
-            '[data-e2e="chat-message-text"],'
-            + '[data-e2e="message-text"],'
-            + '[data-e2e="webcast-live-comment"],'
-            + '[data-e2e="webcast-live-message"],'
-            + '[data-e2e="webcast-message"],'
-            + '[data-e2e="live-comment-text"],'
-            + '[class*="MessageText"],'
-            + '[class*="CommentText"],'
-            + '[class*="message-content"],'
-            + '[class*="chat-content"],'
-            + '[class*="SpanMessage"],'
-            + '[class*="comment-text"],'
-            + 'p, span'
-          ));
-          const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
-          const derivedUser = (() => {
-            // 1) Explicit userEl text
-            const direct = userEl ? userEl.textContent.trim() : '';
-            if (direct && direct.length > 0) return direct;
-            // 2) data-* attributes on element
-            const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username')
-              || el.getAttribute('data-author') || el.getAttribute('data-nick') || '';
-            if (attrName) return attrName.trim();
-            // 3) aria-label often contains "username: message"
-            const aria = el.getAttribute('aria-label') || '';
-            if (aria) {
-              const am = aria.match(/^([^:,\n]{2,40})(?::|,)/); 
-              if (am && am[1]) return am[1].trim();
-            }
-            // 4) Look for a child element with data-e2e containing "user" or "name"
-            const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
-            if (nameByE2e) { const t = nameByE2e.textContent.trim(); if (t) return t; }
-            // 5) First <strong> or <b> is usually the username in TikTok chat
-            const boldEl = el.querySelector('strong, b');
-            if (boldEl) { const t = boldEl.textContent.trim(); if (t && t.length <= 60) return t; }
-            // 6) Regex on full text: "Username: message" or "Username sent gift"
-            const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
-            if (colMatch && colMatch[1]) return colMatch[1].trim();
-            const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)\b/i);
-            if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
-            return '';
-          })();
-          const user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
-          const textBase = textEl ? textEl.textContent.trim() : '';
-          const candidateParts = collectCandidateTextParts(el, user);
-          const assembledText = candidateParts.join(' ').trim();
-          const fallbackParts = textNodes
-            .map(n => (n.textContent || '').replace(/[\s]+/g, ' ').trim())
-            .filter(Boolean)
-            .filter((part, idx, arr) => arr.indexOf(part) === idx)
-            .filter(part => !isAuxiliaryText(part))
-            .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
-          let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
-          
-          // Hvati nagrade, emotikone, specijalne znakove
-          const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
-          const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
-          giftEls.forEach(g => {
-            const gAlt = g.alt || g.title || '🎁';
-            if (gAlt && !rawText.includes(gAlt)) rawText += ' ' + gAlt;
-          });
-          emoteEls.forEach(em => {
-            const eAlt = em.alt || em.title || '';
-            if (eAlt && !rawText.includes(eAlt) && eAlt.length < 30) rawText += ' ' + eAlt;
-          });
-          
-          const cleaned = cleanChatText(rawText, user);
-          const text = cleaned.slice(0, 900);
-          if (text && text.length > 1) {
-            const low = text.toLowerCase();
-            // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
-            const hasSent = /\bsent\b|\bgave\b/i.test(low);
-            const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
-            const isGift = hasSent || hasGiftWord || giftEls.length > 0;
-            const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
-            const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
-            const isShare = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i.test(low);
-            let levelHint = null;
-            if (isJoin) {
-              const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
-              if (levelMatch) {
+                                function isStrictShareEvent(text, rawText, user, el) {
+                                    const shareLooseRe = /\b(share|shared|shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i;
+                                    const shareExactRe = /^(?:share|shared|shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)$/i;
+                                        const sources = [text, cleanChatText(rawText, user), rawText]
+                                            .map((value) => String(value || '').replace(/\s+/g, ' ').trim())
+                                            .filter(Boolean);
+                                        const hasExplicitShareMarker = !!el?.querySelector(
+                                            '[data-e2e*="share" i],'
+                                            + '[aria-label*="shared" i],'
+                                            + '[aria-label*="podijelio" i],'
+                                            + '[aria-label*="podijelila" i],'
+                                            + '[title*="shared" i],'
+                                            + '[title*="podijelio" i],'
+                                            + '[title*="podijelila" i],'
+                                            + '[class*="share" i],'
+                                            + '[class*="Share" i]'
+                                        );
+
+                                        for (const source of sources) {
+                                            if (!shareLooseRe.test(source)) continue;
+                                            const normalized = source
+                                                .replace(/[.!?,:;()[\]{}"'* _+=|\\/-]+/g, ' ')
+                                                .replace(/\s+/g, ' ')
+        .trim();
+    const withoutShare = normalized.replace(shareLooseRe, '').replace(/\s+/g, '').trim();
+    const hasMention = /(^|\s)@[a-z0-9._]{2,40}\b/i.test(normalized);
+                                            if (shareExactRe.test(normalized) && !hasMention) return true;
+    if (!withoutShare && !hasMention && hasExplicitShareMarker) return true;
+}
+
+                                        return false;
+                                }
+
+items.slice(-45).forEach((el, index) => {
+    const userEl = el.querySelector(
+        '[data-e2e="chat-message-user-name"],'
+        + '[data-e2e="user-name"],'
+        + '[data-e2e="message-owner-name"],'
+        + '[data-e2e="comment-username"],'
+        + '[data-e2e="chat-username"],'
+        + '[data-e2e="webcast-live-user-name"],'
+        + '[data-e2e="live-user-name"],'
+        + '[class*="DisplayName"],'
+        + '[class*="UserName"]:not([class*="avatar"]),'
+        + '[class*="Username"]:not([class*="avatar"]),'
+        + '[class*="user-name"],'
+        + '[class*="AuthorName"],'
+        + '[class*="NickName"],'
+        + '[class*="nickname"],'
+        + 'strong, b'
+    );
+    const textEl = el.querySelector(
+        '[data-e2e="chat-message-text"],'
+        + '[data-e2e="message-text"],'
+        + '[data-e2e="webcast-live-comment"],'
+        + '[data-e2e="webcast-live-message"],'
+        + '[data-e2e="webcast-message"],'
+        + '[data-e2e="live-comment-text"],'
+        + '[class*="MessageText"],'
+        + '[class*="CommentText"],'
+        + '[class*="message-content"],'
+        + '[class*="chat-content"],'
+        + '[class*="GiftText"],'
+        + '[class*="GiftMessage"],'
+        + '[class*="Subscribe"],'
+        + '[class*="SpanMessage"],'
+        + '[class*="comment-text"],'
+        + 'p, span'
+    );
+    const textNodes = Array.from(el.querySelectorAll(
+        '[data-e2e="chat-message-text"],'
+        + '[data-e2e="message-text"],'
+        + '[data-e2e="webcast-live-comment"],'
+        + '[data-e2e="webcast-live-message"],'
+        + '[data-e2e="webcast-message"],'
+        + '[data-e2e="live-comment-text"],'
+        + '[class*="MessageText"],'
+        + '[class*="CommentText"],'
+        + '[class*="message-content"],'
+        + '[class*="chat-content"],'
+        + '[class*="SpanMessage"],'
+        + '[class*="comment-text"],'
+        + 'p, span'
+    ));
+    const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
+    const derivedUser = (() => {
+        // 1) Explicit userEl text
+        const direct = userEl ? userEl.textContent.trim() : '';
+        if (direct && direct.length > 0) return direct;
+        // 2) data-* attributes on element
+        const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username')
+            || el.getAttribute('data-author') || el.getAttribute('data-nick') || '';
+        if (attrName) return attrName.trim();
+        // 3) aria-label often contains "username: message"
+        const aria = el.getAttribute('aria-label') || '';
+        if (aria) {
+            const am = aria.match(/^([^:,\n]{2,40})(?::|,)/);
+            if (am && am[1]) return am[1].trim();
+        }
+        // 4) Look for a child element with data-e2e containing "user" or "name"
+        const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
+        if (nameByE2e) { const t = nameByE2e.textContent.trim(); if (t) return t; }
+        // 5) First <strong> or <b> is usually the username in TikTok chat
+        const boldEl = el.querySelector('strong, b');
+        if (boldEl) { const t = boldEl.textContent.trim(); if (t && t.length <= 60) return t; }
+        // 6) Regex on full text: "Username: message" or "Username sent gift"
+        const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
+        if (colMatch && colMatch[1]) return colMatch[1].trim();
+        const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)\b/i);
+        if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
+        return '';
+    })();
+    const user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
+    const textBase = textEl ? textEl.textContent.trim() : '';
+    const candidateParts = collectCandidateTextParts(el, user);
+    const assembledText = candidateParts.join(' ').trim();
+    const fallbackParts = textNodes
+        .map(n => (n.textContent || '').replace(/[\s]+/g, ' ').trim())
+        .filter(Boolean)
+        .filter((part, idx, arr) => arr.indexOf(part) === idx)
+        .filter(part => !isAuxiliaryText(part))
+        .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
+    let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
+
+    // Hvati nagrade, emotikone, specijalne znakove
+    const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
+    const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
+    giftEls.forEach(g => {
+        const gAlt = g.alt || g.title || '🎁';
+        if (gAlt && !rawText.includes(gAlt)) rawText += ' ' + gAlt;
+    });
+    emoteEls.forEach(em => {
+        const eAlt = em.alt || em.title || '';
+        if (eAlt && !rawText.includes(eAlt) && eAlt.length < 30) rawText += ' ' + eAlt;
+    });
+
+    const cleaned = cleanChatText(rawText, user);
+    const text = cleaned.slice(0, 900);
+    if (text && text.length > 1) {
+        const low = text.toLowerCase();
+        // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
+        const hasSent = /\bsent\b|\bgave\b/i.test(low);
+        const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
+        const isGift = hasSent || hasGiftWord || giftEls.length > 0;
+        const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
+        const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
+        const isShare = isStrictShareEvent(text, rawText, user, el);
+        let levelHint = null;
+        if (isJoin) {
+            const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
+            if (levelMatch) {
                 const lvl = parseInt(levelMatch[1], 10);
                 if (Number.isFinite(lvl) && lvl > 0 && lvl < 500) levelHint = lvl;
-              }
             }
-            const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
-                        if (isLikelyNoiseChatText(text, user, messageType)) return;
+        }
+        const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
+        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
+        if (isLikelyNoiseChatText(text, user, messageType)) return;
 
-                        results.push({
-              user: user || 'unknown',
-              text,
-              mid,
-                            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : 'chat'))),
-              level: levelHint
-            });
-          }
+        results.push({
+            user: user || 'unknown',
+            text,
+            mid,
+            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : 'chat'))),
+            level: levelHint
         });
-        const viewerCount = getViewerCount();
-        const giftCatalog = getGiftCatalogFromPage();
-        const topSupporters = getTopSupportersFromPage();
-        const streamOwner = (() => {
-          const pathMatch = String(location.pathname || '').match(/\/@([^\/?#]+)/i);
-          if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).replace(/^@+/, '');
-          const ownerSelectors = [
-            '[data-e2e="browse-username"]',
-            '[data-e2e="user-title"]',
-            '[data-e2e="user-name"]',
-            'a[href*="/@"][href*="/live"]',
-            'a[href^="/@"]',
-            '[class*="owner"] [class*="name"]',
-            '[class*="Author"] [class*="Name"]'
-          ];
-          for (const sel of ownerSelectors) {
-            const el = document.querySelector(sel);
-            const txt = String(el?.textContent || '').trim();
-            if (!txt) continue;
-            const m = txt.match(/@?([a-z0-9._]{2,40})/i);
-            if (m && m[1]) return m[1].replace(/^@+/, '');
-          }
-          return '';
-        })();
-        results.push({ type: '_meta', viewerCount: viewerCount, topSupporters: topSupporters, streamOwner: streamOwner, giftCatalog: giftCatalog });
-        return JSON.stringify(results);
-        } catch(e) { return JSON.stringify({__scraperError: String(e && e.message ? e.message : e)}); }
-      })()`;
+    }
+});
+const viewerCount = getViewerCount();
+const giftCatalog = getGiftCatalogFromPage();
+const topSupporters = getTopSupportersFromPage();
+const streamOwner = (() => {
+    const pathMatch = String(location.pathname || '').match(/\/@([^\/?#]+)/i);
+    if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).replace(/^@+/, '');
+    const ownerSelectors = [
+        '[data-e2e="browse-username"]',
+        '[data-e2e="user-title"]',
+        '[data-e2e="user-name"]',
+        'a[href*="/@"][href*="/live"]',
+        'a[href^="/@"]',
+        '[class*="owner"] [class*="name"]',
+        '[class*="Author"] [class*="Name"]'
+    ];
+    for (const sel of ownerSelectors) {
+        const el = document.querySelector(sel);
+        const txt = String(el?.textContent || '').trim();
+        if (!txt) continue;
+        const m = txt.match(/@?([a-z0-9._]{2,40})/i);
+        if (m && m[1]) return m[1].replace(/^@+/, '');
+    }
+    return '';
+})();
+results.push({ type: '_meta', viewerCount: viewerCount, topSupporters: topSupporters, streamOwner: streamOwner, giftCatalog: giftCatalog });
+return JSON.stringify(results);
+        } catch (e) { return JSON.stringify({ __scraperError: String(e && e.message ? e.message : e) }); }
+      }) ()`;
 
     async function scrapeTikTokChat() {
         if (!window.electronWebview) {
@@ -7373,7 +7406,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     added += 1;
                     if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
                 } else if (allowRepeatGift) {
-                    const repeatId = `${id}:r:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+                    const repeatId = `${id}: r:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
                     const giftMeta = detectGiftMetaFromText(message.text || '');
                     collectedMessages.push({ ...message, id: repeatId, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                     existing.add(repeatId);
@@ -8087,20 +8120,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
         const scanBtnEl = document.getElementById('tkaiBtnToggle');
         if (scanBtnEl) {
-            scanBtnEl.style.background = `linear-gradient(135deg, ${secondary}, ${primary})`;
+            scanBtnEl.style.background = `linear - gradient(135deg, ${secondary}, ${primary})`;
             scanBtnEl.style.borderColor = 'rgba(255,255,255,.2)';
             scanBtnEl.style.color = '#fff';
         }
 
         panel.querySelectorAll('.tkai-gen-btn').forEach(btn => {
             if (btn.id === 'tkaiClearBtn') return;
-            btn.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
+            btn.style.background = `linear - gradient(135deg, ${primary}, ${secondary})`;
             btn.style.borderColor = 'rgba(255,255,255,.2)';
             btn.style.color = '#fff';
         });
 
         panel.querySelectorAll('.tkai-insights-btn, .tkai-collapse-btn').forEach(btn => {
-            btn.style.background = `linear-gradient(135deg, ${insights}, ${primary})`;
+            btn.style.background = `linear - gradient(135deg, ${insights}, ${primary})`;
             btn.style.borderColor = 'rgba(255,255,255,.22)';
             btn.style.color = '#fff';
         });
@@ -8363,7 +8396,7 @@ function renderBookmarksPanel() {
         fDiv.style.cssText = 'margin-top:4px';
         const fHeader = document.createElement('div');
         fHeader.style.cssText = 'display:flex;align-items:center;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:12px;gap:4px;background:var(--bg2);border-radius:4px;margin:2px 4px';
-        fHeader.innerHTML = `<span>📁</span><span style="flex:1">${folder} (${folderBm.length})</span><button class="bm-del-folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px" title="Delete folder">×</button>`;
+        fHeader.innerHTML = `< span >📁</span ><span style="flex:1">${folder} (${folderBm.length})</span><button class="bm-del-folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px" title="Delete folder">×</button>`;
         fHeader.querySelector('.bm-del-folder').addEventListener('click', e => { e.stopPropagation(); if (confirm('Delete folder "' + folder + '"? Bookmarks will be moved to root.')) { DB.deleteBookmarkFolder(folder); renderBookmarksPanel(); } });
         const fBody = document.createElement('div');
         fBody.style.cssText = 'display:none;padding-left:12px';
@@ -8381,7 +8414,7 @@ function renderBookmarksPanel() {
 }
 function _createBmEntry(b) {
     const el = document.createElement('div'); el.className = 'p-entry';
-    el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${b.url}">${b.title || b.url}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-move" title="Move to folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;margin-right:4px">📁</button><button class="p-entry-del">×</button>`;
+    el.innerHTML = `< div class="p-entry-icon" >🌐</div ><div class="p-entry-title" title="${b.url}">${b.title || b.url}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-move" title="Move to folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;margin-right:4px">📁</button><button class="p-entry-del">×</button>`;
     el.querySelector('.p-entry-title').addEventListener('click', () => { navigateTo(b.url); closeAllPanels(); });
     el.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); DB.removeBookmark(b.url); renderBookmarksPanel(); });
     el.querySelector('.p-entry-move').addEventListener('click', async e => {
@@ -8406,7 +8439,7 @@ function renderHistoryPanel() {
         const t = document.createElement('div'); t.className = 'p-section-title'; t.textContent = new Date(entries[0].ts).toDateString() === new Date().toDateString() ? 'Today' : day; list.appendChild(t);
         entries.forEach(h => {
             const el = document.createElement('div'); el.className = 'p-entry';
-            el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${h.url}">${h.title || h.url}</div><div class="p-entry-meta">${new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+            el.innerHTML = `< div class="p-entry-icon" >🌐</div ><div class="p-entry-title" title="${h.url}">${h.title || h.url}</div><div class="p-entry-meta">${new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
             el.addEventListener('click', () => { navigateTo(h.url); closeAllPanels(); }); list.appendChild(el);
         });
     });
@@ -8469,11 +8502,11 @@ function renderDownloadsPanel() {
         const topRow = document.createElement('div');
         topRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
         topRow.innerHTML = `
-          <span style="font-size:14px">${_dlStatusIcon(d.status)}</span>
+    < span style = "font-size:14px" > ${_dlStatusIcon(d.status) }</span >
           <span class="dl-fname" title="${escHtml(d.url || '')}" style="flex:1;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escHtml(fname)}</span>
           <span style="font-size:10px;color:var(--text3);white-space:nowrap">${timeAgo(d.ts)}</span>
           <button class="p-entry-del" style="flex-shrink:0">×</button>
-        `;
+`;
         el.appendChild(topRow);
 
         // Progress bar (samo za aktivne ili ako imamo postotak)
@@ -8482,7 +8515,7 @@ function renderDownloadsPanel() {
             barWrap.style.cssText = 'margin-top:5px;background:var(--bg3);border-radius:3px;height:4px;overflow:hidden;';
             const bar = document.createElement('div');
             bar.className = 'dl-progress-bar';
-            bar.style.cssText = `height:100%;background:var(--accent);border-radius:3px;width:${pct}%;transition:width .3s;`;
+            bar.style.cssText = `height: 100 %; background: var(--accent); border - radius: 3px; width:${pct}%; transition:width .3s;`;
             barWrap.appendChild(bar);
             el.appendChild(barWrap);
         }
@@ -8490,19 +8523,19 @@ function renderDownloadsPanel() {
         // Meta row: size + action buttons
         const metaRow = document.createElement('div');
         metaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px;';
-        let metaHTML = `<span style="font-size:10px;color:var(--text3);flex:1">${escHtml(sizeStr)}`;
-        if (isActive && pct > 0) metaHTML += ` &mdash; ${pct}%`;
-        metaHTML += `</span>`;
+        let metaHTML = `< span style = "font-size:10px;color:var(--text3);flex:1" > ${escHtml(sizeStr)}`;
+        if (isActive && pct > 0) metaHTML += ` & mdash; ${pct}%`;
+        metaHTML += `</span >`;
 
         // Action buttons — only in Electron where savePath is available
         if (isDone && hasSavePath) {
             metaHTML += `
-            <button class="dl-btn-open" title="Otvori fajl" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">▶ Otvori</button>
-            <button class="dl-btn-folder" title="Prikaži u folderu" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">📂 Folder</button>
-          `;
+    < button class="dl-btn-open" title = "Otvori fajl" style = "background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px" >▶ Otvori</button >
+        <button class="dl-btn-folder" title="Prikaži u folderu" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">📂 Folder</button>
+`;
         } else if (!isDone && !isFailed) {
             // Show URL as clickable
-            metaHTML += `<span style="font-size:10px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" class="dl-url-lnk" title="${escHtml(d.url || '')}">${escHtml((d.url || '').replace(/^https?:\/\//, '').slice(0, 40))}</span>`;
+            metaHTML += `< span style = "font-size:10px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" class="dl-url-lnk" title = "${escHtml(d.url || '')}" > ${escHtml((d.url || '').replace(/^https?:\/\//, '').slice(0, 40))}</span >`;
         }
         metaRow.innerHTML = metaHTML;
         el.appendChild(metaRow);
@@ -8617,7 +8650,7 @@ if (window.etherx?.on) {
         const panel = document.getElementById('dlPanel');
         if (panel?.classList.contains('open')) {
             // Try to update just the progress bar without full re-render
-            const entryEl = document.querySelector(`[data-dlid="${download.id}"]`);
+            const entryEl = document.querySelector(`[data - dlid="${download.id}"]`);
             if (entryEl) {
                 const pct = (download.totalBytes > 0) ? Math.round((download.receivedBytes / download.totalBytes) * 100) : 0;
                 const bar = entryEl.querySelector('.dl-progress-bar');
@@ -8694,14 +8727,14 @@ function runBotDetectionTests() {
 
         // Render results
         resultsContainer.innerHTML = results.map(r => `
-          <div style="background:rgba(255,255,255,.05);border-radius:6px;padding:10px">
+    < div style = "background:rgba(255,255,255,.05);border-radius:6px;padding:10px" >
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
               <span style="font-size:13px;font-weight:600;color:var(--text)">${r.name}</span>
               <span style="font-size:12px;padding:2px 8px;border-radius:12px;background:${r.passed ? 'rgba(74,222,128,.2)' : 'rgba(248,113,113,.2)'};color:${r.passed ? '#4ade80' : '#f87171'}">${r.passed ? '✓ Pass' : '✗ Fail'}</span>
             </div>
             <div style="font-size:12px;color:var(--text2);line-height:1.4">${r.detail}</div>
-          </div>
-        `).join('');
+          </div >
+    `).join('');
     }, 100);
 }
 
@@ -8747,7 +8780,7 @@ function testPlugins() {
 
     return {
         passed,
-        detail: passed ? `${pluginCount} plugins detected (normal)` : 'No plugins detected (suspicious for bot)'
+        detail: passed ? `${pluginCount} plugins detected(normal)` : 'No plugins detected (suspicious for bot)'
     };
 }
 
@@ -8781,7 +8814,7 @@ function testScreen() {
 
     return {
         passed: !mismatch,
-        detail: mismatch ? `Screen/window size mismatch (${screenW}x${screenH} vs ${windowW}x${windowH})` : `Screen: ${screenW}x${screenH}, Window: ${windowW}x${windowH}`
+        detail: mismatch ? `Screen / window size mismatch(${screenW}x${screenH} vs ${windowW}x${windowH})` : `Screen: ${screenW}x${screenH}, Window: ${windowW}x${windowH}`
     };
 }
 
@@ -8985,7 +9018,7 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
         el.innerHTML = entries.slice(0, 10).map(([code, cnt]) => {
             const [name, flag] = TLD_COUNTRY[code] || [code.toUpperCase(), '🌐'];
             const pct = Math.round((cnt / max) * 100);
-            return `<div style="display:flex;align-items:center;gap:5px">
+            return `< div style = "display:flex;align-items:center;gap:5px" >
             <span style="font-size:13px;line-height:1;flex-shrink:0">${flag}</span>
             <div style="flex:1;min-width:0">
               <div style="display:flex;justify-content:space-between;margin-bottom:2px">
@@ -8996,7 +9029,7 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
                 <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#27c93f,#1fa833);border-radius:2px;transition:width .3s"></div>
               </div>
             </div>
-          </div>`;
+          </div >`;
         }).join('');
     }
 
@@ -9170,15 +9203,15 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
     document.getElementById('shieldBlockAppNotice')?.addEventListener('change', function () {
         DB.saveSetting('shieldBlockAppNotice', this.checked);
         if (this.checked && window.electronWebview) {
-            const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
+            const wv = document.querySelector(`webview[data - tab - id= "${STATE.activeTabId}"]`) ||
                 document.querySelector('webview.active, webview');
             if (wv && window.safeExecuteJS) {
-                window.safeExecuteJS(wv, `(function(){
-              const s = document.getElementById('__etherx_noappbanner') || document.createElement('style');
-              s.id = '__etherx_noappbanner';
-              s.textContent = 'smart-app-banner,[id*="app-banner"],[class*="app-banner"],[id*="AppBanner"],[class*="AppBanner"],[data-smart-app-banner]{display:none!important}';
-              document.head?.appendChild(s);
-            })()`).catch(() => { });
+                window.safeExecuteJS(wv, `(function () {
+        const s = document.getElementById('__etherx_noappbanner') || document.createElement('style');
+        s.id = '__etherx_noappbanner';
+        s.textContent = 'smart-app-banner,[id*="app-banner"],[class*="app-banner"],[id*="AppBanner"],[class*="AppBanner"],[data-smart-app-banner]{display:none!important}';
+        document.head?.appendChild(s);
+    })()`).catch(() => { });
             }
         }
         showToast(this.checked ? tShield('toastAppNoticeOn') : tShield('toastAppNoticeOff'));
@@ -9188,18 +9221,18 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
     document.getElementById('shieldBlockCookies')?.addEventListener('change', function () {
         DB.saveSetting('shieldBlockCookies', this.checked);
         if (this.checked && window.electronWebview) {
-            const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
+            const wv = document.querySelector(`webview[data - tab - id= "${STATE.activeTabId}"]`) ||
                 document.querySelector('webview.active, webview');
             if (wv && window.safeExecuteJS) {
-                window.safeExecuteJS(wv, `(function(){
-              try {
-                Object.defineProperty(document, 'cookie', {
-                  get: function() { return ''; },
-                  set: function() { /* blocked */ },
-                  configurable: true
-                });
-              } catch(_) {}
-            })()`).catch(() => { });
+                window.safeExecuteJS(wv, `(function () {
+        try {
+            Object.defineProperty(document, 'cookie', {
+                get: function () { return ''; },
+                set: function () { /* blocked */ },
+                configurable: true
+            });
+        } catch (_) { }
+    })()`).catch(() => { });
             }
         }
         showToast(this.checked ? tShield('toastCookiesOn') : tShield('toastCookiesOff'));
@@ -9210,46 +9243,46 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
 
     function _injectFingerprintProtection() {
         if (!window.electronWebview) return;
-        const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
+        const wv = document.querySelector(`webview[data - tab - id= "${STATE.activeTabId}"]`) ||
             document.querySelector('webview.active, webview');
         if (!wv || !window.safeExecuteJS) return;
-        window.safeExecuteJS(wv, `(function(){
-          try {
+        window.safeExecuteJS(wv, `(function () {
+        try {
             const origTDU = HTMLCanvasElement.prototype.toDataURL;
-            HTMLCanvasElement.prototype.toDataURL = function(t, q) {
-              const ctx = this.getContext && this.getContext('2d');
-              if (ctx && this.width > 0 && this.height > 0) {
-                const id = ctx.getImageData(0, 0, this.width, this.height);
-                for (let i = 0; i < id.data.length; i += 4) {
-                  if (Math.random() < .003) { id.data[i] ^= 1; id.data[i+1] ^= 1; }
+            HTMLCanvasElement.prototype.toDataURL = function (t, q) {
+                const ctx = this.getContext && this.getContext('2d');
+                if (ctx && this.width > 0 && this.height > 0) {
+                    const id = ctx.getImageData(0, 0, this.width, this.height);
+                    for (let i = 0; i < id.data.length; i += 4) {
+                        if (Math.random() < .003) { id.data[i] ^= 1; id.data[i + 1] ^= 1; }
+                    }
+                    ctx.putImageData(id, 0, 0);
                 }
-                ctx.putImageData(id, 0, 0);
-              }
-              return origTDU.call(this, t, q);
+                return origTDU.call(this, t, q);
             };
-          } catch(_) {}
-          try {
+        } catch (_) { }
+        try {
             const origGP = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(p) {
-              if (p === 37445 || p === 37446) return 'EtherX GPU';
-              return origGP.call(this, p);
+            WebGLRenderingContext.prototype.getParameter = function (p) {
+                if (p === 37445 || p === 37446) return 'EtherX GPU';
+                return origGP.call(this, p);
             };
-          } catch(_) {}
-          try {
+        } catch (_) { }
+        try {
             const _osc = OfflineAudioContext.prototype.createOscillator;
             if (_osc) {
-              const origStartRender = OfflineAudioContext.prototype.startRendering;
-              OfflineAudioContext.prototype.startRendering = function() {
-                return origStartRender.call(this).then(buf => {
-                  const ch = buf.getChannelData(0);
-                  for (let i = 0; i < Math.min(ch.length, 10); i++) ch[i] += (Math.random() - .5) * 1e-9;
-                  return buf;
-                });
-              };
+                const origStartRender = OfflineAudioContext.prototype.startRendering;
+                OfflineAudioContext.prototype.startRendering = function () {
+                    return origStartRender.call(this).then(buf => {
+                        const ch = buf.getChannelData(0);
+                        for (let i = 0; i < Math.min(ch.length, 10); i++) ch[i] += (Math.random() - .5) * 1e-9;
+                        return buf;
+                    });
+                };
             }
-          } catch(_) {}
-          console.log('[EtherX Shield] Fingerprint protection injected');
-        })();`).catch(() => { });
+        } catch (_) { }
+        console.log('[EtherX Shield] Fingerprint protection injected');
+    })();`).catch(() => { });
     }
 
     // Apply Block Scripts setting to main process on startup
@@ -9285,7 +9318,7 @@ document.getElementById('aiInspectRun')?.addEventListener('click', async () => {
             barEl.style.width = score + '%';
             barEl.style.background = grad;
             verdictEl.textContent = score < 40 ? '✅ Stranica izgleda sigurna' : score < 70 ? '⚠️ Sumnjiva aktivnost otkrivena' : '🚨 Visok rizik — mogući phishing!';
-            reasonsEl.innerHTML = (result.reasons || result.flags || []).map(r => `<div style="font-size:11px;color:var(--text3);padding:2px 0">• ${escHtml(String(r))}</div>`).join('');
+            reasonsEl.innerHTML = (result.reasons || result.flags || []).map(r => `< div style = "font-size:11px;color:var(--text3);padding:2px 0" >• ${escHtml(String(r))}</div >`).join('');
         } else {
             verdictEl.textContent = '⚠️ AI analiza nije dostupna';
         }
@@ -9294,7 +9327,7 @@ document.getElementById('aiInspectRun')?.addEventListener('click', async () => {
     }
     try {
         const url = new URL(tab.url);
-        pageInfoEl.innerHTML = `<b>URL:</b> ${escHtml(tab.url)}<br><b>Domena:</b> ${escHtml(url.hostname)}<br><b>Protokol:</b> ${escHtml(url.protocol)}<br><b>Naslov:</b> ${escHtml(tab.title || '–')}`;
+        pageInfoEl.innerHTML = `< b > URL:</b > ${escHtml(tab.url)} <br><b>Domena:</b> ${escHtml(url.hostname)}<br><b>Protokol:</b> ${escHtml(url.protocol)}<br><b>Naslov:</b> ${escHtml(tab.title || '–')}`;
     } catch (_) {
         pageInfoEl.textContent = tab.url;
     }
@@ -9942,8 +9975,8 @@ function renderAppTab(type) {
                 return;
             }
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Cookies • ${all.length} entries ${activeUrl ? '(for: ' + escHtml(new URL(activeUrl).hostname) + ')' : '(all)'}
-            <button onclick="${window.electronWebview ? "window.etherx?.cookies?.clearAll?.().then(()=>renderAppTab('cookies'))" : "document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/'});renderAppTab('cookies')"}" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button>
-            <button onclick="renderAppTab('cookies')" style="margin-left:4px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
+            <button onclick="${window.electronWebview ? " window.etherx?.cookies?.clearAll?.().then(()=>renderAppTab('cookies'))" : "document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/'});renderAppTab('cookies')"}" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button>
+        <button onclick="renderAppTab('cookies')" style="margin-left:4px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
                 '<table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Domain</th><th>Path</th><th>Secure</th><th>Size</th></tr></thead><tbody>' +
                 all.map(ck => `<tr><td style="color:var(--accent)">${escHtml(ck.name)}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ck.value)}">${escHtml((ck.value || '').slice(0, 50))}</td><td style="color:#888">${escHtml(ck.domain || '')}</td><td style="color:#888">${escHtml(ck.path || '/')}</td><td style="text-align:center">${ck.secure ? '🔒' : ''}</td><td style="color:#777">${((ck.name || '').length + (ck.value || '').length)} B</td></tr>`).join('') + '</tbody></table>';
         });
@@ -10039,7 +10072,7 @@ function renderAppTab(type) {
             const HIDDEN_KEYS = /api[_.]?key|api[_.]?secret|secret|password|token/i;
             const MODEL_KEYS = /ai[_.]?model|model[_.]?name/i;
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>settings</strong> • ${entries.length} rows
-            <button onclick="renderAppTab('sqlite-settings')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺ Refresh</button></div>` +
+        <button onclick="renderAppTab('sqlite-settings')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺ Refresh</button></div>` +
                 '<table class="app-table"><thead><tr><th>Key</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody id="settingsTableBody">' +
                 entries.map(([k, v]) => {
                     let display;
@@ -10055,9 +10088,9 @@ function renderAppTab(type) {
                     return `<tr><td style="color:var(--yellow)">${escHtml(k)}</td><td style="color:#ccc" id="sv_${escHtml(k)}">${display}</td><td><button onclick="_editSetting('${escHtml(k)}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button> <button onclick="_deleteSetting('${escHtml(k)}')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 5px">✕</button></td></tr>`;
                 }).join('') + '</tbody></table>' +
                 `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
-              <input id="newSettingKey" placeholder="key" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-              <input id="newSettingVal" placeholder="value" style="flex:2;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-              <button onclick="_addSetting()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
+        <input id="newSettingKey" placeholder="key" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+            <input id="newSettingVal" placeholder="value" style="flex:2;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+                <button onclick="_addSetting()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
             </div>`;
         });
 
@@ -10070,17 +10103,17 @@ function renderAppTab(type) {
             if (!u) u = DB.getUser();
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>user_profile</strong> • 1 row</div>
             <div style="padding:12px">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                <div id="userAvatarDisp" style="font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--bg3)" title="Click to change avatar" onclick="_changeUserAvatar()">${u.avatarUrl ? '<img src="' + escHtml(u.avatarUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:50%">' : escHtml(u.avatar || '👤')}</div>
-                <div>
-                  <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(u.name || u.displayName || '(no name)')}</div>
-                  <div style="font-size:11px;color:var(--text3)">${escHtml(u.email || '(no email)')}</div>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                    <div id="userAvatarDisp" style="font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--bg3)" title="Click to change avatar" onclick="_changeUserAvatar()">${u.avatarUrl ? '<img src="' + escHtml(u.avatarUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:50%">' : escHtml(u.avatar || '👤')}</div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(u.name || u.displayName || '(no name)')}</div>
+                        <div style="font-size:11px;color:var(--text3)">${escHtml(u.email || '(no email)')}</div>
+                    </div>
                 </div>
-              </div>
-              <table class="app-table"><thead><tr><th>Field</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody>
-                ${['name', 'email', 'avatar', 'bio', 'website', 'location'].map(f => `<tr><td style="color:var(--yellow)">${f}</td><td id="uf_${f}" style="color:#ccc">${escHtml(String(u[f] || ''))}</td><td><button onclick="_editUserField('${f}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button></td></tr>`).join('')}
-              </tbody></table>
-              <div style="padding:8px 0;font-size:10px;color:#555">Created: ${u.createdAt ? new Date(u.createdAt).toLocaleString('hr-HR') : '—'} &nbsp;|&nbsp; Updated: ${u.updatedAt ? new Date(u.updatedAt).toLocaleString('hr-HR') : '—'}</div>
+                <table class="app-table"><thead><tr><th>Field</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody>
+                    ${['name', 'email', 'avatar', 'bio', 'website', 'location'].map(f => `<tr><td style="color:var(--yellow)">${f}</td><td id="uf_${f}" style="color:#ccc">${escHtml(String(u[f] || ''))}</td><td><button onclick="_editUserField('${f}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button></td></tr>`).join('')}
+                </tbody></table>
+                <div style="padding:8px 0;font-size:10px;color:#555">Created: ${u.createdAt ? new Date(u.createdAt).toLocaleString('hr-HR') : '—'} &nbsp;|&nbsp; Updated: ${u.updatedAt ? new Date(u.updatedAt).toLocaleString('hr-HR') : '—'}</div>
             </div>`;
         });
 
@@ -10099,7 +10132,7 @@ function renderAppTab(type) {
             })).concat(localRows.filter(l => !(sqliteRows || []).some(s => s.id === l.id)));
 
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>notes</strong> • ${merged.length} rows
-            <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
+                <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
                 (merged.length ? '<table class="app-table"><thead><tr><th>#</th><th>Title</th><th>Content</th><th>Date</th><th style="width:70px"></th></tr></thead><tbody>' +
                     merged.map((n, i) => {
                         const dt = new Date(n.ts).toLocaleDateString('hr-HR');
@@ -10108,10 +10141,10 @@ function renderAppTab(type) {
                         return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent);font-weight:600">${escHtml(n.title || 'Untitled')}</td><td style="color:#ccc">${escHtml(body)}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="_editNote(${n.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 4px">✏️</button> <button onclick="${delFn};renderAppTab('sqlite-notes')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
                     }).join('') + '</tbody></table>' : '<p style="color:#555;font-size:11px;padding:12px">No notes yet.</p>') +
                 `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
-              <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-              <input id="newNoteContent" placeholder="Content…" style="flex:3;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-              <button onclick="_addNote()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
-            </div>`;
+                <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+                    <input id="newNoteContent" placeholder="Content…" style="flex:3;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+                        <button onclick="_addNote()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
+                    </div>`;
         });
 
     } else if (type === 'sqlite-downloads') {
@@ -10131,7 +10164,7 @@ function renderAppTab(type) {
 
             if (!merged.length) { c.innerHTML = _sqliteEmpty('downloads'); return; }
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>downloads</strong> • ${merged.length} rows
-            <button onclick="${window.electronWebview ? 'window.etherx.downloads.clear()' : 'DB.clearDownloads()'};renderAppTab('sqlite-downloads')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
+                        <button onclick="${window.electronWebview ? 'window.etherx.downloads.clear()' : 'DB.clearDownloads()'};renderAppTab('sqlite-downloads')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
                 '<table class="app-table"><thead><tr><th>#</th><th>Filename</th><th>URL</th><th>Size</th><th>Date</th><th></th></tr></thead><tbody>' +
                 merged.slice(0, 200).map((r, i) => {
                     const dt = r.ts ? new Date(r.ts).toLocaleDateString('hr-HR') : '';
@@ -10160,7 +10193,7 @@ function renderAppTab(type) {
             if (!merged.length) { c.innerHTML = _sqliteEmpty('sessions'); return; }
 
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>sessions</strong> • ${merged.length} saved sessions
-            <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
+                        <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
                 '<table class="app-table"><thead><tr><th>#</th><th>Tabovi</th><th>Saved</th><th style="width:80px"></th></tr></thead><tbody>' +
                 merged.map((r, i) => {
                     const dt = new Date(r.ts).toLocaleString('hr-HR');
@@ -10771,25 +10804,25 @@ document.getElementById('mi-reader').addEventListener('click', () => document.ge
 const DARK_MODE_STYLE_ID = 'etherx-dark-inject';
 
 // SCHEME (nativni) — radi na Googleu i modernim stranicama, bez iskrivljenih boja
-const DARK_SCHEME_CSS = `:root, html { color-scheme: dark !important; }`;
+const DARK_SCHEME_CSS = `:root, html {color - scheme: dark !important; }`;
 
 // FILTER (CSS invert) — agresivno, radi na starim stranicama, ali boje mogu biti fluoroscentne
 // Slika/video se reinvertira natrag da ne budu negativni
 const DARK_FILTER_CSS = `
-      html { filter: invert(1) hue-rotate(180deg) !important; color-scheme: dark !important; }
-      img, video, canvas, svg, picture, iframe, [style*="background-image"] {
-        filter: invert(1) hue-rotate(180deg) !important;
+                        html {filter: invert(1) hue-rotate(180deg) !important; color-scheme: dark !important; }
+                        img, video, canvas, svg, picture, iframe, [style*="background-image"] {
+                            filter: invert(1) hue-rotate(180deg) !important;
       }
-    `;
+                        `;
 
 // BOTH — nativni + filter kao fallback
 const DARK_BOTH_CSS = `
-      :root, html { color-scheme: dark !important; }
-      html { filter: invert(1) hue-rotate(180deg) !important; }
-      img, video, canvas, svg, picture, iframe, [style*="background-image"] {
-        filter: invert(1) hue-rotate(180deg) !important;
+                        :root, html {color - scheme: dark !important; }
+                        html {filter: invert(1) hue-rotate(180deg) !important; }
+                        img, video, canvas, svg, picture, iframe, [style*="background-image"] {
+                            filter: invert(1) hue-rotate(180deg) !important;
       }
-    `;
+                        `;
 
 function _getDarkCSS() {
     const method = DB.getSettings().darkModeMethod || 'scheme';
@@ -10982,7 +11015,7 @@ function renderRecentSites() {
 
 // NTP Customize
 function applyNtpSettings() {
-    const s = JSON.parse(localStorage.getItem('ex_ntp') || '{}');
+    const s = JSON.parse(localStorage.getItem('ex_ntp') || '{ }');
     const ntp = document.getElementById('ntpPage');
     if (s.bgUrl) { ntp.style.backgroundImage = "url('" + s.bgUrl + "')"; ntp.style.backgroundSize = 'cover'; ntp.style.backgroundPosition = 'center'; }
     else if (s.bg) { ntp.style.background = s.bg; ntp.style.backgroundImage = ''; }
@@ -10998,7 +11031,7 @@ function applyNtpSettings() {
 document.addEventListener('DOMContentLoaded', () => {
     const ntpEditBtn = document.getElementById('ntpEditBtn');
     if (ntpEditBtn) ntpEditBtn.addEventListener('click', () => {
-        const s = JSON.parse(localStorage.getItem('ex_ntp') || '{}');
+        const s = JSON.parse(localStorage.getItem('ex_ntp') || '{ }');
         document.getElementById('ntpcBgUrl').value = s.bgUrl || '';
         document.getElementById('ntpcTitle').value = s.title || 'EtherX Browser';
         document.getElementById('ntpcSubtitle').value = s.subtitle || 'The Web3-Native Browser Experience';
@@ -11067,7 +11100,7 @@ function collectMemoryMetrics() {
 }
 
 // Security panel — fast async rendering with IPC cookie count + CSP cache
-const _secCspCache = new Map(); // url → { csp, ts }
+const _secCspCache = new Map(); // url → {csp, ts}
 function renderSecurityPanel() {
     const t = getActiveTab(); const url = t?.url || ''; const isHttps = url.startsWith('https://');
     function set(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
@@ -11506,12 +11539,12 @@ function injectAutofillIntoPage(username, password) {
     }
     const script = `(function() {
         const ns = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        const pwField = document.querySelector('input[type=password]');
-        if (pwField) { ns.call(pwField, ${JSON.stringify(password)}); pwField.dispatchEvent(new Event('input',{bubbles:true})); pwField.dispatchEvent(new Event('change',{bubbles:true})); }
-        const sels = ['input[type=email]','input[name*=user]','input[name*=email]','input[id*=user]','input[id*=email]','input[name*=login]','input[id*=login]','input[type=text]'];
-        let uf = null; for (const s of sels) { uf = document.querySelector(s); if (uf && uf !== pwField) break; }
-        if (uf) { ns.call(uf, ${JSON.stringify(username)}); uf.dispatchEvent(new Event('input',{bubbles:true})); uf.dispatchEvent(new Event('change',{bubbles:true})); }
-        return !!(pwField || uf);
+                        const pwField = document.querySelector('input[type=password]');
+                        if (pwField) {ns.call(pwField, ${JSON.stringify(password) }); pwField.dispatchEvent(new Event('input',{bubbles:true})); pwField.dispatchEvent(new Event('change',{bubbles:true})); }
+                        const sels = ['input[type=email]','input[name*=user]','input[name*=email]','input[id*=user]','input[id*=email]','input[name*=login]','input[id*=login]','input[type=text]'];
+                        let uf = null; for (const s of sels) {uf = document.querySelector(s); if (uf && uf !== pwField) break; }
+                        if (uf) {ns.call(uf, ${JSON.stringify(username) }); uf.dispatchEvent(new Event('input',{bubbles:true})); uf.dispatchEvent(new Event('change',{bubbles:true})); }
+                        return !!(pwField || uf);
       })()`;
     try {
         wv.executeJavaScript(script).then(ok => {
@@ -12393,21 +12426,21 @@ document.addEventListener('keydown', e => {
         if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
             return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
 
-**1. Analiza sadržaja**
-• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
+                        **1. Analiza sadržaja**
+                        • Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
 
-**2. Dijagnostika browsera**
-• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
-• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
+                        **2. Dijagnostika browsera**
+                        • Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
+                        • Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
 
-**3. Edukacija o kriptovalutama**
-• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
-• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
+                        **3. Edukacija o kriptovalutama**
+                        • Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
+                        • \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
 
-**4. Navigacija**
-• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
+                        **4. Navigacija**
+                        • Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
 
-Sve se izvršava optimalno i brzo! Što te zanima?`;
+                        Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
 
         if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
@@ -14669,10 +14702,10 @@ function openWindowSwitcher() {
             ? `<img src="${tab.faviconUrl}" style="width:20px;height:20px;border-radius:3px" onerror="if(this.parentNode)this.outerHTML='<span style=font-size:18px>${tab.favicon || '🌐'}</span>'">`
             : `<span class="wsw-tab-favicon">${tab.favicon || '🌐'}</span>`;
         card.innerHTML = `
-          ${favHtml}
-          <div class="wsw-tab-title">${escHtml(tab.title || 'New Tab')}</div>
-          <div class="wsw-tab-url">${escHtml(tab.url || '')}</div>
-          <button class="wsw-tab-close" data-id="${tab.id}" title="Close tab">✕</button>`;
+                                    ${favHtml}
+                                    <div class="wsw-tab-title">${escHtml(tab.title || 'New Tab')}</div>
+                                    <div class="wsw-tab-url">${escHtml(tab.url || '')}</div>
+                                    <button class="wsw-tab-close" data-id="${tab.id}" title="Close tab">✕</button>`;
         card.addEventListener('click', e => {
             if (e.target.classList.contains('wsw-tab-close')) {
                 e.stopPropagation();
@@ -14961,17 +14994,17 @@ function refreshStorageUsage() {
     const fmt = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
     const now = new Date().toLocaleTimeString();
     t.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text2)">
-        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text3)"><th style="text-align:left;padding:4px 8px">Store</th><th style="text-align:left;padding:4px 8px">Key</th><th style="text-align:right;padding:4px 8px">Veličina</th><th style="text-align:right;padding:4px 8px">%</th></tr></thead>
-        <tbody>` +
+                                        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text3)"><th style="text-align:left;padding:4px 8px">Store</th><th style="text-align:left;padding:4px 8px">Key</th><th style="text-align:right;padding:4px 8px">Veličina</th><th style="text-align:right;padding:4px 8px">%</th></tr></thead>
+                                        <tbody>` +
         rows.map(r => `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-          <td style="padding:3px 8px">${r.label}</td>
-          <td style="padding:3px 8px;color:var(--accent);font-family:monospace">${escHtml(r.key)}</td>
-          <td style="padding:3px 8px;text-align:right;color:var(--text3)">${fmt(r.bytes)}</td>
-          <td style="padding:3px 8px;text-align:right;color:var(--text3)">${totalBytes ? ((r.bytes / totalBytes * 100).toFixed(1)) : '0'}%</td>
-        </tr>`).join('') +
+                                                <td style="padding:3px 8px">${r.label}</td>
+                                                <td style="padding:3px 8px;color:var(--accent);font-family:monospace">${escHtml(r.key)}</td>
+                                                <td style="padding:3px 8px;text-align:right;color:var(--text3)">${fmt(r.bytes)}</td>
+                                                <td style="padding:3px 8px;text-align:right;color:var(--text3)">${totalBytes ? ((r.bytes / totalBytes * 100).toFixed(1)) : '0'}%</td>
+                                            </tr>`).join('') +
         `<tr style="border-top:1px solid var(--border2);font-weight:600"><td colspan="2" style="padding:4px 8px;color:var(--text)">Ukupno localStorage</td><td colspan="2" style="padding:4px 8px;text-align:right;color:var(--text)">${fmt(totalBytes)}</td></tr>
-        </tbody></table>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:right">Ažurirano: ${now}</div>`;
+                                        </tbody></table>
+                                    <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:right">Ažurirano: ${now}</div>`;
 
     // Also query full origin storage estimate (includes IndexedDB, SQLite, Cache API)
     if (navigator.storage && navigator.storage.estimate) {
@@ -14996,28 +15029,28 @@ function initStorageTab() {
     kt.innerHTML = STORE_DEFS.map(s => {
         const key = DB.getStorageKey(s.id);
         return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-          <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
-          <input id="storekey_${s.id}" value="${escHtml(key)}" style="width:140px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;font-family:monospace">
-          <button onclick="_saveStoreKey('${s.id}')" style="font-size:11px;padding:4px 8px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer">Save</button>
-          <button onclick="_migrateStore('${s.id}')" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Migrate</button>
-        </div>`;
+                                        <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
+                                        <input id="storekey_${s.id}" value="${escHtml(key)}" style="width:140px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;font-family:monospace">
+                                            <button onclick="_saveStoreKey('${s.id}')" style="font-size:11px;padding:4px 8px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer">Save</button>
+                                            <button onclick="_migrateStore('${s.id}')" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Migrate</button>
+                                    </div>`;
     }).join('');
 
     // Export/Import list
     const el = document.getElementById('storeExportList'); if (!el) return;
     el.innerHTML = STORE_DEFS.map(s => `
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
-          <button onclick="_exportStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📤 Export</button>
-          <button onclick="_importStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📥 Import</button>
-        </div>`).join('');
+                                    <div style="display:flex;align-items:center;gap:8px">
+                                        <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
+                                        <button onclick="_exportStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📤 Export</button>
+                                        <button onclick="_importStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📥 Import</button>
+                                    </div>`).join('');
 
     // Clear list
     const cl = document.getElementById('storeClearList'); if (!cl) return;
     cl.innerHTML = STORE_DEFS.map(s => `
-        <button onclick="_clearStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(192,57,43,.1);border:1px solid rgba(192,57,43,.3);border-radius:6px;color:#e74c3c;cursor:pointer">
-          🗑 ${s.label}
-        </button>`).join('');
+                                    <button onclick="_clearStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(192,57,43,.1);border:1px solid rgba(192,57,43,.3);border-radius:6px;color:#e74c3c;cursor:pointer">
+                                        🗑 ${s.label}
+                                    </button>`).join('');
 
     refreshStorageUsage();
 }
@@ -15368,9 +15401,9 @@ function renderSitePermsList() {
         const d = perms[domain];
         const pills = Object.entries(d).map(([k, v]) => `<span style="background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-right:3px;font-size:10px;color:var(--text2)">${LABELS[k] || k}: <strong>${v}</strong></span>`).join('');
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-          <div><span style="color:var(--text);font-size:11px">${escHtml(domain)}</span><div style="margin-top:3px">${pills}</div></div>
-          <button onclick="(function(){var p=getSitePerms();delete p['${escHtml(domain)}'];saveSitePerms(p);renderSitePermsList();showToast('Cleared for ${escHtml(domain)}');})()" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px" title="Remove">✕</button>
-        </div>`;
+                                        <div><span style="color:var(--text);font-size:11px">${escHtml(domain)}</span><div style="margin-top:3px">${pills}</div></div>
+                                        <button onclick="(function(){var p=getSitePerms();delete p['${escHtml(domain)}'];saveSitePerms(p);renderSitePermsList();showToast('Cleared for ${escHtml(domain)}');})()" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px" title="Remove">✕</button>
+                                    </div>`;
     }).join('');
 }
 document.getElementById('sClearSitePerms')?.addEventListener('click', () => {
@@ -15512,11 +15545,11 @@ window.customPrompt = function (message, defaultValue, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:12px;font-size:14px;">${message}</div>
-    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-      <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
-    </div>`;
+                                    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
+                                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                                            <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+                                            <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
+                                        </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     const inp = document.getElementById('cpInput');
@@ -15536,11 +15569,11 @@ window.customPrompt = function (message, defaultValue, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:12px;font-size:14px;">${message}</div>
-    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-      <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
-    </div>`;
+                                        <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
+                                            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                                                <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+                                                <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
+                                            </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     const inp = document.getElementById('cpInput');
@@ -15560,10 +15593,10 @@ window.customConfirm = function (message, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:20px;font-size:14px;white-space:pre-wrap;">${message}</div>
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-      <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
-    </div>`;
+                                            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                                                <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+                                                <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
+                                            </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     document.getElementById('ccCancel').onclick = () => { overlay.remove(); callback(false); };
@@ -15576,10 +15609,10 @@ window.customConfirm = function (message, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:20px;font-size:14px;white-space:pre-wrap;">${message}</div>
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-      <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
-    </div>`;
+                                            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                                                <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+                                                <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
+                                            </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     document.getElementById('ccCancel').onclick = () => { overlay.remove(); callback(false); };
@@ -15622,11 +15655,11 @@ document.getElementById('sNewProfile')?.addEventListener('click', () => {
             const row = document.createElement('div'); row.className = 's-row';
             const isActive = p.name === active;
             row.innerHTML = `<div class="s-row-left"><div class="s-row-label">${p.name}</div><div class="s-row-desc">${p.isDefault ? 'System profile' : 'Custom persona'}</div></div>
-            <div style="display:flex;align-items:center;gap:6px">
-              ${isActive ? '<span style="color:var(--green);font-size:11px">✓ Active</span>' : `<button class="s-btn-sm" data-switch="${p.name}">Switch</button>`}
-              <button class="s-btn-sm" data-rename="${p.name}">Rename</button>
-              ${!p.isDefault ? `<button class="s-btn-sm" style="color:var(--red)" data-del="${p.name}">Remove</button>` : ''}
-            </div>`;
+                                            <div style="display:flex;align-items:center;gap:6px">
+                                                ${isActive ? '<span style="color:var(--green);font-size:11px">✓ Active</span>' : `<button class="s-btn-sm" data-switch="${p.name}">Switch</button>`}
+                                                <button class="s-btn-sm" data-rename="${p.name}">Rename</button>
+                                                ${!p.isDefault ? `<button class="s-btn-sm" style="color:var(--red)" data-del="${p.name}">Remove</button>` : ''}
+                                            </div>`;
 
             row.querySelector('[data-switch]')?.addEventListener('click', () => {
                 localStorage.setItem('ex_active_profile', p.name);
@@ -15800,10 +15833,10 @@ function updateSettingsExtCount() {
 }
 
 // ── Site info popup (padlock/URL icon click) ─────────────────────────────
-// Per-domain permission storage: ex_site_perms = { "example.com": { camera: "Ask", ... } }
+// Per-domain permission storage: ex_site_perms = {"example.com": {camera: "Ask", ... } }
 const SIP_PERM_KEYS = ['autoPlay', 'popups', 'camera', 'mic', 'screen', 'location'];
 const SIP_SETTING_MAP = { autoPlay: 'autoPlayDefault', popups: 'popupDefault', camera: 'camDefault', mic: 'micDefault', screen: 'screenDefault', location: 'locationDefault' };
-function getSitePerms() { try { return JSON.parse(localStorage.getItem('ex_site_perms') || '{}'); } catch (e) { return {}; } }
+function getSitePerms() { try { return JSON.parse(localStorage.getItem('ex_site_perms') || '{ }'); } catch (e) { return {}; } }
 function saveSitePerms(obj) { localStorage.setItem('ex_site_perms', JSON.stringify(obj)); }
 function getSitePerm(domain, key) {
     const perms = getSitePerms();
@@ -16711,10 +16744,10 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
                     status.innerHTML = `${platform.display}: ${isNew ? `Nova verzija v${data.latest} dostupna!` : `Koristiš najnoviju verziju v${data.latest}`}`;
 
                     buttons.innerHTML = matches.slice(0, 3).map(match =>
-                        `<button onclick="downloadAsset('${match.asset.url}', '${match.asset.name}')" 
-                   style="font-size:11px;padding:6px 12px;background:${isNew ? '#27c93f' : '#4A9EFF'};border:none;border-radius:6px;color:white;cursor:pointer;white-space:nowrap">
-                   ⬇️ ${match.type} ${isNew ? '(NOVA!)' : ''}
-                 </button>`
+                        `<button onclick="downloadAsset('${match.asset.url}', '${match.asset.name}')"
+                                                    style="font-size:11px;padding:6px 12px;background:${isNew ? '#27c93f' : '#4A9EFF'};border:none;border-radius:6px;color:white;cursor:pointer;white-space:nowrap">
+                                                    ⬇️ ${match.type} ${isNew ? '(NOVA!)' : ''}
+                                                </button>`
                     ).join('');
                 }
             }
@@ -16946,7 +16979,7 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             if (!wcStyle) {
                 wcStyle = document.createElement('style');
                 wcStyle.id = '_etx_willchange_style';
-                wcStyle.textContent = '.tab,.nav-bar,.panel,.ctx-menu,.settings-icon-tabs,.settings-body{will-change:transform,opacity;}';
+                wcStyle.textContent = '.tab,.nav-bar,.panel,.ctx-menu,.settings-icon-tabs,.settings-body{will - change:transform,opacity;}';
                 document.head.appendChild(wcStyle);
             }
         } else if (wcStyle) {
@@ -17090,12 +17123,12 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         let html = '';
         // All bookmarks
         html += `<div class="bm-tree-item${_bmActiveFolder === null ? ' bm-tree-active' : ''}" data-folder="__all__" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px">
-          <span>📚</span><span style="flex:1">Svi bookmarci</span><span style="font-size:10px;color:var(--text3)">${all.length}</span>
-        </div>`;
+                                                    <span>📚</span><span style="flex:1">Svi bookmarci</span><span style="font-size:10px;color:var(--text3)">${all.length}</span>
+                                                </div>`;
         // Unfiled
         html += `<div class="bm-tree-item${_bmActiveFolder === '' ? ' bm-tree-active' : ''}" data-folder="__unfiled__" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px">
-          <span>📄</span><span style="flex:1">Bez foldera</span><span style="font-size:10px;color:var(--text3)">${unfiledCount}</span>
-        </div>`;
+                                                    <span>📄</span><span style="flex:1">Bez foldera</span><span style="font-size:10px;color:var(--text3)">${unfiledCount}</span>
+                                                </div>`;
         // Separator
         if (folders.length) html += '<div style="border-top:1px solid var(--border);margin:4px 0"></div>';
         // Folders
@@ -17103,14 +17136,14 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const cnt = all.filter(b => b.folder === f).length;
             const isActive = _bmActiveFolder === f;
             html += `<div class="bm-tree-item${isActive ? ' bm-tree-active' : ''}" data-folder="${escHtml(f)}"
-            style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px"
-            draggable="false">
-            <span>📁</span>
-            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f)}</span>
-            <span style="font-size:10px;color:var(--text3)">${cnt}</span>
-            <button class="bm-tree-del" data-folder="${escHtml(f)}" title="Obriši folder"
-              style="background:none;border:none;color:transparent;cursor:pointer;font-size:13px;padding:0 2px;transition:color .15s">×</button>
-          </div>`;
+                                                    style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px"
+                                                    draggable="false">
+                                                    <span>📁</span>
+                                                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f)}</span>
+                                                    <span style="font-size:10px;color:var(--text3)">${cnt}</span>
+                                                    <button class="bm-tree-del" data-folder="${escHtml(f)}" title="Obriši folder"
+                                                        style="background:none;border:none;color:transparent;cursor:pointer;font-size:13px;padding:0 2px;transition:color .15s">×</button>
+                                                </div>`;
         });
         if (!tree) return;
         tree.innerHTML = html;
@@ -17120,13 +17153,13 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const s = document.createElement('style');
             s.id = 'bmMgrStyle';
             s.textContent = `
-            .bm-tree-item:hover { background: var(--bg3) !important; }
-            .bm-tree-item:hover .bm-tree-del { color: var(--text3) !important; }
-            .bm-tree-active { background: rgba(102,126,234,.18) !important; color: var(--accent) !important; font-weight:600 }
-            .bm-mgr-row:hover { background: var(--bg2) !important; }
-            .bm-mgr-row.bm-mgr-selected { background: rgba(102,126,234,.12) !important; }
-            .bm-tree-item { transition: background .12s; }
-          `;
+                                                .bm-tree-item:hover {background: var(--bg3) !important; }
+                                                .bm-tree-item:hover .bm-tree-del {color: var(--text3) !important; }
+                                                .bm-tree-active {background: rgba(102,126,234,.18) !important; color: var(--accent) !important; font-weight:600 }
+                                                .bm-mgr-row:hover {background: var(--bg2) !important; }
+                                                .bm-mgr-row.bm-mgr-selected {background: rgba(102,126,234,.12) !important; }
+                                                .bm-tree-item {transition: background .12s; }
+                                                `;
             document.head.appendChild(s);
         }
 
@@ -17200,24 +17233,24 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
             const tags = b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
             return `<div class="bm-mgr-row${sel ? ' bm-mgr-selected' : ''}" data-url="${escHtml(b.url)}"
-            style="display:grid;grid-template-columns:28px 1fr 200px 120px 36px;gap:0;align-items:center;padding:6px 10px 6px 8px;border-bottom:1px solid var(--border);cursor:default;font-size:12px">
-            <div><input type="checkbox" class="bm-chk" data-url="${escHtml(b.url)}" ${sel ? 'checked' : ''} style="cursor:pointer"></div>
-            <div style="min-width:0;padding-right:8px">
-              <div style="display:flex;align-items:center;gap:6px">
-                <img src="${faviconUrl}" width="14" height="14" style="border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">
-                <span class="bm-row-title" data-url="${escHtml(b.url)}" style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(b.title || b.url)}">${escHtml(b.title || b.url)}</span>
-              </div>
-              <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${escHtml(b.url)}</div>
-              ${b.description ? `<div style="font-size:10px;color:var(--text3);margin-top:1px;font-style:italic">${escHtml(b.description.slice(0, 80))}</div>` : ''}
-              ${tags.length ? `<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${tags.map(t => `<span style="background:rgba(102,126,234,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:10px">${escHtml(t)}</span>`).join('')}</div>` : ''}
-            </div>
-            <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px" title="${escHtml(b.url)}">${escHtml(domain)}</div>
-            <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.folder ? `<span style="background:var(--bg3);border-radius:4px;padding:2px 6px">📁 ${escHtml(b.folder)}</span>` : ''}</div>
-            <div style="display:flex;gap:2px;justify-content:flex-end">
-              <button class="bm-row-edit" data-url="${escHtml(b.url)}" title="Uredi" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">✏️</button>
-              <button class="bm-row-del" data-url="${escHtml(b.url)}" title="Obriši" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">🗑</button>
-            </div>
-          </div>`;
+                                                    style="display:grid;grid-template-columns:28px 1fr 200px 120px 36px;gap:0;align-items:center;padding:6px 10px 6px 8px;border-bottom:1px solid var(--border);cursor:default;font-size:12px">
+                                                    <div><input type="checkbox" class="bm-chk" data-url="${escHtml(b.url)}" ${sel ? 'checked' : ''} style="cursor:pointer"></div>
+                                                    <div style="min-width:0;padding-right:8px">
+                                                        <div style="display:flex;align-items:center;gap:6px">
+                                                            <img src="${faviconUrl}" width="14" height="14" style="border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">
+                                                                <span class="bm-row-title" data-url="${escHtml(b.url)}" style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(b.title || b.url)}">${escHtml(b.title || b.url)}</span>
+                                                        </div>
+                                                        <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${escHtml(b.url)}</div>
+                                                        ${b.description ? `<div style="font-size:10px;color:var(--text3);margin-top:1px;font-style:italic">${escHtml(b.description.slice(0, 80))}</div>` : ''}
+                                                        ${tags.length ? `<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${tags.map(t => `<span style="background:rgba(102,126,234,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:10px">${escHtml(t)}</span>`).join('')}</div>` : ''}
+                                                    </div>
+                                                    <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px" title="${escHtml(b.url)}">${escHtml(domain)}</div>
+                                                    <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.folder ? `<span style="background:var(--bg3);border-radius:4px;padding:2px 6px">📁 ${escHtml(b.folder)}</span>` : ''}</div>
+                                                    <div style="display:flex;gap:2px;justify-content:flex-end">
+                                                        <button class="bm-row-edit" data-url="${escHtml(b.url)}" title="Uredi" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">✏️</button>
+                                                        <button class="bm-row-del" data-url="${escHtml(b.url)}" title="Obriši" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">🗑</button>
+                                                    </div>
+                                                </div>`;
         }).join('');
 
         // Row title click → navigate

@@ -9472,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.258</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.259</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10954,7 +10954,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.258</span></div>
+                                    v<span id="helpVersionNum2">2.4.259</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -16245,7 +16245,7 @@
             function setStatus(html) {
                 if (statusEl) statusEl.innerHTML = html;
             }
-            function parseTikTokOwnerFromUrl(url) {
+            window.parseTikTokOwnerFromUrl = function parseTikTokOwnerFromUrl(url) {
                 try {
                     const pathname = new URL(String(url || ''), window.location.origin).pathname || '';
                     const m = pathname.match(/\/(@[^\/?#]+)/i);
@@ -16253,7 +16253,7 @@
                 } catch (_) {
                     return '';
                 }
-            }
+            };
             function updateTkaiStreamOwner(owner, sourceUrl) {
                 if (!streamOwnerEl) return;
                 const fromOwner = String(owner || '').trim().replace(/^@+/, '');
@@ -19540,6 +19540,39 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     return false;
                 }
 
+                                function isStrictShareEvent(text, rawText, user, el) {
+                                    const shareLooseRe = /\b(share|shared|shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i;
+                                    const shareExactRe = /^(?:share|shared|shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)$/i;
+                                        const sources = [text, cleanChatText(rawText, user), rawText]
+                                            .map((value) => String(value || '').replace(/\s+/g, ' ').trim())
+                                            .filter(Boolean);
+                                        const hasExplicitShareMarker = !!el?.querySelector(
+                                            '[data-e2e*="share" i],'
+                                            + '[aria-label*="shared" i],'
+                                            + '[aria-label*="podijelio" i],'
+                                            + '[aria-label*="podijelila" i],'
+                                            + '[title*="shared" i],'
+                                            + '[title*="podijelio" i],'
+                                            + '[title*="podijelila" i],'
+                                            + '[class*="share" i],'
+                                            + '[class*="Share" i]'
+                                        );
+
+                                        for (const source of sources) {
+                                            if (!shareLooseRe.test(source)) continue;
+                                            const normalized = source
+                                                .replace(/[.!?,:;()[\]{}"'*_+=|\\/-]+/g, ' ')
+                                                .replace(/\s+/g, ' ')
+                                                .trim();
+                                            const withoutShare = normalized.replace(shareLooseRe, '').replace(/\s+/g, '').trim();
+                                            const hasMention = /(^|\s)@[a-z0-9._]{2,40}\b/i.test(normalized);
+                                            if (shareExactRe.test(normalized) && !hasMention) return true;
+                                            if (!withoutShare && !hasMention && hasExplicitShareMarker) return true;
+                                        }
+
+                                        return false;
+                                }
+
                 items.slice(-45).forEach((el, index) => {
           const userEl = el.querySelector(
             '[data-e2e="chat-message-user-name"],'
@@ -19653,7 +19686,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isGift = hasSent || hasGiftWord || giftEls.length > 0;
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
-            const isShare = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i.test(low);
+            const isShare = isStrictShareEvent(text, rawText, user, el);
                         if ((!user || String(user).toLowerCase() === 'unknown') && (isGift || isJoin || isShare)) {
                             const fromText = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)\b/i);
                             if (fromText && fromText[1]) user = fromText[1].trim().slice(0, 60);
