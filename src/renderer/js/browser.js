@@ -1070,6 +1070,16 @@ initSettingsPanel();
         const nowTs = Date.now();
         const messages = Array.isArray(session?.messages) ? session.messages.slice() : [];
         const normalizeTs = (m) => Number(m?.ts || m?.timestamp || 0) || 0;
+        const serializeGiftDetails = (giftTypes) => Array.from(giftTypes.values())
+            .map((detail) => ({
+                name: detail.name,
+                quantity: Number(detail.quantity || 0),
+                events: Number(detail.events || 0),
+                coins: Number(detail.coins || 0),
+                unitCoins: Number(detail.unitCoins || 0),
+                type: detail.type || 'gift'
+            }))
+            .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')));
         const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
         const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, other: 0 };
         const userStatsMap = new Map();
@@ -1085,14 +1095,33 @@ initSettingsPanel();
             const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
             const user = String(m?.user || '').trim() || 'Unknown';
             const userKey = user.toLowerCase();
-            const coins = Number(m?.coins || 0);
+            const giftMeta = (type === 'gift' || type === 'subscriber') ? resolveGiftMetaFromMessage(m) : null;
+            const quantity = giftMeta ? Math.max(1, Number(giftMeta.quantity || 1)) : 0;
+            const coins = giftMeta ? Number(giftMeta.coins || 0) : Number(m?.coins || 0);
             if (coins > 0 && Number(session?.totalCoins || 0) <= 0) coinsTotal += coins;
             if (!userStatsMap.has(userKey)) {
-                userStatsMap.set(userKey, { user, total: 0, chat: 0, gifts: 0, joins: 0, coins: 0 });
+                userStatsMap.set(userKey, { user, total: 0, chat: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map() });
             }
             const row = userStatsMap.get(userKey);
             row.total += 1;
-            if (type === 'gift' || type === 'subscriber') row.gifts += 1;
+            if (type === 'gift' || type === 'subscriber') {
+                row.gifts += quantity;
+                row.giftEvents += 1;
+                const giftKey = normalizeGiftKey(giftMeta?.giftName || text || 'unknown gift') || 'unknown gift';
+                const giftRow = row.giftTypes.get(giftKey) || {
+                    name: giftMeta?.giftName || text || 'Unknown gift',
+                    quantity: 0,
+                    events: 0,
+                    coins: 0,
+                    unitCoins: Number(giftMeta?.unitCoins || 0),
+                    type
+                };
+                giftRow.quantity += quantity;
+                giftRow.events += 1;
+                giftRow.coins += Math.max(0, coins);
+                if (!giftRow.unitCoins && Number(giftMeta?.unitCoins || 0) > 0) giftRow.unitCoins = Number(giftMeta.unitCoins || 0);
+                row.giftTypes.set(giftKey, giftRow);
+            }
             else if (type === 'join') row.joins += 1;
             else row.chat += 1;
             row.coins += Math.max(0, coins);
@@ -1102,8 +1131,18 @@ initSettingsPanel();
             if (/^system\b/i.test(user) && text) answers.push({ user, text, ts: normalizeTs(m) || nowTs });
         });
         const uniqueUsers = userStatsMap.size;
-        const usersByMessages = Array.from(userStatsMap.values()).sort((a, b) => b.total - a.total || b.coins - a.coins);
-        const usersByCoins = Array.from(userStatsMap.values()).sort((a, b) => b.coins - a.coins || b.gifts - a.gifts);
+        const userRows = Array.from(userStatsMap.values()).map((row) => ({
+            user: row.user,
+            total: row.total,
+            chat: row.chat,
+            gifts: row.gifts,
+            giftEvents: row.giftEvents,
+            joins: row.joins,
+            coins: row.coins,
+            giftDetails: serializeGiftDetails(row.giftTypes)
+        }));
+        const usersByMessages = userRows.slice().sort((a, b) => b.total - a.total || b.coins - a.coins || b.gifts - a.gifts);
+        const usersByCoins = userRows.slice().sort((a, b) => b.coins - a.coins || b.gifts - a.gifts || b.total - a.total);
         const firstTs = sorted.length ? normalizeTs(sorted[0]) : 0;
         const lastTs = sorted.length ? normalizeTs(sorted[sorted.length - 1]) : 0;
         const durationMin = Number(session?.sessionMinutes || 0) || (firstTs && lastTs && lastTs > firstTs ? Math.max(1, Math.floor((lastTs - firstTs) / 60000)) : 0);
@@ -1184,13 +1223,15 @@ initSettingsPanel();
             + dots
             + `</svg>`;
     }
-    function openTkaiSessionStatsDashboard(session, indexLabel) {
+    function buildTkaiSessionStatsPayload(session, indexLabel) {
         const sessionData = session || {};
         const analytics = buildTkaiSessionAnalytics(sessionData);
+        const giftBreakdowns = buildGiftExportBreakdowns(analytics.usersByCoins, 15, 200);
         const stamp = String(sessionData.savedAt || sessionData.exportedAt || new Date().toISOString()).replace(/[:.]/g, '-');
         const baseName = `tkai-session-stats-${stamp}`;
-        const buildSummaryObject = () => ({
+        const summary = {
             savedAt: sessionData.savedAt || sessionData.exportedAt || new Date().toISOString(),
+            indexLabel: indexLabel || '',
             messageCount: analytics.messages.length,
             durationMinutes: analytics.durationMin,
             peakViewers: analytics.peakViewers,
@@ -1200,11 +1241,66 @@ initSettingsPanel();
             typeCounts: analytics.typeCounts,
             topUsersByMessages: analytics.usersByMessages.slice(0, 50),
             topUsersByCoins: analytics.usersByCoins.slice(0, 50),
+            usersAll: analytics.usersByCoins,
+            topGiftsByUser: giftBreakdowns.topGiftsByUser,
+            topGiftsOverall: giftBreakdowns.topGiftsOverall,
             questions: analytics.questions,
             answers: analytics.answers,
             timeline: analytics.timeline,
-            songs: analytics.songs
-        });
+            songs: analytics.songs,
+            songPerformance: analytics.songPerformance || []
+        };
+        return { sessionData, analytics, giftBreakdowns, stamp, baseName, summary };
+    }
+
+    function openTkaiSessionStatsPage(session, indexLabel) {
+        const payload = buildTkaiSessionStatsPayload(session, indexLabel);
+        const storagePrefix = 'tkai_session_dashboard_payload_';
+        const now = Date.now();
+        try {
+            Object.keys(localStorage)
+                .filter((key) => key.startsWith(storagePrefix))
+                .forEach((key) => {
+                    try {
+                        const raw = JSON.parse(localStorage.getItem(key) || 'null');
+                        const createdAt = Number(raw?.createdAt || 0);
+                        if (!createdAt || now - createdAt > 86400000) localStorage.removeItem(key);
+                    } catch (_) {
+                        localStorage.removeItem(key);
+                    }
+                });
+        } catch (_) { }
+        const token = storagePrefix + now + '_' + Math.random().toString(36).slice(2, 9);
+        try {
+            localStorage.setItem(token, JSON.stringify({ createdAt: now, payload: payload.summary }));
+        } catch (_) {
+            showToast('⚠️ Ne mogu spremiti session dashboard payload.');
+            openTkaiSessionStatsDashboard(session, indexLabel);
+            return;
+        }
+        let pageUrl = '';
+        try {
+            const next = new URL('./tkai-session-dashboard.html', window.location.href);
+            next.hash = encodeURIComponent(token);
+            pageUrl = next.toString();
+        } catch (_) {
+            pageUrl = 'tkai-session-dashboard.html#' + encodeURIComponent(token);
+        }
+        const win = window.open(pageUrl, '_blank', 'noopener,noreferrer,width=1480,height=960');
+        if (!win) {
+            try { localStorage.removeItem(token); } catch (_) { }
+            showToast('⚠️ Popup blokiran. Otvaram ugrađeni dashboard.');
+            openTkaiSessionStatsDashboard(session, indexLabel);
+        }
+    }
+
+    function openTkaiSessionStatsDashboard(session, indexLabel) {
+        const payload = buildTkaiSessionStatsPayload(session, indexLabel);
+        const sessionData = payload.sessionData;
+        const analytics = payload.analytics;
+        const giftBreakdowns = payload.giftBreakdowns;
+        const baseName = payload.baseName;
+        const buildSummaryObject = () => payload.summary;
         const buildCsvText = () => {
             const esc = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
             const lines = [];
@@ -1222,6 +1318,18 @@ initSettingsPanel();
             lines.push(['users', 'user', 'total', 'chat', 'gifts', 'coins', 'joins'].map(esc).join(','));
             analytics.usersByMessages.forEach((u) => {
                 lines.push(['users', u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map(esc).join(','));
+            });
+            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+            lines.push(['top_gifts_overall', 'gift', 'quantity', 'events', 'coins', 'unit_coins', 'users'].map(esc).join(','));
+            giftBreakdowns.topGiftsOverall.forEach((gift) => {
+                lines.push(['top_gifts_overall', gift.name, gift.quantity, gift.events, gift.coins, gift.unitCoins, gift.userCount].map(esc).join(','));
+            });
+            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+            lines.push(['top_gifts_by_user', 'user', 'gift', 'quantity', 'events', 'coins', 'unit_coins'].map(esc).join(','));
+            giftBreakdowns.topGiftsByUser.forEach((row) => {
+                row.gifts.forEach((gift) => {
+                    lines.push(['top_gifts_by_user', row.user, gift.name, gift.quantity, gift.events, gift.coins, gift.unitCoins].map(esc).join(','));
+                });
             });
             lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
             lines.push(['questions', 'user', 'text', 'timestamp'].map(esc).join(','));
@@ -1306,6 +1414,20 @@ initSettingsPanel();
         const topUsersHtml = analytics.usersByMessages.slice(0, 25).map((u, idx) =>
             `<tr><td style="padding:4px 6px;color:#9ec6ff">#${idx + 1} @${escHtml(u.user)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.total)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.chat)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.gifts)}</td><td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(u.coins)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.joins)}</td></tr>`
         ).join('');
+        const topGiftsOverallHtml = giftBreakdowns.topGiftsOverall.slice(0, 18).map((gift, idx) =>
+            `<tr data-gift-name="${encodeURIComponent(gift.name)}" title="Klik za korisnike koji su poslali ovaj gift" style="cursor:pointer">`
+            + `<td style="padding:4px 6px;color:#f8fafc">#${idx + 1} ${escHtml(gift.name)}</td><td style="padding:4px 6px;text-align:right">${formatNum(gift.quantity)}</td><td style="padding:4px 6px;text-align:right">${formatNum(gift.events)}</td><td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(gift.coins)}</td><td style="padding:4px 6px;text-align:right">${formatNum(gift.userCount)}</td></tr>`
+        ).join('') || '<tr><td colspan="5" style="padding:8px 6px;color:#94a3b8;text-align:center">Nema gift podataka.</td></tr>';
+        const topGiftsByUserHtml = giftBreakdowns.topGiftsByUser.slice(0, 10).map((row) => {
+            const preview = row.gifts.slice(0, 3).map((gift) =>
+                `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span style="color:#cbd5e1">${escHtml(gift.name)}</span><span style="color:#fbbf24">${formatNum(gift.coins)} 🪙</span><span style="color:#94a3b8">x${formatNum(gift.quantity)}</span></div>`
+            ).join('');
+            return `<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)">`
+                + `<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px"><span style="color:#9ec6ff">@${escHtml(row.user)}</span><span style="color:#fbbf24">${formatNum(row.totalCoins)} 🪙</span></div>`
+                + `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">Gift količina ${formatNum(row.totalGiftQuantity)} • eventi ${formatNum(row.giftEvents)}</div>`
+                + `<div style="font-size:11px">${preview || '<span style="color:#94a3b8">Nema detalja.</span>'}</div>`
+                + `</div>`;
+        }).join('') || '<div style="color:#94a3b8">Nema gift podataka po korisniku.</div>';
         const questionsHtml = analytics.questions.slice(-50).reverse().map((q) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#a5b4fc">@${escHtml(q.user)}</span>: ${escHtml(q.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema pitanja u sesiji.</div>';
@@ -1339,13 +1461,74 @@ initSettingsPanel();
             + `</div>`
             + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto">`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:8px">Raspodjela tipova poruka</div><div style="display:flex;gap:12px;align-items:center"><div style="width:130px;height:130px;border-radius:50%;background:${donut};position:relative"><div style="position:absolute;inset:27px;border-radius:50%;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:11px;color:#cbd5e1">${formatNum(total)}<br>total</div></div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px">${typeRows.map((r) => `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${r.color}"></span>${r.label}: <b>${formatNum(r.value)}</b></div>`).join('')}</div></div></div>`
+            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Top gifts overall</div><div style="max-height:220px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">Gift</th><th style="padding:5px 6px;text-align:right">Qty</th><th style="padding:5px 6px;text-align:right">Evt</th><th style="padding:5px 6px;text-align:right">Coins</th><th style="padding:5px 6px;text-align:right">Users</th></tr></thead><tbody>${topGiftsOverallHtml}</tbody></table></div></div>`
+            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Top gifts by user</div><div style="max-height:220px;overflow:auto;font-size:11px">${topGiftsByUserHtml}</div></div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Odgovori (system/AI)</div><div style="max-height:220px;overflow:auto;font-size:11px">${answersHtml}</div></div>`
             + `</div>`
             + `</div>`;
+        function showGiftSendersModal(giftName) {
+            const normalizedGift = normalizeGiftKey(giftName);
+            if (!normalizedGift) return;
+            document.getElementById('tkaiGiftSendersModal')?.remove();
+            const senderRows = analytics.usersByCoins
+                .map((user) => {
+                    const detail = (Array.isArray(user.giftDetails) ? user.giftDetails : [])
+                        .find((gift) => normalizeGiftKey(gift.name) === normalizedGift);
+                    if (!detail) return null;
+                    return {
+                        user: user.user,
+                        quantity: Number(detail.quantity || 0),
+                        events: Number(detail.events || 0),
+                        coins: Number(detail.coins || 0),
+                        unitCoins: Number(detail.unitCoins || 0)
+                    };
+                })
+                .filter(Boolean)
+                .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.user || '').localeCompare(String(b.user || '')));
+            const totalCoins = senderRows.reduce((sum, row) => sum + Number(row.coins || 0), 0);
+            const totalQty = senderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+            const sendersHtml = senderRows.length
+                ? senderRows.map((row, idx) => `<tr>`
+                    + `<td style="padding:6px 8px;color:#9ec6ff">#${idx + 1} @${escHtml(row.user)}</td>`
+                    + `<td style="padding:6px 8px;text-align:right">${formatNum(row.quantity)}</td>`
+                    + `<td style="padding:6px 8px;text-align:right">${formatNum(row.events)}</td>`
+                    + `<td style="padding:6px 8px;text-align:right">${formatNum(row.unitCoins)}</td>`
+                    + `<td style="padding:6px 8px;text-align:right;color:#fbbf24">${formatNum(row.coins)}</td>`
+                    + `</tr>`).join('')
+                : '<tr><td colspan="5" style="padding:10px 8px;color:#94a3b8;text-align:center">Nema korisnika za ovaj gift.</td></tr>';
+            const giftModal = document.createElement('div');
+            giftModal.id = 'tkaiGiftSendersModal';
+            giftModal.style.cssText = 'position:fixed;inset:0;z-index:10040;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:16px';
+            giftModal.innerHTML = ''
+                + '<div style="width:min(720px,100%);max-height:85vh;overflow:auto;background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.45);padding:16px;color:#e5eefc">'
+                + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">'
+                + '<div><div style="font-size:18px;font-weight:700">' + escHtml(giftName) + '</div><div style="font-size:12px;color:#94a3b8">Korisnici koji su poslali ovaj gift</div></div>'
+                + '<button id="tkaiGiftSendersClose" type="button" class="tkai-insights-btn">Zatvori</button>'
+                + '</div>'
+                + '<div style="display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:8px;margin-bottom:12px">'
+                + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Pošiljatelji</div><div style="font-size:22px;font-weight:700">' + formatNum(senderRows.length) + '</div></div>'
+                + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Ukupna količina</div><div style="font-size:22px;font-weight:700">' + formatNum(totalQty) + '</div></div>'
+                + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Ukupno coins</div><div style="font-size:22px;font-weight:700;color:#fbbf24">' + formatNum(totalCoins) + '</div></div>'
+                + '</div>'
+                + '<div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03)">'
+                + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+                + '<thead><tr style="background:rgba(15,23,42,.92);color:#94a3b8"><th style="padding:7px 8px;text-align:left">User</th><th style="padding:7px 8px;text-align:right">Količina</th><th style="padding:7px 8px;text-align:right">Eventi</th><th style="padding:7px 8px;text-align:right">Coin/gift</th><th style="padding:7px 8px;text-align:right">Ukupno coins</th></tr></thead>'
+                + '<tbody>' + sendersHtml + '</tbody></table></div></div>';
+            const closeGiftModal = () => giftModal.remove();
+            giftModal.querySelector('#tkaiGiftSendersClose')?.addEventListener('click', closeGiftModal);
+            giftModal.addEventListener('click', (ev) => { if (ev.target === giftModal) closeGiftModal(); });
+            document.body.appendChild(giftModal);
+        }
         const close = () => { modal.remove(); };
         modal.querySelector('#tkaiSessionStatsClose')?.addEventListener('click', close);
+        modal.querySelectorAll('[data-gift-name]').forEach((row) => {
+            row.addEventListener('click', () => {
+                const giftName = decodeURIComponent(String(row.getAttribute('data-gift-name') || ''));
+                if (giftName) showGiftSendersModal(giftName);
+            });
+        });
         modal.querySelector('#tkaiSessExportCsv')?.addEventListener('click', () => {
             downloadTextFile(baseName + '.csv', buildCsvText(), 'text/csv;charset=utf-8');
             showToast('⬇️ Session stats CSV skinut.');
@@ -1382,7 +1565,7 @@ initSettingsPanel();
                 const viewers = s.peakViewers || s.viewerCount || 0;
                 const gifts = (s.messages || []).filter(m => m.type === 'gift').length;
                 return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
-                    + '<div style="display:flex;align-items:center;gap:6px">'
+                    + '<div class="tkai-session-row" data-si="' + i + '" title="Otvori kompletnu statistiku sesije" style="display:flex;align-items:center;gap:6px;cursor:pointer">'
                     + '<input type="checkbox" class="tkai-session-chk" data-si="' + i + '" style="accent-color:#667eea;cursor:pointer">'
                     + '<div style="flex:1;min-width:0">'
                     + '<div style="font-weight:600;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + date + '</div>'
@@ -1394,7 +1577,7 @@ initSettingsPanel();
                     + (gifts ? '<span>🎁 ' + gifts + '</span>' : '')
                     + '</div></div>'
                     + '<div style="display:flex;gap:4px">'
-                    + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Statistike" style="font-size:10px;padding:2px 6px">📊</button>'
+                    + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Statistika sesije" style="font-size:10px;padding:2px 8px">📊 Statistika</button>'
                     + '<button class="s-btn-sm tkai-btn-sess-dl" data-si="' + i + '" title="Skini JSON" style="font-size:10px;padding:2px 6px">⬇️</button>'
                     + '</div>'
                     + '</div>'
@@ -1414,12 +1597,22 @@ initSettingsPanel();
                 });
             });
 
+            listEl.querySelectorAll('.tkai-session-row').forEach(row => {
+                row.addEventListener('click', (event) => {
+                    if (event.target.closest('button') || event.target.closest('input')) return;
+                    const s = getRecentTkaiSessions()[+row.dataset.si];
+                    if (!s) return;
+                    openTkaiSessionStatsPage(s, Number(row.dataset.si) + 1);
+                });
+            });
+
             // Inline stats button
             listEl.querySelectorAll('.tkai-btn-sess-stats').forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (event) => {
+                    event.stopPropagation();
                     const s = getRecentTkaiSessions()[+btn.dataset.si];
                     if (!s) return;
-                    openTkaiSessionStatsDashboard(s, Number(btn.dataset.si) + 1);
+                    openTkaiSessionStatsPage(s, Number(btn.dataset.si) + 1);
                 });
             });
         } catch (e) {
@@ -3725,12 +3918,37 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         base.forEach((m) => {
             const user = String(m?.user || '').trim();
             if (!user) return;
-            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, lastTs: 0, texts: new Map() });
+            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, lastTs: 0, texts: new Map(), giftTypes: new Map() });
             const row = map.get(user);
             row.total += 1;
-            if (m.type === 'gift' || m.type === 'subscriber') row.gifts += 1;
-            else if (m.type === 'join') row.joins += 1;
-            else row.chat += 1;
+            if (m.type === 'gift' || m.type === 'subscriber') {
+                const giftMeta = resolveGiftMetaFromMessage(m);
+                const quantity = Math.max(1, Number(giftMeta.quantity || 1));
+                const coins = Math.max(0, Number(giftMeta.coins || 0));
+                row.gifts += quantity;
+                row.giftEvents += 1;
+                row.coins += coins;
+                const giftKey = normalizeGiftKey(giftMeta.giftName || String(m.text || '').trim() || 'unknown gift') || 'unknown gift';
+                const giftRow = row.giftTypes.get(giftKey) || {
+                    name: giftMeta.giftName || String(m.text || '').trim() || 'Unknown gift',
+                    quantity: 0,
+                    events: 0,
+                    coins: 0,
+                    unitCoins: Number(giftMeta.unitCoins || 0),
+                    type: m.type || 'gift'
+                };
+                giftRow.quantity += quantity;
+                giftRow.events += 1;
+                giftRow.coins += coins;
+                if (!giftRow.unitCoins && Number(giftMeta.unitCoins || 0) > 0) giftRow.unitCoins = Number(giftMeta.unitCoins || 0);
+                row.giftTypes.set(giftKey, giftRow);
+            } else if (m.type === 'join') {
+                row.joins += 1;
+                row.coins += Math.max(0, Number(m?.coins || 0));
+            } else {
+                row.chat += 1;
+                row.coins += Math.max(0, Number(m?.coins || 0));
+            }
             const txt = String(m.text || '').trim().toLowerCase();
             if (txt) row.texts.set(txt, (row.texts.get(txt) || 0) + 1);
             row.lastTs = Math.max(row.lastTs, Number(m.ts || 0));
@@ -3741,11 +3959,72 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 total: r.total,
                 chat: r.chat,
                 gifts: r.gifts,
+                giftEvents: r.giftEvents,
                 joins: r.joins,
+                coins: r.coins,
                 lastTs: r.lastTs,
-                repeatMax: Math.max(0, ...Array.from(r.texts.values()))
+                repeatMax: Math.max(0, ...Array.from(r.texts.values())),
+                giftDetails: Array.from(r.giftTypes.values())
+                    .map((detail) => ({
+                        name: detail.name,
+                        quantity: Number(detail.quantity || 0),
+                        events: Number(detail.events || 0),
+                        coins: Number(detail.coins || 0),
+                        unitCoins: Number(detail.unitCoins || 0),
+                        type: detail.type || 'gift'
+                    }))
+                    .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')))
             }))
-            .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
+            .sort((a, b) => b.total - a.total || b.coins - a.coins || b.lastTs - a.lastTs);
+    }
+    function buildGiftExportBreakdowns(users, perUserLimit = 12, overallLimit = 150) {
+        const list = Array.isArray(users) ? users.slice() : [];
+        const overallMap = new Map();
+        const topGiftsByUser = list
+            .map((user) => {
+                const allGifts = Array.isArray(user?.giftDetails) ? user.giftDetails.slice() : [];
+                const gifts = allGifts.slice(0, perUserLimit);
+                allGifts.forEach((gift) => {
+                    const key = normalizeGiftKey(gift.name) || String(gift.name || 'unknown gift').toLowerCase();
+                    const row = overallMap.get(key) || {
+                        name: gift.name || 'Unknown gift',
+                        quantity: 0,
+                        events: 0,
+                        coins: 0,
+                        unitCoins: Number(gift.unitCoins || 0),
+                        userCount: 0,
+                        users: new Set()
+                    };
+                    row.quantity += Number(gift.quantity || 0);
+                    row.events += Number(gift.events || 0);
+                    row.coins += Number(gift.coins || 0);
+                    if (!row.unitCoins && Number(gift.unitCoins || 0) > 0) row.unitCoins = Number(gift.unitCoins || 0);
+                    row.users.add(String(user.user || ''));
+                    row.userCount = row.users.size;
+                    overallMap.set(key, row);
+                });
+                return {
+                    user: user.user,
+                    totalCoins: Number(user.coins || 0),
+                    totalGiftQuantity: Number(user.gifts || 0),
+                    giftEvents: Number(user.giftEvents || 0),
+                    gifts
+                };
+            })
+            .filter((row) => row.gifts.length > 0)
+            .sort((a, b) => b.totalCoins - a.totalCoins || b.totalGiftQuantity - a.totalGiftQuantity || b.giftEvents - a.giftEvents || String(a.user || '').localeCompare(String(b.user || '')));
+        const topGiftsOverall = Array.from(overallMap.values())
+            .map((row) => ({
+                name: row.name,
+                quantity: row.quantity,
+                events: row.events,
+                coins: row.coins,
+                unitCoins: row.unitCoins,
+                userCount: row.users.size
+            }))
+            .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')))
+            .slice(0, overallLimit);
+        return { topGiftsByUser, topGiftsOverall };
     }
     function buildDailyStats(messages, limit) {
         const scanLimit = Math.max(30, Math.min(2000, Number(limit || 200)));
@@ -3926,6 +4205,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     }
 
+    function escapeGiftRegex(value) {
+        return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
     function parseGiftCatalogLines(lines) {
         const map = new Map();
         String(lines || '')
@@ -3938,6 +4221,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 const patterns = [
                     { kind: 'num_name', re: /^unknown[·•|:\-]?\s*(\d{1,7})\s+(.+)$/i },
                     { kind: 'num_name', re: /^(\d{1,7})\s+(.+)$/i },
+                    { kind: 'num_name', re: /^\(?\s*(\d{1,7})\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙)?\s*\)?\s*[=·•|:\-]\s*(.+)$/i },
+                    { kind: 'name_num', re: /^(.+?)\s*[=]\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i },
+                    { kind: 'name_num', re: /^(.+?)\s*\(\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?\s*\)$/i },
                     { kind: 'name_num', re: /^(.+?)\s*[·•|:\-]\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i },
                     { kind: 'name_num', re: /^(.+?)\s+(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i }
                 ];
@@ -3977,16 +4263,53 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function detectGiftMetaFromText(text) {
         const src = String(text || '').trim();
         const normalized = normalizeGiftKey(src);
+        const normalizedLoose = normalizeGiftKey(
+            src
+                .replace(/\b(?:sent|sends?|sending|gift(?:ed|ing|s)?|gave|gives?|giving|donated?|support(?:ed|ing)?|shared?)\b/gi, ' ')
+                .replace(/\b(?:to|for|host|streamer|creator|live|room)\b/gi, ' ')
+                .replace(/\b(?:qty|quantity|kom|komada|pcs|pieces|times?)\b/gi, ' ')
+                .replace(/[()\[\]{}]/g, ' ')
+        );
         const entries = getGiftCatalogEntries();
         let found = null;
+        let foundKey = '';
         for (const [key, value] of entries) {
-            if (key && normalized.includes(key)) {
+            if (key && (normalized.includes(key) || normalizedLoose.includes(key))) {
                 found = value;
+                foundKey = key;
                 break;
             }
         }
-        const qtyMatch = src.match(/\b(?:x|×)\s*(\d{1,4})\b/i);
-        const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
+        const quantityMatchers = [
+            src.match(/\b(?:x|×)\s*(\d{1,4})\b/i),
+            src.match(/\b(\d{1,4})\s*(?:x|×)\b/i),
+            src.match(/\b(?:qty|quantity|kom|komada|pcs|pieces|times?)\s*[:=]?\s*(\d{1,4})\b/i),
+            src.match(/\b(?:gift|gifted|sent)\s*[:#-]?\s*(\d{1,4})\b/i)
+        ];
+        let quantity = 1;
+        for (const match of quantityMatchers) {
+            const candidate = Number(match?.[1] || 0);
+            if (candidate > 0) {
+                quantity = candidate;
+                break;
+            }
+        }
+        if (quantity <= 1 && foundKey) {
+            const giftPattern = escapeGiftRegex(foundKey).replace(/\s+/g, '\\s+');
+            const dynamicMatchers = [
+                new RegExp(`\\b(\\d{1,4})\\s*(?:x|×)?\\s*${giftPattern}\\b`, 'i'),
+                new RegExp(`\\b${giftPattern}\\b\\s*(?:x|×|qty|quantity|kom|komada|pcs|pieces|times?)?\\s*[:=]?\\s*(\\d{1,4})\\b`, 'i')
+            ];
+            for (const re of dynamicMatchers) {
+                const match = normalizedLoose.match(re) || normalized.match(re);
+                const candidate = Number(match?.[1] || 0);
+                if (candidate > 0) {
+                    quantity = candidate;
+                    break;
+                }
+            }
+        }
+        quantity = Math.max(1, quantity);
         let unitCoins = found ? Number(found.coins || 0) : 0;
         if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
         const coins = unitCoins * quantity;
@@ -3995,6 +4318,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             coins: Math.max(0, Number(coins || 0)),
             unitCoins: Math.max(0, Number(unitCoins || 0)),
             quantity,
+        };
+    }
+
+    function resolveGiftMetaFromMessage(message) {
+        const directName = String(message?.giftName || '').trim();
+        const meta = detectGiftMetaFromText(directName || message?.text || '');
+        const quantity = Math.max(1, Number(message?.quantity || meta.quantity || 1));
+        const unitCoins = Math.max(0, Number(message?.unitCoins || meta.unitCoins || 0));
+        const directCoins = Number(message?.coins || 0);
+        const fallbackCoins = unitCoins > 0 ? unitCoins * quantity : Number(meta.coins || 0);
+        return {
+            giftName: directName || meta.giftName || String(message?.text || '').trim().slice(0, 80) || 'Unknown gift',
+            quantity,
+            unitCoins,
+            coins: Math.max(0, Number(directCoins > 0 ? directCoins : fallbackCoins || 0))
         };
     }
 
@@ -4963,12 +5301,71 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 '<td style="padding:3px 4px">' + formatNum(u.gifts) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.coins) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.joins) + '</td>';
-            tr.title = 'Klik za copy @' + u.user;
+            tr.title = 'Klik za detalje @' + u.user;
             tr.style.cursor = 'pointer';
-            tr.addEventListener('click', () => { navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { }); });
+            tr.addEventListener('click', () => { showTopUserGiftDetails(u); });
             body.appendChild(tr);
         });
-        meta.textContent = formatNum(rows.length) + ' users • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
+        meta.textContent = formatNum(rows.length) + ' users • klik na red za detalje • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
+    }
+
+    function showTopUserGiftDetails(userStats) {
+        if (!userStats?.user) return;
+        document.getElementById('tkaiTopUserDetailModal')?.remove();
+        const modal = document.createElement('div');
+        modal.id = 'tkaiTopUserDetailModal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:10030;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:16px';
+        const giftRows = Array.isArray(userStats.giftDetails) ? userStats.giftDetails.slice() : [];
+        const giftsHtml = giftRows.length
+            ? giftRows.map((gift) => '<tr>'
+                + '<td style="padding:6px 8px">' + escHtml(gift.name || 'Unknown gift') + '</td>'
+                + '<td style="padding:6px 8px;text-align:right">' + formatNum(gift.quantity || 0) + '</td>'
+                + '<td style="padding:6px 8px;text-align:right">' + formatNum(gift.events || 0) + '</td>'
+                + '<td style="padding:6px 8px;text-align:right">' + formatNum(gift.unitCoins || 0) + '</td>'
+                + '<td style="padding:6px 8px;text-align:right;color:#fbbf24">' + formatNum(gift.coins || 0) + '</td>'
+                + '</tr>').join('')
+            : '<tr><td colspan="5" style="padding:10px 8px;color:#94a3b8;text-align:center">Nema spremljenih giftova za ovog korisnika.</td></tr>';
+        modal.innerHTML = ''
+            + '<div style="width:min(760px,100%);max-height:85vh;overflow:auto;background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.45);padding:16px;color:#e5eefc">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">'
+            + '<div>'
+            + '<div style="font-size:18px;font-weight:700;color:' + getUserColor(userStats.user) + '">@' + escHtml(userStats.user) + '</div>'
+            + '<div style="font-size:12px;color:#94a3b8">Detalji giftova i coin zbroj za odabranog korisnika</div>'
+            + '</div>'
+            + '<div style="display:flex;gap:8px;align-items:center">'
+            + '<button id="tkaiTopUserCopyBtn" type="button" class="tkai-insights-btn">Copy @user</button>'
+            + '<button id="tkaiTopUserDetailClose" type="button" class="tkai-insights-btn">Zatvori</button>'
+            + '</div>'
+            + '</div>'
+            + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">'
+            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Ukupno poruka</div><div style="font-size:22px;font-weight:700">' + formatNum(userStats.total || 0) + '</div></div>'
+            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Gift količina</div><div style="font-size:22px;font-weight:700">' + formatNum(userStats.gifts || 0) + '</div></div>'
+            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Gift eventi</div><div style="font-size:22px;font-weight:700">' + formatNum(userStats.giftEvents || 0) + '</div></div>'
+            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Coins</div><div style="font-size:22px;font-weight:700;color:#fbbf24">' + formatNum(userStats.coins || 0) + '</div></div>'
+            + '</div>'
+            + '<div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03)">'
+            + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+            + '<thead><tr style="background:rgba(15,23,42,.92);color:#94a3b8"><th style="padding:7px 8px;text-align:left">Gift</th><th style="padding:7px 8px;text-align:right">Količina</th><th style="padding:7px 8px;text-align:right">Eventi</th><th style="padding:7px 8px;text-align:right">Coin/gift</th><th style="padding:7px 8px;text-align:right">Ukupno coins</th></tr></thead>'
+            + '<tbody>' + giftsHtml + '</tbody>'
+            + '</table>'
+            + '</div>'
+            + '</div>';
+        let keyHandler = null;
+        const close = () => {
+            if (keyHandler) document.removeEventListener('keydown', keyHandler);
+            modal.remove();
+        };
+        modal.querySelector('#tkaiTopUserDetailClose')?.addEventListener('click', close);
+        modal.querySelector('#tkaiTopUserCopyBtn')?.addEventListener('click', () => {
+            navigator.clipboard.writeText('@' + userStats.user + ' ').then(() => showToast('📋 Kopirano @' + userStats.user)).catch(() => { });
+        });
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) close(); });
+        keyHandler = function onKey(ev) {
+            if (ev.key !== 'Escape') return;
+            close();
+        };
+        document.addEventListener('keydown', keyHandler);
+        document.body.appendChild(modal);
     }
 
     function updateInsightsUI() {
@@ -7723,6 +8120,9 @@ return JSON.stringify(results);
                 translatedLang: message.translatedLang || '',
                 type: message.type || 'chat',
                 coins: message.coins || 0,
+                giftName: message.giftName || '',
+                quantity: Number(message.quantity || 0),
+                unitCoins: Number(message.unitCoins || 0),
                 timestamp: message.ts || Date.now()
             }))
         };
@@ -7745,11 +8145,26 @@ return JSON.stringify(results);
             rows.push([esc(m.user), esc(m.text), esc(m.translatedText || ''), esc(m.type || 'chat'), m.coins || 0, new Date(m.ts || Date.now()).toISOString()].join(','));
         });
         const merged = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
+        const giftBreakdowns = buildGiftExportBreakdowns(merged, 15, 200);
         rows.push('');
         rows.push('MERGED_USERS');
-        rows.push(['user', 'total', 'chat', 'gifts', 'joins', 'repeatMax', 'lastTs'].join(','));
+        rows.push(['user', 'total', 'chat', 'gifts', 'giftEvents', 'coins', 'joins', 'repeatMax', 'lastTs'].join(','));
         merged.forEach((u) => {
-            rows.push([esc(u.user), u.total, u.chat, u.gifts, u.joins, u.repeatMax, new Date(u.lastTs || Date.now()).toISOString()].join(','));
+            rows.push([esc(u.user), u.total, u.chat, u.gifts, u.giftEvents || 0, u.coins || 0, u.joins, u.repeatMax, new Date(u.lastTs || Date.now()).toISOString()].join(','));
+        });
+        rows.push('');
+        rows.push('TOP_GIFTS_OVERALL');
+        rows.push(['gift', 'quantity', 'events', 'coins', 'unitCoins', 'userCount'].join(','));
+        giftBreakdowns.topGiftsOverall.forEach((gift) => {
+            rows.push([esc(gift.name), gift.quantity || 0, gift.events || 0, gift.coins || 0, gift.unitCoins || 0, gift.userCount || 0].join(','));
+        });
+        rows.push('');
+        rows.push('TOP_GIFTS_BY_USER');
+        rows.push(['user', 'gift', 'quantity', 'events', 'coins', 'unitCoins'].join(','));
+        giftBreakdowns.topGiftsByUser.forEach((row) => {
+            row.gifts.forEach((gift) => {
+                rows.push([esc(row.user), esc(gift.name), gift.quantity || 0, gift.events || 0, gift.coins || 0, gift.unitCoins || 0].join(','));
+            });
         });
         const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');

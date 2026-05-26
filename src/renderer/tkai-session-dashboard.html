@@ -1,0 +1,1485 @@
+<!doctype html>
+<html lang="hr">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TikTok AI Session Dashboard</title>
+    <style>
+        :root {
+            --bg: #08111f;
+            --panel: rgba(15, 23, 42, 0.92);
+            --panel-2: rgba(30, 41, 59, 0.72);
+            --border: rgba(148, 163, 184, 0.18);
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #2dd4bf;
+            --accent-2: #38bdf8;
+            --warm: #f59e0b;
+            --danger: #fb7185;
+            --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 28%),
+                radial-gradient(circle at top right, rgba(56, 189, 248, 0.18), transparent 26%),
+                linear-gradient(180deg, #08111f 0%, #0b1220 55%, #07101c 100%);
+            color: var(--text);
+            font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+        }
+
+        .shell {
+            width: min(1500px, calc(100vw - 32px));
+            margin: 18px auto;
+            display: grid;
+            gap: 14px;
+        }
+
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            padding: 22px 24px;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            background: linear-gradient(135deg, rgba(13, 118, 110, 0.86), rgba(11, 93, 103, 0.72));
+            box-shadow: var(--shadow);
+        }
+
+        .hero h1 {
+            margin: 0 0 6px;
+            font-size: clamp(24px, 3vw, 38px);
+            line-height: 1.05;
+        }
+
+        .hero p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.84);
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            border-radius: 999px;
+            padding: 9px 14px;
+            cursor: pointer;
+            font: inherit;
+            transition: transform .15s ease, background .15s ease, border-color .15s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.14);
+            border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .metric {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .metric .label {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 8px;
+        }
+
+        .metric .value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .metric.warm .value {
+            color: #fbbf24;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+            gap: 14px;
+        }
+
+        .dashboard-shell {
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            gap: 14px;
+            align-items: start;
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 14px;
+        }
+
+        .nav-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            width: 100%;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text);
+            border-radius: 16px;
+            padding: 12px 14px;
+            text-align: left;
+            cursor: pointer;
+            font: inherit;
+            transition: background .15s ease, border-color .15s ease, transform .15s ease;
+        }
+
+        .nav-btn:hover {
+            transform: translateX(2px);
+            background: rgba(45, 212, 191, 0.08);
+            border-color: rgba(45, 212, 191, 0.18);
+        }
+
+        .nav-btn.active {
+            background: linear-gradient(135deg, rgba(45, 212, 191, 0.16), rgba(56, 189, 248, 0.08));
+            border-color: rgba(45, 212, 191, 0.28);
+            box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.12);
+        }
+
+        .nav-btn-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .nav-btn-copy {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .content-stack {
+            display: grid;
+            gap: 14px;
+        }
+
+        .toolbar-panel {
+            padding: 14px 16px 16px;
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .toolbar-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .toolbar-controls {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(150px, 220px));
+            gap: 10px;
+            align-items: end;
+        }
+
+        .toolbar-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .toolbar-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 999px;
+            padding: 8px 12px;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.04);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+
+        .toolbar-chip strong {
+            color: var(--text);
+            font-size: 12px;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .filter-block {
+            display: grid;
+            gap: 6px;
+        }
+
+        .filter-label {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+
+        .filter-input {
+            width: 100%;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border-radius: 14px;
+            padding: 11px 12px;
+            font: inherit;
+            outline: none;
+        }
+
+        .filter-input:focus {
+            border-color: rgba(45, 212, 191, 0.34);
+            box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12);
+        }
+
+        .filter-meta {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .dashboard-view {
+            display: none;
+        }
+
+        .dashboard-view.active {
+            display: block;
+        }
+
+        .view-stack {
+            display: grid;
+            gap: 14px;
+        }
+
+        .dual-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .column {
+            display: grid;
+            gap: 14px;
+            align-content: start;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .panel-title {
+            font-size: 13px;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .panel-body {
+            padding: 14px 16px 16px;
+        }
+
+        .table-wrap,
+        .list-wrap {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th,
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+            text-align: left;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: rgba(8, 17, 31, 0.95);
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            font-size: 10px;
+        }
+
+        td.num,
+        th.num {
+            text-align: right;
+        }
+
+        .gift-row {
+            cursor: pointer;
+        }
+
+        .user-row {
+            cursor: pointer;
+        }
+
+        .gift-row:hover {
+            background: rgba(45, 212, 191, 0.08);
+        }
+
+        .user-row:hover {
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .timeline {
+            height: 180px;
+        }
+
+        .stack {
+            display: grid;
+            gap: 10px;
+        }
+
+        .user-card,
+        .qa-row,
+        .song-row {
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: var(--panel-2);
+            border: 1px solid rgba(148, 163, 184, 0.08);
+        }
+
+        .user-card.clickable {
+            cursor: pointer;
+            transition: transform .15s ease, border-color .15s ease, background .15s ease;
+        }
+
+        .user-card.clickable:hover {
+            transform: translateY(-1px);
+            border-color: rgba(56, 189, 248, 0.24);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        .user-card-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .user-card small,
+        .meta {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .gift-preview {
+            display: grid;
+            gap: 4px;
+            margin-top: 8px;
+            font-size: 12px;
+        }
+
+        .gift-preview-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 8px;
+        }
+
+        .coin {
+            color: #fbbf24;
+        }
+
+        .type-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 14px;
+            align-items: center;
+        }
+
+        .donut {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .donut::after {
+            content: attr(data-total);
+            white-space: pre;
+            position: absolute;
+            inset: 26px;
+            border-radius: 50%;
+            background: #0b1220;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .legend {
+            display: grid;
+            gap: 8px;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            flex: none;
+        }
+
+        .empty {
+            color: var(--muted);
+            text-align: center;
+            padding: 20px 12px;
+        }
+
+        .mini-chart {
+            height: 220px;
+            border: 1px solid rgba(148, 163, 184, 0.08);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+            padding: 10px;
+        }
+
+        .mini-chart svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .insight-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1.15fr .85fr;
+            gap: 14px;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 6, 23, 0.74);
+            padding: 16px;
+        }
+
+        .modal-card {
+            width: min(720px, 100%);
+            max-height: 86vh;
+            overflow: auto;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            padding: 18px;
+        }
+
+        .modal-card.wide {
+            width: min(1080px, 100%);
+        }
+
+        .error {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+        }
+
+        .error-card {
+            width: min(680px, 100%);
+            padding: 26px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+
+        @media (max-width: 1120px) {
+            .metrics {
+                grid-template-columns: repeat(2, minmax(160px, 1fr));
+            }
+
+            .dashboard-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
+
+            .nav-list {
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .dual-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .insight-grid,
+            .detail-grid,
+            .toolbar-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .shell {
+                width: min(100vw - 16px, 100%);
+                margin: 8px auto 18px;
+            }
+
+            .hero {
+                padding: 16px;
+                border-radius: 20px;
+            }
+
+            .actions {
+                justify-content: flex-start;
+            }
+
+            .metrics {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-list {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .type-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff;
+                color: #0f172a;
+            }
+
+            .actions {
+                display: none;
+            }
+
+            .panel,
+            .metric,
+            .hero {
+                box-shadow: none;
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app"></div>
+    <script>
+        function escHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatNum(value) {
+            return Number(value || 0).toLocaleString('hr-HR');
+        }
+
+        function formatDate(value) {
+            try { return new Date(value || Date.now()).toLocaleString('hr-HR'); } catch (_) { return String(value || ''); }
+        }
+
+        function normalizeGiftKey(value) {
+            return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        }
+
+        function getToken() {
+            const fromHash = decodeURIComponent(String(window.location.hash || '').replace(/^#/, '').trim());
+            if (fromHash) return fromHash;
+            const fromQuery = new URLSearchParams(window.location.search).get('payload');
+            return fromQuery ? decodeURIComponent(fromQuery) : '';
+        }
+
+        function readSummary() {
+            const token = getToken();
+            if (!token) return null;
+            try {
+                const raw = localStorage.getItem(token);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return parsed && parsed.payload ? parsed.payload : parsed;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function downloadTextFile(fileName, content, mime) {
+            const blob = new Blob([String(content || '')], { type: mime || 'text/plain;charset=utf-8' });
+            const href = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = href;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(function () {
+                link.remove();
+                URL.revokeObjectURL(href);
+            }, 0);
+        }
+
+        function renderTimelineSvg(points) {
+            const list = Array.isArray(points) ? points.slice() : [];
+            if (!list.length) return '<div class="empty">Nema timeline podataka.</div>';
+            const width = 860;
+            const height = 180;
+            const padX = 12;
+            const padTop = 10;
+            const padBottom = 22;
+            const vals = list.map(function (row) { return Number(row.count || 0); });
+            const maxV = Math.max(1, Math.max.apply(null, vals));
+            const minV = Math.min.apply(null, vals);
+            const range = Math.max(1, maxV - minV);
+            const coords = vals.map(function (value, index) {
+                const x = list.length === 1 ? width / 2 : padX + (index / (list.length - 1)) * (width - padX * 2);
+                const y = padTop + ((maxV - value) / range) * (height - padTop - padBottom);
+                return { x: x, y: y };
+            });
+            const line = coords.map(function (point) { return point.x.toFixed(1) + ',' + point.y.toFixed(1); }).join(' ');
+            const area = line + ' ' + coords[coords.length - 1].x.toFixed(1) + ',' + (height - padBottom).toFixed(1) + ' ' + coords[0].x.toFixed(1) + ',' + (height - padBottom).toFixed(1);
+            const dots = coords.map(function (point) {
+                return '<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) + '" r="2.4" fill="rgba(45,212,191,.95)" stroke="rgba(8,145,178,.55)" stroke-width="0.8"></circle>';
+            }).join('');
+            return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:100%">'
+                + '<polyline fill="none" stroke="rgba(148,163,184,.35)" stroke-width="1" points="' + padX + ',' + (height - padBottom).toFixed(1) + ' ' + (width - padX).toFixed(1) + ',' + (height - padBottom).toFixed(1) + '"></polyline>'
+                + '<polygon points="' + area + '" fill="rgba(45,212,191,.15)"></polygon>'
+                + '<polyline fill="none" stroke="rgba(45,212,191,.95)" stroke-width="2.2" points="' + line + '"></polyline>'
+                + dots
+                + '</svg>';
+        }
+
+        function buildCsvText(summary) {
+            const esc = function (value) { return '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"'; };
+            const lines = [];
+            lines.push(['section', 'key', 'value'].map(esc).join(','));
+            lines.push(['summary', 'messages', summary.messageCount].map(esc).join(','));
+            lines.push(['summary', 'duration_min', summary.durationMinutes].map(esc).join(','));
+            lines.push(['summary', 'peak_viewers', summary.peakViewers].map(esc).join(','));
+            lines.push(['summary', 'coins', summary.totalCoins].map(esc).join(','));
+            lines.push(['summary', 'unique_users', summary.uniqueUsers].map(esc).join(','));
+            lines.push(['summary', 'joins', summary.joins].map(esc).join(','));
+            Object.entries(summary.typeCounts || {}).forEach(function (entry) {
+                lines.push(['type_count', entry[0], entry[1]].map(esc).join(','));
+            });
+            lines.push(['', '', ''].map(esc).join(','));
+            lines.push(['users', 'user', 'total', 'chat', 'gifts', 'coins', 'joins'].map(esc).join(','));
+            (summary.topUsersByMessages || []).forEach(function (user) {
+                lines.push(['users', user.user, user.total, user.chat, user.gifts, user.coins, user.joins].map(esc).join(','));
+            });
+            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+            lines.push(['top_gifts_overall', 'gift', 'quantity', 'events', 'coins', 'unit_coins', 'users'].map(esc).join(','));
+            (summary.topGiftsOverall || []).forEach(function (gift) {
+                lines.push(['top_gifts_overall', gift.name, gift.quantity, gift.events, gift.coins, gift.unitCoins, gift.userCount].map(esc).join(','));
+            });
+            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+            lines.push(['top_gifts_by_user', 'user', 'gift', 'quantity', 'events', 'coins', 'unit_coins'].map(esc).join(','));
+            (summary.topGiftsByUser || []).forEach(function (row) {
+                (row.gifts || []).forEach(function (gift) {
+                    lines.push(['top_gifts_by_user', row.user, gift.name, gift.quantity, gift.events, gift.coins, gift.unitCoins].map(esc).join(','));
+                });
+            });
+            lines.push(['', '', '', ''].map(esc).join(','));
+            lines.push(['questions', 'user', 'text', 'timestamp'].map(esc).join(','));
+            (summary.questions || []).forEach(function (q) {
+                lines.push(['questions', q.user, q.text, new Date(Number(q.ts || Date.now())).toISOString()].map(esc).join(','));
+            });
+            lines.push(['', '', '', ''].map(esc).join(','));
+            lines.push(['songs', 'source', 'title', 'timestamp'].map(esc).join(','));
+            (summary.songs || []).forEach(function (s) {
+                lines.push(['songs', s.source, s.title, new Date(Number(s.ts || Date.now())).toISOString()].map(esc).join(','));
+            });
+            lines.push(['', '', '', ''].map(esc).join(','));
+            lines.push(['answers', 'user', 'text', 'timestamp'].map(esc).join(','));
+            (summary.answers || []).forEach(function (a) {
+                lines.push(['answers', a.user, a.text, new Date(Number(a.ts || Date.now())).toISOString()].map(esc).join(','));
+            });
+            return lines.join('\n');
+        }
+
+        function buildTxtText(summary) {
+            const rows = [];
+            rows.push('AI Live Chat - Session Dashboard');
+            rows.push('Saved: ' + formatDate(summary.savedAt));
+            rows.push('Messages: ' + formatNum(summary.messageCount));
+            rows.push('Duration: ' + formatNum(summary.durationMinutes) + ' min');
+            rows.push('Peak viewers: ' + formatNum(summary.peakViewers));
+            rows.push('Coins: ' + formatNum(summary.totalCoins));
+            rows.push('Unique users: ' + formatNum(summary.uniqueUsers));
+            rows.push('Joins: ' + formatNum(summary.joins));
+            rows.push('');
+            rows.push('Type counts:');
+            Object.entries(summary.typeCounts || {}).forEach(function (entry) { rows.push('- ' + entry[0] + ': ' + entry[1]); });
+            rows.push('');
+            rows.push('Top users:');
+            (summary.topUsersByMessages || []).slice(0, 30).forEach(function (u, index) {
+                rows.push((index + 1) + '. @' + u.user + ' | total ' + u.total + ' | chat ' + u.chat + ' | gifts ' + u.gifts + ' | coins ' + u.coins + ' | join ' + u.joins);
+            });
+            rows.push('');
+            rows.push('Top gifts overall:');
+            (summary.topGiftsOverall || []).slice(0, 30).forEach(function (gift, index) {
+                rows.push((index + 1) + '. ' + gift.name + ' | qty ' + gift.quantity + ' | events ' + gift.events + ' | coins ' + gift.coins + ' | users ' + gift.userCount);
+            });
+            rows.push('');
+            rows.push('Questions:');
+            (summary.questions || []).slice(-80).forEach(function (q) { rows.push('@' + q.user + ': ' + q.text); });
+            rows.push('');
+            rows.push('Answers:');
+            (summary.answers || []).slice(-80).forEach(function (a) { rows.push(a.user + ': ' + a.text); });
+            return rows.join('\n');
+        }
+
+        function showGiftSendersModal(summary, giftName) {
+            const normalizedGift = normalizeGiftKey(giftName);
+            if (!normalizedGift) return;
+            const senderRows = (summary.usersAll || [])
+                .map(function (user) {
+                    const detail = (Array.isArray(user.giftDetails) ? user.giftDetails : []).find(function (gift) {
+                        return normalizeGiftKey(gift.name) === normalizedGift;
+                    });
+                    if (!detail) return null;
+                    return {
+                        user: user.user,
+                        quantity: Number(detail.quantity || 0),
+                        events: Number(detail.events || 0),
+                        coins: Number(detail.coins || 0),
+                        unitCoins: Number(detail.unitCoins || 0)
+                    };
+                })
+                .filter(Boolean)
+                .sort(function (a, b) {
+                    return b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.user || '').localeCompare(String(b.user || ''));
+                });
+            const totalCoins = senderRows.reduce(function (sum, row) { return sum + row.coins; }, 0);
+            const totalQty = senderRows.reduce(function (sum, row) { return sum + row.quantity; }, 0);
+            const sendersHtml = senderRows.length
+                ? senderRows.map(function (row, index) {
+                    return '<tr>'
+                        + '<td>' + (index + 1) + '. @' + escHtml(row.user) + '</td>'
+                        + '<td class="num">' + formatNum(row.quantity) + '</td>'
+                        + '<td class="num">' + formatNum(row.events) + '</td>'
+                        + '<td class="num">' + formatNum(row.unitCoins) + '</td>'
+                        + '<td class="num coin">' + formatNum(row.coins) + '</td>'
+                        + '</tr>';
+                }).join('')
+                : '<tr><td colspan="5" class="empty">Nema korisnika za ovaj gift.</td></tr>';
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = '<div class="modal-card">'
+                + '<div class="panel-head" style="padding:0 0 14px;border-bottom:1px solid rgba(148,163,184,.1)">'
+                + '<div><div style="font-size:20px;font-weight:700">' + escHtml(giftName) + '</div><div class="meta">Korisnici koji su poslali ovaj gift</div></div>'
+                + '<button id="giftSendersClose" class="btn">Zatvori</button>'
+                + '</div>'
+                + '<div class="metrics" style="margin:16px 0;grid-template-columns:repeat(3,minmax(120px,1fr))">'
+                + '<div class="metric"><div class="label">Posiljatelji</div><div class="value">' + formatNum(senderRows.length) + '</div></div>'
+                + '<div class="metric"><div class="label">Ukupna kolicina</div><div class="value">' + formatNum(totalQty) + '</div></div>'
+                + '<div class="metric warm"><div class="label">Ukupno coins</div><div class="value">' + formatNum(totalCoins) + '</div></div>'
+                + '</div>'
+                + '<div class="table-wrap"><table><thead><tr><th>User</th><th class="num">Kolicina</th><th class="num">Eventi</th><th class="num">Coin/gift</th><th class="num">Ukupno coins</th></tr></thead><tbody>' + sendersHtml + '</tbody></table></div>'
+                + '</div>';
+            modal.querySelector('#giftSendersClose').addEventListener('click', function () { modal.remove(); });
+            modal.addEventListener('click', function (event) { if (event.target === modal) modal.remove(); });
+            document.body.appendChild(modal);
+        }
+
+        function showUserDetailsModal(summary, userName) {
+            const user = (summary.usersAll || []).find(function (row) {
+                return String(row.user || '').toLowerCase() === String(userName || '').toLowerCase();
+            });
+            if (!user) return;
+            const giftRows = (Array.isArray(user.giftDetails) ? user.giftDetails : []).slice().sort(function (a, b) {
+                return Number(b.coins || 0) - Number(a.coins || 0)
+                    || Number(b.quantity || 0) - Number(a.quantity || 0)
+                    || String(a.name || '').localeCompare(String(b.name || ''));
+            });
+            const questions = (summary.questions || []).filter(function (row) {
+                return String(row.user || '').toLowerCase() === String(user.user || '').toLowerCase();
+            }).slice(-12).reverse();
+            const answers = (summary.answers || []).filter(function (row) {
+                return String(row.text || '').toLowerCase().includes(String(user.user || '').toLowerCase());
+            }).slice(-8).reverse();
+            const giftsHtml = giftRows.length
+                ? giftRows.map(function (gift, index) {
+                    return '<tr class="gift-row" data-gift-name="' + encodeURIComponent(gift.name) + '">'
+                        + '<td>' + (index + 1) + '. ' + escHtml(gift.name) + '</td>'
+                        + '<td class="num">' + formatNum(gift.quantity) + '</td>'
+                        + '<td class="num">' + formatNum(gift.events) + '</td>'
+                        + '<td class="num">' + formatNum(gift.unitCoins) + '</td>'
+                        + '<td class="num coin">' + formatNum(gift.coins) + '</td>'
+                        + '</tr>';
+                }).join('')
+                : '<tr><td colspan="5" class="empty">Nema gift podataka za ovog korisnika.</td></tr>';
+            const questionsHtml = questions.length
+                ? questions.map(function (row) {
+                    return '<div class="qa-row"><strong>@' + escHtml(row.user) + '</strong><div>' + escHtml(row.text) + '</div><div class="meta">' + escHtml(formatDate(row.ts)) + '</div></div>';
+                }).join('')
+                : '<div class="empty">Nema spremljenih pitanja za ovog korisnika.</div>';
+            const answersHtml = answers.length
+                ? answers.map(function (row) {
+                    return '<div class="qa-row"><strong>' + escHtml(row.user) + '</strong><div>' + escHtml(row.text) + '</div><div class="meta">' + escHtml(formatDate(row.ts)) + '</div></div>';
+                }).join('')
+                : '<div class="empty">Nema AI/system odgovora koji spominju ovog korisnika.</div>';
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = '<div class="modal-card wide">'
+                + '<div class="panel-head" style="padding:0 0 14px;border-bottom:1px solid rgba(148,163,184,.1)">'
+                + '<div><div style="font-size:20px;font-weight:700">@' + escHtml(user.user) + '</div><div class="meta">kompletan gift i chat detalj korisnika</div></div>'
+                + '<button id="userDetailsClose" class="btn">Zatvori</button>'
+                + '</div>'
+                + '<div class="metrics" style="margin:16px 0;grid-template-columns:repeat(5,minmax(120px,1fr))">'
+                + '<div class="metric"><div class="label">Ukupno</div><div class="value">' + formatNum(user.total) + '</div></div>'
+                + '<div class="metric"><div class="label">Chat</div><div class="value">' + formatNum(user.chat) + '</div></div>'
+                + '<div class="metric"><div class="label">Giftovi</div><div class="value">' + formatNum(user.gifts) + '</div></div>'
+                + '<div class="metric warm"><div class="label">Coins</div><div class="value">' + formatNum(user.coins) + '</div></div>'
+                + '<div class="metric"><div class="label">Joins</div><div class="value">' + formatNum(user.joins) + '</div></div>'
+                + '</div>'
+                + '<div class="detail-grid">'
+                + '<div class="panel" style="overflow:hidden"><div class="panel-head"><div class="panel-title">Gift breakdown</div><div class="meta">klik na gift za sve pošiljatelje</div></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>Gift</th><th class="num">Qty</th><th class="num">Evt</th><th class="num">Coin/gift</th><th class="num">Coins</th></tr></thead><tbody>' + giftsHtml + '</tbody></table></div></div></div>'
+                + '<div class="stack">'
+                + '<div class="panel"><div class="panel-head"><div class="panel-title">Pitanja</div><div class="meta">zadnjih ' + formatNum(questions.length) + '</div></div><div class="panel-body"><div class="list-wrap stack">' + questionsHtml + '</div></div></div>'
+                + '<div class="panel"><div class="panel-head"><div class="panel-title">AI / system odgovori</div><div class="meta">mention scan</div></div><div class="panel-body"><div class="list-wrap stack">' + answersHtml + '</div></div></div>'
+                + '</div>'
+                + '</div>'
+                + '</div>';
+            modal.querySelector('#userDetailsClose').addEventListener('click', function () { modal.remove(); });
+            modal.addEventListener('click', function (event) { if (event.target === modal) modal.remove(); });
+            document.body.appendChild(modal);
+            modal.querySelectorAll('[data-gift-name]').forEach(function (row) {
+                row.addEventListener('click', function () {
+                    const giftName = decodeURIComponent(String(row.getAttribute('data-gift-name') || ''));
+                    if (giftName) showGiftSendersModal(summary, giftName);
+                });
+            });
+        }
+
+        function renderBarsSvg(items, options) {
+            const rows = Array.isArray(items) ? items.slice(0, 8) : [];
+            if (!rows.length) return '<div class="empty">Nema dovoljno podataka za chart.</div>';
+            const width = 760;
+            const rowHeight = 26;
+            const height = rows.length * rowHeight + 26;
+            const maxValue = Math.max(1, Math.max.apply(null, rows.map(function (row) { return Number(row.value || 0); })));
+            const labelColor = escHtml(options.labelColor || '#cbd5e1');
+            const barColor = escHtml(options.barColor || 'rgba(45,212,191,.88)');
+            const valueColor = escHtml(options.valueColor || '#f8fafc');
+            const svgRows = rows.map(function (row, index) {
+                const y = 8 + index * rowHeight;
+                const barWidth = Math.max(6, (Number(row.value || 0) / maxValue) * 420);
+                return ''
+                    + '<text x="0" y="' + (y + 13) + '" fill="' + labelColor + '" font-size="11">' + escHtml(row.label) + '</text>'
+                    + '<rect x="180" y="' + y + '" rx="8" ry="8" width="' + barWidth.toFixed(1) + '" height="16" fill="' + barColor + '"></rect>'
+                    + '<text x="' + (190 + barWidth).toFixed(1) + '" y="' + (y + 13) + '" fill="' + valueColor + '" font-size="11">' + escHtml(formatNum(row.value)) + (options.suffix || '') + '</text>';
+            }).join('');
+            return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">'
+                + '<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="transparent"></rect>'
+                + svgRows
+                + '</svg>';
+        }
+
+        function aggregateFilteredGifts(users, giftQuery) {
+            const normalizedGiftQuery = String(giftQuery || '').trim().toLowerCase();
+            const overallMap = new Map();
+            const topGiftsByUser = users
+                .map(function (user) {
+                    const gifts = (Array.isArray(user.giftDetails) ? user.giftDetails : [])
+                        .filter(function (gift) {
+                            return !normalizedGiftQuery || String(gift.name || '').toLowerCase().includes(normalizedGiftQuery);
+                        })
+                        .sort(function (a, b) {
+                            return Number(b.coins || 0) - Number(a.coins || 0)
+                                || Number(b.quantity || 0) - Number(a.quantity || 0)
+                                || Number(b.events || 0) - Number(a.events || 0)
+                                || String(a.name || '').localeCompare(String(b.name || ''));
+                        });
+                    gifts.forEach(function (gift) {
+                        const key = normalizeGiftKey(gift.name) || String(gift.name || '').toLowerCase();
+                        const row = overallMap.get(key) || {
+                            name: gift.name || 'Unknown gift',
+                            quantity: 0,
+                            events: 0,
+                            coins: 0,
+                            unitCoins: Number(gift.unitCoins || 0),
+                            userCount: 0,
+                            users: new Set()
+                        };
+                        row.quantity += Number(gift.quantity || 0);
+                        row.events += Number(gift.events || 0);
+                        row.coins += Number(gift.coins || 0);
+                        if (!row.unitCoins && Number(gift.unitCoins || 0) > 0) row.unitCoins = Number(gift.unitCoins || 0);
+                        row.users.add(String(user.user || ''));
+                        row.userCount = row.users.size;
+                        overallMap.set(key, row);
+                    });
+                    return {
+                        user: user.user,
+                        totalCoins: gifts.reduce(function (sum, gift) { return sum + Number(gift.coins || 0); }, 0),
+                        totalGiftQuantity: gifts.reduce(function (sum, gift) { return sum + Number(gift.quantity || 0); }, 0),
+                        giftEvents: gifts.reduce(function (sum, gift) { return sum + Number(gift.events || 0); }, 0),
+                        gifts: gifts
+                    };
+                })
+                .filter(function (row) { return row.gifts.length > 0; })
+                .sort(function (a, b) {
+                    return b.totalCoins - a.totalCoins
+                        || b.totalGiftQuantity - a.totalGiftQuantity
+                        || b.giftEvents - a.giftEvents
+                        || String(a.user || '').localeCompare(String(b.user || ''));
+                });
+            const topGiftsOverall = Array.from(overallMap.values())
+                .map(function (row) {
+                    return {
+                        name: row.name,
+                        quantity: row.quantity,
+                        events: row.events,
+                        coins: row.coins,
+                        unitCoins: row.unitCoins,
+                        userCount: row.users.size
+                    };
+                })
+                .sort(function (a, b) {
+                    return b.coins - a.coins
+                        || b.quantity - a.quantity
+                        || b.events - a.events
+                        || String(a.name || '').localeCompare(String(b.name || ''));
+                });
+            return { topGiftsOverall: topGiftsOverall, topGiftsByUser: topGiftsByUser };
+        }
+
+        function render(summary) {
+            const type = summary.typeCounts || {};
+            const total = Math.max(1, Number(summary.messageCount || 0));
+            const state = {
+                view: 'overview',
+                userQuery: '',
+                giftQuery: '',
+                textQuery: '',
+                ranges: {
+                    overview: 10,
+                    users: 25,
+                    gifts: 25,
+                    qa: 40,
+                    songs: 40
+                },
+                sorts: {
+                    overview: 'coins',
+                    users: 'coins',
+                    gifts: 'coins',
+                    qa: 'newest',
+                    songs: 'recent'
+                }
+            };
+            const allUsers = Array.isArray(summary.usersAll) ? summary.usersAll.slice() : [];
+            const viewConfigs = {
+                overview: {
+                    label: 'Overview',
+                    description: 'Rezime sesije s top userima, tipovima i quick trendovima.',
+                    sortOptions: [
+                        { value: 'coins', label: 'Coins desc' },
+                        { value: 'total', label: 'Ukupno poruka' },
+                        { value: 'gifts', label: 'Gift count' }
+                    ]
+                },
+                users: {
+                    label: 'Users',
+                    description: 'Klik na korisnika otvara puni detail s gift breakdownom i pitanjima.',
+                    sortOptions: [
+                        { value: 'coins', label: 'Coins desc' },
+                        { value: 'total', label: 'Ukupno poruka' },
+                        { value: 'chat', label: 'Chat desc' },
+                        { value: 'gifts', label: 'Gift count' },
+                        { value: 'joins', label: 'Join count' },
+                        { value: 'user', label: 'User A-Z' }
+                    ]
+                },
+                gifts: {
+                    label: 'Gifts',
+                    description: 'Sort i range za overall i per-user gift breakdown.',
+                    sortOptions: [
+                        { value: 'coins', label: 'Coins desc' },
+                        { value: 'quantity', label: 'Qty desc' },
+                        { value: 'events', label: 'Events desc' },
+                        { value: 'users', label: 'Users desc' },
+                        { value: 'name', label: 'Gift A-Z' }
+                    ]
+                },
+                qa: {
+                    label: 'Q&A',
+                    description: 'Sort pitanja i odgovora po vremenu ili alfabetu.',
+                    sortOptions: [
+                        { value: 'newest', label: 'Newest first' },
+                        { value: 'oldest', label: 'Oldest first' },
+                        { value: 'user', label: 'User A-Z' }
+                    ]
+                },
+                songs: {
+                    label: 'Songs',
+                    description: 'Sort songs po zadnjem eventu, title ili performance.',
+                    sortOptions: [
+                        { value: 'recent', label: 'Recent first' },
+                        { value: 'title', label: 'Title A-Z' },
+                        { value: 'plays', label: 'Most plays' },
+                        { value: 'engagement', label: 'Engagement desc' }
+                    ]
+                }
+            };
+            const typeRows = [
+                { label: 'Chat', value: Number(type.chat || 0), color: '#60a5fa' },
+                { label: 'Gifts', value: Number(type.gift || 0) + Number(type.subscriber || 0), color: '#f97316' },
+                { label: 'Join', value: Number(type.join || 0), color: '#a78bfa' },
+                { label: 'CC', value: Number(type.caption || 0), color: '#38bdf8' },
+                { label: 'Songs', value: Number(type.song || 0), color: '#22c55e' }
+            ];
+            const donut = 'conic-gradient(' + typeRows.map(function (row, index) {
+                const prev = typeRows.slice(0, index).reduce(function (sum, item) { return sum + item.value; }, 0);
+                const next = prev + row.value;
+                const from = ((prev / total) * 100).toFixed(2);
+                const to = ((next / total) * 100).toFixed(2);
+                return row.color + ' ' + from + '% ' + to + '%';
+            }).join(', ') + ')';
+
+            document.getElementById('app').innerHTML = ''
+                + '<div class="shell">'
+                + '<section class="hero">'
+                + '<div><div class="meta">AI Live Chat Session</div><h1>Dashboard ' + (summary.indexLabel ? '#' + escHtml(summary.indexLabel) : '') + '</h1><p>' + escHtml(formatDate(summary.savedAt)) + ' • kompletna statistika spremljene sesije</p></div>'
+                + '<div class="actions">'
+                + '<button class="btn" id="statsExportCsv">CSV</button>'
+                + '<button class="btn" id="statsExportTxt">TXT</button>'
+                + '<button class="btn" id="statsExportJson">JSON</button>'
+                + '<button class="btn" id="statsPrint">Print</button>'
+                + '<button class="btn" id="statsClose">Zatvori</button>'
+                + '</div>'
+                + '</section>'
+
+                + '<section class="metrics">'
+                + '<div class="metric"><div class="label">Poruke</div><div class="value">' + formatNum(summary.messageCount) + '</div></div>'
+                + '<div class="metric"><div class="label">Giftovi</div><div class="value">' + formatNum((type.gift || 0) + (type.subscriber || 0)) + '</div></div>'
+                + '<div class="metric"><div class="label">Peak viewers</div><div class="value">' + formatNum(summary.peakViewers) + '</div></div>'
+                + '<div class="metric warm"><div class="label">Coins</div><div class="value">' + formatNum(summary.totalCoins) + '</div></div>'
+                + '<div class="metric"><div class="label">Jedinstveni users</div><div class="value">' + formatNum(summary.uniqueUsers) + '</div></div>'
+                + '<div class="metric"><div class="label">Trajanje</div><div class="value">' + formatNum(summary.durationMinutes) + ' min</div></div>'
+                + '<div class="metric"><div class="label">Joins</div><div class="value">' + formatNum(summary.joins) + '</div></div>'
+                + '<div class="metric"><div class="label">Q / A</div><div class="value">' + formatNum((summary.questions || []).length) + ' / ' + formatNum((summary.answers || []).length) + '</div></div>'
+                + '</section>'
+
+                + '<section class="dashboard-shell">'
+                + '<aside class="sidebar panel"><div class="panel-head"><div class="panel-title">Pogledi</div><div class="meta">brza navigacija</div></div><div class="panel-body"><div class="nav-list">'
+                + '<button class="nav-btn active" data-view="overview"><div class="nav-btn-title">Overview</div><div class="nav-btn-copy">Timeline, tipovi poruka, najvažniji rezime</div></button>'
+                + '<button class="nav-btn" data-view="users"><div class="nav-btn-title">Users</div><div class="nav-btn-copy">Top users, chat, gifts i coins po korisniku</div></button>'
+                + '<button class="nav-btn" data-view="gifts"><div class="nav-btn-title">Gifts</div><div class="nav-btn-copy">Top gifts overall i sender breakdown</div></button>'
+                + '<button class="nav-btn" data-view="qa"><div class="nav-btn-title">Q&amp;A</div><div class="nav-btn-copy">Pitanja i odgovori iz sesije</div></button>'
+                + '<button class="nav-btn" data-view="songs"><div class="nav-btn-title">Songs</div><div class="nav-btn-copy">Detektirane pjesme i performanse</div></button>'
+                + '</div></div></aside>'
+                + '<div class="content-stack">'
+                + '<article class="panel toolbar-panel"><div class="toolbar-grid"><div class="panel-title">Live filteri i kontrole</div><div class="filters">'
+                + '<label class="filter-block"><span class="filter-label">User filter</span><input id="filterUser" class="filter-input" type="text" placeholder="npr. viewer123"></label>'
+                + '<label class="filter-block"><span class="filter-label">Gift filter</span><input id="filterGift" class="filter-input" type="text" placeholder="npr. rose, lion, galaxy"></label>'
+                + '<label class="filter-block"><span class="filter-label">Text filter</span><input id="filterText" class="filter-input" type="text" placeholder="Q&A ili songs pretraga"></label>'
+                + '</div><div class="toolbar-controls">'
+                + '<div class="toolbar-summary"><span class="toolbar-chip">View <strong id="toolbarViewName">Overview</strong></span><span class="toolbar-chip">Saved <strong>' + escHtml(formatDate(summary.savedAt)) + '</strong></span><span class="toolbar-chip" id="toolbarViewHint">Rezime sesije s top userima, tipovima i quick trendovima.</span></div>'
+                + '<label class="filter-block"><span class="filter-label">Range</span><select id="rangeSelect" class="filter-input"><option value="10">Top 10</option><option value="25">Top 25</option><option value="50">Top 50</option><option value="100">Top 100</option></select></label>'
+                + '<label class="filter-block"><span class="filter-label">Sort</span><select id="sortSelect" class="filter-input"></select></label>'
+                + '</div><div id="filterMeta" class="filter-meta">Filteri su prazni — prikazujem cijelu sesiju.</div></div></article>'
+                + '<div id="view-overview" class="dashboard-view active"><div class="view-stack">'
+                + '<div class="grid">'
+                + '<div class="column">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Poruke kroz vrijeme</div><div class="meta">scan timeline</div></div><div class="panel-body"><div class="timeline">' + renderTimelineSvg(summary.timeline) + '</div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Top users</div><div class="meta">rezime po korisniku</div></div><div class="panel-body"><div id="overviewUsersTable" class="table-wrap"></div></div></article>'
+                + '</div>'
+                + '<div class="column">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Raspodjela tipova</div><div class="meta">tipovi poruka</div></div><div class="panel-body"><div class="type-grid"><div class="donut" style="background:' + donut + '" data-total="' + formatNum(total) + '\A total"></div><div class="legend">' + typeRows.map(function (row) { return '<div class="legend-row"><span class="dot" style="background:' + row.color + '"></span><span>' + row.label + '</span><strong style="margin-left:auto">' + formatNum(row.value) + '</strong></div>'; }).join('') + '</div></div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Top gifts overall</div><div class="meta">najjači giftovi sesije</div></div><div class="panel-body"><div id="overviewGiftsTable" class="table-wrap"></div></div></article>'
+                + '</div>'
+                + '</div>'
+                + '<div class="insight-grid">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">User momentum</div><div class="meta">top users trend</div></div><div class="panel-body"><div id="overviewUserTrend" class="mini-chart"></div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Gift velocity</div><div class="meta">top gifts trend</div></div><div class="panel-body"><div id="overviewGiftTrend" class="mini-chart"></div></div></article>'
+                + '</div>'
+                + '</div></div>'
+                + '<div id="view-users" class="dashboard-view"><div class="view-stack">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">User trend chart</div><div class="meta">coins i poruke po useru</div></div><div class="panel-body"><div id="usersTrendWrap" class="mini-chart"></div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Users</div><div class="meta">filtrirano po user/gift upitu</div></div><div class="panel-body"><div id="usersTableWrap" class="table-wrap"></div></div></article>'
+                + '</div></div>'
+                + '<div id="view-gifts" class="dashboard-view"><div class="view-stack">'
+                + '<div class="dual-grid">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Top gifts overall</div><div class="meta">klik na gift za pošiljatelje</div></div><div class="panel-body"><div id="giftsOverallWrap" class="table-wrap"></div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Top gifts by user</div><div class="meta">sender breakdown</div></div><div class="panel-body"><div id="giftsByUserWrap" class="list-wrap stack"></div></div></article>'
+                + '</div>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Gift trend chart</div><div class="meta">coins i quantity po giftu</div></div><div class="panel-body"><div id="giftsTrendWrap" class="mini-chart"></div></div></article>'
+                + '</div></div>'
+                + '<div id="view-qa" class="dashboard-view"><div class="view-stack">'
+                + '<div class="dual-grid">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Questions</div><div class="meta">pitanja iz chata</div></div><div class="panel-body"><div id="questionsWrap" class="list-wrap stack"></div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Answers</div><div class="meta">system / AI odgovori</div></div><div class="panel-body"><div id="answersWrap" class="list-wrap stack"></div></div></article>'
+                + '</div>'
+                + '</div></div>'
+                + '<div id="view-songs" class="dashboard-view"><div class="view-stack">'
+                + '<div class="dual-grid">'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Songs</div><div class="meta">detektirane pjesme</div></div><div class="panel-body"><div id="songsWrap" class="list-wrap stack"></div></div></article>'
+                + '<article class="panel"><div class="panel-head"><div class="panel-title">Song performance</div><div class="meta">prosjek engagement/sentiment</div></div><div class="panel-body"><div id="songPerfWrap" class="table-wrap"></div></div></article>'
+                + '</div>'
+                + '</div></div>'
+                + '</div>'
+                + '</section>'
+                + '</div>';
+
+            function getFilteredUsers() {
+                const userQuery = state.userQuery.trim().toLowerCase();
+                const giftQuery = state.giftQuery.trim().toLowerCase();
+                return allUsers.filter(function (user) {
+                    const userOk = !userQuery || String(user.user || '').toLowerCase().includes(userQuery);
+                    if (!userOk) return false;
+                    if (!giftQuery) return true;
+                    return (Array.isArray(user.giftDetails) ? user.giftDetails : []).some(function (gift) {
+                        return String(gift.name || '').toLowerCase().includes(giftQuery);
+                    });
+                });
+            }
+
+            function sortUsers(users, sortKey) {
+                return users.slice().sort(function (a, b) {
+                    if (sortKey === 'user') return String(a.user || '').localeCompare(String(b.user || ''));
+                    if (sortKey === 'chat') return Number(b.chat || 0) - Number(a.chat || 0) || Number(b.total || 0) - Number(a.total || 0) || String(a.user || '').localeCompare(String(b.user || ''));
+                    if (sortKey === 'gifts') return Number(b.gifts || 0) - Number(a.gifts || 0) || Number(b.coins || 0) - Number(a.coins || 0) || String(a.user || '').localeCompare(String(b.user || ''));
+                    if (sortKey === 'joins') return Number(b.joins || 0) - Number(a.joins || 0) || Number(b.total || 0) - Number(a.total || 0) || String(a.user || '').localeCompare(String(b.user || ''));
+                    if (sortKey === 'total') return Number(b.total || 0) - Number(a.total || 0) || Number(b.coins || 0) - Number(a.coins || 0) || String(a.user || '').localeCompare(String(b.user || ''));
+                    return Number(b.coins || 0) - Number(a.coins || 0) || Number(b.total || 0) - Number(a.total || 0) || String(a.user || '').localeCompare(String(b.user || ''));
+                });
+            }
+
+            function sortGifts(gifts, sortKey) {
+                return gifts.slice().sort(function (a, b) {
+                    if (sortKey === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+                    if (sortKey === 'quantity') return Number(b.quantity || 0) - Number(a.quantity || 0) || Number(b.coins || 0) - Number(a.coins || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+                    if (sortKey === 'events') return Number(b.events || 0) - Number(a.events || 0) || Number(b.coins || 0) - Number(a.coins || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+                    if (sortKey === 'users') return Number(b.userCount || 0) - Number(a.userCount || 0) || Number(b.coins || 0) - Number(a.coins || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+                    return Number(b.coins || 0) - Number(a.coins || 0) || Number(b.quantity || 0) - Number(a.quantity || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+                });
+            }
+
+            function sortQaItems(items, sortKey) {
+                return (items || []).slice().sort(function (a, b) {
+                    if (sortKey === 'oldest') return Number(a.ts || 0) - Number(b.ts || 0);
+                    if (sortKey === 'user') return String(a.user || '').localeCompare(String(b.user || '')) || Number(b.ts || 0) - Number(a.ts || 0);
+                    return Number(b.ts || 0) - Number(a.ts || 0);
+                });
+            }
+
+            function sortSongs(items, perfRows, sortKey) {
+                if (sortKey === 'plays' || sortKey === 'engagement') {
+                    return (perfRows || []).slice().sort(function (a, b) {
+                        if (sortKey === 'plays') return Number(b.plays || 0) - Number(a.plays || 0) || String(a.title || '').localeCompare(String(b.title || ''));
+                        return Number(b.avgEngagement || 0) - Number(a.avgEngagement || 0) || Number(b.plays || 0) - Number(a.plays || 0) || String(a.title || '').localeCompare(String(b.title || ''));
+                    }).map(function (row) {
+                        return { source: 'perf', title: row.title, ts: row.lastSeen || 0 };
+                    });
+                }
+                return (items || []).slice().sort(function (a, b) {
+                    if (sortKey === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
+                    return Number(b.ts || 0) - Number(a.ts || 0);
+                });
+            }
+
+            function renderUsersTable(users, limit, sortKey) {
+                const rows = sortUsers(users, sortKey || 'coins')
+                    .slice(0, limit || 25)
+                    .map(function (user, index) {
+                        const topGift = sortGifts(Array.isArray(user.giftDetails) ? user.giftDetails : [], 'coins')[0];
+                        return '<tr class="user-row" data-user-name="' + encodeURIComponent(user.user || '') + '">'
+                            + '<td>' + (index + 1) + '. @' + escHtml(user.user) + (topGift ? '<div class="meta">Top gift: ' + escHtml(topGift.name) + '</div>' : '') + '</td>'
+                            + '<td class="num">' + formatNum(user.total) + '</td>'
+                            + '<td class="num">' + formatNum(user.chat) + '</td>'
+                            + '<td class="num">' + formatNum(user.gifts) + '</td>'
+                            + '<td class="num coin">' + formatNum(user.coins) + '</td>'
+                            + '<td class="num">' + formatNum(user.joins) + '</td>'
+                            + '</tr>';
+                    }).join('');
+                return '<table><thead><tr><th>User</th><th class="num">Ukupno</th><th class="num">Chat</th><th class="num">Gifts</th><th class="num">Coins</th><th class="num">Join</th></tr></thead><tbody>'
+                    + (rows || '<tr><td colspan="6" class="empty">Nema korisnika za zadane filtere.</td></tr>') + '</tbody></table>';
+            }
+
+            function renderGiftsOverallTable(gifts, limit) {
+                const rows = sortGifts(gifts, state.sorts.gifts).slice(0, limit || 18).map(function (gift, index) {
+                    return '<tr class="gift-row" data-gift-name="' + encodeURIComponent(gift.name) + '">'
+                        + '<td>' + (index + 1) + '. ' + escHtml(gift.name) + '</td>'
+                        + '<td class="num">' + formatNum(gift.quantity) + '</td>'
+                        + '<td class="num">' + formatNum(gift.events) + '</td>'
+                        + '<td class="num coin">' + formatNum(gift.coins) + '</td>'
+                        + '<td class="num">' + formatNum(gift.userCount) + '</td>'
+                        + '</tr>';
+                }).join('');
+                return '<table><thead><tr><th>Gift</th><th class="num">Qty</th><th class="num">Evt</th><th class="num">Coins</th><th class="num">Users</th></tr></thead><tbody>'
+                    + (rows || '<tr><td colspan="5" class="empty">Nema gift podataka za zadane filtere.</td></tr>') + '</tbody></table>';
+            }
+
+            function renderGiftsByUserCards(rows, limit) {
+                const html = rows.slice().sort(function (a, b) {
+                    return Number(b.totalCoins || 0) - Number(a.totalCoins || 0)
+                        || Number(b.totalGiftQuantity || 0) - Number(a.totalGiftQuantity || 0)
+                        || String(a.user || '').localeCompare(String(b.user || ''));
+                }).slice(0, limit || 10).map(function (row) {
+                    const preview = (row.gifts || []).slice(0, 4).map(function (gift) {
+                        return '<div class="gift-preview-row"><span>' + escHtml(gift.name) + '</span><span class="coin">' + formatNum(gift.coins) + ' 🪙</span><span class="meta">x' + formatNum(gift.quantity) + '</span></div>';
+                    }).join('');
+                    return '<div class="user-card clickable" data-user-name="' + encodeURIComponent(row.user || '') + '">'
+                        + '<div class="user-card-head"><strong>@' + escHtml(row.user) + '</strong><strong class="coin">' + formatNum(row.totalCoins) + ' 🪙</strong></div>'
+                        + '<div class="meta">Gift kolicina ' + formatNum(row.totalGiftQuantity) + ' • eventi ' + formatNum(row.giftEvents) + '</div>'
+                        + '<div class="gift-preview">' + (preview || '<span class="meta">Nema detalja.</span>') + '</div>'
+                        + '</div>';
+                }).join('');
+                return html || '<div class="empty">Nema gift podataka po korisniku.</div>';
+            }
+
+            function renderQaList(items, emptyText) {
+                const query = state.textQuery.trim().toLowerCase();
+                const userQuery = state.userQuery.trim().toLowerCase();
+                const html = sortQaItems(items, state.sorts.qa).filter(function (row) {
+                    const userOk = !userQuery || String(row.user || '').toLowerCase().includes(userQuery);
+                    const textOk = !query || String(row.text || '').toLowerCase().includes(query) || String(row.user || '').toLowerCase().includes(query);
+                    return userOk && textOk;
+                }).slice(0, state.ranges.qa).map(function (row) {
+                    return '<div class="qa-row"><strong>' + escHtml(row.user) + '</strong><div>' + escHtml(row.text) + '</div><div class="meta">' + escHtml(formatDate(row.ts)) + '</div></div>';
+                }).join('');
+                return html || '<div class="empty">' + escHtml(emptyText) + '</div>';
+            }
+
+            function renderSongsList(items) {
+                const query = state.textQuery.trim().toLowerCase();
+                const html = sortSongs(items, summary.songPerformance || [], state.sorts.songs).filter(function (song) {
+                    return !query || String(song.title || '').toLowerCase().includes(query) || String(song.source || '').toLowerCase().includes(query);
+                }).slice(0, state.ranges.songs).map(function (song) {
+                    return '<div class="song-row"><strong>' + escHtml(String(song.source || '').toUpperCase()) + '</strong><div>' + escHtml(song.title) + '</div><div class="meta">' + escHtml(song.ts ? formatDate(song.ts) : 'bez timestampa') + '</div></div>';
+                }).join('');
+                return html || '<div class="empty">Nema pjesama za zadani filter.</div>';
+            }
+
+            function renderSongPerformance(items) {
+                const query = state.textQuery.trim().toLowerCase();
+                const rows = (items || []).slice().sort(function (a, b) {
+                    if (state.sorts.songs === 'plays') return Number(b.plays || 0) - Number(a.plays || 0) || String(a.title || '').localeCompare(String(b.title || ''));
+                    if (state.sorts.songs === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
+                    return Number(b.avgEngagement || 0) - Number(a.avgEngagement || 0) || Number(b.lastSeen || 0) - Number(a.lastSeen || 0) || String(a.title || '').localeCompare(String(b.title || ''));
+                }).filter(function (row) {
+                    return !query || String(row.title || '').toLowerCase().includes(query);
+                }).slice(0, state.ranges.songs).map(function (row, index) {
+                    return '<tr>'
+                        + '<td>' + (index + 1) + '. ' + escHtml(row.title) + '</td>'
+                        + '<td class="num">' + formatNum(row.plays || 0) + '</td>'
+                        + '<td class="num">' + formatNum(row.avgEngagement || 0) + '</td>'
+                        + '<td class="num">' + formatNum(row.avgSentiment || 0) + '</td>'
+                        + '</tr>';
+                }).join('');
+                return '<table><thead><tr><th>Song</th><th class="num">Plays</th><th class="num">Avg engage</th><th class="num">Avg sentiment</th></tr></thead><tbody>'
+                    + (rows || '<tr><td colspan="4" class="empty">Nema song performance podataka.</td></tr>') + '</tbody></table>';
+            }
+
+            function bindUserRows() {
+                document.querySelectorAll('[data-user-name]').forEach(function (row) {
+                    row.addEventListener('click', function () {
+                        const userName = decodeURIComponent(String(row.getAttribute('data-user-name') || ''));
+                        if (userName) showUserDetailsModal(summary, userName);
+                    });
+                });
+            }
+
+            function bindGiftRows() {
+                document.querySelectorAll('[data-gift-name]').forEach(function (row) {
+                    row.addEventListener('click', function () {
+                        const giftName = decodeURIComponent(String(row.getAttribute('data-gift-name') || ''));
+                        if (giftName) showGiftSendersModal(summary, giftName);
+                    });
+                });
+            }
+
+            function updateActiveView() {
+                document.querySelectorAll('.dashboard-view').forEach(function (node) {
+                    node.classList.toggle('active', node.id === 'view-' + state.view);
+                });
+                document.querySelectorAll('.nav-btn').forEach(function (button) {
+                    button.classList.toggle('active', button.getAttribute('data-view') === state.view);
+                });
+                const config = viewConfigs[state.view] || viewConfigs.overview;
+                document.getElementById('toolbarViewName').textContent = config.label;
+                document.getElementById('toolbarViewHint').innerHTML = escHtml(config.description);
+                const rangeSelect = document.getElementById('rangeSelect');
+                rangeSelect.value = String(state.ranges[state.view] || 25);
+                const sortSelect = document.getElementById('sortSelect');
+                sortSelect.innerHTML = config.sortOptions.map(function (row) {
+                    return '<option value="' + escHtml(row.value) + '">' + escHtml(row.label) + '</option>';
+                }).join('');
+                sortSelect.value = state.sorts[state.view] || config.sortOptions[0].value;
+            }
+
+            function updateSections() {
+                const filteredUsers = getFilteredUsers();
+                const filteredGiftData = aggregateFilteredGifts(filteredUsers, state.giftQuery);
+                const filterNotes = [];
+                if (state.userQuery.trim()) filterNotes.push('user: ' + state.userQuery.trim());
+                if (state.giftQuery.trim()) filterNotes.push('gift: ' + state.giftQuery.trim());
+                if (state.textQuery.trim()) filterNotes.push('text: ' + state.textQuery.trim());
+                document.getElementById('filterMeta').textContent = filterNotes.length
+                    ? ('Aktivni filteri — ' + filterNotes.join(' • ') + ' • match users: ' + formatNum(filteredUsers.length))
+                    : 'Filteri su prazni — prikazujem cijelu sesiju.';
+
+                const overviewLimit = Math.min(state.ranges.overview, 18);
+                const usersChartRows = sortUsers(filteredUsers, state.sorts.users).slice(0, Math.min(state.ranges.users, 8)).map(function (user) {
+                    return { label: '@' + String(user.user || ''), value: Number(state.sorts.users === 'total' ? user.total : state.sorts.users === 'chat' ? user.chat : state.sorts.users === 'gifts' ? user.gifts : state.sorts.users === 'joins' ? user.joins : user.coins) };
+                });
+                const overviewUserRows = sortUsers(filteredUsers, state.sorts.overview).slice(0, Math.min(overviewLimit, 8)).map(function (user) {
+                    return { label: '@' + String(user.user || ''), value: Number(state.sorts.overview === 'total' ? user.total : state.sorts.overview === 'gifts' ? user.gifts : user.coins) };
+                });
+                const giftTrendRows = sortGifts(filteredGiftData.topGiftsOverall, state.sorts.gifts).slice(0, Math.min(state.ranges.gifts, 8)).map(function (gift) {
+                    return { label: String(gift.name || ''), value: Number(state.sorts.gifts === 'quantity' ? gift.quantity : state.sorts.gifts === 'events' ? gift.events : state.sorts.gifts === 'users' ? gift.userCount : gift.coins) };
+                });
+
+                document.getElementById('overviewUsersTable').innerHTML = renderUsersTable(filteredUsers, overviewLimit, state.sorts.overview);
+                document.getElementById('overviewGiftsTable').innerHTML = renderGiftsOverallTable(filteredGiftData.topGiftsOverall, overviewLimit);
+                document.getElementById('usersTableWrap').innerHTML = renderUsersTable(filteredUsers, state.ranges.users, state.sorts.users);
+                document.getElementById('giftsOverallWrap').innerHTML = renderGiftsOverallTable(filteredGiftData.topGiftsOverall, state.ranges.gifts);
+                document.getElementById('giftsByUserWrap').innerHTML = renderGiftsByUserCards(filteredGiftData.topGiftsByUser, state.ranges.gifts);
+                document.getElementById('questionsWrap').innerHTML = renderQaList(summary.questions, 'Nema pitanja za zadani filter.');
+                document.getElementById('answersWrap').innerHTML = renderQaList(summary.answers, 'Nema odgovora za zadani filter.');
+                document.getElementById('songsWrap').innerHTML = renderSongsList(summary.songs);
+                document.getElementById('songPerfWrap').innerHTML = renderSongPerformance(summary.songPerformance || []);
+                document.getElementById('overviewUserTrend').innerHTML = renderBarsSvg(overviewUserRows, { barColor: 'rgba(56,189,248,.88)', suffix: state.sorts.overview === 'coins' ? ' 🪙' : '' });
+                document.getElementById('overviewGiftTrend').innerHTML = renderBarsSvg(giftTrendRows.slice(0, 8), { barColor: 'rgba(245,158,11,.88)', suffix: state.sorts.gifts === 'coins' ? ' 🪙' : '' });
+                document.getElementById('usersTrendWrap').innerHTML = renderBarsSvg(usersChartRows, { barColor: 'rgba(56,189,248,.88)', suffix: state.sorts.users === 'coins' ? ' 🪙' : '' });
+                document.getElementById('giftsTrendWrap').innerHTML = renderBarsSvg(giftTrendRows, { barColor: 'rgba(245,158,11,.88)', suffix: state.sorts.gifts === 'coins' ? ' 🪙' : '' });
+                bindGiftRows();
+                bindUserRows();
+            }
+
+            document.querySelectorAll('.nav-btn').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    state.view = button.getAttribute('data-view') || 'overview';
+                    updateActiveView();
+                });
+            });
+
+            document.getElementById('filterUser').addEventListener('input', function (event) {
+                state.userQuery = event.target.value || '';
+                updateSections();
+            });
+            document.getElementById('filterGift').addEventListener('input', function (event) {
+                state.giftQuery = event.target.value || '';
+                updateSections();
+            });
+            document.getElementById('filterText').addEventListener('input', function (event) {
+                state.textQuery = event.target.value || '';
+                updateSections();
+            });
+            document.getElementById('rangeSelect').addEventListener('change', function (event) {
+                state.ranges[state.view] = Number(event.target.value || 25);
+                updateSections();
+            });
+            document.getElementById('sortSelect').addEventListener('change', function (event) {
+                state.sorts[state.view] = event.target.value || state.sorts[state.view];
+                updateSections();
+            });
+
+            updateActiveView();
+            updateSections();
+
+            document.getElementById('statsExportJson').addEventListener('click', function () {
+                downloadTextFile('tkai-session-stats-' + String(summary.savedAt || '').replace(/[:.]/g, '-') + '.json', JSON.stringify(summary, null, 2), 'application/json;charset=utf-8');
+            });
+            document.getElementById('statsExportCsv').addEventListener('click', function () {
+                downloadTextFile('tkai-session-stats-' + String(summary.savedAt || '').replace(/[:.]/g, '-') + '.csv', buildCsvText(summary), 'text/csv;charset=utf-8');
+            });
+            document.getElementById('statsExportTxt').addEventListener('click', function () {
+                downloadTextFile('tkai-session-stats-' + String(summary.savedAt || '').replace(/[:.]/g, '-') + '.txt', buildTxtText(summary), 'text/plain;charset=utf-8');
+            });
+            document.getElementById('statsPrint').addEventListener('click', function () { window.print(); });
+            document.getElementById('statsClose').addEventListener('click', function () { window.close(); });
+        }
+
+        function renderError() {
+            document.getElementById('app').innerHTML = '<div class="error"><div class="error-card"><div class="meta">Session Dashboard</div><h1 style="margin:8px 0 12px">Podaci za statistiku nisu dostupni</h1><p style="color:var(--muted)">Otvori dashboard ponovno iz AI Live Chat panela preko gumba Statistika. Ako si osvjezio ovu stranicu nakon dugo vremena, privremeni payload vise ne postoji.</p><div style="margin-top:16px"><button class="btn" onclick="window.close()">Zatvori</button></div></div></div>';
+        }
+
+        (function init() {
+            const summary = readSummary();
+            if (!summary) {
+                renderError();
+                return;
+            }
+            render(summary);
+        })();
+    </script>
+</body>
+
+</html>
