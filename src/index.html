@@ -9472,7 +9472,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.262</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.263</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -10954,7 +10954,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.262</span></div>
+                                    v<span id="helpVersionNum2">2.4.263</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -13731,6 +13731,32 @@
                 });
                 return out.slice(-Math.max(10, Number(maxItems || 120)));
             }
+            function getTkaiGiftMeta(text) {
+                if (typeof detectGiftMetaFromText === 'function') {
+                    return detectGiftMetaFromText(text);
+                }
+                const src = String(text || '').trim();
+                const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+                const normalized = normalize(src);
+                const entries = typeof getGiftCatalogEntries === 'function' ? getGiftCatalogEntries() : [];
+                let found = null;
+                for (const [key, value] of entries) {
+                    if (key && normalized.includes(String(key || ''))) {
+                        found = value;
+                        break;
+                    }
+                }
+                const qtyMatch = src.match(/(?:\b(?:x|×)\s*(\d{1,4})\b|\b(\d{1,4})\s*x\b|\b(?:combo|gift(?:ed)?|sent)\s*(\d{1,4})\b)/i);
+                const quantity = Math.max(1, Number(qtyMatch?.[1] || qtyMatch?.[2] || qtyMatch?.[3] || 1));
+                let unitCoins = found ? Number(found.coins || 0) : 0;
+                if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
+                return {
+                    giftName: found ? found.name : src.slice(0, 80),
+                    coins: Math.max(0, Number(unitCoins * quantity || 0)),
+                    unitCoins: Math.max(0, Number(unitCoins || 0)),
+                    quantity
+                };
+            }
             function buildTkaiSessionAnalytics(session) {
                 const nowTs = Date.now();
                 const messages = Array.isArray(session?.messages) ? session.messages.slice() : [];
@@ -13763,7 +13789,7 @@
                     const userKey = user.toLowerCase();
                     const directGiftName = String(m?.giftName || '').trim();
                     const giftMeta = (type === 'gift' || type === 'subscriber')
-                        ? detectGiftMetaFromText(directGiftName || m?.text || '')
+                        ? getTkaiGiftMeta(directGiftName || m?.text || '')
                         : null;
                     const quantity = giftMeta ? Math.max(1, Number(m?.quantity || giftMeta.quantity || 1)) : 0;
                     const unitCoins = giftMeta ? Math.max(0, Number(m?.unitCoins || giftMeta.unitCoins || 0)) : 0;
@@ -16723,7 +16749,7 @@
                 return null;
             }
             function parseCoinsFromText(text) {
-                const meta = detectGiftMetaFromText(text);
+                const meta = getTkaiGiftMeta(text);
                 if (Number(meta.coins || 0) > 0) return Number(meta.coins || 0);
                 const t = String(text || '');
                 const compact = t.match(/(\d+(?:[.,]\d+)?)\s*([km])\s*(coins?|coin|coina|kovanica|diamonds?)/i);
@@ -17385,7 +17411,7 @@
                 let giftEventsTotal = 0;
                 let giftCoinsTotal = 0;
                 giftScanBase.forEach((m) => {
-                    const giftName = String(m.giftName || detectGiftMetaFromText(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
+                    const giftName = String(m.giftName || getTkaiGiftMeta(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
                     const user = String(m.user || 'unknown').trim().slice(0, 40) || 'unknown';
                     const quantity = Math.max(1, Number(m.quantity || 1));
                     const coins = Math.max(0, Number(m.coins || 0));
@@ -19032,7 +19058,7 @@
                 const supporterSet = new Set();
                 giftEvents.forEach((message) => {
                     const user = String(message.user || 'Chat user').trim() || 'Chat user';
-                    const meta = detectGiftMetaFromText(message.text || '');
+                    const meta = getTkaiGiftMeta(message.text || '');
                     const eventCoins = Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0);
                     const eventUnitCoins = Number(message.unitCoins || meta.unitCoins || 0);
                     const eventQuantity = Math.max(1, Number(message.quantity || meta.quantity || 1));
@@ -20029,7 +20055,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
                         if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
                         if (!existing.has(id)) {
-                            const giftMeta = detectGiftMetaFromText(message.text || '');
+                            const giftMeta = getTkaiGiftMeta(message.text || '');
                             collectedMessages.push({ ...message, id, ts: nowTs, coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                             existing.add(id);
                             existingRecent.set(recentKey, nowTs);
