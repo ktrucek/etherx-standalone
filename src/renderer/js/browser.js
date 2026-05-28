@@ -7331,7 +7331,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             '[class*="chat-content"]',
             '[class*="SpanMessage"]',
             '[class*="comment-text"]',
-            'p',
+                        'p',
+                        'div',
             'span'
           ].join(',');
           const parts = [];
@@ -7567,6 +7568,7 @@ items.slice(-45).forEach((el, index) => {
         + '[class*="AuthorName"],'
         + '[class*="NickName"],'
         + '[class*="nickname"],'
+        + 'a[href^="/@"],'
         + 'strong, b'
     );
     const textEl = el.querySelector(
@@ -7585,7 +7587,7 @@ items.slice(-45).forEach((el, index) => {
         + '[class*="Subscribe"],'
         + '[class*="SpanMessage"],'
         + '[class*="comment-text"],'
-        + 'p, span'
+        + 'p, div, span'
     );
     const textNodes = Array.from(el.querySelectorAll(
         '[data-e2e="chat-message-text"],'
@@ -7600,9 +7602,10 @@ items.slice(-45).forEach((el, index) => {
         + '[class*="chat-content"],'
         + '[class*="SpanMessage"],'
         + '[class*="comment-text"],'
-        + 'p, span'
+        + 'p, div, span'
     ));
     const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
+    const ariaLabelText = String(el.getAttribute('aria-label') || '').replace(/[\s]+/g, ' ').trim();
     const derivedUser = (() => {
         // 1) Explicit userEl text
         const direct = userEl ? userEl.textContent.trim() : '';
@@ -7640,7 +7643,7 @@ items.slice(-45).forEach((el, index) => {
         .filter((part, idx, arr) => arr.indexOf(part) === idx)
         .filter(part => !isAuxiliaryText(part))
         .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
-    let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
+    let rawText = (assembledText || textBase || fallbackParts.join(' ') || ariaLabelText || el.textContent || '').trim().slice(0, 1200);
 
     // Hvati nagrade, emotikone, specijalne znakove
     const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
@@ -7657,12 +7660,13 @@ items.slice(-45).forEach((el, index) => {
     const cleaned = cleanChatText(rawText, user);
     const text = cleaned.slice(0, 900);
     if (text && text.length > 1) {
-        const low = text.toLowerCase();
+        const messageContext = [text, rawText, ariaLabelText, fallbackText].filter(Boolean).join(' ');
+        const low = messageContext.toLowerCase();
         // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
-        const hasSent = /\bsent\b|\bgave\b/i.test(low);
-        const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
-        const isGift = hasSent || hasGiftWord || giftEls.length > 0;
-        const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
+        const hasSent = /\b(?:sent|gave)\b/i.test(low);
+        const hasGiftWord = /(?:\bgift\b|\brose\b|\bcoins?\b|\bdiamonds?\b|\bgalaxy\b|\blion\b|\blollipop\b|\bsunglasses\b|\buniverse\b|\bcastle\b|\brocket\b|\bbear\b|\bunicorn\b|\bpoklon\b|\bdar\b|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+)/i.test(messageContext);
+        const isGift = (hasSent && hasGiftWord) || giftEls.length > 0 || /\b(?:sent\s+(?:a\s+)?gift|sent\s+rose|gave\s+(?:a\s+)?gift)\b/i.test(low);
+        const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(messageContext);
         const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
         const isShare = isStrictShareEvent(text, rawText, user, el);
         let levelHint = null;
@@ -7674,14 +7678,16 @@ items.slice(-45).forEach((el, index) => {
             }
         }
         const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
+        const stableSig = String(mid || el.getAttribute('aria-label') || el.getAttribute('data-e2e') || '').trim().slice(0, 240);
+        const messageType = isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : (isGift ? 'gift' : 'chat')));
         if (isLikelyNoiseChatText(text, user, messageType)) return;
 
         results.push({
             user: user || 'unknown',
             text,
             mid,
-            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : 'chat'))),
+            sig: stableSig,
+            type: messageType,
             level: levelHint
         });
     }
@@ -7789,14 +7795,14 @@ return JSON.stringify(results);
             const existing = new Set(collectedMessages.map(message => message.id));
             const existingCounts = new Map();
             collectedMessages.forEach(message => {
-                const k = `${message.user}:${message.text}`;
+                const k = `${message.type || 'chat'}:${message.user}:${message.text}`;
                 existingCounts.set(k, (existingCounts.get(k) || 0) + 1);
             });
             let added = 0;
             const incomingCaptions = [];
             filteredMessages.forEach((message) => {
-                const baseKey = `${message.user}:${message.text}`;
-                const id = message.mid ? `mid:${message.mid}` : baseKey;
+                const baseKey = `${message.type || 'chat'}:${message.user}:${message.text}`;
+                const id = message.mid ? `mid:${message.mid}` : (message.sig ? `sig:${message.sig}` : baseKey);
                 const allowRepeatGift = (message.type === 'gift' || message.type === 'subscriber') && (existingCounts.get(baseKey) || 0) < 4;
                 if (!existing.has(id)) {
                     const giftMeta = detectGiftMetaFromText(message.text || '');
@@ -8558,14 +8564,6 @@ return JSON.stringify(results);
         applyTkaiPanelScale();
     }
 
-    // Apply on panel open
-    document.getElementById('btnTikTokAI')?.addEventListener('click', () => {
-        setTimeout(() => {
-            applyTkaiFeatureToggles();
-            applyTkaiButtonTheme();
-            initInsightCardControls();
-        }, 50);
-    });
     // Re-apply whenever a tkai feature toggle is clicked in settings
     document.getElementById('settingsPanel')?.addEventListener('click', e => {
         const t = e.target.closest('.toggle[data-setting]');
@@ -8597,12 +8595,37 @@ return JSON.stringify(results);
 
     const tkaiMinBtn = document.getElementById('minimizeTiktokAIPanel');
     const TKAI_MIN_KEY = 'ex_tkai_panel_minimized';
+    const TKAI_POS_KEY = 'ex_tkai_panel_pos';
     const applyTkaiMinimized = (minimized) => {
         panel.classList.toggle('tkai-minimized', !!minimized);
         if (tkaiMinBtn) {
             tkaiMinBtn.textContent = minimized ? '▢' : '−';
             tkaiMinBtn.title = minimized ? 'Proširi' : 'Spusti / proširi';
         }
+    };
+    const resetTkaiPanelPosition = () => {
+        panel.style.transition = 'left .2s, bottom .2s';
+        panel.style.right = '0';
+        panel.style.left = 'auto';
+        panel.style.top = 'auto';
+        panel.style.bottom = '10px';
+        try { localStorage.removeItem(TKAI_POS_KEY); } catch (_) { }
+        setTimeout(() => { panel.style.transition = 'none'; }, 220);
+    };
+    const ensureTkaiPanelVisible = () => {
+        applyTkaiMinimized(false);
+        try { localStorage.setItem(TKAI_MIN_KEY, '0'); } catch (_) { }
+        requestAnimationFrame(() => {
+            const rect = panel.getBoundingClientRect();
+            const width = panel.offsetWidth || rect.width || 0;
+            const height = panel.offsetHeight || rect.height || 0;
+            const offscreen = !width || !height
+                || rect.right < 80
+                || rect.left > window.innerWidth - 40
+                || rect.bottom < 80
+                || rect.top > window.innerHeight - 40;
+            if (offscreen) resetTkaiPanelPosition();
+        });
     };
     try {
         applyTkaiMinimized(localStorage.getItem(TKAI_MIN_KEY) === '1');
@@ -8616,6 +8639,16 @@ return JSON.stringify(results);
         try { localStorage.setItem(TKAI_MIN_KEY, next ? '1' : '0'); } catch (_) { }
     });
 
+    // Apply on panel open
+    document.getElementById('btnTikTokAI')?.addEventListener('click', () => {
+        ensureTkaiPanelVisible();
+        setTimeout(() => {
+            applyTkaiFeatureToggles();
+            applyTkaiButtonTheme();
+            initInsightCardControls();
+        }, 50);
+    });
+
     document.getElementById('closeTiktokAIPanel')?.addEventListener('click', stopScanning);
     document.addEventListener('keydown', onTikTokHoldLShortcut);
     updateHoldLButton();
@@ -8624,19 +8657,8 @@ return JSON.stringify(results);
 
     // ── Draggable panel ──────────────────────────────────────────────────────
     (function makePanelDraggable() {
-        const TKAI_POS_KEY = 'ex_tkai_panel_pos';
         const dragHandle = document.getElementById('tiktokAIPanelHeader');
         if (!dragHandle || !panel) return;
-
-        function resetPanelPosition() {
-            panel.style.transition = 'left .2s, bottom .2s';
-            panel.style.right = '0';
-            panel.style.left = 'auto';
-            panel.style.top = 'auto';
-            panel.style.bottom = '10px';
-            try { localStorage.removeItem(TKAI_POS_KEY); } catch (_) { }
-            setTimeout(() => { panel.style.transition = 'none'; }, 220);
-        }
 
         function clampPanelPosition() {
             const rect = panel.getBoundingClientRect();
@@ -8645,7 +8667,7 @@ return JSON.stringify(results);
             const maxTop = Math.max(chromeH, window.innerHeight - Math.min(panel.offsetHeight || rect.height, window.innerHeight));
             const visibleEnough = rect.right > 80 && rect.left < window.innerWidth - 40 && rect.bottom > chromeH + 40 && rect.top < window.innerHeight - 40;
             if (!visibleEnough) {
-                resetPanelPosition();
+                resetTkaiPanelPosition();
                 return;
             }
             if (panel.style.left && panel.style.left !== 'auto') {
@@ -8722,7 +8744,7 @@ return JSON.stringify(results);
         // Double-click header → reset to default bottom-right position
         dragHandle.addEventListener('dblclick', e => {
             if (e.target.closest('button')) return;
-            resetPanelPosition();
+            resetTkaiPanelPosition();
         });
 
         window.addEventListener('resize', clampPanelPosition);
