@@ -2820,6 +2820,80 @@ function setupIPC() {
     }
   });
 
+  function execFileAsync(command, args, options = {}) {
+    return new Promise((resolve, reject) => {
+      execFile(command, args, options, (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    });
+  }
+
+  function findFirstAppBundle(rootDir) {
+    const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(rootDir, entry.name);
+      if (entry.isDirectory() && entry.name.endsWith(".app")) return fullPath;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const nested = findFirstAppBundle(path.join(rootDir, entry.name));
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  function shellQuote(value) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
+  }
+
+  async function installMacZipUpdate(zipPath) {
+    const os = require("os");
+    const tempRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "etherx-update-install-"),
+    );
+    const extractDir = path.join(tempRoot, "expanded");
+    fs.mkdirSync(extractDir, { recursive: true });
+
+    try {
+      await execFileAsync("/usr/bin/ditto", ["-x", "-k", zipPath, extractDir]);
+      const appBundle = findFirstAppBundle(extractDir);
+      if (!appBundle) {
+        throw new Error("ZIP ne sadrži .app bundle za instalaciju");
+      }
+
+      const appName = path.basename(appBundle);
+      const destApp = path.join("/Applications", appName);
+
+      try {
+        fs.rmSync(destApp, { recursive: true, force: true });
+        await execFileAsync("/usr/bin/ditto", [appBundle, destApp]);
+        await execFileAsync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destApp]).catch(() => ({ stdout: "", stderr: "" }));
+      } catch (error) {
+        if (!["EACCES", "EPERM"].includes(error.code)) throw error;
+        const copyScript = [
+          `/bin/rm -rf ${shellQuote(destApp)}`,
+          `/usr/bin/ditto ${shellQuote(appBundle)} ${shellQuote(destApp)}`,
+          `/usr/bin/xattr -dr com.apple.quarantine ${shellQuote(destApp)} || true`,
+        ].join(" && ");
+        await execFileAsync("/usr/bin/osascript", [
+          "-e",
+          `do shell script ${JSON.stringify(copyScript)} with administrator privileges`,
+        ]);
+      }
+
+      await execFileAsync("/usr/bin/open", ["-n", destApp]);
+      return { appPath: destApp };
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  }
+
   // Install: open the downloaded file and quit
   ipcMain.handle("update:install", async (_e, filePath) => {
     try {
@@ -2828,8 +2902,11 @@ function setupIPC() {
       const ext = path.extname(filePath).toLowerCase();
 
       if (process.platform === "darwin") {
-        // macOS: open DMG or ZIP
-        await shell.openPath(filePath);
+        if (ext === ".zip") {
+          await installMacZipUpdate(filePath);
+        } else {
+          await shell.openPath(filePath);
+        }
         setTimeout(() => app.quit(), 1500);
       } else if (process.platform === "linux") {
         if (ext === ".appimage") {
