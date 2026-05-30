@@ -9536,7 +9536,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.268</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.269</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -11018,7 +11018,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.268</span></div>
+                                    v<span id="helpVersionNum2">2.4.269</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
                                     provjera: nikad
                                 </div>
@@ -17111,6 +17111,21 @@
                     coins: Math.max(0, Number(coins || 0)),
                     unitCoins: Math.max(0, Number(unitCoins || 0)),
                     quantity,
+                };
+            }
+
+            function resolveGiftMetaFromMessage(message) {
+                const directName = String(message?.giftName || '').trim();
+                const meta = detectGiftMetaFromText(directName || message?.text || '');
+                const quantity = Math.max(1, Number(message?.quantity || meta.quantity || 1));
+                const unitCoins = Math.max(0, Number(message?.unitCoins || meta.unitCoins || 0));
+                const directCoins = Number(message?.coins || 0);
+                const fallbackCoins = unitCoins > 0 ? unitCoins * quantity : Number(meta.coins || 0);
+                return {
+                    giftName: directName || meta.giftName || String(message?.text || '').trim().slice(0, 80) || 'Unknown gift',
+                    quantity,
+                    unitCoins,
+                    coins: Math.max(0, Number(directCoins > 0 ? directCoins : fallbackCoins || 0))
                 };
             }
 
