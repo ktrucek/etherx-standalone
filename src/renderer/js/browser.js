@@ -13734,11 +13734,22 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
 (async function initHelpVersion() {
     let ver = '2.4.6';
     try { if (window.etherx?.app?.getVersion) ver = await window.etherx.app.getVersion(); } catch (e) { }
-    const now = new Date();
-    const buildDate = now.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + now.toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+    let buildDate = '—';
+    try {
+        const info = await window.electronAPI?.invoke?.('app:getBuildInfo');
+        if (info?.version) ver = info.version;
+        if (info?.buildTime) {
+            const buildTs = new Date(info.buildTime);
+            if (!Number.isNaN(buildTs.getTime())) {
+                buildDate = buildTs.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + buildTs.toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+    } catch (e) { }
     const platform = (typeof process !== 'undefined' && process.platform) || navigator.platform || 'web';
     const verEl = document.getElementById('helpVersionNum'); if (verEl) verEl.textContent = ver;
+    const verEl2 = document.getElementById('helpVersionNum2'); if (verEl2) verEl2.textContent = ver;
     const bdEl = document.getElementById('helpBuildDate'); if (bdEl) bdEl.textContent = buildDate;
+    const updBdEl = document.getElementById('updBuildDate'); if (updBdEl) updBdEl.textContent = buildDate;
     const pfEl = document.getElementById('helpPlatform'); if (pfEl) pfEl.textContent = platform;
 })();
 
