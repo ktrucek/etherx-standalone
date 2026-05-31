@@ -1,10 +1,10 @@
 {
-  "version": "2.4.133",
+  "version": "3.0.0",
   "minVersion": "2.0.0",
   "channel": "stable",
-  "releaseDate": "2026-05-12",
-  "downloadUrl": "https://kriptoentuzijasti.io/etherx-update/EtherX-v2.4.133.zip",
-  "changelog": "- Dodan TikTok Chat AI panel\n- Dodan sustav automatskog ažuriranja\n- Poboljšanja performansi\n- Ispravci grešaka",
+  "releaseDate": "2026-05-31",
+  "downloadUrl": "https://kriptoentuzijasti.io/etherx-update/EtherX-v3.0.0.zip",
+  "changelog": "- v3.0: CSS i JS izvučeni u zasebne fajlove (Opcija 3 refaktor)\n- Popravak macOS update instalera (ENOTDIR)\n- Ispravci TikTok Chat AI panela\n- Poboljšanja stabilnosti",
   "sha256": "",
   "notes": "Upload this file to: https://kriptoentuzijasti.io/etherx-update/manifest.json"
 }

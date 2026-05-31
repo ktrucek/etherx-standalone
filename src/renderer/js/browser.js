@@ -996,10 +996,25 @@ initSettingsPanel();
         document.getElementById('settingsPanel')?.classList.remove('open');
         togglePanel('tiktokAIPanel');
     });
+    const openLiveDashboardSafely = () => {
+        const openFn = (typeof openLiveDashboardPopout === 'function')
+            ? openLiveDashboardPopout
+            : (typeof window.openLiveDashboardPopout === 'function' ? window.openLiveDashboardPopout : null);
+        if (openFn) {
+            openFn();
+            return;
+        }
+        const liveBtn = document.getElementById('tkaiExpandLiveBtn');
+        if (liveBtn) {
+            setTimeout(() => liveBtn.click(), 60);
+            return;
+        }
+        showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
+    };
     document.getElementById('btnTkaiToolsOpenLive')?.addEventListener('click', () => {
         document.getElementById('settingsPanel')?.classList.remove('open');
         togglePanel('tiktokAIPanel');
-        openLiveDashboardPopout();
+        openLiveDashboardSafely();
     });
     document.getElementById('btnTkaiToolsExportJson')?.addEventListener('click', () => {
         document.getElementById('tkaiExportBtn')?.click();
@@ -1154,6 +1169,19 @@ initSettingsPanel();
         });
     })();
 
+    const TKAI_SONG_PERF_DB_KEY = 'ex_tkai_song_perf_db';
+    function getSongPerfDb() {
+        try {
+            const db = JSON.parse(localStorage.getItem(TKAI_SONG_PERF_DB_KEY) || '{}');
+            return db && typeof db === 'object' ? db : {};
+        } catch (_) {
+            return {};
+        }
+    }
+    function saveSongPerfDb(db) {
+        try { localStorage.setItem(TKAI_SONG_PERF_DB_KEY, JSON.stringify(db || {})); } catch (_) { }
+    }
+
     // Session history + merge + stats
     function getRecentTkaiSessions() {
         try {
@@ -1162,6 +1190,82 @@ initSettingsPanel();
         } catch (_) {
             return [];
         }
+    }
+    function buildSongPerformanceFromDb(songTitles) {
+        const db = getSongPerfDb();
+        const wanted = new Set((Array.isArray(songTitles) ? songTitles : []).map((t) => normalizeSongTitleKey(t)).filter(Boolean));
+        return Object.entries(db || {})
+            .filter(([key]) => !wanted.size || wanted.has(key))
+            .map(([, row]) => {
+                const samples = Math.max(1, Number(row.samples || 0));
+                return {
+                    title: String(row.title || ''),
+                    plays: Number(row.plays || 0),
+                    samples,
+                    avgEngagement: Number((Number(row.engagementSum || 0) / samples).toFixed(2)),
+                    avgSentiment: Number((Number(row.sentimentSum || 0) / samples).toFixed(2)),
+                    lastSeen: Number(row.lastSeen || 0)
+                };
+            })
+            .sort((a, b) => b.avgEngagement - a.avgEngagement || b.lastSeen - a.lastSeen)
+            .slice(0, 120);
+    }
+    function extractSongEventsForSessionAnalytics(sourceMessages, nowTs = Date.now(), maxItems = 120) {
+        if (typeof extractSongEventsFromMessages === 'function') {
+            return extractSongEventsFromMessages(sourceMessages, nowTs, maxItems);
+        }
+        const base = Array.isArray(sourceMessages) ? sourceMessages : [];
+        const songRegex = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\s*[:\-]?\s*([^\n]{3,120})/i;
+        const quoteRegex = /["']([^"']{4,90})["']/;
+        const out = [];
+        base.forEach((m) => {
+            const type = String(m?.type || '').toLowerCase();
+            const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
+            if (!text) return;
+            let title = '';
+            if (type === 'song') title = text;
+            else if (type === 'caption' || type === 'chat') {
+                const match = text.match(songRegex);
+                if (match) title = String(match[1] || '').trim();
+                if (!title) {
+                    const quoted = text.match(quoteRegex);
+                    if (quoted && /(music|song|dj|pjesma|beat|track)/i.test(text)) title = String(quoted[1] || '').trim();
+                }
+            }
+            if (!title) return;
+            out.push({ title: title.slice(0, 90), source: type || 'chat', ts: Number(m?.ts || m?.timestamp || nowTs) });
+        });
+        return out.slice(-Math.max(10, Number(maxItems || 120)));
+    }
+    function getTkaiGiftMeta(text) {
+        if (typeof detectGiftMetaFromText === 'function') {
+            return detectGiftMetaFromText(text);
+        }
+        const src = String(text || '').trim();
+        const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const normalized = normalize(src);
+        const entries = typeof getGiftCatalogEntries === 'function' ? getGiftCatalogEntries() : [];
+        let found = null;
+        for (const [key, value] of entries) {
+            if (key && normalized.includes(String(key || ''))) {
+                found = value;
+                break;
+            }
+        }
+        const qtyMatch = src.match(/(?:\b(?:x|×)\s*(\d{1,4})\b|\b(\d{1,4})\s*x\b|\b(?:combo|gift(?:ed)?|sent)\s*(\d{1,4})\b)/i);
+        const quantity = Math.max(1, Number(qtyMatch?.[1] || qtyMatch?.[2] || qtyMatch?.[3] || 1));
+        let unitCoins = found ? Number(found.coins || 0) : 0;
+        if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
+        return {
+            giftName: found ? found.name : src.slice(0, 80),
+            coins: Math.max(0, Number(unitCoins * quantity || 0)),
+            unitCoins: Math.max(0, Number(unitCoins || 0)),
+            quantity
+        };
+    }
+    function normalizeTkaiGiftKeySafe(value) {
+        if (typeof normalizeGiftKey === 'function') return normalizeGiftKey(value);
+        return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     }
     function buildTkaiSessionAnalytics(session) {
         const nowTs = Date.now();
@@ -1180,6 +1284,7 @@ initSettingsPanel();
         const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
         const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, other: 0 };
         const userStatsMap = new Map();
+        const giftTypeMap = new Map();
         const questions = [];
         const answers = [];
         let coinsTotal = Number(session?.totalCoins || 0);
@@ -1192,9 +1297,16 @@ initSettingsPanel();
             const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
             const user = String(m?.user || '').trim() || 'Unknown';
             const userKey = user.toLowerCase();
-            const giftMeta = (type === 'gift' || type === 'subscriber') ? resolveGiftMetaFromMessage(m) : null;
-            const quantity = giftMeta ? Math.max(1, Number(giftMeta.quantity || 1)) : 0;
-            const coins = giftMeta ? Number(giftMeta.coins || 0) : Number(m?.coins || 0);
+            const directGiftName = String(m?.giftName || '').trim();
+            const giftMeta = (type === 'gift' || type === 'subscriber')
+                ? getTkaiGiftMeta(directGiftName || m?.text || '')
+                : null;
+            const quantity = giftMeta ? Math.max(1, Number(m?.quantity || giftMeta.quantity || 1)) : 0;
+            const unitCoins = giftMeta ? Math.max(0, Number(m?.unitCoins || giftMeta.unitCoins || 0)) : 0;
+            const directCoins = Number(m?.coins || 0);
+            const coins = giftMeta
+                ? Math.max(0, Number(directCoins > 0 ? directCoins : (unitCoins > 0 ? unitCoins * quantity : giftMeta.coins || 0)))
+                : Number(m?.coins || 0);
             if (coins > 0 && Number(session?.totalCoins || 0) <= 0) coinsTotal += coins;
             if (!userStatsMap.has(userKey)) {
                 userStatsMap.set(userKey, { user, total: 0, chat: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map() });
@@ -1204,22 +1316,29 @@ initSettingsPanel();
             if (type === 'gift' || type === 'subscriber') {
                 row.gifts += quantity;
                 row.giftEvents += 1;
-                const giftKey = normalizeGiftKey(giftMeta?.giftName || text || 'unknown gift') || 'unknown gift';
-                const giftRow = row.giftTypes.get(giftKey) || {
-                    name: giftMeta?.giftName || text || 'Unknown gift',
+                const giftName = directGiftName || giftMeta?.giftName || text || 'Unknown gift';
+                const giftKey = normalizeTkaiGiftKeySafe(giftName) || 'unknown gift';
+                const userGiftRow = row.giftTypes.get(giftKey) || {
+                    name: giftName,
                     quantity: 0,
                     events: 0,
                     coins: 0,
-                    unitCoins: Number(giftMeta?.unitCoins || 0),
+                    unitCoins,
                     type
                 };
-                giftRow.quantity += quantity;
-                giftRow.events += 1;
-                giftRow.coins += Math.max(0, coins);
-                if (!giftRow.unitCoins && Number(giftMeta?.unitCoins || 0) > 0) giftRow.unitCoins = Number(giftMeta.unitCoins || 0);
-                row.giftTypes.set(giftKey, giftRow);
-            }
-            else if (type === 'join') row.joins += 1;
+                userGiftRow.quantity += quantity;
+                userGiftRow.events += 1;
+                userGiftRow.coins += Math.max(0, coins);
+                if (!userGiftRow.unitCoins && unitCoins > 0) userGiftRow.unitCoins = unitCoins;
+                row.giftTypes.set(giftKey, userGiftRow);
+
+                const overallGiftRow = giftTypeMap.get(giftKey) || { giftName, events: 0, quantity: 0, coins: 0, users: new Set() };
+                overallGiftRow.events += 1;
+                overallGiftRow.quantity += quantity;
+                overallGiftRow.coins += Math.max(0, coins);
+                if (user && user !== 'Unknown') overallGiftRow.users.add(user);
+                giftTypeMap.set(giftKey, overallGiftRow);
+            } else if (type === 'join') row.joins += 1;
             else row.chat += 1;
             row.coins += Math.max(0, coins);
 
@@ -1258,28 +1377,19 @@ initSettingsPanel();
             const minute = Math.max(0, latestMinute - (chartPoints - 1 - idx));
             return { minute, count: Number(perMinuteMap.get(minute) || 0) };
         });
-        const songEvents = extractSongEventsFromMessages(sorted, nowTs, 400);
-        const songPerformance = Object.entries(getSongPerfDb())
-            .map(([, row]) => {
-                const samples = Math.max(1, Number(row.samples || 0));
-                return {
-                    title: String(row.title || ''),
-                    plays: Number(row.plays || 0),
-                    samples,
-                    avgEngagement: Number((Number(row.engagementSum || 0) / samples).toFixed(2)),
-                    avgSentiment: Number((Number(row.sentimentSum || 0) / samples).toFixed(2)),
-                    lastSeen: Number(row.lastSeen || 0)
-                };
-            })
-            .filter((r) => r.title)
-            .sort((a, b) => b.avgEngagement - a.avgEngagement || b.lastSeen - a.lastSeen)
-            .slice(0, 120);
+        const songs = extractSongEventsForSessionAnalytics(sorted, nowTs, 500);
+        const songPerformance = buildSongPerformanceFromDb(songs.map((s) => s.title));
+        const topGiftTypes = Array.from(giftTypeMap.values())
+            .map((row) => ({ giftName: row.giftName, events: row.events, quantity: row.quantity, coins: row.coins, users: row.users.size }))
+            .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events)
+            .slice(0, 80);
         return {
             messages: sorted,
             typeCounts,
             uniqueUsers,
             usersByMessages,
             usersByCoins,
+            topGiftTypes,
             questions: questions.slice(-80),
             answers: answers.slice(-80),
             joinsTotal,
@@ -1287,7 +1397,7 @@ initSettingsPanel();
             durationMin,
             peakViewers,
             timeline,
-            songs: songEvents,
+            songs,
             songPerformance
         };
     }
@@ -1320,6 +1430,55 @@ initSettingsPanel();
             + dots
             + `</svg>`;
     }
+    function buildGiftExportBreakdowns(users, perUserLimit = 12, overallLimit = 150) {
+        const list = Array.isArray(users) ? users.slice() : [];
+        const overallMap = new Map();
+        const topGiftsByUser = list
+            .map((user) => {
+                const allGifts = Array.isArray(user?.giftDetails) ? user.giftDetails.slice() : [];
+                const gifts = allGifts.slice(0, perUserLimit);
+                allGifts.forEach((gift) => {
+                    const key = normalizeTkaiGiftKeySafe(gift.name) || String(gift.name || 'unknown gift').toLowerCase();
+                    const row = overallMap.get(key) || {
+                        name: gift.name || 'Unknown gift',
+                        quantity: 0,
+                        events: 0,
+                        coins: 0,
+                        unitCoins: Number(gift.unitCoins || 0),
+                        userCount: 0,
+                        users: new Set()
+                    };
+                    row.quantity += Number(gift.quantity || 0);
+                    row.events += Number(gift.events || 0);
+                    row.coins += Number(gift.coins || 0);
+                    if (!row.unitCoins && Number(gift.unitCoins || 0) > 0) row.unitCoins = Number(gift.unitCoins || 0);
+                    row.users.add(String(user.user || ''));
+                    row.userCount = row.users.size;
+                    overallMap.set(key, row);
+                });
+                return {
+                    user: user.user,
+                    totalCoins: Number(user.coins || 0),
+                    totalGiftQuantity: Number(user.gifts || 0),
+                    giftEvents: Number(user.giftEvents || 0),
+                    gifts
+                };
+            })
+            .filter((row) => row.gifts.length > 0)
+            .sort((a, b) => b.totalCoins - a.totalCoins || b.totalGiftQuantity - a.totalGiftQuantity || b.giftEvents - a.giftEvents || String(a.user || '').localeCompare(String(b.user || '')));
+        const topGiftsOverall = Array.from(overallMap.values())
+            .map((row) => ({
+                name: row.name,
+                quantity: row.quantity,
+                events: row.events,
+                coins: row.coins,
+                unitCoins: row.unitCoins,
+                userCount: row.users.size
+            }))
+            .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')))
+            .slice(0, overallLimit);
+        return { topGiftsByUser, topGiftsOverall };
+    }
     function buildTkaiSessionStatsPayload(session, indexLabel) {
         const sessionData = session || {};
         const analytics = buildTkaiSessionAnalytics(sessionData);
@@ -1349,7 +1508,6 @@ initSettingsPanel();
         };
         return { sessionData, analytics, giftBreakdowns, stamp, baseName, summary };
     }
-
     function openTkaiSessionStatsPage(session, indexLabel) {
         const payload = buildTkaiSessionStatsPayload(session, indexLabel);
         const storagePrefix = 'tkai_session_dashboard_payload_';
@@ -1377,11 +1535,12 @@ initSettingsPanel();
         }
         let pageUrl = '';
         try {
-            const next = new URL('./tkai-session-dashboard.html', window.location.href);
+            const relativePath = /\/renderer\//i.test(String(window.location.pathname || '')) ? './tkai-session-dashboard.html' : './renderer/tkai-session-dashboard.html';
+            const next = new URL(relativePath, window.location.href);
             next.hash = encodeURIComponent(token);
             pageUrl = next.toString();
         } catch (_) {
-            pageUrl = 'tkai-session-dashboard.html#' + encodeURIComponent(token);
+            pageUrl = 'renderer/tkai-session-dashboard.html#' + encodeURIComponent(token);
         }
         const win = window.open(pageUrl, '_blank', 'noopener,noreferrer,width=1480,height=960');
         if (!win) {
@@ -1390,14 +1549,29 @@ initSettingsPanel();
             openTkaiSessionStatsDashboard(session, indexLabel);
         }
     }
-
     function openTkaiSessionStatsDashboard(session, indexLabel) {
-        const payload = buildTkaiSessionStatsPayload(session, indexLabel);
-        const sessionData = payload.sessionData;
-        const analytics = payload.analytics;
-        const giftBreakdowns = payload.giftBreakdowns;
-        const baseName = payload.baseName;
-        const buildSummaryObject = () => payload.summary;
+        const sessionData = session || {};
+        const analytics = buildTkaiSessionAnalytics(sessionData);
+        const stamp = String(sessionData.savedAt || sessionData.exportedAt || new Date().toISOString()).replace(/[:.]/g, '-');
+        const baseName = `tkai-session-stats-${stamp}`;
+        const buildSummaryObject = () => ({
+            savedAt: sessionData.savedAt || sessionData.exportedAt || new Date().toISOString(),
+            messageCount: analytics.messages.length,
+            durationMinutes: analytics.durationMin,
+            peakViewers: analytics.peakViewers,
+            totalCoins: analytics.coinsTotal,
+            uniqueUsers: analytics.uniqueUsers,
+            joins: analytics.joinsTotal,
+            typeCounts: analytics.typeCounts,
+            topUsersByMessages: analytics.usersByMessages.slice(0, 50),
+            topUsersByCoins: analytics.usersByCoins.slice(0, 50),
+            topGiftTypes: analytics.topGiftTypes,
+            questions: analytics.questions,
+            answers: analytics.answers,
+            timeline: analytics.timeline,
+            songs: analytics.songs,
+            songPerformance: analytics.songPerformance
+        });
         const buildCsvText = () => {
             const esc = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
             const lines = [];
@@ -1417,18 +1591,11 @@ initSettingsPanel();
                 lines.push(['users', u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map(esc).join(','));
             });
             lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
-            lines.push(['top_gifts_overall', 'gift', 'quantity', 'events', 'coins', 'unit_coins', 'users'].map(esc).join(','));
-            giftBreakdowns.topGiftsOverall.forEach((gift) => {
-                lines.push(['top_gifts_overall', gift.name, gift.quantity, gift.events, gift.coins, gift.unitCoins, gift.userCount].map(esc).join(','));
+            lines.push(['gift_types', 'gift_name', 'events', 'quantity', 'coins', 'users'].map(esc).join(','));
+            analytics.topGiftTypes.forEach((g) => {
+                lines.push(['gift_types', g.giftName, g.events, g.quantity, g.coins, g.users].map(esc).join(','));
             });
-            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
-            lines.push(['top_gifts_by_user', 'user', 'gift', 'quantity', 'events', 'coins', 'unit_coins'].map(esc).join(','));
-            giftBreakdowns.topGiftsByUser.forEach((row) => {
-                row.gifts.forEach((gift) => {
-                    lines.push(['top_gifts_by_user', row.user, gift.name, gift.quantity, gift.events, gift.coins, gift.unitCoins].map(esc).join(','));
-                });
-            });
-            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
+            lines.push(['', '', '', '', '', ''].map(esc).join(','));
             lines.push(['questions', 'user', 'text', 'timestamp'].map(esc).join(','));
             analytics.questions.forEach((q) => {
                 lines.push(['questions', q.user, q.text, new Date(Number(q.ts || Date.now())).toISOString()].map(esc).join(','));
@@ -1437,6 +1604,11 @@ initSettingsPanel();
             lines.push(['songs', 'source', 'title', 'timestamp'].map(esc).join(','));
             analytics.songs.forEach((s) => {
                 lines.push(['songs', s.source, s.title, new Date(Number(s.ts || Date.now())).toISOString()].map(esc).join(','));
+            });
+            lines.push(['', '', '', ''].map(esc).join(','));
+            lines.push(['song_performance', 'title', 'plays', 'avg_engagement', 'avg_sentiment', 'samples'].map(esc).join(','));
+            analytics.songPerformance.forEach((s) => {
+                lines.push(['song_performance', s.title, s.plays, s.avgEngagement, s.avgSentiment, s.samples].map(esc).join(','));
             });
             lines.push(['', '', '', ''].map(esc).join(','));
             lines.push(['answers', 'user', 'text', 'timestamp'].map(esc).join(','));
@@ -1464,8 +1636,16 @@ initSettingsPanel();
                 rows.push(`${i + 1}. @${u.user} | total ${u.total} | chat ${u.chat} | gifts ${u.gifts} | coins ${u.coins} | join ${u.joins}`);
             });
             rows.push('');
+            rows.push('Gift types:');
+            analytics.topGiftTypes.slice(0, 40).forEach((g, i) => {
+                rows.push(`${i + 1}. ${g.giftName} | coins ${g.coins} | qty ${g.quantity} | events ${g.events} | users ${g.users}`);
+            });
+            rows.push('');
             rows.push('Songs list:');
             analytics.songs.slice(-200).forEach((s) => rows.push(`[${new Date(Number(s.ts || Date.now())).toLocaleTimeString('hr-HR')}] ${String(s.source || 'chat').toUpperCase()} - ${s.title}`));
+            rows.push('');
+            rows.push('Song performance (DB):');
+            analytics.songPerformance.slice(0, 120).forEach((s, i) => rows.push(`${i + 1}. ${s.title} | plays ${s.plays} | avg engage ${s.avgEngagement} | avg sentiment ${s.avgSentiment} | samples ${s.samples}`));
             rows.push('');
             rows.push('Questions:');
             analytics.questions.slice(-80).forEach((q) => rows.push(`@${q.user}: ${q.text}`));
@@ -1511,26 +1691,18 @@ initSettingsPanel();
         const topUsersHtml = analytics.usersByMessages.slice(0, 25).map((u, idx) =>
             `<tr><td style="padding:4px 6px;color:#9ec6ff">#${idx + 1} @${escHtml(u.user)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.total)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.chat)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.gifts)}</td><td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(u.coins)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.joins)}</td></tr>`
         ).join('');
-        const topGiftsOverallHtml = giftBreakdowns.topGiftsOverall.slice(0, 18).map((gift, idx) =>
-            `<tr data-gift-name="${encodeURIComponent(gift.name)}" title="Klik za korisnike koji su poslali ovaj gift" style="cursor:pointer">`
-            + `<td style="padding:4px 6px;color:#f8fafc">#${idx + 1} ${escHtml(gift.name)}</td><td style="padding:4px 6px;text-align:right">${formatNum(gift.quantity)}</td><td style="padding:4px 6px;text-align:right">${formatNum(gift.events)}</td><td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(gift.coins)}</td><td style="padding:4px 6px;text-align:right">${formatNum(gift.userCount)}</td></tr>`
-        ).join('') || '<tr><td colspan="5" style="padding:8px 6px;color:#94a3b8;text-align:center">Nema gift podataka.</td></tr>';
-        const topGiftsByUserHtml = giftBreakdowns.topGiftsByUser.slice(0, 10).map((row) => {
-            const preview = row.gifts.slice(0, 3).map((gift) =>
-                `<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span style="color:#cbd5e1">${escHtml(gift.name)}</span><span style="color:#fbbf24">${formatNum(gift.coins)} 🪙</span><span style="color:#94a3b8">x${formatNum(gift.quantity)}</span></div>`
-            ).join('');
-            return `<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)">`
-                + `<div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px"><span style="color:#9ec6ff">@${escHtml(row.user)}</span><span style="color:#fbbf24">${formatNum(row.totalCoins)} 🪙</span></div>`
-                + `<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">Gift količina ${formatNum(row.totalGiftQuantity)} • eventi ${formatNum(row.giftEvents)}</div>`
-                + `<div style="font-size:11px">${preview || '<span style="color:#94a3b8">Nema detalja.</span>'}</div>`
-                + `</div>`;
-        }).join('') || '<div style="color:#94a3b8">Nema gift podataka po korisniku.</div>';
         const questionsHtml = analytics.questions.slice(-50).reverse().map((q) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#a5b4fc">@${escHtml(q.user)}</span>: ${escHtml(q.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema pitanja u sesiji.</div>';
         const songsHtml = analytics.songs.slice(-120).reverse().map((s) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(String(s.source || '').toUpperCase())}</span>: ${escHtml(s.title)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema detektiranih pjesama.</div>';
+        const songPerfHtml = analytics.songPerformance.slice(0, 80).map((s, idx) =>
+            `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#9ec6ff">#${idx + 1} ${escHtml(s.title)}</span><div style="font-size:10px;color:#cbd5e1">plays ${formatNum(s.plays)} • avg engage ${formatNum(s.avgEngagement)} • avg sentiment ${formatNum(s.avgSentiment)} • samples ${formatNum(s.samples)}</div></div>`
+        ).join('') || '<div style="color:#94a3b8">Song performance DB je prazna.</div>';
+        const giftTypesHtml = analytics.topGiftTypes.slice(0, 80).map((g, idx) =>
+            `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#fcd34d">#${idx + 1} ${escHtml(g.giftName)}</span><div style="font-size:10px;color:#cbd5e1">coins ${formatNum(g.coins)} • qty ${formatNum(g.quantity)} • events ${formatNum(g.events)} • users ${formatNum(g.users)}</div></div>`
+        ).join('') || '<div style="color:#94a3b8">Nema gift događaja u sesiji.</div>';
         const answersHtml = analytics.answers.slice(-50).reverse().map((a) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(a.user)}</span>: ${escHtml(a.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema system/AI odgovora u sesiji.</div>';
@@ -1541,8 +1713,15 @@ initSettingsPanel();
             + `<div><div style="font-weight:700;font-size:14px">AI Live Chat - Session Dashboard ${indexLabel ? '#' + indexLabel : ''}</div><div style="font-size:11px;color:rgba(255,255,255,.8)">${new Date(sessionData.savedAt || sessionData.exportedAt || Date.now()).toLocaleString('hr-HR')}</div></div>`
             + `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button id="tkaiSessExportCsv" class="s-btn-sm" style="font-size:10px;padding:3px 8px">CSV</button><button id="tkaiSessExportTxt" class="s-btn-sm" style="font-size:10px;padding:3px 8px">TXT</button><button id="tkaiSessExportPdf" class="s-btn-sm" style="font-size:10px;padding:3px 8px">PDF</button><button id="tkaiSessExportJson" class="s-btn-sm" style="font-size:10px;padding:3px 8px">JSON</button><button id="tkaiSessionStatsClose" class="panel-close" style="position:static">x</button></div>`
             + `</div>`
-            + `<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:10px;padding:10px;overflow:hidden;height:calc(100% - 56px)">`
-            + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:4px">`
+            + `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)">`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessOverview">Overview</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessUsers">Users</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessGifts">Gifts</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessQuestions">Questions</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessSongs">Songs</button>`
+            + `</div>`
+            + `<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:10px;padding:10px;overflow:hidden;height:calc(100% - 102px)">`
+            + `<div id="tkaiSessOverview" style="display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:4px">`
             + `<div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px">`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Poruke</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.messages.length)}</div></div>`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Giftovi</div><div style="font-size:20px;font-weight:700">${formatNum(type.gift + type.subscriber)}</div></div>`
@@ -1554,76 +1733,24 @@ initSettingsPanel();
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Pitanja / odgovori</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.questions.length)} / ${formatNum(analytics.answers.length)}</div></div>`
             + `</div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Poruke kroz vrijeme (scan timeline)</div><div style="height:160px">${timelineSvg}</div></div>`
-            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
+            + `<div id="tkaiSessUsers" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
             + `</div>`
             + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto">`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:8px">Raspodjela tipova poruka</div><div style="display:flex;gap:12px;align-items:center"><div style="width:130px;height:130px;border-radius:50%;background:${donut};position:relative"><div style="position:absolute;inset:27px;border-radius:50%;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:11px;color:#cbd5e1">${formatNum(total)}<br>total</div></div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px">${typeRows.map((r) => `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${r.color}"></span>${r.label}: <b>${formatNum(r.value)}</b></div>`).join('')}</div></div></div>`
-            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Top gifts overall</div><div style="max-height:220px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">Gift</th><th style="padding:5px 6px;text-align:right">Qty</th><th style="padding:5px 6px;text-align:right">Evt</th><th style="padding:5px 6px;text-align:right">Coins</th><th style="padding:5px 6px;text-align:right">Users</th></tr></thead><tbody>${topGiftsOverallHtml}</tbody></table></div></div>`
-            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Top gifts by user</div><div style="max-height:220px;overflow:auto;font-size:11px">${topGiftsByUserHtml}</div></div>`
-            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
-            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
+            + `<div id="tkaiSessGifts" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Gift breakdown</div><div style="max-height:220px;overflow:auto;font-size:11px">${giftTypesHtml}</div></div>`
+            + `<div id="tkaiSessSongs" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
+            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Song performance (engagement/sentiment)</div><div style="max-height:180px;overflow:auto;font-size:11px">${songPerfHtml}</div></div>`
+            + `<div id="tkaiSessQuestions" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Odgovori (system/AI)</div><div style="max-height:220px;overflow:auto;font-size:11px">${answersHtml}</div></div>`
             + `</div>`
             + `</div>`;
-        function showGiftSendersModal(giftName) {
-            const normalizedGift = normalizeGiftKey(giftName);
-            if (!normalizedGift) return;
-            document.getElementById('tkaiGiftSendersModal')?.remove();
-            const senderRows = analytics.usersByCoins
-                .map((user) => {
-                    const detail = (Array.isArray(user.giftDetails) ? user.giftDetails : [])
-                        .find((gift) => normalizeGiftKey(gift.name) === normalizedGift);
-                    if (!detail) return null;
-                    return {
-                        user: user.user,
-                        quantity: Number(detail.quantity || 0),
-                        events: Number(detail.events || 0),
-                        coins: Number(detail.coins || 0),
-                        unitCoins: Number(detail.unitCoins || 0)
-                    };
-                })
-                .filter(Boolean)
-                .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.user || '').localeCompare(String(b.user || '')));
-            const totalCoins = senderRows.reduce((sum, row) => sum + Number(row.coins || 0), 0);
-            const totalQty = senderRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-            const sendersHtml = senderRows.length
-                ? senderRows.map((row, idx) => `<tr>`
-                    + `<td style="padding:6px 8px;color:#9ec6ff">#${idx + 1} @${escHtml(row.user)}</td>`
-                    + `<td style="padding:6px 8px;text-align:right">${formatNum(row.quantity)}</td>`
-                    + `<td style="padding:6px 8px;text-align:right">${formatNum(row.events)}</td>`
-                    + `<td style="padding:6px 8px;text-align:right">${formatNum(row.unitCoins)}</td>`
-                    + `<td style="padding:6px 8px;text-align:right;color:#fbbf24">${formatNum(row.coins)}</td>`
-                    + `</tr>`).join('')
-                : '<tr><td colspan="5" style="padding:10px 8px;color:#94a3b8;text-align:center">Nema korisnika za ovaj gift.</td></tr>';
-            const giftModal = document.createElement('div');
-            giftModal.id = 'tkaiGiftSendersModal';
-            giftModal.style.cssText = 'position:fixed;inset:0;z-index:10040;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:16px';
-            giftModal.innerHTML = ''
-                + '<div style="width:min(720px,100%);max-height:85vh;overflow:auto;background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.45);padding:16px;color:#e5eefc">'
-                + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">'
-                + '<div><div style="font-size:18px;font-weight:700">' + escHtml(giftName) + '</div><div style="font-size:12px;color:#94a3b8">Korisnici koji su poslali ovaj gift</div></div>'
-                + '<button id="tkaiGiftSendersClose" type="button" class="tkai-insights-btn">Zatvori</button>'
-                + '</div>'
-                + '<div style="display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:8px;margin-bottom:12px">'
-                + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Pošiljatelji</div><div style="font-size:22px;font-weight:700">' + formatNum(senderRows.length) + '</div></div>'
-                + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Ukupna količina</div><div style="font-size:22px;font-weight:700">' + formatNum(totalQty) + '</div></div>'
-                + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Ukupno coins</div><div style="font-size:22px;font-weight:700;color:#fbbf24">' + formatNum(totalCoins) + '</div></div>'
-                + '</div>'
-                + '<div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03)">'
-                + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-                + '<thead><tr style="background:rgba(15,23,42,.92);color:#94a3b8"><th style="padding:7px 8px;text-align:left">User</th><th style="padding:7px 8px;text-align:right">Količina</th><th style="padding:7px 8px;text-align:right">Eventi</th><th style="padding:7px 8px;text-align:right">Coin/gift</th><th style="padding:7px 8px;text-align:right">Ukupno coins</th></tr></thead>'
-                + '<tbody>' + sendersHtml + '</tbody></table></div></div>';
-            const closeGiftModal = () => giftModal.remove();
-            giftModal.querySelector('#tkaiGiftSendersClose')?.addEventListener('click', closeGiftModal);
-            giftModal.addEventListener('click', (ev) => { if (ev.target === giftModal) closeGiftModal(); });
-            document.body.appendChild(giftModal);
-        }
         const close = () => { modal.remove(); };
         modal.querySelector('#tkaiSessionStatsClose')?.addEventListener('click', close);
-        modal.querySelectorAll('[data-gift-name]').forEach((row) => {
-            row.addEventListener('click', () => {
-                const giftName = decodeURIComponent(String(row.getAttribute('data-gift-name') || ''));
-                if (giftName) showGiftSendersModal(giftName);
+        modal.querySelectorAll('.tkai-sess-nav').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-target');
+                const target = targetId ? modal.querySelector('#' + targetId) : null;
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
         modal.querySelector('#tkaiSessExportCsv')?.addEventListener('click', () => {
@@ -1662,7 +1789,7 @@ initSettingsPanel();
                 const viewers = s.peakViewers || s.viewerCount || 0;
                 const gifts = (s.messages || []).filter(m => m.type === 'gift').length;
                 return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
-                    + '<div class="tkai-session-row" data-si="' + i + '" title="Otvori kompletnu statistiku sesije" style="display:flex;align-items:center;gap:6px;cursor:pointer">'
+                    + '<div style="display:flex;align-items:center;gap:6px">'
                     + '<input type="checkbox" class="tkai-session-chk" data-si="' + i + '" style="accent-color:#667eea;cursor:pointer">'
                     + '<div style="flex:1;min-width:0">'
                     + '<div style="font-weight:600;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + date + '</div>'
@@ -1674,7 +1801,7 @@ initSettingsPanel();
                     + (gifts ? '<span>🎁 ' + gifts + '</span>' : '')
                     + '</div></div>'
                     + '<div style="display:flex;gap:4px">'
-                    + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Statistika sesije" style="font-size:10px;padding:2px 8px">📊 Statistika</button>'
+                    + '<button class="s-btn-sm tkai-btn-sess-stats" data-si="' + i + '" title="Otvori statistiku sesije" style="font-size:10px;padding:2px 8px">📊 Statistika</button>'
                     + '<button class="s-btn-sm tkai-btn-sess-dl" data-si="' + i + '" title="Skini JSON" style="font-size:10px;padding:2px 6px">⬇️</button>'
                     + '</div>'
                     + '</div>'
@@ -1682,36 +1809,25 @@ initSettingsPanel();
                     + '</div>';
             }).join('');
 
-            // Download button
-            listEl.querySelectorAll('.tkai-btn-sess-dl').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const item = getRecentTkaiSessions()[+btn.dataset.si];
+            listEl.onclick = (event) => {
+                const statsBtn = event.target.closest('.tkai-btn-sess-stats');
+                if (statsBtn) {
+                    const s = getRecentTkaiSessions()[+statsBtn.dataset.si];
+                    if (!s) return;
+                    openTkaiSessionStatsPage(s, Number(statsBtn.dataset.si) + 1);
+                    return;
+                }
+                const dlBtn = event.target.closest('.tkai-btn-sess-dl');
+                if (dlBtn) {
+                    const item = getRecentTkaiSessions()[+dlBtn.dataset.si];
                     if (!item) return;
                     const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
                     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
                     a.download = 'tkai-session-' + (item.savedAt || '').replace(/[:.]/g, '-') + '.json'; a.click();
                     setTimeout(() => URL.revokeObjectURL(a.href), 0);
-                });
-            });
-
-            listEl.querySelectorAll('.tkai-session-row').forEach(row => {
-                row.addEventListener('click', (event) => {
-                    if (event.target.closest('button') || event.target.closest('input')) return;
-                    const s = getRecentTkaiSessions()[+row.dataset.si];
-                    if (!s) return;
-                    openTkaiSessionStatsPage(s, Number(row.dataset.si) + 1);
-                });
-            });
-
-            // Inline stats button
-            listEl.querySelectorAll('.tkai-btn-sess-stats').forEach(btn => {
-                btn.addEventListener('click', (event) => {
-                    event.stopPropagation();
-                    const s = getRecentTkaiSessions()[+btn.dataset.si];
-                    if (!s) return;
-                    openTkaiSessionStatsPage(s, Number(btn.dataset.si) + 1);
-                });
-            });
+                    return;
+                }
+            };
         } catch (e) {
             listEl.innerHTML = '<div style="color:var(--text3)">Greška pri učitavanju sesija.</div>';
         }
@@ -2788,6 +2904,7 @@ document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel
 // ── AI Page Summarizer (multi-provider) ────────────────────────────────
 const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
 const LOCAL_AI_DEFAULT_BASE_URL = 'http://127.0.0.1:11434/v1';
+const OLLAMA_REMOTE_DEFAULT_BASE_URL = 'https://your-ollama-server.example.com/v1';
 function getSelectedAiModel() {
     const sel = document.getElementById('settingsAiModel');
     if (sel && sel.value) return sel.value;
@@ -2849,7 +2966,7 @@ async function getAiRuntimeSettings() {
         groqApiKey: document.getElementById('settingsGroqKey')?.value?.trim() || settings.groqApiKey || settings.groq_api_key || '',
         openrouterApiKey: document.getElementById('settingsOpenrouterKey')?.value?.trim() || settings.openrouterApiKey || settings.openrouter_api_key || '',
         hfApiKey: document.getElementById('settingsHfToken')?.value?.trim() || settings.hfApiKey || settings.hf_api_key || '',
-        ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || 'http://localhost:11434/v1'),
+        ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL),
     };
 }
 async function runAiTextRequest(prompt, opts = {}) {
@@ -2982,20 +3099,15 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'HuggingFace');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) {
-            if (response.status === 402) {
-                throw new Error(
-                    'HuggingFace HTTP 402 (Payment Required): model zahtijeva aktivan billing/credits na HF routeru. ' +
-                    'Dodaj credits na HuggingFace ili prebaci provider na OpenRouter i koristi model "meta-llama/llama-3.3-70b-instruct".'
-                );
-            }
-            throw new Error(data.error?.message || ('HTTP ' + response.status));
-        }
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
     if (provider === 'ollama') {
-        const baseUrl = normalizeLocalAiBaseUrl(opts.baseUrl || runtime.ollamaBaseUrl || 'http://localhost:11434/v1');
+        const baseUrl = normalizeLocalAiBaseUrl(opts.baseUrl || runtime.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL);
+        if (/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/v1/i.test(baseUrl)) {
+            throw new Error('Ollama localhost je isključen. Postavi online Ollama endpoint u AI postavkama.');
+        }
         const response = await fetchWith202Retry(baseUrl + '/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3462,11 +3574,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let viewerSamplePoints = [];
     let lastViewerSampleAt = 0;
     let lastViewerSampleValue = 0;
+    let lastAutoSongRecAt = 0;
+    let autoSongRecInFlight = false;
     let lastSongPerfSampleAt = 0;
     let lastSongPerfSongKey = '';
     let giftCatalogFromPage = [];
     const TKAI_AUTOSAVE_KEY = 'ex_tkai_live_autosave';
-    const TKAI_SONG_PERF_DB_KEY = 'ex_tkai_song_perf_db';
     let tkaiAutosaveInterval = null;
     let tkaiAutosaveDebounce = null;
     let spikeFilter = 'all';
@@ -3482,17 +3595,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
     const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
     const TKAI_SCAN_FAST_WINDOW_MS = 30000;
-    function getSongPerfDb() {
-        try {
-            const db = JSON.parse(localStorage.getItem(TKAI_SONG_PERF_DB_KEY) || '{}');
-            return db && typeof db === 'object' ? db : {};
-        } catch (_) {
-            return {};
-        }
-    }
-    function saveSongPerfDb(db) {
-        try { localStorage.setItem(TKAI_SONG_PERF_DB_KEY, JSON.stringify(db || {})); } catch (_) { }
-    }
     function setGiftCatalogFromPage(rows) {
         try {
             const seen = new Set();
@@ -3505,7 +3607,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 })
                 .filter((row) => row.name && Number.isFinite(row.coins) && row.coins > 0)
                 .filter((row) => {
-                    const key = normalizeGiftKey(row.name);
+                    const key = normalizeTkaiGiftKeySafe(row.name);
                     if (!key || seen.has(key)) return false;
                     seen.add(key);
                     return true;
@@ -3617,6 +3719,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const messagesEl = document.getElementById('tkaiMessages');
     const repliesEl = document.getElementById('tkaiReplies');
     const toggleBtn = document.getElementById('tkaiBtnToggle');
+    const audioToggleBtn = document.getElementById('tkaiAudioToggleBtn');
     const genBtn = document.getElementById('tkaiGenBtn');
     const genAllBtn = document.getElementById('tkaiGenAllBtn');
     const ccReadBtn = document.getElementById('tkaiCcReadBtn');
@@ -3639,6 +3742,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const filterStarredBtn = document.getElementById('tkaiFilterStarredBtn');
     const sessionInfoEl = document.getElementById('tkaiSessionInfo');
     const viewerCountEl = document.getElementById('tkaiViewerCount');
+    const viewerSampleMetaEl = document.getElementById('tkaiViewerSampleMeta');
     const coinTotalEl = document.getElementById('tkaiCoinTotal');
     const supporterCountEl = document.getElementById('tkaiSupporterCount');
     const topSupportersEl = document.getElementById('tkaiTopSupporters');
@@ -3666,6 +3770,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const pieSummaryEl = document.getElementById('tkaiPieSummary');
     const songListEl = document.getElementById('tkaiSongList');
     const joinLevelListEl = document.getElementById('tkaiJoinLevelList');
+    const giftStatsMetaEl = document.getElementById('tkaiGiftStatsMeta');
+    const giftStatsListEl = document.getElementById('tkaiGiftStatsList');
     const shareEventsListEl = document.getElementById('tkaiShareEventsList');
     const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
     const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
@@ -3673,10 +3779,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const spikeAllBtn = document.getElementById('tkaiSpikeAll');
     const spikeViewersBtn = document.getElementById('tkaiSpikeViewers');
     const spikeGiftsBtn = document.getElementById('tkaiSpikeGifts');
-    const openSoundboardBtn = document.getElementById('tkaiOpenSoundboardBtn');
-    const favSoundsQuickBtn = document.getElementById('tkaiFavSoundsQuickBtn');
-    const favSoundsQuickWrap = document.getElementById('tkaiFavSoundsQuickWrap');
-    const favSoundsQuickList = document.getElementById('tkaiFavSoundsQuickList');
     const layoutFoldBtn = document.getElementById('tkaiLayoutFoldBtn');
     const layoutUnfoldBtn = document.getElementById('tkaiLayoutUnfoldBtn');
     const layoutLockBtn = document.getElementById('tkaiLayoutLockBtn');
@@ -3769,8 +3871,44 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return code || 'en-US';
     }
 
+    function isTkaiAudioEnabled() {
+        return DB.getSettings().tkaiAudioEnabled === true;
+    }
+
     function isCcReadEnabled() {
-        return DB.getSettings().tkaiCcReadEnabled === true;
+        return isTkaiAudioEnabled() && DB.getSettings().tkaiCcReadEnabled === true;
+    }
+
+    function updateTkaiAudioButton() {
+        if (!audioToggleBtn) return;
+        const on = isTkaiAudioEnabled();
+        audioToggleBtn.textContent = on ? '🔊 AI Audio ON' : '🔇 AI Audio OFF';
+        audioToggleBtn.style.opacity = on ? '1' : '.85';
+        audioToggleBtn.style.boxShadow = on ? '0 0 0 1px rgba(125,211,252,.45) inset' : 'none';
+    }
+
+    async function refreshTkaiSongRecOutputs() {
+        const select = document.querySelector('#stab-ai-live-chat [data-setting="tkaiSongRecOutputDevice"]');
+        if (!select) return;
+        const current = String(DB.getSettings().tkaiSongRecOutputDevice || '').trim();
+        let outputs = [];
+        try {
+            const res = await window.etherx?.songrec?.listOutputs?.();
+            outputs = Array.isArray(res?.outputs) ? res.outputs : [];
+        } catch (_) { }
+
+        const opts = ['<option value="">System default</option>']
+            .concat(outputs.map((out) => {
+                const id = escHtml(String(out?.id || '').trim());
+                const label = escHtml(String(out?.label || out?.id || '').trim() || 'Audio output');
+                return `<option value="${id}">${label}</option>`;
+            }));
+        select.innerHTML = opts.join('');
+        if (current && outputs.some((out) => String(out?.id || '').trim() === current)) {
+            select.value = current;
+        } else {
+            select.value = '';
+        }
     }
 
     function updateCcReadButton() {
@@ -3783,6 +3921,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     function speakCaptionText(text, langCode) {
         const clean = String(text || '').trim();
+        if (!isTkaiAudioEnabled()) return;
         if (!clean || !('speechSynthesis' in window) || !window.speechSynthesis) return;
         const langTag = mapLangForSpeech(langCode || getCcTargetLang());
         const key = `${langTag}::${clean}`;
@@ -3846,7 +3985,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function setStatus(html) {
         if (statusEl) statusEl.innerHTML = html;
     }
-    function parseTikTokOwnerFromUrl(url) {
+    window.parseTikTokOwnerFromUrl = function parseTikTokOwnerFromUrl(url) {
         try {
             const pathname = new URL(String(url || ''), window.location.origin).pathname || '';
             const m = pathname.match(/\/(@[^\/?#]+)/i);
@@ -3854,7 +3993,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         } catch (_) {
             return '';
         }
-    }
+    };
     function updateTkaiStreamOwner(owner, sourceUrl) {
         if (!streamOwnerEl) return;
         const fromOwner = String(owner || '').trim().replace(/^@+/, '');
@@ -3886,7 +4025,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 btn.textContent = busy ? busyLabel : idleLabel;
             });
         });
-        setTkaiButtonState(ids, { active: !!busy, busy: !!busy });
     }
     async function runSongRecRecognition(manualTrigger) {
         setSongToolButtonState('songrec', true);
@@ -3899,12 +4037,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         const cfg = DB.getSettings() || {};
         const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
+        const outputDevice = String(cfg.tkaiSongRecOutputDevice || '').trim();
         const timeoutMs = Math.max(2000, Math.min(25000, Number(cfg.tkaiSongRecTimeoutMs || 12000) || 12000));
         setSongToolStatus('SongRec: slusam...');
         if (manualTrigger) showToast('▶ SongRec pokrenut');
 
         try {
-            const result = await window.etherx.songrec.recognize({ command, timeoutMs });
+            const result = await window.etherx.songrec.recognize({ command, timeoutMs, outputDevice });
             if (!result?.ok) {
                 setSongToolStatus('SongRec: greska');
                 if (manualTrigger) showToast('SongRec greska: ' + (result?.error || 'nepoznata greska'));
@@ -3943,91 +4082,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
     window.runSongRecRecognition = runSongRecRecognition;
-    async function runDjCcNow(manualTrigger) {
-        setSongToolButtonState('djcc', true);
-        if (!window.electronWebview) {
-            setSongToolStatus('DJ CC: webview nije dostupan');
-            if (manualTrigger) showToast('DJ CC radi u Electron webview modu.');
-            setSongToolButtonState('djcc', false);
-            return;
-        }
-        const tab = getActiveTab();
-        if (!tab?.url || !tab.url.includes('tiktok.com')) {
-            setSongToolStatus('DJ CC: otvori TikTok Live');
-            if (manualTrigger) showToast('Otvori TikTok Live pa klikni DJ CC now.');
-            setSongToolButtonState('djcc', false);
-            return;
-        }
-        const webview = getActiveTikTokWebview();
-        if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') {
-            setSongToolStatus('DJ CC: webview nije spreman');
-            setSongToolButtonState('djcc', false);
-            return;
-        }
-        setSongToolStatus('DJ CC: citam...');
-        const script = String.raw`(() => {
-                  const selectors = [
-                    '[class*="webcast-caption"]',
-                    '[class*="webcast-subtitles"]',
-                    '[class*="caption"]',
-                    '[class*="Caption"]',
-                    '[class*="subtitle"]',
-                    '[class*="Subtitle"]',
-                    '[data-e2e="live-subtitle"]',
-                    '[data-e2e*="caption"]',
-                    '[data-e2e*="subtitle"]',
-                    '.webcast-chatroom__caption',
-                    '.webcast-chatroom__subtitle',
-                    '.caption-content',
-                    '.subtitle-content',
-                    '[class*="CaptionContainer"]',
-                    '[aria-live="polite"] span'
-                  ];
-                  const out = [];
-                  selectors.forEach((sel) => {
-                    try {
-                      document.querySelectorAll(sel).forEach((node) => {
-                        const style = window.getComputedStyle(node);
-                        if (style && (style.display === 'none' || style.visibility === 'hidden')) return;
-                        const txt = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-                        if (txt && txt.length >= 3 && !out.includes(txt)) out.push(txt);
-                      });
-                    } catch (_) {}
-                  });
-                  return out.slice(-3);
-                })()`;
-        try {
-            const lines = await webview.executeJavaScript(script);
-            const text = Array.isArray(lines) ? String(lines[lines.length - 1] || '').trim() : '';
-            if (!text) {
-                setSongToolStatus('DJ CC: nema aktivnog captiona');
-                if (manualTrigger) showToast('Nema aktivnog DJ CC / caption teksta.');
-                setSongToolButtonState('djcc', false);
-                return;
-            }
-            const msg = {
-                id: 'manual_caption_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-                user: 'SYSTEM (DJ CC)',
-                text: text.slice(0, 380),
-                type: 'caption',
-                ts: Date.now(),
-            };
-            collectedMessages.push(msg);
-            const maxLen = Math.max(120, Number(DB.getSettings().tkaiMsgBuffer || 300));
-            if (collectedMessages.length > maxLen) collectedMessages = collectedMessages.slice(-maxLen);
-            renderMessages();
-            updateSessionStatsUI();
-            await handleIncomingCaption(msg).catch(() => { });
-            setSongToolStatus('DJ CC: ' + msg.text.slice(0, 64));
-            if (manualTrigger) showToast('DJ CC: ' + msg.text.slice(0, 80));
-        } catch (err) {
-            setSongToolStatus('DJ CC: greska');
-            if (manualTrigger) showToast('DJ CC poziv nije uspio: ' + String(err?.message || err));
-        } finally {
-            setSongToolButtonState('djcc', false);
-        }
-    }
-    window.runDjCcNow = runDjCcNow;
     function getUserColor(name) {
         const input = String(name || '').trim().toLowerCase();
         let h = 0;
@@ -4042,37 +4096,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         base.forEach((m) => {
             const user = String(m?.user || '').trim();
             if (!user) return;
-            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, lastTs: 0, texts: new Map(), giftTypes: new Map() });
+            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, lastTs: 0, coins: 0, texts: new Map() });
             const row = map.get(user);
             row.total += 1;
-            if (m.type === 'gift' || m.type === 'subscriber') {
-                const giftMeta = resolveGiftMetaFromMessage(m);
-                const quantity = Math.max(1, Number(giftMeta.quantity || 1));
-                const coins = Math.max(0, Number(giftMeta.coins || 0));
-                row.gifts += quantity;
-                row.giftEvents += 1;
-                row.coins += coins;
-                const giftKey = normalizeGiftKey(giftMeta.giftName || String(m.text || '').trim() || 'unknown gift') || 'unknown gift';
-                const giftRow = row.giftTypes.get(giftKey) || {
-                    name: giftMeta.giftName || String(m.text || '').trim() || 'Unknown gift',
-                    quantity: 0,
-                    events: 0,
-                    coins: 0,
-                    unitCoins: Number(giftMeta.unitCoins || 0),
-                    type: m.type || 'gift'
-                };
-                giftRow.quantity += quantity;
-                giftRow.events += 1;
-                giftRow.coins += coins;
-                if (!giftRow.unitCoins && Number(giftMeta.unitCoins || 0) > 0) giftRow.unitCoins = Number(giftMeta.unitCoins || 0);
-                row.giftTypes.set(giftKey, giftRow);
-            } else if (m.type === 'join') {
-                row.joins += 1;
-                row.coins += Math.max(0, Number(m?.coins || 0));
-            } else {
-                row.chat += 1;
-                row.coins += Math.max(0, Number(m?.coins || 0));
-            }
+            if (m.type === 'gift' || m.type === 'subscriber') { row.gifts += 1; row.coins += Number(m.coins || 0); }
+            else if (m.type === 'join') row.joins += 1;
+            else row.chat += 1;
             const txt = String(m.text || '').trim().toLowerCase();
             if (txt) row.texts.set(txt, (row.texts.get(txt) || 0) + 1);
             row.lastTs = Math.max(row.lastTs, Number(m.ts || 0));
@@ -4083,72 +4112,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 total: r.total,
                 chat: r.chat,
                 gifts: r.gifts,
-                giftEvents: r.giftEvents,
                 joins: r.joins,
-                coins: r.coins,
                 lastTs: r.lastTs,
-                repeatMax: Math.max(0, ...Array.from(r.texts.values())),
-                giftDetails: Array.from(r.giftTypes.values())
-                    .map((detail) => ({
-                        name: detail.name,
-                        quantity: Number(detail.quantity || 0),
-                        events: Number(detail.events || 0),
-                        coins: Number(detail.coins || 0),
-                        unitCoins: Number(detail.unitCoins || 0),
-                        type: detail.type || 'gift'
-                    }))
-                    .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')))
+                coins: r.coins,
+                repeatMax: Math.max(0, ...Array.from(r.texts.values()))
             }))
-            .sort((a, b) => b.total - a.total || b.coins - a.coins || b.lastTs - a.lastTs);
-    }
-    function buildGiftExportBreakdowns(users, perUserLimit = 12, overallLimit = 150) {
-        const list = Array.isArray(users) ? users.slice() : [];
-        const overallMap = new Map();
-        const topGiftsByUser = list
-            .map((user) => {
-                const allGifts = Array.isArray(user?.giftDetails) ? user.giftDetails.slice() : [];
-                const gifts = allGifts.slice(0, perUserLimit);
-                allGifts.forEach((gift) => {
-                    const key = normalizeGiftKey(gift.name) || String(gift.name || 'unknown gift').toLowerCase();
-                    const row = overallMap.get(key) || {
-                        name: gift.name || 'Unknown gift',
-                        quantity: 0,
-                        events: 0,
-                        coins: 0,
-                        unitCoins: Number(gift.unitCoins || 0),
-                        userCount: 0,
-                        users: new Set()
-                    };
-                    row.quantity += Number(gift.quantity || 0);
-                    row.events += Number(gift.events || 0);
-                    row.coins += Number(gift.coins || 0);
-                    if (!row.unitCoins && Number(gift.unitCoins || 0) > 0) row.unitCoins = Number(gift.unitCoins || 0);
-                    row.users.add(String(user.user || ''));
-                    row.userCount = row.users.size;
-                    overallMap.set(key, row);
-                });
-                return {
-                    user: user.user,
-                    totalCoins: Number(user.coins || 0),
-                    totalGiftQuantity: Number(user.gifts || 0),
-                    giftEvents: Number(user.giftEvents || 0),
-                    gifts
-                };
-            })
-            .filter((row) => row.gifts.length > 0)
-            .sort((a, b) => b.totalCoins - a.totalCoins || b.totalGiftQuantity - a.totalGiftQuantity || b.giftEvents - a.giftEvents || String(a.user || '').localeCompare(String(b.user || '')));
-        const topGiftsOverall = Array.from(overallMap.values())
-            .map((row) => ({
-                name: row.name,
-                quantity: row.quantity,
-                events: row.events,
-                coins: row.coins,
-                unitCoins: row.unitCoins,
-                userCount: row.users.size
-            }))
-            .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')))
-            .slice(0, overallLimit);
-        return { topGiftsByUser, topGiftsOverall };
+            .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
     }
     function buildDailyStats(messages, limit) {
         const scanLimit = Math.max(30, Math.min(2000, Number(limit || 200)));
@@ -4337,8 +4306,34 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         return null;
     }
+    function getTkaiGiftMeta(text) {
+        if (typeof detectGiftMetaFromText === 'function') {
+            return detectGiftMetaFromText(text);
+        }
+        const src = String(text || '').trim();
+        const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const normalized = normalize(src);
+        const entries = typeof getGiftCatalogEntries === 'function' ? getGiftCatalogEntries() : [];
+        let found = null;
+        for (const [key, value] of entries) {
+            if (key && normalized.includes(String(key || ''))) {
+                found = value;
+                break;
+            }
+        }
+        const qtyMatch = src.match(/(?:\b(?:x|×)\s*(\d{1,4})\b|\b(\d{1,4})\s*x\b|\b(?:combo|gift(?:ed)?|sent)\s*(\d{1,4})\b)/i);
+        const quantity = Math.max(1, Number(qtyMatch?.[1] || qtyMatch?.[2] || qtyMatch?.[3] || 1));
+        let unitCoins = found ? Number(found.coins || 0) : 0;
+        if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
+        return {
+            giftName: found ? found.name : src.slice(0, 80),
+            coins: Math.max(0, Number(unitCoins * quantity || 0)),
+            unitCoins: Math.max(0, Number(unitCoins || 0)),
+            quantity
+        };
+    }
     function parseCoinsFromText(text) {
-        const meta = detectGiftMetaFromText(text);
+        const meta = getTkaiGiftMeta(text);
         if (Number(meta.coins || 0) > 0) return Number(meta.coins || 0);
         const t = String(text || '');
         const compact = t.match(/(\d+(?:[.,]\d+)?)\s*([km])\s*(coins?|coin|coina|kovanica|diamonds?)/i);
@@ -4361,10 +4356,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     }
 
-    function escapeGiftRegex(value) {
-        return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
     function parseGiftCatalogLines(lines) {
         const map = new Map();
         String(lines || '')
@@ -4377,9 +4368,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 const patterns = [
                     { kind: 'num_name', re: /^unknown[·•|:\-]?\s*(\d{1,7})\s+(.+)$/i },
                     { kind: 'num_name', re: /^(\d{1,7})\s+(.+)$/i },
-                    { kind: 'num_name', re: /^\(?\s*(\d{1,7})\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙)?\s*\)?\s*[=·•|:\-]\s*(.+)$/i },
-                    { kind: 'name_num', re: /^(.+?)\s*[=]\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i },
-                    { kind: 'name_num', re: /^(.+?)\s*\(\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?\s*\)$/i },
                     { kind: 'name_num', re: /^(.+?)\s*[·•|:\-]\s*(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i },
                     { kind: 'name_num', re: /^(.+?)\s+(\d{1,7})(?:\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙))?$/i }
                 ];
@@ -4419,53 +4407,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function detectGiftMetaFromText(text) {
         const src = String(text || '').trim();
         const normalized = normalizeGiftKey(src);
-        const normalizedLoose = normalizeGiftKey(
-            src
-                .replace(/\b(?:sent|sends?|sending|gift(?:ed|ing|s)?|gave|gives?|giving|donated?|support(?:ed|ing)?|shared?)\b/gi, ' ')
-                .replace(/\b(?:to|for|host|streamer|creator|live|room)\b/gi, ' ')
-                .replace(/\b(?:qty|quantity|kom|komada|pcs|pieces|times?)\b/gi, ' ')
-                .replace(/[()\[\]{}]/g, ' ')
-        );
         const entries = getGiftCatalogEntries();
         let found = null;
-        let foundKey = '';
         for (const [key, value] of entries) {
-            if (key && (normalized.includes(key) || normalizedLoose.includes(key))) {
+            if (key && normalized.includes(key)) {
                 found = value;
-                foundKey = key;
                 break;
             }
         }
-        const quantityMatchers = [
-            src.match(/\b(?:x|×)\s*(\d{1,4})\b/i),
-            src.match(/\b(\d{1,4})\s*(?:x|×)\b/i),
-            src.match(/\b(?:qty|quantity|kom|komada|pcs|pieces|times?)\s*[:=]?\s*(\d{1,4})\b/i),
-            src.match(/\b(?:gift|gifted|sent)\s*[:#-]?\s*(\d{1,4})\b/i)
-        ];
-        let quantity = 1;
-        for (const match of quantityMatchers) {
-            const candidate = Number(match?.[1] || 0);
-            if (candidate > 0) {
-                quantity = candidate;
-                break;
-            }
-        }
-        if (quantity <= 1 && foundKey) {
-            const giftPattern = escapeGiftRegex(foundKey).replace(/\s+/g, '\\s+');
-            const dynamicMatchers = [
-                new RegExp(`\\b(\\d{1,4})\\s*(?:x|×)?\\s*${giftPattern}\\b`, 'i'),
-                new RegExp(`\\b${giftPattern}\\b\\s*(?:x|×|qty|quantity|kom|komada|pcs|pieces|times?)?\\s*[:=]?\\s*(\\d{1,4})\\b`, 'i')
-            ];
-            for (const re of dynamicMatchers) {
-                const match = normalizedLoose.match(re) || normalized.match(re);
-                const candidate = Number(match?.[1] || 0);
-                if (candidate > 0) {
-                    quantity = candidate;
-                    break;
-                }
-            }
-        }
-        quantity = Math.max(1, quantity);
+        const qtyMatch = src.match(/\b(?:x|×)\s*(\d{1,4})\b/i);
+        const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
         let unitCoins = found ? Number(found.coins || 0) : 0;
         if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
         const coins = unitCoins * quantity;
@@ -4506,7 +4457,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const v = Number(value || 0);
         if (!Number.isFinite(v) || v <= 0) return;
         const now = Date.now();
-        const minGapMs = 8000;
+        const minGapMs = Math.max(2000, (Number(DB.getSettings().tkaiViewerSampleIntervalSec || 8) || 8) * 1000);
         if (now - lastViewerSampleAt < minGapMs && v === lastViewerSampleValue) return;
         viewerSamples.push(v);
         viewerSamplePoints.push({ ts: now, value: v });
@@ -4610,80 +4561,80 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!tab?.url || !tab.url.includes('tiktok.com')) return false;
         const shouldSubmit = options?.submit !== false;
         const script = `(() => {
-            const text = ${JSON.stringify(text)};
-            const shouldSubmit = ${shouldSubmit ? 'true' : 'false'};
-            const visible = (el) => {
-                if (!el || !(el instanceof Element)) return false;
-                const style = window.getComputedStyle(el);
-                const rect = el.getBoundingClientRect();
-                return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 12 && rect.height > 12;
-            };
-            const scoreComposer = (el) => {
-                if (!visible(el)) return -999;
-                const rect = el.getBoundingClientRect();
-                const attrs = [el.getAttribute('placeholder'), el.getAttribute('aria-label'), el.getAttribute('data-e2e'), el.className, el.id]
-                    .map(v => String(v || '').toLowerCase()).join(' ');
-                let score = 0;
-                if (/(comment|chat|message|reply|say something|write something|komentar|poruka)/i.test(attrs)) score += 8;
-                if (/(search|pretraga|filter)/i.test(attrs)) score -= 10;
-                if (rect.bottom > window.innerHeight * 0.55) score += 3;
-                if (rect.left > 0 && rect.right < window.innerWidth) score += 1;
-                if (el.closest('[data-e2e*="comment" i], [data-e2e*="chat" i], [class*="comment" i], [class*="chat" i]')) score += 3;
-                return score;
-            };
-            const composers = Array.from(document.querySelectorAll([
-                'textarea',
-                'input[type="text"]',
-                '[contenteditable="true"]',
-                '[contenteditable="plaintext-only"]',
-                '[role="textbox"]'
-            ].join(',')))
-                .filter(visible)
-                .map((el) => ({ el, score: scoreComposer(el) }))
-                .filter((row) => row.score > -5)
-                .sort((a, b) => b.score - a.score);
-            const composer = composers[0]?.el || null;
-            if (!composer) return false;
-            composer.focus();
-            if (composer.isContentEditable) {
-                try {
-                    document.execCommand('selectAll', false);
-                    document.execCommand('insertText', false, text);
-                } catch (_) {
-                    composer.textContent = text;
-                }
-            } else if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
-                const proto = composer.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                if (setter) setter.call(composer, text);
-                else composer.value = text;
-            } else {
-                composer.textContent = text;
-            }
-            ['input', 'change', 'keyup'].forEach((name) => composer.dispatchEvent(new Event(name, { bubbles: true })));
-            if (!shouldSubmit) return true;
-            const scoreButton = (el) => {
-                if (!visible(el)) return -999;
-                const rect = el.getBoundingClientRect();
-                const txt = [el.textContent, el.getAttribute('aria-label'), el.getAttribute('data-e2e'), el.className]
-                    .map(v => String(v || '').toLowerCase()).join(' ');
-                let score = 0;
-                if (/(send|post|comment|reply|pošalji|posalji|objavi)/i.test(txt)) score += 8;
-                if (rect.bottom > window.innerHeight * 0.55) score += 2;
-                return score;
-            };
-            const sendBtn = Array.from(document.querySelectorAll('button, [role="button"]'))
-                .map((el) => ({ el, score: scoreButton(el) }))
-                .filter((row) => row.score > 0)
-                .sort((a, b) => b.score - a.score)[0]?.el || null;
-            if (sendBtn) {
-                sendBtn.click();
-                return true;
-            }
-            composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
-            composer.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
-            return true;
-        })()`;
+                    const text = ${JSON.stringify(text)};
+                    const shouldSubmit = ${shouldSubmit ? 'true' : 'false'};
+                    const visible = (el) => {
+                        if (!el || !(el instanceof Element)) return false;
+                        const style = window.getComputedStyle(el);
+                        const rect = el.getBoundingClientRect();
+                        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 12 && rect.height > 12;
+                    };
+                    const scoreComposer = (el) => {
+                        if (!visible(el)) return -999;
+                        const rect = el.getBoundingClientRect();
+                        const attrs = [el.getAttribute('placeholder'), el.getAttribute('aria-label'), el.getAttribute('data-e2e'), el.className, el.id]
+                            .map(v => String(v || '').toLowerCase()).join(' ');
+                        let score = 0;
+                        if (/(comment|chat|message|reply|say something|write something|komentar|poruka)/i.test(attrs)) score += 8;
+                        if (/(search|pretraga|filter)/i.test(attrs)) score -= 10;
+                        if (rect.bottom > window.innerHeight * 0.55) score += 3;
+                        if (rect.left > 0 && rect.right < window.innerWidth) score += 1;
+                        if (el.closest('[data-e2e*="comment" i], [data-e2e*="chat" i], [class*="comment" i], [class*="chat" i]')) score += 3;
+                        return score;
+                    };
+                    const composers = Array.from(document.querySelectorAll([
+                        'textarea',
+                        'input[type="text"]',
+                        '[contenteditable="true"]',
+                        '[contenteditable="plaintext-only"]',
+                        '[role="textbox"]'
+                    ].join(',')))
+                        .filter(visible)
+                        .map((el) => ({ el, score: scoreComposer(el) }))
+                        .filter((row) => row.score > -5)
+                        .sort((a, b) => b.score - a.score);
+                    const composer = composers[0]?.el || null;
+                    if (!composer) return false;
+                    composer.focus();
+                    if (composer.isContentEditable) {
+                        try {
+                            document.execCommand('selectAll', false);
+                            document.execCommand('insertText', false, text);
+                        } catch (_) {
+                            composer.textContent = text;
+                        }
+                    } else if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
+                        const proto = composer.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                        if (setter) setter.call(composer, text);
+                        else composer.value = text;
+                    } else {
+                        composer.textContent = text;
+                    }
+                    ['input', 'change', 'keyup'].forEach((name) => composer.dispatchEvent(new Event(name, { bubbles: true })));
+                    if (!shouldSubmit) return true;
+                    const scoreButton = (el) => {
+                        if (!visible(el)) return -999;
+                        const rect = el.getBoundingClientRect();
+                        const txt = [el.textContent, el.getAttribute('aria-label'), el.getAttribute('data-e2e'), el.className]
+                            .map(v => String(v || '').toLowerCase()).join(' ');
+                        let score = 0;
+                        if (/(send|post|comment|reply|pošalji|posalji|objavi)/i.test(txt)) score += 8;
+                        if (rect.bottom > window.innerHeight * 0.55) score += 2;
+                        return score;
+                    };
+                    const sendBtn = Array.from(document.querySelectorAll('button, [role="button"]'))
+                        .map((el) => ({ el, score: scoreButton(el) }))
+                        .filter((row) => row.score > 0)
+                        .sort((a, b) => b.score - a.score)[0]?.el || null;
+                    if (sendBtn) {
+                        sendBtn.click();
+                        return true;
+                    }
+                    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+                    composer.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+                    return true;
+                })()`;
         try {
             return !!(await webview.executeJavaScript(script));
         } catch (_) {
@@ -5124,7 +5075,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         ].map((row) => ({
             ...row,
             pct: Math.round((row.value / msgTypeTotal) * 100)
-        }));
+        })).filter((row) => {
+            const cfg = DB.getSettings();
+            if (row.key === 'chat') return cfg.tkaiPieIncludeChat !== false;
+            if (row.key === 'gift') return cfg.tkaiPieIncludeGift !== false;
+            if (row.key === 'join') return cfg.tkaiPieIncludeJoin === true;
+            if (row.key === 'share') return cfg.tkaiPieIncludeShare === true;
+            if (row.key === 'caption') return cfg.tkaiPieIncludeCaption !== false;
+            if (row.key === 'song') return cfg.tkaiPieIncludeSong !== false;
+            return true;
+        });
 
         const songEvents = extractSongEventsFromMessages(messages, now, 180);
         const shareEvents = messages
@@ -5132,6 +5092,37 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .map((m) => ({ user: String(m.user || '').slice(0, 40) || 'unknown', text: String(m.text || '').slice(0, 160), ts: Number(m.ts || now) }))
             .slice(-120)
             .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+
+        const giftScanBase = (Array.isArray(source) ? source : messages).filter((m) => m && (m.type === 'gift' || m.type === 'subscriber')).slice(-400);
+        const giftTypeMap = new Map();
+        const giftUserMap = new Map();
+        let giftEventsTotal = 0;
+        let giftCoinsTotal = 0;
+        giftScanBase.forEach((m) => {
+            const giftName = String(m.giftName || getTkaiGiftMeta(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
+            const user = String(m.user || 'unknown').trim().slice(0, 40) || 'unknown';
+            const quantity = Math.max(1, Number(m.quantity || 1));
+            const coins = Math.max(0, Number(m.coins || 0));
+            giftEventsTotal += 1;
+            giftCoinsTotal += coins;
+            const typeRow = giftTypeMap.get(giftName) || { giftName, events: 0, quantity: 0, coins: 0 };
+            typeRow.events += 1;
+            typeRow.quantity += quantity;
+            typeRow.coins += coins;
+            giftTypeMap.set(giftName, typeRow);
+            const userRow = giftUserMap.get(user) || { user, events: 0, quantity: 0, coins: 0 };
+            userRow.events += 1;
+            userRow.quantity += quantity;
+            userRow.coins += coins;
+            giftUserMap.set(user, userRow);
+        });
+        const giftDetails = {
+            totalEvents: giftEventsTotal,
+            totalCoins: giftCoinsTotal,
+            uniqueGiftTypes: giftTypeMap.size,
+            topGiftTypes: Array.from(giftTypeMap.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events).slice(0, 12),
+            topGifters: Array.from(giftUserMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events).slice(0, 12)
+        };
 
         const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
         const isJoinLikeMessage = (m) => {
@@ -5141,16 +5132,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (!text) return false;
             return /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text);
         };
-        const joinSource = collectedMessages
+        const joinSeen = new Set();
+        const joinScanBase = (Array.isArray(source) ? source : messages).slice(-(Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 300) || 300)));
+        const freshJoinCutoff = Number(sessionStartedAt || 0);
+        const joinSource = joinScanBase
             .filter((m) => isJoinLikeMessage(m))
+            .filter((m) => !freshJoinCutoff || Number(m?.ts || now) >= freshJoinCutoff)
             .map((m) => ({
                 user: String(m.user || '').slice(0, 40) || 'unknown',
                 level: extractJoinLevel(m),
                 ts: Number(m.ts || now)
             }))
-            .filter((j) => j.user)
+            .filter((j) => j.user && j.user.toLowerCase() !== 'unknown')
             .filter((j) => !joinMinLevel || !j.level || Number(j.level) >= joinMinLevel)
-            .slice(-120);
+            .filter((j) => {
+                const bucket = Math.floor((Number(j.ts || now)) / 15000);
+                const key = `${String(j.user || '').toLowerCase()}|${Number(j.level || 0)}|${bucket}`;
+                if (joinSeen.has(key)) return false;
+                joinSeen.add(key);
+                return true;
+            })
+            .slice(-180);
 
         const joinBuckets = {
             lvl1to20: 0,
@@ -5192,6 +5194,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             pieBreakdown,
             songs: songEvents.slice(-30).reverse(),
             shareEvents,
+            giftDetails,
             joinLevels: joinSource.slice(-120).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
             joinBuckets,
             spikeDebug: {
@@ -5330,6 +5333,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const padTop = 6;
         const padBottom = 12;
         const vals = points.map((p) => Number(p.count || 0));
+        const totalActivity = vals.reduce((a, b) => a + b, 0);
+        if (totalActivity === 0) {
+            engagementAreaEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(148,163,184,.45);font-size:10px;pointer-events:none">Graf: čekam podatke…</div>';
+            if (engagementAreaMetaEl) engagementAreaMetaEl.textContent = 'Trend: -';
+            return;
+        }
         const maxV = Math.max(1, ...vals);
         const minV = Math.min(...vals);
         const range = Math.max(1, maxV - minV);
@@ -5375,17 +5384,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const hasTrendSignal = rawScores.some((v) => Math.abs(v) > 0.001);
         const points = hasTrendSignal ? trend : fallbackTrend;
         const scores = points.map((s) => Number(s.score || 0));
+        const mode = String(DB.getSettings().tkaiSentimentMomentumMode || 'bars').toLowerCase();
 
         const width = 320;
-        const hLine = 64;
-        const hWave = 56;
+        const hBars = 58;
+        const hWave = 58;
         const pad = 6;
         const maxAbs = Math.max(1, ...scores.map((v) => Math.abs(v)));
         sentimentTrendEl.innerHTML = '';
         points.forEach((p) => {
             const score = Number(p.score || 0);
             const ratio = Math.min(1, Math.abs(score) / maxAbs);
-            const h = Math.max(4, Math.round(ratio * 32));
+            const h = Math.max(3, Math.round(ratio * 22));
             const bar = document.createElement('div');
             bar.className = 'tkai-sentiment-bar';
             const posPart = document.createElement('div');
@@ -5394,10 +5404,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             negPart.className = 'tkai-sentiment-stack-neg';
             if (score > 0) {
                 posPart.style.height = `${Math.max(2, h)}px`;
+                posPart.style.background = `linear-gradient(180deg, rgba(52,211,153,.95), rgba(34,197,94,.88))`;
                 negPart.style.height = '1px';
             } else if (score < 0) {
                 posPart.style.height = '1px';
                 negPart.style.height = `${Math.max(2, h)}px`;
+                negPart.style.background = `linear-gradient(180deg, rgba(251,113,133,.95), rgba(239,68,68,.88))`;
             } else {
                 posPart.style.height = '1px';
                 negPart.style.height = '1px';
@@ -5407,18 +5419,22 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             bar.appendChild(negPart);
             sentimentTrendEl.appendChild(bar);
         });
+        sentimentTrendEl.style.display = mode === 'bars' ? '' : 'none';
 
         if (sentimentWaveEl) {
+            const midY = hWave / 2;
             const wavePts = scores.map((v, i) => {
                 const x = scores.length === 1 ? width / 2 : pad + (i / (scores.length - 1)) * (width - pad * 2);
-                const y = hWave - 8 - ((Math.abs(v) / maxAbs) * (hWave - 18));
+                const y = midY - ((v / maxAbs) * (hWave / 2 - 8));
                 return `${x.toFixed(1)},${y.toFixed(1)}`;
             }).join(' ');
             sentimentWaveEl.innerHTML =
-                `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="none" aria-hidden="true">` +
-                `<polygon points="${wavePts} ${width - pad},${hWave - 6} ${pad},${hWave - 6}" fill="rgba(94,234,212,.24)"></polygon>` +
-                `<polyline fill="none" stroke="rgba(45,212,191,.92)" stroke-width="1.8" points="${wavePts}"></polyline>` +
+                `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
+                `<defs><linearGradient id="tkaiSentWaveGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22d3ee"/><stop offset="50%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#f472b6"/></linearGradient></defs>` +
+                `<line x1="${pad}" y1="${midY.toFixed(1)}" x2="${(width - pad).toFixed(1)}" y2="${midY.toFixed(1)}" stroke="rgba(148,163,184,.26)" stroke-width="1" />` +
+                `<polyline fill="none" stroke="url(#tkaiSentWaveGrad)" stroke-width="2" points="${wavePts}"></polyline>` +
                 `</svg>`;
+            sentimentWaveEl.style.display = mode === 'wave' ? '' : 'none';
         }
 
         const avg = scores.reduce((acc, n) => acc + n, 0) / Math.max(1, scores.length);
@@ -5546,71 +5562,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 '<td style="padding:3px 4px">' + formatNum(u.gifts) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.coins) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.joins) + '</td>';
-            tr.title = 'Klik za detalje @' + u.user;
+            tr.title = 'Klik za copy @' + u.user;
             tr.style.cursor = 'pointer';
-            tr.addEventListener('click', () => { showTopUserGiftDetails(u); });
+            tr.addEventListener('click', () => { navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { }); });
             body.appendChild(tr);
         });
-        meta.textContent = formatNum(rows.length) + ' users • klik na red za detalje • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
-    }
-
-    function showTopUserGiftDetails(userStats) {
-        if (!userStats?.user) return;
-        document.getElementById('tkaiTopUserDetailModal')?.remove();
-        const modal = document.createElement('div');
-        modal.id = 'tkaiTopUserDetailModal';
-        modal.style.cssText = 'position:fixed;inset:0;z-index:10030;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:16px';
-        const giftRows = Array.isArray(userStats.giftDetails) ? userStats.giftDetails.slice() : [];
-        const giftsHtml = giftRows.length
-            ? giftRows.map((gift) => '<tr>'
-                + '<td style="padding:6px 8px">' + escHtml(gift.name || 'Unknown gift') + '</td>'
-                + '<td style="padding:6px 8px;text-align:right">' + formatNum(gift.quantity || 0) + '</td>'
-                + '<td style="padding:6px 8px;text-align:right">' + formatNum(gift.events || 0) + '</td>'
-                + '<td style="padding:6px 8px;text-align:right">' + formatNum(gift.unitCoins || 0) + '</td>'
-                + '<td style="padding:6px 8px;text-align:right;color:#fbbf24">' + formatNum(gift.coins || 0) + '</td>'
-                + '</tr>').join('')
-            : '<tr><td colspan="5" style="padding:10px 8px;color:#94a3b8;text-align:center">Nema spremljenih giftova za ovog korisnika.</td></tr>';
-        modal.innerHTML = ''
-            + '<div style="width:min(760px,100%);max-height:85vh;overflow:auto;background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.45);padding:16px;color:#e5eefc">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">'
-            + '<div>'
-            + '<div style="font-size:18px;font-weight:700;color:' + getUserColor(userStats.user) + '">@' + escHtml(userStats.user) + '</div>'
-            + '<div style="font-size:12px;color:#94a3b8">Detalji giftova i coin zbroj za odabranog korisnika</div>'
-            + '</div>'
-            + '<div style="display:flex;gap:8px;align-items:center">'
-            + '<button id="tkaiTopUserCopyBtn" type="button" class="tkai-insights-btn">Copy @user</button>'
-            + '<button id="tkaiTopUserDetailClose" type="button" class="tkai-insights-btn">Zatvori</button>'
-            + '</div>'
-            + '</div>'
-            + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">'
-            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Ukupno poruka</div><div style="font-size:22px;font-weight:700">' + formatNum(userStats.total || 0) + '</div></div>'
-            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Gift količina</div><div style="font-size:22px;font-weight:700">' + formatNum(userStats.gifts || 0) + '</div></div>'
-            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Gift eventi</div><div style="font-size:22px;font-weight:700">' + formatNum(userStats.giftEvents || 0) + '</div></div>'
-            + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px"><div style="font-size:11px;color:#94a3b8">Coins</div><div style="font-size:22px;font-weight:700;color:#fbbf24">' + formatNum(userStats.coins || 0) + '</div></div>'
-            + '</div>'
-            + '<div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03)">'
-            + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-            + '<thead><tr style="background:rgba(15,23,42,.92);color:#94a3b8"><th style="padding:7px 8px;text-align:left">Gift</th><th style="padding:7px 8px;text-align:right">Količina</th><th style="padding:7px 8px;text-align:right">Eventi</th><th style="padding:7px 8px;text-align:right">Coin/gift</th><th style="padding:7px 8px;text-align:right">Ukupno coins</th></tr></thead>'
-            + '<tbody>' + giftsHtml + '</tbody>'
-            + '</table>'
-            + '</div>'
-            + '</div>';
-        let keyHandler = null;
-        const close = () => {
-            if (keyHandler) document.removeEventListener('keydown', keyHandler);
-            modal.remove();
-        };
-        modal.querySelector('#tkaiTopUserDetailClose')?.addEventListener('click', close);
-        modal.querySelector('#tkaiTopUserCopyBtn')?.addEventListener('click', () => {
-            navigator.clipboard.writeText('@' + userStats.user + ' ').then(() => showToast('📋 Kopirano @' + userStats.user)).catch(() => { });
-        });
-        modal.addEventListener('click', (ev) => { if (ev.target === modal) close(); });
-        keyHandler = function onKey(ev) {
-            if (ev.key !== 'Escape') return;
-            close();
-        };
-        document.addEventListener('keydown', keyHandler);
-        document.body.appendChild(modal);
+        meta.textContent = formatNum(rows.length) + ' users • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
     }
 
     function updateInsightsUI() {
@@ -5716,15 +5673,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             li.textContent = r;
             recommendationsEl.appendChild(li);
         });
+        const popEnabled = DB.getSettings().tkaiRecommendationsPopoutEnabled === true;
         const currentHash = JSON.stringify(recommendations);
         if (currentHash !== lastRecommendationsHash) {
             lastRecommendationsHash = currentHash;
-            pulseRecommendationJump();
-            if (recommendations.length > 0) {
+            if (popEnabled) {
+                pulseRecommendationJump();
+            }
+            if (popEnabled && recommendations.length > 0) {
                 openRecommendationsPopout();
             }
         }
-        syncRecommendationsPopout(recommendations);
+        if (popEnabled) syncRecommendationsPopout(recommendations);
+        else closeRecommendationsPopout();
 
         if (pieChartEl && pieLegendEl && pieCenterEl) {
             const parts = Array.isArray(insights.pieBreakdown) ? insights.pieBreakdown : [];
@@ -5810,18 +5771,49 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
         }
 
+        if (giftStatsListEl) {
+            giftStatsListEl.innerHTML = '';
+            const giftDetails = insights.giftDetails || {};
+            const topGiftTypes = Array.isArray(giftDetails.topGiftTypes) ? giftDetails.topGiftTypes : [];
+            const topGifters = Array.isArray(giftDetails.topGifters) ? giftDetails.topGifters : [];
+            if (giftStatsMetaEl) giftStatsMetaEl.textContent = `${formatNum(giftDetails.totalEvents || 0)} giftova • ${formatNum(giftDetails.uniqueGiftTypes || 0)} tipova • ${formatNum(giftDetails.totalCoins || 0)} 🪙`;
+            if (!topGiftTypes.length) {
+                const li = document.createElement('li');
+                li.textContent = 'Nema gift statistike u trenutnom rasponu.';
+                giftStatsListEl.appendChild(li);
+            } else {
+                topGiftTypes.slice(0, 6).forEach((row, idx) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span style="color:#fcd34d">#${idx + 1} ${escHtml(row.giftName || 'Gift')}</span> • ${formatNum(row.coins || 0)} 🪙 • qty ${formatNum(row.quantity || 0)} • evt ${formatNum(row.events || 0)}`;
+                    giftStatsListEl.appendChild(li);
+                });
+                if (topGifters.length) {
+                    const divider = document.createElement('li');
+                    divider.style.marginTop = '4px';
+                    divider.style.color = 'var(--text3)';
+                    divider.textContent = 'Top gifteri:';
+                    giftStatsListEl.appendChild(divider);
+                    topGifters.slice(0, 4).forEach((row) => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<span style="color:${getUserColor(row.user)}">@${escHtml(row.user || 'unknown')}</span> • ${formatNum(row.coins || 0)} 🪙 • evt ${formatNum(row.events || 0)}`;
+                        giftStatsListEl.appendChild(li);
+                    });
+                }
+            }
+        }
+
         if (joinLevelListEl) {
             joinLevelListEl.innerHTML = '';
-            const joins = Array.isArray(insights.joinLevels) ? insights.joinLevels : [];
+            const joins = (Array.isArray(insights.joinLevels) ? insights.joinLevels : []).filter((j) => Number(j?.level || 0) > 0);
             const buckets = insights.joinBuckets || {};
             const joinMinLevel = Math.max(0, Number(DB.getSettings().tkaiJoinMinLevel ?? 0));
             const summary = document.createElement('li');
             summary.textContent =
-                `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)} • Unknown: ${formatNum(buckets.unknown || 0)}`;
+                `Min lvl ${formatNum(joinMinLevel)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)}`;
             joinLevelListEl.appendChild(summary);
             if (!joins.length) {
                 const li = document.createElement('li');
-                li.textContent = 'Nema join eventova za odabrani minimum levela (provjeri Join scan i min level).';
+                li.textContent = 'Nema join eventova s poznatim levelom za odabrani minimum.';
                 joinLevelListEl.appendChild(li);
             } else {
                 joins.slice(0, 80).forEach((j) => {
@@ -5842,7 +5834,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                         navigator.clipboard.writeText(value).then(() => showToast('📋 Kopirano: ' + value.trim())).catch(() => { });
                     });
                     li.appendChild(mention);
-                    li.appendChild(document.createTextNode(` • lvl ${j.level ? formatNum(j.level) : '?'} @ ${when}`));
+                    li.appendChild(document.createTextNode(` • lvl ${formatNum(j.level || 0)} @ ${when}`));
                     joinLevelListEl.appendChild(li);
                 });
             }
@@ -5932,6 +5924,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '</div>' +
             '</div>' +
             '<div style="display:flex;align-items:center;gap:6px">' +
+            '<button id="tkaiRecPopStop" class="tkai-collapse-btn" title="Zaustavi recommendations skakanje">⛔</button>' +
             '<button id="tkaiRecPopClose" class="tkai-collapse-btn">✕</button>' +
             '</div>' +
             '</div>' +
@@ -5951,6 +5944,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
         }
         wrap.querySelector('#tkaiRecPopClose')?.addEventListener('click', closeRecommendationsPopout);
+        wrap.querySelector('#tkaiRecPopStop')?.addEventListener('click', () => {
+            DB.saveSetting('tkaiRecommendationsPopoutEnabled', false);
+            DB.saveSetting('tkaiRecommendationJumpPulseEnabled', false);
+            if (recJumpBtn) {
+                recJumpBtn.style.display = 'none';
+                recJumpBtn.classList.remove('live');
+            }
+            closeRecommendationsPopout();
+            showToast('⛔ Recommendations skakanje ugašeno');
+        });
         const head = wrap.querySelector('#tkaiRecPopHead');
         let dragging = false;
         let dx = 0;
@@ -6190,379 +6193,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         });
     }
     initTkaiButtonPressFeedback();
-    let lastAutoSongRecAt = 0;
-    let autoSongRecInFlight = false;
-    let tkaiSoundboardPopout = null;
-    let tkaiAudioCtx = null;
-    let tkaiCurrentAudio = null;
-    let tkaiSoundboardCategory = 'all';
-    const TKAI_SOUNDBOARD_KEY = 'ex_tkai_soundboard_sounds';
-    const TKAI_SOUNDBOARD_FAV_KEY = 'ex_tkai_soundboard_favorites';
-    const TKAI_DEFAULT_SOUNDS = [
-        { id: 'builtin_airhorn', name: 'Airhorn', type: 'builtin', category: 'hype' },
-        { id: 'builtin_sad', name: 'Sad Trombone', type: 'builtin', category: 'meme' },
-        { id: 'builtin_boing', name: 'Boing', type: 'builtin', category: 'meme' },
-        { id: 'builtin_drum', name: 'Drum Roll', type: 'builtin', category: 'hype' },
-        { id: 'builtin_laugh', name: 'Laugh FX', type: 'builtin', category: 'meme' },
-        { id: 'builtin_applause', name: 'Applause', type: 'builtin', category: 'hype' },
-        { id: 'builtin_wow', name: 'WOW', type: 'builtin', category: 'meme' },
-        { id: 'builtin_hype_up', name: 'Hype Up', type: 'builtin', category: 'hype' },
-        { id: 'builtin_hype_drop', name: 'Hype Drop', type: 'builtin', category: 'hype' },
-        { id: 'builtin_victory', name: 'Victory Stinger', type: 'builtin', category: 'game' },
-        { id: 'builtin_fail', name: 'Fail Buzzer', type: 'builtin', category: 'game' },
-        { id: 'builtin_alarm', name: 'Red Alert', type: 'builtin', category: 'alerts' },
-        { id: 'builtin_suspense', name: 'Suspense', type: 'builtin', category: 'alerts' },
-        { id: 'builtin_laser', name: 'Laser Zap', type: 'builtin', category: 'game' },
-        { id: 'builtin_riser', name: 'Riser', type: 'builtin', category: 'hype' },
-        { id: 'builtin_coin', name: 'Coin Ding', type: 'builtin', category: 'money' },
-        { id: 'builtin_cash', name: 'Cash Register', type: 'builtin', category: 'money' },
-        { id: 'builtin_bell', name: 'Bell Hit', type: 'builtin', category: 'alerts' },
-        { id: 'builtin_clap_short', name: 'Clap Short', type: 'builtin', category: 'hype' },
-        { id: 'builtin_whistle', name: 'Ref Whistle', type: 'builtin', category: 'alerts' },
-        { id: 'builtin_horn_hit', name: 'Stadium Horn', type: 'builtin', category: 'hype' },
-        { id: 'builtin_record_scratch', name: 'Record Scratch', type: 'builtin', category: 'meme' },
-        { id: 'builtin_glitch', name: 'Glitch Hit', type: 'builtin', category: 'alerts' },
-        { id: 'builtin_8bit_win', name: '8-bit Win', type: 'builtin', category: 'game' },
-        { id: 'builtin_8bit_lose', name: '8-bit Lose', type: 'builtin', category: 'game' },
-        { id: 'builtin_transition', name: 'Transition Whoosh', type: 'builtin', category: 'hype' }
-    ];
-
-    function getTkaiAudioContext() {
-        if (!tkaiAudioCtx) tkaiAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        return tkaiAudioCtx;
-    }
-    function playToneSequence(sequence) {
-        const ctx = getTkaiAudioContext();
-        let t = ctx.currentTime + 0.02;
-        sequence.forEach((step) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = step.type || 'sine';
-            osc.frequency.setValueAtTime(Number(step.f || 440), t);
-            gain.gain.setValueAtTime(0.0001, t);
-            gain.gain.exponentialRampToValueAtTime(Math.max(0.001, Number(step.g || 0.25)), t + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.03, Number(step.d || 0.14)));
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(t);
-            osc.stop(t + Math.max(0.03, Number(step.d || 0.14)) + 0.02);
-            t += Math.max(0.03, Number(step.gap || step.d || 0.14));
-        });
-    }
-    function playBuiltInSound(soundId) {
-        const note = (f, d = 0.1, g = 0.22, type = 'square', gap = d) => ({ f, d, g, type, gap });
-        if (soundId === 'builtin_airhorn') {
-            playToneSequence([{ f: 680, d: 0.16, g: 0.28, type: 'sawtooth' }, { f: 620, d: 0.14, g: 0.28, type: 'sawtooth' }, { f: 700, d: 0.2, g: 0.28, type: 'sawtooth' }]);
-            return;
-        }
-        if (soundId === 'builtin_sad') {
-            playToneSequence([{ f: 440, d: 0.2, g: 0.22, type: 'triangle' }, { f: 370, d: 0.2, g: 0.2, type: 'triangle' }, { f: 300, d: 0.24, g: 0.2, type: 'triangle' }]);
-            return;
-        }
-        if (soundId === 'builtin_boing') {
-            playToneSequence([{ f: 220, d: 0.08, g: 0.2, type: 'square' }, { f: 380, d: 0.06, g: 0.22, type: 'square' }, { f: 280, d: 0.08, g: 0.2, type: 'square' }, { f: 460, d: 0.1, g: 0.2, type: 'square' }]);
-            return;
-        }
-        if (soundId === 'builtin_drum') {
-            playToneSequence([{ f: 120, d: 0.06, g: 0.18, type: 'triangle' }, { f: 160, d: 0.05, g: 0.18, type: 'triangle' }, { f: 210, d: 0.05, g: 0.2, type: 'triangle' }, { f: 280, d: 0.08, g: 0.22, type: 'triangle' }]);
-            return;
-        }
-        if (soundId === 'builtin_laugh') {
-            playToneSequence([{ f: 520, d: 0.05, g: 0.18, type: 'square' }, { f: 640, d: 0.05, g: 0.18, type: 'square' }, { f: 560, d: 0.05, g: 0.18, type: 'square' }, { f: 700, d: 0.07, g: 0.2, type: 'square' }, { f: 620, d: 0.09, g: 0.2, type: 'square' }]);
-            return;
-        }
-        if (soundId === 'builtin_applause') {
-            playToneSequence([note(400, 0.04, 0.14, 'triangle', 0.05), note(530, 0.04, 0.14, 'triangle', 0.05), note(460, 0.04, 0.14, 'triangle', 0.05), note(610, 0.04, 0.14, 'triangle', 0.05), note(480, 0.04, 0.14, 'triangle', 0.05), note(660, 0.06, 0.16, 'triangle', 0.06)]);
-            return;
-        }
-        if (soundId === 'builtin_wow') {
-            playToneSequence([note(320, 0.12, 0.2, 'sine', 0.12), note(480, 0.14, 0.22, 'sine', 0.14), note(380, 0.15, 0.2, 'sine', 0.15)]);
-            return;
-        }
-        if (soundId === 'builtin_hype_up') {
-            playToneSequence([note(260, 0.08, 0.18, 'sawtooth', 0.08), note(320, 0.08, 0.18, 'sawtooth', 0.08), note(420, 0.08, 0.2, 'sawtooth', 0.08), note(560, 0.08, 0.22, 'sawtooth', 0.08), note(760, 0.12, 0.24, 'sawtooth', 0.12)]);
-            return;
-        }
-        if (soundId === 'builtin_hype_drop') {
-            playToneSequence([note(820, 0.08, 0.22, 'sawtooth', 0.08), note(620, 0.08, 0.22, 'sawtooth', 0.08), note(480, 0.1, 0.22, 'sawtooth', 0.1), note(320, 0.12, 0.22, 'sawtooth', 0.12)]);
-            return;
-        }
-        if (soundId === 'builtin_victory') {
-            playToneSequence([note(523, 0.1, 0.2, 'triangle', 0.1), note(659, 0.1, 0.2, 'triangle', 0.1), note(784, 0.14, 0.24, 'triangle', 0.14)]);
-            return;
-        }
-        if (soundId === 'builtin_fail') {
-            playToneSequence([note(420, 0.14, 0.2, 'square', 0.14), note(350, 0.18, 0.2, 'square', 0.18)]);
-            return;
-        }
-        if (soundId === 'builtin_alarm') {
-            playToneSequence([note(780, 0.1, 0.22, 'square', 0.1), note(560, 0.1, 0.22, 'square', 0.1), note(780, 0.1, 0.22, 'square', 0.1), note(560, 0.14, 0.22, 'square', 0.14)]);
-            return;
-        }
-        if (soundId === 'builtin_suspense') {
-            playToneSequence([note(180, 0.16, 0.18, 'sine', 0.16), note(220, 0.18, 0.18, 'sine', 0.18), note(260, 0.2, 0.2, 'sine', 0.2), note(300, 0.24, 0.22, 'sine', 0.24)]);
-            return;
-        }
-        if (soundId === 'builtin_laser') {
-            playToneSequence([note(960, 0.04, 0.2, 'sawtooth', 0.04), note(740, 0.04, 0.2, 'sawtooth', 0.04), note(560, 0.05, 0.2, 'sawtooth', 0.05), note(420, 0.06, 0.2, 'sawtooth', 0.06)]);
-            return;
-        }
-        if (soundId === 'builtin_riser') {
-            playToneSequence([note(220, 0.08, 0.14, 'triangle', 0.08), note(280, 0.08, 0.14, 'triangle', 0.08), note(360, 0.08, 0.16, 'triangle', 0.08), note(460, 0.08, 0.18, 'triangle', 0.08), note(600, 0.1, 0.2, 'triangle', 0.1), note(760, 0.12, 0.22, 'triangle', 0.12)]);
-            return;
-        }
-        if (soundId === 'builtin_coin') {
-            playToneSequence([note(880, 0.06, 0.2, 'sine', 0.06), note(1320, 0.08, 0.24, 'sine', 0.08)]);
-            return;
-        }
-        if (soundId === 'builtin_cash') {
-            playToneSequence([note(700, 0.05, 0.18, 'square', 0.05), note(880, 0.05, 0.18, 'square', 0.05), note(980, 0.05, 0.18, 'square', 0.05), note(1320, 0.1, 0.22, 'triangle', 0.1)]);
-            return;
-        }
-        if (soundId === 'builtin_bell') {
-            playToneSequence([note(1040, 0.16, 0.2, 'sine', 0.16), note(820, 0.14, 0.14, 'sine', 0.14)]);
-            return;
-        }
-        if (soundId === 'builtin_clap_short') {
-            playToneSequence([note(380, 0.03, 0.14, 'triangle', 0.04), note(520, 0.03, 0.14, 'triangle', 0.04), note(420, 0.03, 0.14, 'triangle', 0.04)]);
-            return;
-        }
-        if (soundId === 'builtin_whistle') {
-            playToneSequence([note(1200, 0.06, 0.22, 'sine', 0.06), note(960, 0.08, 0.2, 'sine', 0.08), note(1200, 0.1, 0.22, 'sine', 0.1)]);
-            return;
-        }
-        if (soundId === 'builtin_horn_hit') {
-            playToneSequence([note(240, 0.16, 0.26, 'sawtooth', 0.16), note(320, 0.14, 0.24, 'sawtooth', 0.14), note(260, 0.16, 0.24, 'sawtooth', 0.16)]);
-            return;
-        }
-        if (soundId === 'builtin_record_scratch') {
-            playToneSequence([note(900, 0.03, 0.18, 'square', 0.03), note(760, 0.03, 0.18, 'square', 0.03), note(620, 0.03, 0.18, 'square', 0.03), note(500, 0.04, 0.18, 'square', 0.04), note(420, 0.05, 0.18, 'square', 0.05)]);
-            return;
-        }
-        if (soundId === 'builtin_glitch') {
-            playToneSequence([note(360, 0.03, 0.18, 'square', 0.03), note(920, 0.03, 0.18, 'square', 0.03), note(300, 0.03, 0.18, 'square', 0.03), note(1080, 0.04, 0.18, 'square', 0.04)]);
-            return;
-        }
-        if (soundId === 'builtin_8bit_win') {
-            playToneSequence([note(659, 0.08, 0.2, 'square', 0.08), note(784, 0.08, 0.2, 'square', 0.08), note(988, 0.12, 0.22, 'square', 0.12)]);
-            return;
-        }
-        if (soundId === 'builtin_8bit_lose') {
-            playToneSequence([note(494, 0.09, 0.2, 'square', 0.09), note(392, 0.1, 0.2, 'square', 0.1), note(294, 0.13, 0.22, 'square', 0.13)]);
-            return;
-        }
-        if (soundId === 'builtin_transition') {
-            playToneSequence([note(280, 0.06, 0.16, 'triangle', 0.06), note(360, 0.06, 0.16, 'triangle', 0.06), note(460, 0.06, 0.18, 'triangle', 0.06), note(580, 0.06, 0.18, 'triangle', 0.06), note(740, 0.08, 0.2, 'triangle', 0.08)]);
-        }
-    }
-    function getSoundboardList() {
-        try {
-            const saved = JSON.parse(localStorage.getItem(TKAI_SOUNDBOARD_KEY) || '[]');
-            return [...TKAI_DEFAULT_SOUNDS, ...(Array.isArray(saved) ? saved : [])];
-        } catch (_) {
-            return [...TKAI_DEFAULT_SOUNDS];
-        }
-    }
-    function getSoundboardFavoritesSet() {
-        try {
-            const rows = JSON.parse(localStorage.getItem(TKAI_SOUNDBOARD_FAV_KEY) || '[]');
-            if (!Array.isArray(rows)) return new Set();
-            return new Set(rows.map((x) => String(x || '')).filter(Boolean));
-        } catch (_) {
-            return new Set();
-        }
-    }
-    function setSoundboardFavoritesSet(favSet) {
-        const rows = Array.from(favSet || []).map((x) => String(x || '')).filter(Boolean).slice(0, 500);
-        localStorage.setItem(TKAI_SOUNDBOARD_FAV_KEY, JSON.stringify(rows));
-    }
-    function renderFavSoundsQuickPanel() {
-        if (!favSoundsQuickList) return;
-        const favSet = getSoundboardFavoritesSet();
-        const favItems = getSoundboardList().filter((it) => favSet.has(String(it.id || '')));
-        favSoundsQuickList.innerHTML = favItems.map((item) =>
-            `<button class="tkai-insights-btn tkai-fav-quick-play" data-sid="${escHtml(item.id)}" type="button" style="padding:2px 8px;font-size:10px">${escHtml(item.name)}</button>`
-        ).join('') || '<span style="font-size:10px;color:var(--text3)">Nema favorita. Dodaj ⭐ u Soundboard prozoru.</span>';
-    }
-    function setSoundboardCustomList(rows) {
-        const custom = Array.isArray(rows) ? rows.filter((r) => r && r.type === 'file').map((r) => ({ ...r, category: 'custom' })) : [];
-        localStorage.setItem(TKAI_SOUNDBOARD_KEY, JSON.stringify(custom.slice(0, 120)));
-    }
-    function stopSoundboardPlayback() {
-        if (tkaiCurrentAudio) {
-            try { tkaiCurrentAudio.pause(); } catch (_) { }
-            tkaiCurrentAudio = null;
-        }
-    }
-    function playSoundboardItem(item) {
-        if (!item) return;
-        stopSoundboardPlayback();
-        if (item.type === 'builtin') {
-            playBuiltInSound(item.id);
-            showToast('🔊 ' + item.name);
-            return;
-        }
-        if (item.type === 'file' && item.dataUrl) {
-            const audio = new Audio(item.dataUrl);
-            tkaiCurrentAudio = audio;
-            audio.play().then(() => {
-                showToast('🔊 ' + item.name);
-            }).catch((err) => {
-                showToast('⚠️ Ne mogu pustiti zvuk: ' + String(err?.message || err));
-            });
-        }
-    }
-    function renderSoundboardList() {
-        if (!tkaiSoundboardPopout) return;
-        const listEl = tkaiSoundboardPopout.querySelector('#tkaiSoundboardList');
-        if (!listEl) return;
-        const allItems = getSoundboardList();
-        const favSet = getSoundboardFavoritesSet();
-        const items = tkaiSoundboardCategory === 'all'
-            ? allItems
-            : tkaiSoundboardCategory === 'favorites'
-                ? allItems.filter((it) => favSet.has(String(it.id || '')))
-                : allItems.filter((it) => String(it.category || (it.type === 'file' ? 'custom' : 'other')) === tkaiSoundboardCategory);
-        const categoryButtons = tkaiSoundboardPopout.querySelectorAll('.tkai-sound-cat');
-        categoryButtons.forEach((btn) => {
-            btn.classList.toggle('active', btn.dataset.cat === tkaiSoundboardCategory);
-        });
-        listEl.innerHTML = items.map((item) => {
-            const builtIn = item.type === 'builtin';
-            const isFav = favSet.has(String(item.id || ''));
-            return `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
-                        <button class="tkai-insights-btn tkai-sound-play" data-sid="${escHtml(item.id)}" style="padding:2px 8px">▶</button>
-                        <div style="flex:1;font-size:11px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.name)}</div>
-                        <button class="tkai-insights-btn tkai-sound-fav" data-sid="${escHtml(item.id)}" style="padding:2px 7px">${isFav ? '★' : '☆'}</button>
-                        <div style="font-size:10px;color:var(--text3)">${escHtml(String(item.category || (builtIn ? 'builtin' : 'custom')).toUpperCase())}</div>
-                        ${builtIn ? '' : `<button class="tkai-insights-btn tkai-sound-del" data-sid="${escHtml(item.id)}" style="padding:2px 8px">✕</button>`}
-                    </div>`;
-        }).join('') || '<div style="font-size:11px;color:var(--text3);padding:10px 4px">Nema zvukova u ovoj kategoriji.</div>';
-    }
-    function openTkaiSoundboard() {
-        if (tkaiSoundboardPopout && document.body.contains(tkaiSoundboardPopout)) {
-            tkaiSoundboardPopout.style.display = '';
-            renderSoundboardList();
-            return;
-        }
-        tkaiSoundboardPopout = document.createElement('div');
-        tkaiSoundboardPopout.id = 'tkaiSoundboardPopout';
-        tkaiSoundboardPopout.style.cssText =
-            'position:fixed;z-index:100002;top:72px;right:22px;width:360px;height:500px;background:var(--surface,#1a1a2e);border:1px solid var(--border,rgba(255,255,255,.14));border-radius:12px;color:var(--text,#e2e8f0);display:flex;flex-direction:column;box-shadow:0 14px 42px rgba(0,0,0,.6);overflow:hidden;resize:both;min-width:300px;min-height:320px;';
-        tkaiSoundboardPopout.innerHTML =
-            '<div id="tkaiSoundboardHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:linear-gradient(135deg,#1f2937,#111827);cursor:move">' +
-            '<div style="font-size:12px;font-weight:700">TikTok AI Soundboard</div>' +
-            '<button id="tkaiSoundboardClose" class="panel-close" style="position:static">×</button>' +
-            '</div>' +
-            '<div style="padding:10px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;gap:6px;flex-wrap:wrap">' +
-            '<button id="tkaiSoundUploadBtn" class="tkai-insights-btn" type="button">+ Add sound</button>' +
-            '<button id="tkaiSoundStopBtn" class="tkai-insights-btn" type="button">■ Stop</button>' +
-            '<input id="tkaiSoundUploadInput" type="file" accept="audio/*" style="display:none">' +
-            '<div style="font-size:10px;color:var(--text3);width:100%">Za mikrofon output koristi virtual audio cable / monitor u OBS-u.</div>' +
-            '</div>' +
-            '<div style="padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;gap:6px;flex-wrap:wrap">' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="all" type="button" style="padding:2px 7px">All</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="favorites" type="button" style="padding:2px 7px">Fav</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="hype" type="button" style="padding:2px 7px">Hype</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="meme" type="button" style="padding:2px 7px">Meme</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="alerts" type="button" style="padding:2px 7px">Alerts</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="game" type="button" style="padding:2px 7px">Game</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="money" type="button" style="padding:2px 7px">Money</button>' +
-            '<button class="tkai-insights-btn tkai-sound-cat" data-cat="custom" type="button" style="padding:2px 7px">Custom</button>' +
-            '</div>' +
-            '<div id="tkaiSoundboardList" style="flex:1;overflow:auto;padding:8px 10px"></div>';
-        document.body.appendChild(tkaiSoundboardPopout);
-        tkaiSoundboardCategory = 'all';
-        renderSoundboardList();
-
-        tkaiSoundboardPopout.querySelector('#tkaiSoundboardClose')?.addEventListener('click', () => {
-            tkaiSoundboardPopout.remove();
-            tkaiSoundboardPopout = null;
-            stopSoundboardPlayback();
-        });
-        tkaiSoundboardPopout.querySelector('#tkaiSoundUploadBtn')?.addEventListener('click', () => {
-            tkaiSoundboardPopout.querySelector('#tkaiSoundUploadInput')?.click();
-        });
-        tkaiSoundboardPopout.querySelector('#tkaiSoundStopBtn')?.addEventListener('click', () => {
-            stopSoundboardPlayback();
-            showToast('⏹️ Zaustavljen zvuk');
-        });
-        tkaiSoundboardPopout.querySelector('#tkaiSoundUploadInput')?.addEventListener('change', async (ev) => {
-            const file = ev?.target?.files?.[0];
-            if (!file) return;
-            const name = String(file.name || 'Sound').replace(/\.[^/.]+$/, '').slice(0, 60);
-            try {
-                const dataUrl = await new Promise((resolve, reject) => {
-                    const fr = new FileReader();
-                    fr.onload = () => resolve(String(fr.result || ''));
-                    fr.onerror = () => reject(fr.error || new Error('File read error'));
-                    fr.readAsDataURL(file);
-                });
-                const current = getSoundboardList().filter((r) => r.type === 'file');
-                current.push({ id: 'file_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8), name, type: 'file', dataUrl });
-                setSoundboardCustomList(current);
-                renderSoundboardList();
-                showToast('✅ Dodan zvuk: ' + name);
-            } catch (err) {
-                showToast('⚠️ Upload nije uspio: ' + String(err?.message || err));
-            } finally {
-                ev.target.value = '';
-            }
-        });
-        tkaiSoundboardPopout.addEventListener('click', (ev) => {
-            const catBtn = ev.target.closest('.tkai-sound-cat');
-            if (catBtn) {
-                tkaiSoundboardCategory = String(catBtn.dataset.cat || 'all');
-                renderSoundboardList();
-                return;
-            }
-            const playBtn = ev.target.closest('.tkai-sound-play');
-            if (playBtn) {
-                const item = getSoundboardList().find((r) => r.id === playBtn.dataset.sid);
-                playSoundboardItem(item);
-                return;
-            }
-            const favBtn = ev.target.closest('.tkai-sound-fav');
-            if (favBtn) {
-                const sid = String(favBtn.dataset.sid || '');
-                if (!sid) return;
-                const favSet = getSoundboardFavoritesSet();
-                if (favSet.has(sid)) favSet.delete(sid);
-                else favSet.add(sid);
-                setSoundboardFavoritesSet(favSet);
-                renderSoundboardList();
-                return;
-            }
-            const delBtn = ev.target.closest('.tkai-sound-del');
-            if (delBtn) {
-                const sid = String(delBtn.dataset.sid || '');
-                const current = getSoundboardList().filter((r) => r.type === 'file' && r.id !== sid);
-                setSoundboardCustomList(current);
-                renderSoundboardList();
-                showToast('🗑️ Zvuk obrisan');
-            }
-        });
-
-        const head = tkaiSoundboardPopout.querySelector('#tkaiSoundboardHead');
-        let dragging = false;
-        let dx = 0;
-        let dy = 0;
-        head?.addEventListener('pointerdown', (e) => {
-            if (e.target.closest('button')) return;
-            dragging = true;
-            dx = e.clientX - tkaiSoundboardPopout.getBoundingClientRect().left;
-            dy = e.clientY - tkaiSoundboardPopout.getBoundingClientRect().top;
-            head.setPointerCapture(e.pointerId);
-        });
-        head?.addEventListener('pointermove', (e) => {
-            if (!dragging) return;
-            tkaiSoundboardPopout.style.left = Math.max(0, e.clientX - dx) + 'px';
-            tkaiSoundboardPopout.style.top = Math.max(40, e.clientY - dy) + 'px';
-            tkaiSoundboardPopout.style.right = 'auto';
-        });
-        head?.addEventListener('pointerup', () => { dragging = false; });
-        head?.addEventListener('pointercancel', () => { dragging = false; });
-    }
 
     function openChatPopout() {
         if (chatPopout && document.body.contains(chatPopout)) {
@@ -6896,13 +6526,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         liveDashboardPopout.querySelector('#tkaiLiveDashClose')?.addEventListener('click', closeLiveDashboardPopout);
 
-        syncLiveDashboardPopout();
-        liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+        // Always show button change and timer first — then populate content
         if (expandLiveBtn) {
             expandLiveBtn.textContent = '🖥 Zatvori live';
             expandLiveBtn.style.background = 'rgba(45,212,191,.28)';
         }
+        liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+        try { if (typeof updateInsightsUI === 'function') updateInsightsUI(); } catch (_) { }
+        try { syncLiveDashboardPopout(); } catch (_) { }
     }
+
+    window.openLiveDashboardPopout = openLiveDashboardPopout;
+    window.closeLiveDashboardPopout = closeLiveDashboardPopout;
 
     applyTkaiFeedMode();
     expandChatBtn?.addEventListener('click', () => {
@@ -6914,9 +6549,23 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     });
     expandLiveBtn?.addEventListener('click', () => {
         if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
-        else openLiveDashboardPopout();
+        else {
+            const openFn = (typeof openLiveDashboardPopout === 'function')
+                ? openLiveDashboardPopout
+                : (typeof window.openLiveDashboardPopout === 'function' ? window.openLiveDashboardPopout : null);
+            if (!openFn) {
+                showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
+                return;
+            }
+            try { openFn(); } catch (err) { showToast('⚠️ Live dashboard greška: ' + (err?.message || err)); console.error('[tkai] openLiveDashboardPopout error:', err); }
+        }
     });
     recJumpBtn?.addEventListener('click', () => {
+        if (DB.getSettings().tkaiRecommendationsPopoutEnabled !== true) {
+            document.getElementById('tkaiRecommendationsCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showToast('📌 Recommendations u Pie sekciji');
+            return;
+        }
         openRecommendationsPopout();
         document.getElementById('tkaiRecommendationsCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         showToast('📌 Recommendations otvoren');
@@ -7022,6 +6671,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             else if (peakViewerCount > 0) viewerCountEl.textContent = 'peak ' + formatNum(peakViewerCount);
             else viewerCountEl.textContent = '0';
         }
+        if (viewerSampleMetaEl) {
+            if (lastViewerSampleAt > 0) {
+                const ageSec = Math.max(0, Math.floor((Date.now() - lastViewerSampleAt) / 1000));
+                const sampleSec = Math.max(2, Number(DB.getSettings().tkaiViewerSampleIntervalSec || 8) || 8);
+                viewerSampleMetaEl.textContent = 'sample ' + formatNum(sampleSec) + 's • zadnje ' + formatNum(ageSec) + 's';
+            } else {
+                viewerSampleMetaEl.textContent = 'Čekam očitanje';
+            }
+        }
         if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
         // ── Nove statistike ──────────────────────────────────────────────
         const msgsPerMin = elapsedMin > 0 ? (collectedMessages.length / elapsedMin).toFixed(1) : '-';
@@ -7101,7 +6759,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const supporterSet = new Set();
         giftEvents.forEach((message) => {
             const user = String(message.user || 'Chat user').trim() || 'Chat user';
-            const meta = detectGiftMetaFromText(message.text || '');
+            const meta = getTkaiGiftMeta(message.text || '');
             const eventCoins = Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0);
             const eventUnitCoins = Number(message.unitCoins || meta.unitCoins || 0);
             const eventQuantity = Math.max(1, Number(message.quantity || meta.quantity || 1));
@@ -7129,8 +6787,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const icon = message.type === 'subscriber' ? '⭐' : '🎁';
             const countBadge = '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + (message.count || 1) + '</span>';
             const coins = Number(message.totalCoins || 0);
-            const unitCoins = Number(message.unitCoins || 0);
+            let unitCoins = Number(message.unitCoins || 0);
             const quantity = Math.max(1, Number(message.totalQuantity || message.quantity || 1));
+            // Fallback: if catalog lookup during collection returned 0, try again by giftName
+            if (unitCoins === 0 && coins === 0 && message.giftName) {
+                const catMeta = getTkaiGiftMeta(message.giftName);
+                unitCoins = Number(catMeta.unitCoins || 0);
+            }
             const coinsBadge = unitCoins > 0
                 ? '<span style="margin-left:auto;color:#ffd47a" title="Ukupno ' + formatNum(coins) + ' 🪙">'
                 + formatNum(unitCoins) + ' 🪙' + (quantity > 1 ? (' × ' + formatNum(quantity)) : '')
@@ -7533,15 +7196,34 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               tryTake(label, label);
             });
           } catch (_) {}
+          try {
+            const directTikTokViewerSelectors = [
+              "#tiktok-live-main-container-id > div.bg-UIPageFlat1.tiktok-q76ycn.eayczbk0 > div.tiktok-i9gxme.eayczbk1 > div > div.relative.flex.flex-col.flex-shrink-0.rounded-\\[16px\\].my-12.bg-UIPageFlat2.border-l-\\[0\\.5px\\].overflow-hidden.ltr\\:mr-12.rtl\\:ml-12 > div.relative.w-full.flex.flex-col.flex-grow.overflow-hidden.rounded-\\[inherit\\] > div > div.w-full.h-auto.flex.flex-col.bg-UIPageFlat2.will-change-\\[height\\].absolute > div.w-full.h-30.px-16.pt-12.mb-4.flex.justify-between.items-center > div.flex.justify-start.items-center > div.P4-Medium.font-semibold.text-UIText1.ltr\\:mr-6.rtl\\:ml-6",
+              "#tiktok-live-main-container-id div.P4-Medium.font-semibold.text-UIText1.ltr\\:mr-6.rtl\\:ml-6"
+            ];
+            for (const sel of directTikTokViewerSelectors) {
+              const el = document.querySelector(sel);
+              const txt = (el?.textContent || "").replace(/\s+/g, " ").trim();
+              if (!txt) continue;
+              tryTake(txt, "direct tiktok viewers header");
+              break;
+            }
+          } catch (_) {}
           const viewerSelectors = [
             '[data-e2e="live-room-viewer-count"]',
             '[data-e2e="live-room-info-viewer-count"]',
             '[data-e2e*="viewer-count"]',
             '[data-e2e*="watching"]',
+            '[data-e2e*="user-count"]',
+            '[data-e2e*="audience"]',
             '[class*="ViewerCount"]',
             '[class*="viewerCount"]',
             '[class*="WatchCount"]',
-            '[class*="watch-count"]'
+            '[class*="watch-count"]',
+            '[class*="Audience"]',
+            '[class*="audience"]',
+            '[class*="UserCount"]',
+            '[class*="userCount"]'
           ];
           for (const sel of viewerSelectors) {
             try {
@@ -7569,6 +7251,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 tryTake(m[1], txt);
                 break;
               }
+            });
+          } catch (_) {}
+          try {
+            document.querySelectorAll('span, div, strong, p').forEach(function(el) {
+              const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+              if (!txt || txt.length > 24) return;
+              const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+              if (!rect || rect.width <= 0 || rect.height <= 0) return;
+              if (rect.top < 0 || rect.top > window.innerHeight * 0.24) return;
+              if (rect.left < window.innerWidth * 0.62) return;
+              const closestLabel = el.closest('[aria-label]')?.getAttribute('aria-label') || '';
+              const ownLabel = el.getAttribute('aria-label') || '';
+              const title = el.getAttribute('title') || '';
+              const ctx = (ownLabel + ' ' + closestLabel + ' ' + title + ' ' + (el.parentElement?.textContent || '')).replace(/\s+/g, ' ').trim();
+              const looksPlainCounter = /^(?:\d[\d.,\s]*[km]?)(?:\+)?$/.test(txt);
+              if (!viewerHint.test(ctx) && !looksPlainCounter) return;
+              if (blockedContext.test(ctx) && !viewerHint.test(ctx)) return;
+              tryTake(txt, ctx || 'top-right live header');
             });
           } catch (_) {}
           return maxViewer;
@@ -7617,8 +7317,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             '[class*="chat-content"]',
             '[class*="SpanMessage"]',
             '[class*="comment-text"]',
-                        'p',
-                        'div',
+            'p',
             'span'
           ].join(',');
           const parts = [];
@@ -7652,11 +7351,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (!txt || txt.length < 4) return;
                 const r = txt.match(/#?\s*([1-9])\s*[.)-]?\s*(.{2,40}?)\s+(\d[\d.,\s]*[km]?)(?:\s*(coins?|coin|coina|kovanica|diamonds?))?/i);
                 if (!r) return;
-                rows.push({
-                  rank: parseInt(r[1], 10) || 99,
-                  user: String(r[2] || '').trim().slice(0, 40),
-                  coins: parseNumberLike(r[3])
-                });
+                pushRow(r[1], r[2], r[3], sel);
               });
             } catch (_) {}
           }
@@ -7664,7 +7359,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           rows.forEach((row) => {
             if (!row.user) return;
             const prev = dedupe.get(row.user);
-            if (!prev || row.coins > prev.coins) dedupe.set(row.user, row);
+            if (!prev || row.coins > prev.coins || (row.coins === prev.coins && row.rank < prev.rank)) dedupe.set(row.user, row);
           });
           return Array.from(dedupe.values())
             .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
@@ -7826,186 +7521,189 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                         for (const source of sources) {
                                             if (!shareLooseRe.test(source)) continue;
                                             const normalized = source
-                                                .replace(/[.!?,:;()[\]{}"'* _+=|\\/-]+/g, ' ')
+                                                .replace(/[.!?,:;()[\]{}"'*_+=|\\/-]+/g, ' ')
                                                 .replace(/\s+/g, ' ')
-        .trim();
-    const withoutShare = normalized.replace(shareLooseRe, '').replace(/\s+/g, '').trim();
-    const hasMention = /(^|\s)@[a-z0-9._]{2,40}\b/i.test(normalized);
+                                                .trim();
+                                            const withoutShare = normalized.replace(shareLooseRe, '').replace(/\s+/g, '').trim();
+                                            const hasMention = /(^|\s)@[a-z0-9._]{2,40}\b/i.test(normalized);
                                             if (shareExactRe.test(normalized) && !hasMention) return true;
-    if (!withoutShare && !hasMention && hasExplicitShareMarker) return true;
-}
+                                            if (!withoutShare && !hasMention && hasExplicitShareMarker) return true;
+                                        }
 
                                         return false;
                                 }
 
-items.slice(-45).forEach((el, index) => {
-    const userEl = el.querySelector(
-        '[data-e2e="chat-message-user-name"],'
-        + '[data-e2e="user-name"],'
-        + '[data-e2e="message-owner-name"],'
-        + '[data-e2e="comment-username"],'
-        + '[data-e2e="chat-username"],'
-        + '[data-e2e="webcast-live-user-name"],'
-        + '[data-e2e="live-user-name"],'
-        + '[class*="DisplayName"],'
-        + '[class*="UserName"]:not([class*="avatar"]),'
-        + '[class*="Username"]:not([class*="avatar"]),'
-        + '[class*="user-name"],'
-        + '[class*="AuthorName"],'
-        + '[class*="NickName"],'
-        + '[class*="nickname"],'
-        + 'a[href^="/@"],'
-        + 'strong, b'
-    );
-    const textEl = el.querySelector(
-        '[data-e2e="chat-message-text"],'
-        + '[data-e2e="message-text"],'
-        + '[data-e2e="webcast-live-comment"],'
-        + '[data-e2e="webcast-live-message"],'
-        + '[data-e2e="webcast-message"],'
-        + '[data-e2e="live-comment-text"],'
-        + '[class*="MessageText"],'
-        + '[class*="CommentText"],'
-        + '[class*="message-content"],'
-        + '[class*="chat-content"],'
-        + '[class*="GiftText"],'
-        + '[class*="GiftMessage"],'
-        + '[class*="Subscribe"],'
-        + '[class*="SpanMessage"],'
-        + '[class*="comment-text"],'
-        + 'p, div, span'
-    );
-    const textNodes = Array.from(el.querySelectorAll(
-        '[data-e2e="chat-message-text"],'
-        + '[data-e2e="message-text"],'
-        + '[data-e2e="webcast-live-comment"],'
-        + '[data-e2e="webcast-live-message"],'
-        + '[data-e2e="webcast-message"],'
-        + '[data-e2e="live-comment-text"],'
-        + '[class*="MessageText"],'
-        + '[class*="CommentText"],'
-        + '[class*="message-content"],'
-        + '[class*="chat-content"],'
-        + '[class*="SpanMessage"],'
-        + '[class*="comment-text"],'
-        + 'p, div, span'
-    ));
-    const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
-    const ariaLabelText = String(el.getAttribute('aria-label') || '').replace(/[\s]+/g, ' ').trim();
-    const derivedUser = (() => {
-        // 1) Explicit userEl text
-        const direct = userEl ? userEl.textContent.trim() : '';
-        if (direct && direct.length > 0) return direct;
-        // 2) data-* attributes on element
-        const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username')
-            || el.getAttribute('data-author') || el.getAttribute('data-nick') || '';
-        if (attrName) return attrName.trim();
-        // 3) aria-label often contains "username: message"
-        const aria = el.getAttribute('aria-label') || '';
-        if (aria) {
-            const am = aria.match(/^([^:,\n]{2,40})(?::|,)/);
-            if (am && am[1]) return am[1].trim();
-        }
-        // 4) Look for a child element with data-e2e containing "user" or "name"
-        const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
-        if (nameByE2e) { const t = nameByE2e.textContent.trim(); if (t) return t; }
-        // 5) First <strong> or <b> is usually the username in TikTok chat
-        const boldEl = el.querySelector('strong, b');
-        if (boldEl) { const t = boldEl.textContent.trim(); if (t && t.length <= 60) return t; }
-        // 6) Regex on full text: "Username: message" or "Username sent gift"
-        const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
-        if (colMatch && colMatch[1]) return colMatch[1].trim();
-        const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)\b/i);
-        if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
-        return '';
-    })();
-    const user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
-    const textBase = textEl ? textEl.textContent.trim() : '';
-    const candidateParts = collectCandidateTextParts(el, user);
-    const assembledText = candidateParts.join(' ').trim();
-    const fallbackParts = textNodes
-        .map(n => (n.textContent || '').replace(/[\s]+/g, ' ').trim())
-        .filter(Boolean)
-        .filter((part, idx, arr) => arr.indexOf(part) === idx)
-        .filter(part => !isAuxiliaryText(part))
-        .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
-    let rawText = (assembledText || textBase || fallbackParts.join(' ') || ariaLabelText || el.textContent || '').trim().slice(0, 1200);
-
-    // Hvati nagrade, emotikone, specijalne znakove
-    const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
-    const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
-    giftEls.forEach(g => {
-        const gAlt = g.alt || g.title || '🎁';
-        if (gAlt && !rawText.includes(gAlt)) rawText += ' ' + gAlt;
-    });
-    emoteEls.forEach(em => {
-        const eAlt = em.alt || em.title || '';
-        if (eAlt && !rawText.includes(eAlt) && eAlt.length < 30) rawText += ' ' + eAlt;
-    });
-
-    const cleaned = cleanChatText(rawText, user);
-    const text = cleaned.slice(0, 900);
-    if (text && text.length > 1) {
-        const messageContext = [text, rawText, ariaLabelText, fallbackText].filter(Boolean).join(' ');
-        const low = messageContext.toLowerCase();
-        // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
-        const hasSent = /\b(?:sent|gave)\b/i.test(low);
-        const hasGiftWord = /(?:\bgift\b|\brose\b|\bcoins?\b|\bdiamonds?\b|\bgalaxy\b|\blion\b|\blollipop\b|\bsunglasses\b|\buniverse\b|\bcastle\b|\brocket\b|\bbear\b|\bunicorn\b|\bpoklon\b|\bdar\b|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+)/i.test(messageContext);
-        const isGift = (hasSent && hasGiftWord) || giftEls.length > 0 || /\b(?:sent\s+(?:a\s+)?gift|sent\s+rose|gave\s+(?:a\s+)?gift)\b/i.test(low);
-        const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(messageContext);
-        const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
-        const isShare = isStrictShareEvent(text, rawText, user, el);
-        let levelHint = null;
-        if (isJoin) {
-            const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
-            if (levelMatch) {
+                items.slice(-45).forEach((el, index) => {
+          const userEl = el.querySelector(
+            '[data-e2e="chat-message-user-name"],'
+            + '[data-e2e="user-name"],'
+            + '[data-e2e="message-owner-name"],'
+            + '[data-e2e="comment-username"],'
+            + '[data-e2e="chat-username"],'
+            + '[data-e2e="webcast-live-user-name"],'
+            + '[data-e2e="live-user-name"],'
+            + '[class*="DisplayName"],'
+            + '[class*="UserName"]:not([class*="avatar"]),'
+            + '[class*="Username"]:not([class*="avatar"]),'
+            + '[class*="user-name"],'
+            + '[class*="AuthorName"],'
+            + '[class*="NickName"],'
+            + '[class*="nickname"],'
+            + 'strong, b'
+          );
+          const textEl = el.querySelector(
+            '[data-e2e="chat-message-text"],'
+            + '[data-e2e="message-text"],'
+            + '[data-e2e="webcast-live-comment"],'
+            + '[data-e2e="webcast-live-message"],'
+            + '[data-e2e="webcast-message"],'
+            + '[data-e2e="live-comment-text"],'
+            + '[class*="MessageText"],'
+            + '[class*="CommentText"],'
+            + '[class*="message-content"],'
+            + '[class*="chat-content"],'
+            + '[class*="GiftText"],'
+            + '[class*="GiftMessage"],'
+            + '[class*="Subscribe"],'
+            + '[class*="SpanMessage"],'
+            + '[class*="comment-text"],'
+            + 'p, span'
+          );
+          const textNodes = Array.from(el.querySelectorAll(
+            '[data-e2e="chat-message-text"],'
+            + '[data-e2e="message-text"],'
+            + '[data-e2e="webcast-live-comment"],'
+            + '[data-e2e="webcast-live-message"],'
+            + '[data-e2e="webcast-message"],'
+            + '[data-e2e="live-comment-text"],'
+            + '[class*="MessageText"],'
+            + '[class*="CommentText"],'
+            + '[class*="message-content"],'
+            + '[class*="chat-content"],'
+            + '[class*="SpanMessage"],'
+            + '[class*="comment-text"],'
+            + 'p, span'
+          ));
+          const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
+          const derivedUser = (() => {
+            // 1) Explicit userEl text
+            const direct = userEl ? userEl.textContent.trim() : '';
+            if (direct && direct.length > 0) return direct;
+            // 2) data-* attributes on element
+            const attrName = el.getAttribute('data-user-name') || el.getAttribute('data-username')
+              || el.getAttribute('data-author') || el.getAttribute('data-nick') || '';
+            if (attrName) return attrName.trim();
+            // 3) aria-label often contains "username: message"
+            const aria = el.getAttribute('aria-label') || '';
+            if (aria) {
+              const am = aria.match(/^([^:,\n]{2,40})(?::|,)/); 
+              if (am && am[1]) return am[1].trim();
+            }
+            // 4) Look for a child element with data-e2e containing "user" or "name"
+            const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
+            if (nameByE2e) { const t = nameByE2e.textContent.trim(); if (t) return t; }
+            // 5) First <strong> or <b> is usually the username in TikTok chat
+            const boldEl = el.querySelector('strong, b');
+            if (boldEl) { const t = boldEl.textContent.trim(); if (t && t.length <= 60) return t; }
+            // 6) Regex on full text: "Username: message" or "Username sent gift"
+            const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
+            if (colMatch && colMatch[1]) return colMatch[1].trim();
+            const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)\b/i);
+            if (sentMatch && sentMatch[1]) return sentMatch[1].trim();
+            return '';
+          })();
+          let user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
+          const textBase = textEl ? textEl.textContent.trim() : '';
+          const candidateParts = collectCandidateTextParts(el, user);
+          const assembledText = candidateParts.join(' ').trim();
+          const fallbackParts = textNodes
+            .map(n => (n.textContent || '').replace(/[\s]+/g, ' ').trim())
+            .filter(Boolean)
+            .filter((part, idx, arr) => arr.indexOf(part) === idx)
+            .filter(part => !isAuxiliaryText(part))
+            .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
+          let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
+          
+          // Hvati nagrade, emotikone, specijalne znakove
+          const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
+          const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
+          giftEls.forEach(g => {
+            const gAlt = g.alt || g.title || '🎁';
+            if (gAlt && !rawText.includes(gAlt)) rawText += ' ' + gAlt;
+          });
+          emoteEls.forEach(em => {
+            const eAlt = em.alt || em.title || '';
+            if (eAlt && !rawText.includes(eAlt) && eAlt.length < 30) rawText += ' ' + eAlt;
+          });
+          
+          const cleaned = cleanChatText(rawText, user);
+                    const text = cleaned.slice(0, 900);
+          if (text && text.length > 1) {
+            const low = text.toLowerCase();
+            // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
+            const hasSent = /\bsent\b|\bgave\b/i.test(low);
+            const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
+            const isGift = hasSent || hasGiftWord || giftEls.length > 0;
+            const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
+            const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
+            const isShare = isStrictShareEvent(text, rawText, user, el);
+                        if ((!user || String(user).toLowerCase() === 'unknown') && (isGift || isJoin || isShare)) {
+                            const fromText = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)\b/i);
+                            if (fromText && fromText[1]) user = fromText[1].trim().slice(0, 60);
+                        }
+            let levelHint = null;
+            if (isJoin) {
+              const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
+              if (levelMatch) {
                 const lvl = parseInt(levelMatch[1], 10);
                 if (Number.isFinite(lvl) && lvl > 0 && lvl < 500) levelHint = lvl;
+              }
             }
-        }
-        const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-        const stableSig = String(mid || el.getAttribute('aria-label') || el.getAttribute('data-e2e') || '').trim().slice(0, 240);
-        const messageType = isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : (isGift ? 'gift' : 'chat')));
-        if (isLikelyNoiseChatText(text, user, messageType)) return;
+            const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
+                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
+                        if (isLikelyNoiseChatText(text, user, messageType)) return;
+                        if ((messageType === 'gift' || messageType === 'join' || messageType === 'share') && (!user || String(user).toLowerCase() === 'unknown')) return;
+                        const looksLikeCatalogGiftLine = /^(?:unknown\s*[·•|:\-]?\s*)?\d{1,7}\s+[^\s].*$/i.test(text)
+                            || /^[^\d]{2,40}\s*[·•|:\-]\s*\d{1,7}(?:\s*(?:coins?|diamonds?|🪙))?$/i.test(text);
+                        if (looksLikeCatalogGiftLine && !/\b(?:sent|gave)\b/i.test(low)) return;
 
-        results.push({
-            user: user || 'unknown',
-            text,
-            mid,
-            sig: stableSig,
-            type: messageType,
-            level: levelHint
+                        results.push({
+              user: user || 'unknown',
+              text,
+              mid,
+                            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : 'chat'))),
+              level: levelHint
+            });
+          }
         });
-    }
-});
-const viewerCount = getViewerCount();
-const giftCatalog = getGiftCatalogFromPage();
-const topSupporters = getTopSupportersFromPage();
-const streamOwner = (() => {
-    const pathMatch = String(location.pathname || '').match(/\/@([^\/?#]+)/i);
-    if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).replace(/^@+/, '');
-    const ownerSelectors = [
-        '[data-e2e="browse-username"]',
-        '[data-e2e="user-title"]',
-        '[data-e2e="user-name"]',
-        'a[href*="/@"][href*="/live"]',
-        'a[href^="/@"]',
-        '[class*="owner"] [class*="name"]',
-        '[class*="Author"] [class*="Name"]'
-    ];
-    for (const sel of ownerSelectors) {
-        const el = document.querySelector(sel);
-        const txt = String(el?.textContent || '').trim();
-        if (!txt) continue;
-        const m = txt.match(/@?([a-z0-9._]{2,40})/i);
-        if (m && m[1]) return m[1].replace(/^@+/, '');
-    }
-    return '';
-})();
-results.push({ type: '_meta', viewerCount: viewerCount, topSupporters: topSupporters, streamOwner: streamOwner, giftCatalog: giftCatalog });
-return JSON.stringify(results);
-        } catch (e) { return JSON.stringify({ __scraperError: String(e && e.message ? e.message : e) }); }
-      }) ()`;
+        const viewerCount = getViewerCount();
+        const giftCatalog = getGiftCatalogFromPage();
+        const topSupporters = getTopSupportersFromPage();
+        const streamOwner = (() => {
+          const pathMatch = String(location.pathname || '').match(/\/@([^\/?#]+)/i);
+          if (pathMatch && pathMatch[1]) return decodeURIComponent(pathMatch[1]).replace(/^@+/, '');
+          const ownerSelectors = [
+            '[data-e2e="browse-username"]',
+            '[data-e2e="user-title"]',
+            '[data-e2e="user-name"]',
+            'a[href*="/@"][href*="/live"]',
+            'a[href^="/@"]',
+            '[class*="owner"] [class*="name"]',
+            '[class*="Author"] [class*="Name"]'
+          ];
+          for (const sel of ownerSelectors) {
+            const el = document.querySelector(sel);
+            const txt = String(el?.textContent || '').trim();
+            if (!txt) continue;
+            const m = txt.match(/@?([a-z0-9._]{2,40})/i);
+            if (m && m[1]) return m[1].replace(/^@+/, '');
+          }
+          return '';
+        })();
+        results.push({ type: '_meta', viewerCount: viewerCount, topSupporters: topSupporters, streamOwner: streamOwner, giftCatalog: giftCatalog });
+        return JSON.stringify(results);
+        } catch(e) { return JSON.stringify({__scraperError: String(e && e.message ? e.message : e)}); }
+      })()`;
 
     async function scrapeTikTokChat() {
         if (!window.electronWebview) {
@@ -8079,30 +7777,30 @@ return JSON.stringify(results);
                 return 0;
             }
             const existing = new Set(collectedMessages.map(message => message.id));
-            const existingCounts = new Map();
+            const existingRecent = new Map();
             collectedMessages.forEach(message => {
-                const k = `${message.type || 'chat'}:${message.user}:${message.text}`;
-                existingCounts.set(k, (existingCounts.get(k) || 0) + 1);
+                const k = `${message.type || 'chat'}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
+                existingRecent.set(k, Number(message.ts || 0));
             });
+            const incomingSeen = new Set();
             let added = 0;
             const incomingCaptions = [];
+            const nowTs = Date.now();
+            const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
             filteredMessages.forEach((message) => {
                 const baseKey = `${message.type || 'chat'}:${message.user}:${message.text}`;
-                const id = message.mid ? `mid:${message.mid}` : (message.sig ? `sig:${message.sig}` : baseKey);
-                const allowRepeatGift = (message.type === 'gift' || message.type === 'subscriber') && (existingCounts.get(baseKey) || 0) < 4;
+                const inKey = `${message.mid || ''}|${message.type || ''}|${message.user || ''}|${message.text || ''}`;
+                if (incomingSeen.has(inKey)) return;
+                incomingSeen.add(inKey);
+                const id = message.mid ? `mid:${message.mid}` : baseKey;
+                const recentKey = `${message.type || 'chat'}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
+                const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
+                if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
                 if (!existing.has(id)) {
-                    const giftMeta = detectGiftMetaFromText(message.text || '');
-                    collectedMessages.push({ ...message, id, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
+                    const giftMeta = getTkaiGiftMeta(message.text || '');
+                    collectedMessages.push({ ...message, id, ts: nowTs, coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
                     existing.add(id);
-                    existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
-                    added += 1;
-                    if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
-                } else if (allowRepeatGift) {
-                    const repeatId = `${id}: r:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
-                    const giftMeta = detectGiftMetaFromText(message.text || '');
-                    collectedMessages.push({ ...message, id: repeatId, ts: Date.now(), coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
-                    existing.add(repeatId);
-                    existingCounts.set(baseKey, (existingCounts.get(baseKey) || 0) + 1);
+                    existingRecent.set(recentKey, nowTs);
                     added += 1;
                     if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
                 }
@@ -8201,9 +7899,7 @@ return JSON.stringify(results);
             if (hasSongSignal && Date.now() - lastAutoSongRecAt >= cooldownSec * 1000 && typeof window.runSongRecRecognition === 'function') {
                 autoSongRecInFlight = true;
                 lastAutoSongRecAt = Date.now();
-                window.runSongRecRecognition(false)
-                    .catch(() => { })
-                    .finally(() => { autoSongRecInFlight = false; });
+                window.runSongRecRecognition(false).catch(() => { }).finally(() => { autoSongRecInFlight = false; });
             }
         }
         if (DB.getSettings().tkaiTurboScan !== false && added > 0) {
@@ -8394,6 +8090,7 @@ return JSON.stringify(results);
         const replyLang = replyLangEl?.value || 'hr';
         const giftStats = computeGiftStats();
         const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 200);
+        const detailedInsights = computeInsightsSnapshot(collectedMessages);
         const payload = {
             exportedAt: new Date().toISOString(),
             targetLanguage: targetLang,
@@ -8405,6 +8102,7 @@ return JSON.stringify(results);
             totalCoins: giftStats.totalCoins,
             mergedUsers: buildUserStats(collectedMessages, userLimit),
             dailyStats: buildDailyStats(collectedMessages, userLimit),
+            giftDetails: detailedInsights.giftDetails || {},
             messages: collectedMessages.map(message => ({
                 user: message.user,
                 text: message.text,
@@ -8413,8 +8111,10 @@ return JSON.stringify(results);
                 type: message.type || 'chat',
                 coins: message.coins || 0,
                 giftName: message.giftName || '',
+                giftRawText: message.giftRawText || '',
                 quantity: Number(message.quantity || 0),
                 unitCoins: Number(message.unitCoins || 0),
+                giftDetectedFromCatalog: message.giftDetectedFromCatalog === true,
                 timestamp: message.ts || Date.now()
             }))
         };
@@ -8437,26 +8137,11 @@ return JSON.stringify(results);
             rows.push([esc(m.user), esc(m.text), esc(m.translatedText || ''), esc(m.type || 'chat'), m.coins || 0, new Date(m.ts || Date.now()).toISOString()].join(','));
         });
         const merged = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
-        const giftBreakdowns = buildGiftExportBreakdowns(merged, 15, 200);
         rows.push('');
         rows.push('MERGED_USERS');
-        rows.push(['user', 'total', 'chat', 'gifts', 'giftEvents', 'coins', 'joins', 'repeatMax', 'lastTs'].join(','));
+        rows.push(['user', 'total', 'chat', 'gifts', 'joins', 'repeatMax', 'lastTs'].join(','));
         merged.forEach((u) => {
-            rows.push([esc(u.user), u.total, u.chat, u.gifts, u.giftEvents || 0, u.coins || 0, u.joins, u.repeatMax, new Date(u.lastTs || Date.now()).toISOString()].join(','));
-        });
-        rows.push('');
-        rows.push('TOP_GIFTS_OVERALL');
-        rows.push(['gift', 'quantity', 'events', 'coins', 'unitCoins', 'userCount'].join(','));
-        giftBreakdowns.topGiftsOverall.forEach((gift) => {
-            rows.push([esc(gift.name), gift.quantity || 0, gift.events || 0, gift.coins || 0, gift.unitCoins || 0, gift.userCount || 0].join(','));
-        });
-        rows.push('');
-        rows.push('TOP_GIFTS_BY_USER');
-        rows.push(['user', 'gift', 'quantity', 'events', 'coins', 'unitCoins'].join(','));
-        giftBreakdowns.topGiftsByUser.forEach((row) => {
-            row.gifts.forEach((gift) => {
-                rows.push([esc(row.user), esc(gift.name), gift.quantity || 0, gift.events || 0, gift.coins || 0, gift.unitCoins || 0].join(','));
-            });
+            rows.push([esc(u.user), u.total, u.chat, u.gifts, u.joins, u.repeatMax, new Date(u.lastTs || Date.now()).toISOString()].join(','));
         });
         const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
@@ -8642,29 +8327,6 @@ return JSON.stringify(results);
         renderGiftGallery();
         showToast('✅ Dodan gift: ' + name);
     });
-    document.getElementById('tkaiSongRecNowBtn')?.addEventListener('click', () => {
-        if (typeof window.runSongRecRecognition === 'function') window.runSongRecRecognition(true);
-    });
-    document.getElementById('tkaiDjCcNowBtn')?.addEventListener('click', () => {
-        if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
-    });
-    openSoundboardBtn?.addEventListener('click', () => {
-        openTkaiSoundboard();
-    });
-    favSoundsQuickBtn?.addEventListener('click', () => {
-        if (!favSoundsQuickWrap) return;
-        const isOpen = favSoundsQuickWrap.style.display !== 'none';
-        favSoundsQuickWrap.style.display = isOpen ? 'none' : '';
-        favSoundsQuickBtn.classList.toggle('active', !isOpen);
-        if (!isOpen) renderFavSoundsQuickPanel();
-    });
-    favSoundsQuickList?.addEventListener('click', (ev) => {
-        const btn = ev.target.closest('.tkai-fav-quick-play');
-        if (!btn) return;
-        const sid = String(btn.dataset.sid || '');
-        const item = getSoundboardList().find((r) => String(r.id || '') === sid);
-        if (item) playSoundboardItem(item);
-    });
     contextEl?.addEventListener('input', saveCfg);
     customPromptEl?.addEventListener('input', saveCfg);
     readLangEl?.addEventListener('change', async () => {
@@ -8726,12 +8388,27 @@ return JSON.stringify(results);
 
     ccReadBtn?.addEventListener('click', () => {
         const next = !isCcReadEnabled();
+        if (!isTkaiAudioEnabled() && next) {
+            DB.saveSetting('tkaiAudioEnabled', true);
+        }
         DB.saveSetting('tkaiCcReadEnabled', next);
+        updateTkaiAudioButton();
         updateCcReadButton();
         if (!next && 'speechSynthesis' in window && window.speechSynthesis) {
             speechSynthesis.cancel();
         }
         showToast(next ? '💬🔊 CC čitanje uključeno' : '💬🔇 CC čitanje isključeno');
+    });
+
+    audioToggleBtn?.addEventListener('click', () => {
+        const next = !isTkaiAudioEnabled();
+        DB.saveSetting('tkaiAudioEnabled', next);
+        updateTkaiAudioButton();
+        updateCcReadButton();
+        if (!next && 'speechSynthesis' in window && window.speechSynthesis) {
+            speechSynthesis.cancel();
+        }
+        showToast(next ? '🔊 AI audio uključen' : '🔇 AI audio isključen');
     });
 
     document.querySelector('#stab-ai-live-chat [data-setting="tkaiCcReadEnabled"]')?.addEventListener('click', () => {
@@ -8743,7 +8420,23 @@ return JSON.stringify(results);
         }, 0);
     });
 
+    document.querySelector('#stab-ai-live-chat [data-setting="tkaiAudioEnabled"]')?.addEventListener('click', () => {
+        setTimeout(() => {
+            updateTkaiAudioButton();
+            updateCcReadButton();
+            if (!isTkaiAudioEnabled() && 'speechSynthesis' in window && window.speechSynthesis) {
+                speechSynthesis.cancel();
+            }
+        }, 0);
+    });
+
+    document.querySelector('#stab-ai-live-chat [data-setting="tkaiSongRecOutputDevice"]')?.addEventListener('change', () => {
+        showToast('🎧 SongRec output uređaj spremljen');
+    });
+
     updateCcReadButton();
+    updateTkaiAudioButton();
+    refreshTkaiSongRecOutputs();
 
     genBtn?.addEventListener('click', () => {
         const selected = selectedMsgIds.size
@@ -8800,6 +8493,14 @@ return JSON.stringify(results);
         vis('tkaiPieCard', 'tkaiShowPieBreakdown');
         const songCard = document.getElementById('tkaiSongsCard');
         if (songCard) songCard.style.display = '';
+        if (recJumpBtn) {
+            const popEnabled = s.tkaiRecommendationsPopoutEnabled === true;
+            const jumpEnabled = s.tkaiRecommendationJumpPulseEnabled === true;
+            if (!popEnabled || !jumpEnabled) {
+                recJumpBtn.style.display = 'none';
+                recJumpBtn.classList.remove('live');
+            }
+        }
 
         // Safety net: if every insights card ended hidden (bad saved state), bring core cards back.
         const insightsRoot = document.getElementById('tkaiInsights');
@@ -8830,26 +8531,34 @@ return JSON.stringify(results);
 
         const scanBtnEl = document.getElementById('tkaiBtnToggle');
         if (scanBtnEl) {
-            scanBtnEl.style.background = `linear - gradient(135deg, ${secondary}, ${primary})`;
+            scanBtnEl.style.background = `linear-gradient(135deg, ${secondary}, ${primary})`;
             scanBtnEl.style.borderColor = 'rgba(255,255,255,.2)';
             scanBtnEl.style.color = '#fff';
         }
 
         panel.querySelectorAll('.tkai-gen-btn').forEach(btn => {
             if (btn.id === 'tkaiClearBtn') return;
-            btn.style.background = `linear - gradient(135deg, ${primary}, ${secondary})`;
+            btn.style.background = `linear-gradient(135deg, ${primary}, ${secondary})`;
             btn.style.borderColor = 'rgba(255,255,255,.2)';
             btn.style.color = '#fff';
         });
 
         panel.querySelectorAll('.tkai-insights-btn, .tkai-collapse-btn').forEach(btn => {
-            btn.style.background = `linear - gradient(135deg, ${insights}, ${primary})`;
+            btn.style.background = `linear-gradient(135deg, ${insights}, ${primary})`;
             btn.style.borderColor = 'rgba(255,255,255,.22)';
             btn.style.color = '#fff';
         });
         applyTkaiPanelScale();
     }
 
+    // Apply on panel open
+    document.getElementById('btnTikTokAI')?.addEventListener('click', () => {
+        setTimeout(() => {
+            applyTkaiFeatureToggles();
+            applyTkaiButtonTheme();
+            initInsightCardControls();
+        }, 50);
+    });
     // Re-apply whenever a tkai feature toggle is clicked in settings
     document.getElementById('settingsPanel')?.addEventListener('click', e => {
         const t = e.target.closest('.toggle[data-setting]');
@@ -8881,7 +8590,6 @@ return JSON.stringify(results);
 
     const tkaiMinBtn = document.getElementById('minimizeTiktokAIPanel');
     const TKAI_MIN_KEY = 'ex_tkai_panel_minimized';
-    const TKAI_POS_KEY = 'ex_tkai_panel_pos';
     const applyTkaiMinimized = (minimized) => {
         panel.classList.toggle('tkai-minimized', !!minimized);
         if (tkaiMinBtn) {
@@ -8889,50 +8597,14 @@ return JSON.stringify(results);
             tkaiMinBtn.title = minimized ? 'Proširi' : 'Spusti / proširi';
         }
     };
-    const resetTkaiPanelPosition = () => {
-        panel.style.transition = 'left .2s, bottom .2s';
-        panel.style.right = '0';
-        panel.style.left = 'auto';
-        panel.style.top = 'auto';
-        panel.style.bottom = '10px';
-        try { localStorage.removeItem(TKAI_POS_KEY); } catch (_) { }
-        setTimeout(() => { panel.style.transition = 'none'; }, 220);
-    };
-    const ensureTkaiPanelVisible = () => {
-        applyTkaiMinimized(false);
-        try { localStorage.setItem(TKAI_MIN_KEY, '0'); } catch (_) { }
-        requestAnimationFrame(() => {
-            const rect = panel.getBoundingClientRect();
-            const width = panel.offsetWidth || rect.width || 0;
-            const height = panel.offsetHeight || rect.height || 0;
-            const offscreen = !width || !height
-                || rect.right < 80
-                || rect.left > window.innerWidth - 40
-                || rect.bottom < 80
-                || rect.top > window.innerHeight - 40;
-            if (offscreen) resetTkaiPanelPosition();
-        });
-    };
-    try {
-        applyTkaiMinimized(localStorage.getItem(TKAI_MIN_KEY) === '1');
-    } catch (_) {
-        applyTkaiMinimized(false);
-    }
+    // Always open expanded so the panel remains easy to control.
+    applyTkaiMinimized(false);
+    try { localStorage.removeItem(TKAI_MIN_KEY); } catch (_) { }
     tkaiMinBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
         const next = !panel.classList.contains('tkai-minimized');
         applyTkaiMinimized(next);
         try { localStorage.setItem(TKAI_MIN_KEY, next ? '1' : '0'); } catch (_) { }
-    });
-
-    // Apply on panel open
-    document.getElementById('btnTikTokAI')?.addEventListener('click', () => {
-        ensureTkaiPanelVisible();
-        setTimeout(() => {
-            applyTkaiFeatureToggles();
-            applyTkaiButtonTheme();
-            initInsightCardControls();
-        }, 50);
     });
 
     document.getElementById('closeTiktokAIPanel')?.addEventListener('click', stopScanning);
@@ -8943,8 +8615,19 @@ return JSON.stringify(results);
 
     // ── Draggable panel ──────────────────────────────────────────────────────
     (function makePanelDraggable() {
+        const TKAI_POS_KEY = 'ex_tkai_panel_pos';
         const dragHandle = document.getElementById('tiktokAIPanelHeader');
         if (!dragHandle || !panel) return;
+
+        function resetPanelPosition() {
+            panel.style.transition = 'left .2s, bottom .2s';
+            panel.style.right = '0';
+            panel.style.left = 'auto';
+            panel.style.top = 'auto';
+            panel.style.bottom = '10px';
+            try { localStorage.removeItem(TKAI_POS_KEY); } catch (_) { }
+            setTimeout(() => { panel.style.transition = 'none'; }, 220);
+        }
 
         function clampPanelPosition() {
             const rect = panel.getBoundingClientRect();
@@ -8953,7 +8636,7 @@ return JSON.stringify(results);
             const maxTop = Math.max(chromeH, window.innerHeight - Math.min(panel.offsetHeight || rect.height, window.innerHeight));
             const visibleEnough = rect.right > 80 && rect.left < window.innerWidth - 40 && rect.bottom > chromeH + 40 && rect.top < window.innerHeight - 40;
             if (!visibleEnough) {
-                resetTkaiPanelPosition();
+                resetPanelPosition();
                 return;
             }
             if (panel.style.left && panel.style.left !== 'auto') {
@@ -9030,7 +8713,7 @@ return JSON.stringify(results);
         // Double-click header → reset to default bottom-right position
         dragHandle.addEventListener('dblclick', e => {
             if (e.target.closest('button')) return;
-            resetTkaiPanelPosition();
+            resetPanelPosition();
         });
 
         window.addEventListener('resize', clampPanelPosition);
@@ -9040,16 +8723,38 @@ return JSON.stringify(results);
     (function makePanelResizable() {
         if (!panel) return;
         const TKAI_SIZE_KEY = 'ex_tkai_panel_size';
+        const DEFAULT_W = 460;
+        const DEFAULT_H = 580;
         const MIN_W = 360, MIN_H = 340;
+        function getMaxHeight() {
+            const chromeH = document.querySelector('.tab-bar')?.getBoundingClientRect()?.top;
+            const topBoundary = Number.isFinite(chromeH) ? Math.max(0, chromeH) : 90;
+            return Math.max(MIN_H, window.innerHeight - topBoundary - 10);
+        }
+        function clampPanelSize(width, height) {
+            const maxW = Math.max(MIN_W, window.innerWidth - 20);
+            const maxH = getMaxHeight();
+            const w = Math.max(MIN_W, Math.min(Number(width) || DEFAULT_W, maxW));
+            const h = Math.max(MIN_H, Math.min(Number(height) || Math.min(DEFAULT_H, maxH), maxH));
+            return { w, h };
+        }
+        function applyPanelSize(width, height) {
+            const size = clampPanelSize(width, height);
+            panel.style.width = size.w + 'px';
+            panel.style.height = size.h + 'px';
+        }
         try {
             const s = JSON.parse(localStorage.getItem(TKAI_SIZE_KEY) || 'null');
-            if (s && s.width) panel.style.width = s.width + 'px';
-            if (s && s.height) panel.style.height = s.height + 'px';
+            applyPanelSize(s?.width, s?.height);
         } catch (_) { }
         function saveSize() {
             try { localStorage.setItem(TKAI_SIZE_KEY, JSON.stringify({ width: panel.offsetWidth, height: panel.offsetHeight })); } catch (_) { }
         }
-        ['ne', 'nw', 'se', 'sw'].forEach(dir => {
+        window.addEventListener('resize', () => {
+            applyPanelSize(panel.offsetWidth, panel.offsetHeight);
+            saveSize();
+        });
+        ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
             const h = document.createElement('div');
             h.className = 'tkai-resize-handle tkai-resize-' + dir;
             panel.appendChild(h);
@@ -9067,17 +8772,20 @@ return JSON.stringify(results);
                 const onMove = e2 => {
                     if (!resizing) return;
                     const dx = e2.clientX - sx, dy = e2.clientY - sy;
-                    if (dir.includes('e')) panel.style.width = Math.max(MIN_W, sw + dx) + 'px';
-                    if (dir.includes('s')) panel.style.height = Math.max(MIN_H, sh + dy) + 'px';
+                    const maxW = Math.max(MIN_W, window.innerWidth - 20);
+                    const maxH = getMaxHeight();
+                    if (dir.includes('e')) panel.style.width = Math.max(MIN_W, Math.min(sw + dx, maxW)) + 'px';
+                    if (dir.includes('s')) panel.style.height = Math.max(MIN_H, Math.min(sh + dy, maxH)) + 'px';
                     if (dir.includes('w')) {
-                        const nw = Math.max(MIN_W, sw - dx);
+                        const nw = Math.max(MIN_W, Math.min(sw - dx, maxW));
                         panel.style.width = nw + 'px';
                         panel.style.left = (sl + sw - nw) + 'px';
                     }
                     if (dir === 'n' || dir === 'ne' || dir === 'nw') {
-                        const nh = Math.max(MIN_H, sh - dy);
+                        const nh = Math.max(MIN_H, Math.min(sh - dy, maxH));
                         panel.style.height = nh + 'px';
-                        panel.style.bottom = (sb + sh - nh) + 'px';
+                        // Keep bottom anchored while moving only the top edge.
+                        panel.style.bottom = sb + 'px';
                     }
                 };
                 const onUp = () => {
@@ -9122,7 +8830,7 @@ function renderBookmarksPanel() {
         fDiv.style.cssText = 'margin-top:4px';
         const fHeader = document.createElement('div');
         fHeader.style.cssText = 'display:flex;align-items:center;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:12px;gap:4px;background:var(--bg2);border-radius:4px;margin:2px 4px';
-        fHeader.innerHTML = `< span >📁</span ><span style="flex:1">${folder} (${folderBm.length})</span><button class="bm-del-folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px" title="Delete folder">×</button>`;
+        fHeader.innerHTML = `<span>📁</span><span style="flex:1">${folder} (${folderBm.length})</span><button class="bm-del-folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px" title="Delete folder">×</button>`;
         fHeader.querySelector('.bm-del-folder').addEventListener('click', e => { e.stopPropagation(); if (confirm('Delete folder "' + folder + '"? Bookmarks will be moved to root.')) { DB.deleteBookmarkFolder(folder); renderBookmarksPanel(); } });
         const fBody = document.createElement('div');
         fBody.style.cssText = 'display:none;padding-left:12px';
@@ -9140,7 +8848,7 @@ function renderBookmarksPanel() {
 }
 function _createBmEntry(b) {
     const el = document.createElement('div'); el.className = 'p-entry';
-    el.innerHTML = `< div class="p-entry-icon" >🌐</div ><div class="p-entry-title" title="${b.url}">${b.title || b.url}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-move" title="Move to folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;margin-right:4px">📁</button><button class="p-entry-del">×</button>`;
+    el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${b.url}">${b.title || b.url}</div><div class="p-entry-meta">${timeAgo(b.ts)}</div><button class="p-entry-move" title="Move to folder" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;margin-right:4px">📁</button><button class="p-entry-del">×</button>`;
     el.querySelector('.p-entry-title').addEventListener('click', () => { navigateTo(b.url); closeAllPanels(); });
     el.querySelector('.p-entry-del').addEventListener('click', e => { e.stopPropagation(); DB.removeBookmark(b.url); renderBookmarksPanel(); });
     el.querySelector('.p-entry-move').addEventListener('click', async e => {
@@ -9165,7 +8873,7 @@ function renderHistoryPanel() {
         const t = document.createElement('div'); t.className = 'p-section-title'; t.textContent = new Date(entries[0].ts).toDateString() === new Date().toDateString() ? 'Today' : day; list.appendChild(t);
         entries.forEach(h => {
             const el = document.createElement('div'); el.className = 'p-entry';
-            el.innerHTML = `< div class="p-entry-icon" >🌐</div ><div class="p-entry-title" title="${h.url}">${h.title || h.url}</div><div class="p-entry-meta">${new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
+            el.innerHTML = `<div class="p-entry-icon">🌐</div><div class="p-entry-title" title="${h.url}">${h.title || h.url}</div><div class="p-entry-meta">${new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>`;
             el.addEventListener('click', () => { navigateTo(h.url); closeAllPanels(); }); list.appendChild(el);
         });
     });
@@ -9228,11 +8936,11 @@ function renderDownloadsPanel() {
         const topRow = document.createElement('div');
         topRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
         topRow.innerHTML = `
-    < span style = "font-size:14px" > ${_dlStatusIcon(d.status) }</span >
+          <span style="font-size:14px">${_dlStatusIcon(d.status)}</span>
           <span class="dl-fname" title="${escHtml(d.url || '')}" style="flex:1;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${escHtml(fname)}</span>
           <span style="font-size:10px;color:var(--text3);white-space:nowrap">${timeAgo(d.ts)}</span>
           <button class="p-entry-del" style="flex-shrink:0">×</button>
-`;
+        `;
         el.appendChild(topRow);
 
         // Progress bar (samo za aktivne ili ako imamo postotak)
@@ -9241,7 +8949,7 @@ function renderDownloadsPanel() {
             barWrap.style.cssText = 'margin-top:5px;background:var(--bg3);border-radius:3px;height:4px;overflow:hidden;';
             const bar = document.createElement('div');
             bar.className = 'dl-progress-bar';
-            bar.style.cssText = `height: 100 %; background: var(--accent); border - radius: 3px; width:${pct}%; transition:width .3s;`;
+            bar.style.cssText = `height:100%;background:var(--accent);border-radius:3px;width:${pct}%;transition:width .3s;`;
             barWrap.appendChild(bar);
             el.appendChild(barWrap);
         }
@@ -9249,19 +8957,19 @@ function renderDownloadsPanel() {
         // Meta row: size + action buttons
         const metaRow = document.createElement('div');
         metaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px;';
-        let metaHTML = `< span style = "font-size:10px;color:var(--text3);flex:1" > ${escHtml(sizeStr)}`;
-        if (isActive && pct > 0) metaHTML += ` & mdash; ${pct}%`;
-        metaHTML += `</span >`;
+        let metaHTML = `<span style="font-size:10px;color:var(--text3);flex:1">${escHtml(sizeStr)}`;
+        if (isActive && pct > 0) metaHTML += ` &mdash; ${pct}%`;
+        metaHTML += `</span>`;
 
         // Action buttons — only in Electron where savePath is available
         if (isDone && hasSavePath) {
             metaHTML += `
-    < button class="dl-btn-open" title = "Otvori fajl" style = "background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px" >▶ Otvori</button >
-        <button class="dl-btn-folder" title="Prikaži u folderu" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">📂 Folder</button>
-`;
+            <button class="dl-btn-open" title="Otvori fajl" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">▶ Otvori</button>
+            <button class="dl-btn-folder" title="Prikaži u folderu" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;font-size:10px;padding:1px 7px">📂 Folder</button>
+          `;
         } else if (!isDone && !isFailed) {
             // Show URL as clickable
-            metaHTML += `< span style = "font-size:10px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" class="dl-url-lnk" title = "${escHtml(d.url || '')}" > ${escHtml((d.url || '').replace(/^https?:\/\//, '').slice(0, 40))}</span >`;
+            metaHTML += `<span style="font-size:10px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" class="dl-url-lnk" title="${escHtml(d.url || '')}">${escHtml((d.url || '').replace(/^https?:\/\//, '').slice(0, 40))}</span>`;
         }
         metaRow.innerHTML = metaHTML;
         el.appendChild(metaRow);
@@ -9376,7 +9084,7 @@ if (window.etherx?.on) {
         const panel = document.getElementById('dlPanel');
         if (panel?.classList.contains('open')) {
             // Try to update just the progress bar without full re-render
-            const entryEl = document.querySelector(`[data - dlid="${download.id}"]`);
+            const entryEl = document.querySelector(`[data-dlid="${download.id}"]`);
             if (entryEl) {
                 const pct = (download.totalBytes > 0) ? Math.round((download.receivedBytes / download.totalBytes) * 100) : 0;
                 const bar = entryEl.querySelector('.dl-progress-bar');
@@ -9453,14 +9161,14 @@ function runBotDetectionTests() {
 
         // Render results
         resultsContainer.innerHTML = results.map(r => `
-    < div style = "background:rgba(255,255,255,.05);border-radius:6px;padding:10px" >
+          <div style="background:rgba(255,255,255,.05);border-radius:6px;padding:10px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
               <span style="font-size:13px;font-weight:600;color:var(--text)">${r.name}</span>
               <span style="font-size:12px;padding:2px 8px;border-radius:12px;background:${r.passed ? 'rgba(74,222,128,.2)' : 'rgba(248,113,113,.2)'};color:${r.passed ? '#4ade80' : '#f87171'}">${r.passed ? '✓ Pass' : '✗ Fail'}</span>
             </div>
             <div style="font-size:12px;color:var(--text2);line-height:1.4">${r.detail}</div>
-          </div >
-    `).join('');
+          </div>
+        `).join('');
     }, 100);
 }
 
@@ -9506,7 +9214,7 @@ function testPlugins() {
 
     return {
         passed,
-        detail: passed ? `${pluginCount} plugins detected(normal)` : 'No plugins detected (suspicious for bot)'
+        detail: passed ? `${pluginCount} plugins detected (normal)` : 'No plugins detected (suspicious for bot)'
     };
 }
 
@@ -9540,7 +9248,7 @@ function testScreen() {
 
     return {
         passed: !mismatch,
-        detail: mismatch ? `Screen / window size mismatch(${screenW}x${screenH} vs ${windowW}x${windowH})` : `Screen: ${screenW}x${screenH}, Window: ${windowW}x${windowH}`
+        detail: mismatch ? `Screen/window size mismatch (${screenW}x${screenH} vs ${windowW}x${windowH})` : `Screen: ${screenW}x${screenH}, Window: ${windowW}x${windowH}`
     };
 }
 
@@ -9744,7 +9452,7 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
         el.innerHTML = entries.slice(0, 10).map(([code, cnt]) => {
             const [name, flag] = TLD_COUNTRY[code] || [code.toUpperCase(), '🌐'];
             const pct = Math.round((cnt / max) * 100);
-            return `< div style = "display:flex;align-items:center;gap:5px" >
+            return `<div style="display:flex;align-items:center;gap:5px">
             <span style="font-size:13px;line-height:1;flex-shrink:0">${flag}</span>
             <div style="flex:1;min-width:0">
               <div style="display:flex;justify-content:space-between;margin-bottom:2px">
@@ -9755,7 +9463,7 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
                 <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#27c93f,#1fa833);border-radius:2px;transition:width .3s"></div>
               </div>
             </div>
-          </div >`;
+          </div>`;
         }).join('');
     }
 
@@ -9929,15 +9637,15 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
     document.getElementById('shieldBlockAppNotice')?.addEventListener('change', function () {
         DB.saveSetting('shieldBlockAppNotice', this.checked);
         if (this.checked && window.electronWebview) {
-            const wv = document.querySelector(`webview[data - tab - id= "${STATE.activeTabId}"]`) ||
+            const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
                 document.querySelector('webview.active, webview');
             if (wv && window.safeExecuteJS) {
-                window.safeExecuteJS(wv, `(function () {
-        const s = document.getElementById('__etherx_noappbanner') || document.createElement('style');
-        s.id = '__etherx_noappbanner';
-        s.textContent = 'smart-app-banner,[id*="app-banner"],[class*="app-banner"],[id*="AppBanner"],[class*="AppBanner"],[data-smart-app-banner]{display:none!important}';
-        document.head?.appendChild(s);
-    })()`).catch(() => { });
+                window.safeExecuteJS(wv, `(function(){
+              const s = document.getElementById('__etherx_noappbanner') || document.createElement('style');
+              s.id = '__etherx_noappbanner';
+              s.textContent = 'smart-app-banner,[id*="app-banner"],[class*="app-banner"],[id*="AppBanner"],[class*="AppBanner"],[data-smart-app-banner]{display:none!important}';
+              document.head?.appendChild(s);
+            })()`).catch(() => { });
             }
         }
         showToast(this.checked ? tShield('toastAppNoticeOn') : tShield('toastAppNoticeOff'));
@@ -9947,18 +9655,18 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
     document.getElementById('shieldBlockCookies')?.addEventListener('change', function () {
         DB.saveSetting('shieldBlockCookies', this.checked);
         if (this.checked && window.electronWebview) {
-            const wv = document.querySelector(`webview[data - tab - id= "${STATE.activeTabId}"]`) ||
+            const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
                 document.querySelector('webview.active, webview');
             if (wv && window.safeExecuteJS) {
-                window.safeExecuteJS(wv, `(function () {
-        try {
-            Object.defineProperty(document, 'cookie', {
-                get: function () { return ''; },
-                set: function () { /* blocked */ },
-                configurable: true
-            });
-        } catch (_) { }
-    })()`).catch(() => { });
+                window.safeExecuteJS(wv, `(function(){
+              try {
+                Object.defineProperty(document, 'cookie', {
+                  get: function() { return ''; },
+                  set: function() { /* blocked */ },
+                  configurable: true
+                });
+              } catch(_) {}
+            })()`).catch(() => { });
             }
         }
         showToast(this.checked ? tShield('toastCookiesOn') : tShield('toastCookiesOff'));
@@ -9969,46 +9677,46 @@ document.getElementById('botDetectRunAll').addEventListener('click', runBotDetec
 
     function _injectFingerprintProtection() {
         if (!window.electronWebview) return;
-        const wv = document.querySelector(`webview[data - tab - id= "${STATE.activeTabId}"]`) ||
+        const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) ||
             document.querySelector('webview.active, webview');
         if (!wv || !window.safeExecuteJS) return;
-        window.safeExecuteJS(wv, `(function () {
-        try {
+        window.safeExecuteJS(wv, `(function(){
+          try {
             const origTDU = HTMLCanvasElement.prototype.toDataURL;
-            HTMLCanvasElement.prototype.toDataURL = function (t, q) {
-                const ctx = this.getContext && this.getContext('2d');
-                if (ctx && this.width > 0 && this.height > 0) {
-                    const id = ctx.getImageData(0, 0, this.width, this.height);
-                    for (let i = 0; i < id.data.length; i += 4) {
-                        if (Math.random() < .003) { id.data[i] ^= 1; id.data[i + 1] ^= 1; }
-                    }
-                    ctx.putImageData(id, 0, 0);
+            HTMLCanvasElement.prototype.toDataURL = function(t, q) {
+              const ctx = this.getContext && this.getContext('2d');
+              if (ctx && this.width > 0 && this.height > 0) {
+                const id = ctx.getImageData(0, 0, this.width, this.height);
+                for (let i = 0; i < id.data.length; i += 4) {
+                  if (Math.random() < .003) { id.data[i] ^= 1; id.data[i+1] ^= 1; }
                 }
-                return origTDU.call(this, t, q);
+                ctx.putImageData(id, 0, 0);
+              }
+              return origTDU.call(this, t, q);
             };
-        } catch (_) { }
-        try {
+          } catch(_) {}
+          try {
             const origGP = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function (p) {
-                if (p === 37445 || p === 37446) return 'EtherX GPU';
-                return origGP.call(this, p);
+            WebGLRenderingContext.prototype.getParameter = function(p) {
+              if (p === 37445 || p === 37446) return 'EtherX GPU';
+              return origGP.call(this, p);
             };
-        } catch (_) { }
-        try {
+          } catch(_) {}
+          try {
             const _osc = OfflineAudioContext.prototype.createOscillator;
             if (_osc) {
-                const origStartRender = OfflineAudioContext.prototype.startRendering;
-                OfflineAudioContext.prototype.startRendering = function () {
-                    return origStartRender.call(this).then(buf => {
-                        const ch = buf.getChannelData(0);
-                        for (let i = 0; i < Math.min(ch.length, 10); i++) ch[i] += (Math.random() - .5) * 1e-9;
-                        return buf;
-                    });
-                };
+              const origStartRender = OfflineAudioContext.prototype.startRendering;
+              OfflineAudioContext.prototype.startRendering = function() {
+                return origStartRender.call(this).then(buf => {
+                  const ch = buf.getChannelData(0);
+                  for (let i = 0; i < Math.min(ch.length, 10); i++) ch[i] += (Math.random() - .5) * 1e-9;
+                  return buf;
+                });
+              };
             }
-        } catch (_) { }
-        console.log('[EtherX Shield] Fingerprint protection injected');
-    })();`).catch(() => { });
+          } catch(_) {}
+          console.log('[EtherX Shield] Fingerprint protection injected');
+        })();`).catch(() => { });
     }
 
     // Apply Block Scripts setting to main process on startup
@@ -10044,7 +9752,7 @@ document.getElementById('aiInspectRun')?.addEventListener('click', async () => {
             barEl.style.width = score + '%';
             barEl.style.background = grad;
             verdictEl.textContent = score < 40 ? '✅ Stranica izgleda sigurna' : score < 70 ? '⚠️ Sumnjiva aktivnost otkrivena' : '🚨 Visok rizik — mogući phishing!';
-            reasonsEl.innerHTML = (result.reasons || result.flags || []).map(r => `< div style = "font-size:11px;color:var(--text3);padding:2px 0" >• ${escHtml(String(r))}</div >`).join('');
+            reasonsEl.innerHTML = (result.reasons || result.flags || []).map(r => `<div style="font-size:11px;color:var(--text3);padding:2px 0">• ${escHtml(String(r))}</div>`).join('');
         } else {
             verdictEl.textContent = '⚠️ AI analiza nije dostupna';
         }
@@ -10053,7 +9761,7 @@ document.getElementById('aiInspectRun')?.addEventListener('click', async () => {
     }
     try {
         const url = new URL(tab.url);
-        pageInfoEl.innerHTML = `< b > URL:</b > ${escHtml(tab.url)} <br><b>Domena:</b> ${escHtml(url.hostname)}<br><b>Protokol:</b> ${escHtml(url.protocol)}<br><b>Naslov:</b> ${escHtml(tab.title || '–')}`;
+        pageInfoEl.innerHTML = `<b>URL:</b> ${escHtml(tab.url)}<br><b>Domena:</b> ${escHtml(url.hostname)}<br><b>Protokol:</b> ${escHtml(url.protocol)}<br><b>Naslov:</b> ${escHtml(tab.title || '–')}`;
     } catch (_) {
         pageInfoEl.textContent = tab.url;
     }
@@ -10126,7 +9834,12 @@ async function runAiTranslate(text, lang, langName, resultEl, infoEl, btn) {
             maxOutputTokens: 2000,
             systemPrompt: `Ti si profesionalni prevoditelj. Prevedi tekst precizno i prirodno na zadani jezik.`
         });
-        setTranslateResult(resultEl, translated || '(prazan odgovor)');
+        if (!String(translated || '').trim()) {
+            const fallback = await translateViaGoogle(trimmed, lang);
+            setTranslateResult(resultEl, fallback || '(prazan odgovor)');
+        } else {
+            setTranslateResult(resultEl, translated);
+        }
     } catch (e) {
         setTranslateResult(resultEl, '❌ ' + (e.message || String(e)));
     } finally {
@@ -10701,8 +10414,8 @@ function renderAppTab(type) {
                 return;
             }
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Cookies • ${all.length} entries ${activeUrl ? '(for: ' + escHtml(new URL(activeUrl).hostname) + ')' : '(all)'}
-            <button onclick="${window.electronWebview ? " window.etherx?.cookies?.clearAll?.().then(()=>renderAppTab('cookies'))" : "document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/'});renderAppTab('cookies')"}" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button>
-        <button onclick="renderAppTab('cookies')" style="margin-left:4px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
+            <button onclick="${window.electronWebview ? "window.etherx?.cookies?.clearAll?.().then(()=>renderAppTab('cookies'))" : "document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/'});renderAppTab('cookies')"}" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button>
+            <button onclick="renderAppTab('cookies')" style="margin-left:4px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
                 '<table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Domain</th><th>Path</th><th>Secure</th><th>Size</th></tr></thead><tbody>' +
                 all.map(ck => `<tr><td style="color:var(--accent)">${escHtml(ck.name)}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ck.value)}">${escHtml((ck.value || '').slice(0, 50))}</td><td style="color:#888">${escHtml(ck.domain || '')}</td><td style="color:#888">${escHtml(ck.path || '/')}</td><td style="text-align:center">${ck.secure ? '🔒' : ''}</td><td style="color:#777">${((ck.name || '').length + (ck.value || '').length)} B</td></tr>`).join('') + '</tbody></table>';
         });
@@ -10798,7 +10511,7 @@ function renderAppTab(type) {
             const HIDDEN_KEYS = /api[_.]?key|api[_.]?secret|secret|password|token/i;
             const MODEL_KEYS = /ai[_.]?model|model[_.]?name/i;
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>settings</strong> • ${entries.length} rows
-        <button onclick="renderAppTab('sqlite-settings')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺ Refresh</button></div>` +
+            <button onclick="renderAppTab('sqlite-settings')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺ Refresh</button></div>` +
                 '<table class="app-table"><thead><tr><th>Key</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody id="settingsTableBody">' +
                 entries.map(([k, v]) => {
                     let display;
@@ -10814,9 +10527,9 @@ function renderAppTab(type) {
                     return `<tr><td style="color:var(--yellow)">${escHtml(k)}</td><td style="color:#ccc" id="sv_${escHtml(k)}">${display}</td><td><button onclick="_editSetting('${escHtml(k)}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button> <button onclick="_deleteSetting('${escHtml(k)}')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 5px">✕</button></td></tr>`;
                 }).join('') + '</tbody></table>' +
                 `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
-        <input id="newSettingKey" placeholder="key" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-            <input id="newSettingVal" placeholder="value" style="flex:2;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-                <button onclick="_addSetting()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
+              <input id="newSettingKey" placeholder="key" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+              <input id="newSettingVal" placeholder="value" style="flex:2;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+              <button onclick="_addSetting()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
             </div>`;
         });
 
@@ -10829,17 +10542,17 @@ function renderAppTab(type) {
             if (!u) u = DB.getUser();
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>user_profile</strong> • 1 row</div>
             <div style="padding:12px">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                    <div id="userAvatarDisp" style="font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--bg3)" title="Click to change avatar" onclick="_changeUserAvatar()">${u.avatarUrl ? '<img src="' + escHtml(u.avatarUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:50%">' : escHtml(u.avatar || '👤')}</div>
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(u.name || u.displayName || '(no name)')}</div>
-                        <div style="font-size:11px;color:var(--text3)">${escHtml(u.email || '(no email)')}</div>
-                    </div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <div id="userAvatarDisp" style="font-size:36px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;overflow:hidden;background:var(--bg3)" title="Click to change avatar" onclick="_changeUserAvatar()">${u.avatarUrl ? '<img src="' + escHtml(u.avatarUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:50%">' : escHtml(u.avatar || '👤')}</div>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(u.name || u.displayName || '(no name)')}</div>
+                  <div style="font-size:11px;color:var(--text3)">${escHtml(u.email || '(no email)')}</div>
                 </div>
-                <table class="app-table"><thead><tr><th>Field</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody>
-                    ${['name', 'email', 'avatar', 'bio', 'website', 'location'].map(f => `<tr><td style="color:var(--yellow)">${f}</td><td id="uf_${f}" style="color:#ccc">${escHtml(String(u[f] || ''))}</td><td><button onclick="_editUserField('${f}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button></td></tr>`).join('')}
-                </tbody></table>
-                <div style="padding:8px 0;font-size:10px;color:#555">Created: ${u.createdAt ? new Date(u.createdAt).toLocaleString('hr-HR') : '—'} &nbsp;|&nbsp; Updated: ${u.updatedAt ? new Date(u.updatedAt).toLocaleString('hr-HR') : '—'}</div>
+              </div>
+              <table class="app-table"><thead><tr><th>Field</th><th>Value</th><th style="width:60px"></th></tr></thead><tbody>
+                ${['name', 'email', 'avatar', 'bio', 'website', 'location'].map(f => `<tr><td style="color:var(--yellow)">${f}</td><td id="uf_${f}" style="color:#ccc">${escHtml(String(u[f] || ''))}</td><td><button onclick="_editUserField('${f}')" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 5px">✏️</button></td></tr>`).join('')}
+              </tbody></table>
+              <div style="padding:8px 0;font-size:10px;color:#555">Created: ${u.createdAt ? new Date(u.createdAt).toLocaleString('hr-HR') : '—'} &nbsp;|&nbsp; Updated: ${u.updatedAt ? new Date(u.updatedAt).toLocaleString('hr-HR') : '—'}</div>
             </div>`;
         });
 
@@ -10858,7 +10571,7 @@ function renderAppTab(type) {
             })).concat(localRows.filter(l => !(sqliteRows || []).some(s => s.id === l.id)));
 
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>notes</strong> • ${merged.length} rows
-                <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
+            <button onclick="renderAppTab('sqlite-notes')" style="margin-left:8px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
                 (merged.length ? '<table class="app-table"><thead><tr><th>#</th><th>Title</th><th>Content</th><th>Date</th><th style="width:70px"></th></tr></thead><tbody>' +
                     merged.map((n, i) => {
                         const dt = new Date(n.ts).toLocaleDateString('hr-HR');
@@ -10867,10 +10580,10 @@ function renderAppTab(type) {
                         return `<tr><td style="color:#555">${i + 1}</td><td style="color:var(--accent);font-weight:600">${escHtml(n.title || 'Untitled')}</td><td style="color:#ccc">${escHtml(body)}</td><td style="color:#777;white-space:nowrap">${dt}</td><td><button onclick="_editNote(${n.id})" style="background:none;border:1px solid #555;border-radius:3px;color:#aaa;cursor:pointer;font-size:10px;padding:1px 4px">✏️</button> <button onclick="${delFn};renderAppTab('sqlite-notes')" style="background:none;border:1px solid #c0392b44;border-radius:3px;color:#e74c3c;cursor:pointer;font-size:10px;padding:1px 4px">✕</button></td></tr>`;
                     }).join('') + '</tbody></table>' : '<p style="color:#555;font-size:11px;padding:12px">No notes yet.</p>') +
                 `<div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px">
-                <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-                    <input id="newNoteContent" placeholder="Content…" style="flex:3;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
-                        <button onclick="_addNote()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
-                    </div>`;
+              <input id="newNoteTitle" placeholder="Title" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+              <input id="newNoteContent" placeholder="Content…" style="flex:3;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:11px">
+              <button onclick="_addNote()" style="background:var(--accent);border:none;border-radius:4px;color:#fff;cursor:pointer;font-size:11px;padding:3px 10px">+ Add</button>
+            </div>`;
         });
 
     } else if (type === 'sqlite-downloads') {
@@ -10890,7 +10603,7 @@ function renderAppTab(type) {
 
             if (!merged.length) { c.innerHTML = _sqliteEmpty('downloads'); return; }
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>downloads</strong> • ${merged.length} rows
-                        <button onclick="${window.electronWebview ? 'window.etherx.downloads.clear()' : 'DB.clearDownloads()'};renderAppTab('sqlite-downloads')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
+            <button onclick="${window.electronWebview ? 'window.etherx.downloads.clear()' : 'DB.clearDownloads()'};renderAppTab('sqlite-downloads')" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button></div>` +
                 '<table class="app-table"><thead><tr><th>#</th><th>Filename</th><th>URL</th><th>Size</th><th>Date</th><th></th></tr></thead><tbody>' +
                 merged.slice(0, 200).map((r, i) => {
                     const dt = r.ts ? new Date(r.ts).toLocaleDateString('hr-HR') : '';
@@ -10919,7 +10632,7 @@ function renderAppTab(type) {
             if (!merged.length) { c.innerHTML = _sqliteEmpty('sessions'); return; }
 
             c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>sessions</strong> • ${merged.length} saved sessions
-                        <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
+            <button onclick="DB.saveSession(STATE.tabs);renderAppTab('sqlite-sessions')" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">💾 Save Current</button></div>` +
                 '<table class="app-table"><thead><tr><th>#</th><th>Tabovi</th><th>Saved</th><th style="width:80px"></th></tr></thead><tbody>' +
                 merged.map((r, i) => {
                     const dt = new Date(r.ts).toLocaleString('hr-HR');
@@ -11530,25 +11243,25 @@ document.getElementById('mi-reader').addEventListener('click', () => document.ge
 const DARK_MODE_STYLE_ID = 'etherx-dark-inject';
 
 // SCHEME (nativni) — radi na Googleu i modernim stranicama, bez iskrivljenih boja
-const DARK_SCHEME_CSS = `:root, html {color - scheme: dark !important; }`;
+const DARK_SCHEME_CSS = `:root, html { color-scheme: dark !important; }`;
 
 // FILTER (CSS invert) — agresivno, radi na starim stranicama, ali boje mogu biti fluoroscentne
 // Slika/video se reinvertira natrag da ne budu negativni
 const DARK_FILTER_CSS = `
-                        html {filter: invert(1) hue-rotate(180deg) !important; color-scheme: dark !important; }
-                        img, video, canvas, svg, picture, iframe, [style*="background-image"] {
-                            filter: invert(1) hue-rotate(180deg) !important;
+      html { filter: invert(1) hue-rotate(180deg) !important; color-scheme: dark !important; }
+      img, video, canvas, svg, picture, iframe, [style*="background-image"] {
+        filter: invert(1) hue-rotate(180deg) !important;
       }
-                        `;
+    `;
 
 // BOTH — nativni + filter kao fallback
 const DARK_BOTH_CSS = `
-                        :root, html {color - scheme: dark !important; }
-                        html {filter: invert(1) hue-rotate(180deg) !important; }
-                        img, video, canvas, svg, picture, iframe, [style*="background-image"] {
-                            filter: invert(1) hue-rotate(180deg) !important;
+      :root, html { color-scheme: dark !important; }
+      html { filter: invert(1) hue-rotate(180deg) !important; }
+      img, video, canvas, svg, picture, iframe, [style*="background-image"] {
+        filter: invert(1) hue-rotate(180deg) !important;
       }
-                        `;
+    `;
 
 function _getDarkCSS() {
     const method = DB.getSettings().darkModeMethod || 'scheme';
@@ -11658,7 +11371,7 @@ document.getElementById('darkModeMethod')?.addEventListener('change', function (
     }
 })();
 document.getElementById('mi-about').addEventListener('click', async () => {
-    let ver = '2.4.14';
+    let ver = '3.0.0';
     let buildDateStr = '';
     try { if (window.etherx?.app?.getVersion) ver = await window.etherx.app.getVersion(); } catch (e) { }
     try {
@@ -11741,7 +11454,7 @@ function renderRecentSites() {
 
 // NTP Customize
 function applyNtpSettings() {
-    const s = JSON.parse(localStorage.getItem('ex_ntp') || '{ }');
+    const s = JSON.parse(localStorage.getItem('ex_ntp') || '{}');
     const ntp = document.getElementById('ntpPage');
     if (s.bgUrl) { ntp.style.backgroundImage = "url('" + s.bgUrl + "')"; ntp.style.backgroundSize = 'cover'; ntp.style.backgroundPosition = 'center'; }
     else if (s.bg) { ntp.style.background = s.bg; ntp.style.backgroundImage = ''; }
@@ -11757,7 +11470,7 @@ function applyNtpSettings() {
 document.addEventListener('DOMContentLoaded', () => {
     const ntpEditBtn = document.getElementById('ntpEditBtn');
     if (ntpEditBtn) ntpEditBtn.addEventListener('click', () => {
-        const s = JSON.parse(localStorage.getItem('ex_ntp') || '{ }');
+        const s = JSON.parse(localStorage.getItem('ex_ntp') || '{}');
         document.getElementById('ntpcBgUrl').value = s.bgUrl || '';
         document.getElementById('ntpcTitle').value = s.title || 'EtherX Browser';
         document.getElementById('ntpcSubtitle').value = s.subtitle || 'The Web3-Native Browser Experience';
@@ -11826,7 +11539,7 @@ function collectMemoryMetrics() {
 }
 
 // Security panel — fast async rendering with IPC cookie count + CSP cache
-const _secCspCache = new Map(); // url → {csp, ts}
+const _secCspCache = new Map(); // url → { csp, ts }
 function renderSecurityPanel() {
     const t = getActiveTab(); const url = t?.url || ''; const isHttps = url.startsWith('https://');
     function set(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
@@ -11928,7 +11641,7 @@ document.getElementById('lhRun').addEventListener('click', () => {
 });
 
 // User Agent
-const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) EtherXBrowser/2.4.40 Chrome/138.0.7204.251 Electron/37.10.3 Safari/537.36';
+const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) EtherXBrowser/3.0.0 Chrome/138.0.7204.251 Electron/37.10.3 Safari/537.36';
 const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const UA_PRESETS = { 'default': ETHERX_DEFAULT_UA, 'Chrome 131 V8': CHROME_131_UA, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
 let activeUA = localStorage.getItem('ex_ua') || ETHERX_DEFAULT_UA;
@@ -12265,12 +11978,12 @@ function injectAutofillIntoPage(username, password) {
     }
     const script = `(function() {
         const ns = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-                        const pwField = document.querySelector('input[type=password]');
-                        if (pwField) {ns.call(pwField, ${JSON.stringify(password) }); pwField.dispatchEvent(new Event('input',{bubbles:true})); pwField.dispatchEvent(new Event('change',{bubbles:true})); }
-                        const sels = ['input[type=email]','input[name*=user]','input[name*=email]','input[id*=user]','input[id*=email]','input[name*=login]','input[id*=login]','input[type=text]'];
-                        let uf = null; for (const s of sels) {uf = document.querySelector(s); if (uf && uf !== pwField) break; }
-                        if (uf) {ns.call(uf, ${JSON.stringify(username) }); uf.dispatchEvent(new Event('input',{bubbles:true})); uf.dispatchEvent(new Event('change',{bubbles:true})); }
-                        return !!(pwField || uf);
+        const pwField = document.querySelector('input[type=password]');
+        if (pwField) { ns.call(pwField, ${JSON.stringify(password)}); pwField.dispatchEvent(new Event('input',{bubbles:true})); pwField.dispatchEvent(new Event('change',{bubbles:true})); }
+        const sels = ['input[type=email]','input[name*=user]','input[name*=email]','input[id*=user]','input[id*=email]','input[name*=login]','input[id*=login]','input[type=text]'];
+        let uf = null; for (const s of sels) { uf = document.querySelector(s); if (uf && uf !== pwField) break; }
+        if (uf) { ns.call(uf, ${JSON.stringify(username)}); uf.dispatchEvent(new Event('input',{bubbles:true})); uf.dispatchEvent(new Event('change',{bubbles:true})); }
+        return !!(pwField || uf);
       })()`;
     try {
         wv.executeJavaScript(script).then(ok => {
@@ -13046,7 +12759,9 @@ document.addEventListener('keydown', e => {
         this.value = '';
     });
     document.getElementById('btnExportData')?.addEventListener('click', () => {
-        const data = { bookmarks: DB.getBookmarks(), history: DB.getHistory(), settings: DB.getSettings(), extensions: JSON.parse(localStorage.getItem('ex_extensions') || '[]'), exportDate: new Date().toISOString(), browser: 'EtherX' };
+        let aiLiveChatConfig = {};
+        try { aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {}; } catch (_) { aiLiveChatConfig = {}; }
+        const data = { bookmarks: DB.getBookmarks(), history: DB.getHistory(), settings: DB.getSettings(), aiLiveChatConfig, extensions: JSON.parse(localStorage.getItem('ex_extensions') || '[]'), exportDate: new Date().toISOString(), browser: 'EtherX' };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'etherx-export-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
         showToast('Data exported successfully');
@@ -13152,21 +12867,21 @@ document.addEventListener('keydown', e => {
         if (m === 'pomoć' || m === 'help' || m === 'što možeš' || m === 'sto mozes' || m === 'opcije') {
             return `Ja sam tvoj AI asistent u EtherX browseru! Evo što sve mogu napraviti za tebe (bez preopterećenja sustava):
 
-                        **1. Analiza sadržaja**
-                        • Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
+**1. Analiza sadržaja**
+• Napiši \`sažetak\`, \`što piše ovdje\` ili \`analiziraj\` dok si na nekoj stranici da dobiješ kratki pregled.
 
-                        **2. Dijagnostika browsera**
-                        • Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
-                        • Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
+**2. Dijagnostika browsera**
+• Napiši \`status\`, \`sistem\`, \`provjeri sustav\` da ti ispišem trenutno stanje memorije, tabova i aktivnih modula.
+• Napiši \`memorija\` ili \`potrošnja\` da ti javim koliko RAM-a trenutno trošimo.
 
-                        **3. Edukacija o kriptovalutama**
-                        • Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
-                        • \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
+**3. Edukacija o kriptovalutama**
+• Napiši \`što je bitcoin\`, \`objasni nft\` ili pitaj bilo koji drugi osnovni kripto pojam - imam ugrađenu bazu znanja.
+• \`kripto vijesti\` ili \`najnovije vijesti\` da povučem zadnje naslove sa našeg portala.
 
-                        **4. Navigacija**
-                        • Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
+**4. Navigacija**
+• Upiši \`otvori [stranicu]\` (npr. \`otvori google.com\`) i ja ću ti otvoriti novi tab s tom adresom.
 
-                        Sve se izvršava optimalno i brzo! Što te zanima?`;
+Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
 
         if (m.includes('memorija') || m.includes('potrošnja') || m.includes('ram')) {
@@ -13732,7 +13447,7 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
 
 // ── Help Version Info Init ──
 (async function initHelpVersion() {
-    let ver = '2.4.6';
+    let ver = '3.0.0';
     try { if (window.etherx?.app?.getVersion) ver = await window.etherx.app.getVersion(); } catch (e) { }
     let buildDate = '—';
     try {
@@ -14026,7 +13741,7 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
         });
     })();
     if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
-    if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || 'http://localhost:11434/v1';
+    if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL;
     getStoredApiKey('gemini').then(gk => {
         if (gk && geminiKeyEl) geminiKeyEl.value = gk;
         getStoredApiKey('openai').then(ok_ => {
@@ -14124,7 +13839,7 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
                 const d = await r.json();
                 models = (d.data || []).map(m => m.id).filter(Boolean).sort();
             } else if (provider === 'ollama') {
-                const baseUrl = normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || 'http://localhost:11434/v1');
+                const baseUrl = normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || OLLAMA_REMOTE_DEFAULT_BASE_URL);
                 const r = await fetch(baseUrl + '/models').catch(() => null);
                 if (!r || !r.ok) throw new Error('Ollama nije dostupan na ' + baseUrl);
                 const d = await r.json();
@@ -14197,7 +13912,7 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
         const lBaseUrl = normalizeLocalAiBaseUrl(localBaseUrlEl?.value);
         const grKey = groqKeyEl?.value.trim() || '';
         const orKey = openrouterKeyEl?.value.trim() || '';
-        const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || 'http://localhost:11434/v1');
+        const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || OLLAMA_REMOTE_DEFAULT_BASE_URL);
         DB.saveSetting('aiProvider', p);
         DB.saveSetting('aiModel', modelSel.value);
         DB.saveSetting('translateAiProvider', document.getElementById('settingsTranslateProvider')?.value || '__main__');
@@ -14271,7 +13986,10 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
         try {
             const sample = 'Hello world, this is a translation test.';
             const tr = await window.etherx?.ai?.translate?.(sample, 'hr');
-            const out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
+            let out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
+            if (!String(out || '').trim()) {
+                out = await translateViaGoogle(sample, 'hr');
+            }
             tests.push({ ok: !!out, name: 'Prijevod (AI manager)', detail: out ? 'Radi ✓ — "' + String(out).slice(0, 80) + '"' : 'Prazan odgovor' });
         } catch (e) {
             tests.push({ ok: false, name: 'Prijevod (AI manager)', detail: e.message });
@@ -15383,7 +15101,12 @@ document.getElementById('cttReset').addEventListener('click', () => {
                 consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
                 return;
             }
-        } catch (e) { /* corrupt session, fall through */ }
+        } catch (e) {
+            try {
+                localStorage.removeItem('ex_session_tabs_' + windowId);
+                localStorage.removeItem('ex_session_active_' + windowId);
+            } catch (_) { }
+        }
     }
     const url = getInitialUrl();
     createTab(url); renderQuickLinks();
@@ -15439,10 +15162,10 @@ function openWindowSwitcher() {
             ? `<img src="${tab.faviconUrl}" style="width:20px;height:20px;border-radius:3px" onerror="if(this.parentNode)this.outerHTML='<span style=font-size:18px>${tab.favicon || '🌐'}</span>'">`
             : `<span class="wsw-tab-favicon">${tab.favicon || '🌐'}</span>`;
         card.innerHTML = `
-                                    ${favHtml}
-                                    <div class="wsw-tab-title">${escHtml(tab.title || 'New Tab')}</div>
-                                    <div class="wsw-tab-url">${escHtml(tab.url || '')}</div>
-                                    <button class="wsw-tab-close" data-id="${tab.id}" title="Close tab">✕</button>`;
+          ${favHtml}
+          <div class="wsw-tab-title">${escHtml(tab.title || 'New Tab')}</div>
+          <div class="wsw-tab-url">${escHtml(tab.url || '')}</div>
+          <button class="wsw-tab-close" data-id="${tab.id}" title="Close tab">✕</button>`;
         card.addEventListener('click', e => {
             if (e.target.classList.contains('wsw-tab-close')) {
                 e.stopPropagation();
@@ -15731,17 +15454,17 @@ function refreshStorageUsage() {
     const fmt = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
     const now = new Date().toLocaleTimeString();
     t.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:11px;color:var(--text2)">
-                                        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text3)"><th style="text-align:left;padding:4px 8px">Store</th><th style="text-align:left;padding:4px 8px">Key</th><th style="text-align:right;padding:4px 8px">Veličina</th><th style="text-align:right;padding:4px 8px">%</th></tr></thead>
-                                        <tbody>` +
+        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--text3)"><th style="text-align:left;padding:4px 8px">Store</th><th style="text-align:left;padding:4px 8px">Key</th><th style="text-align:right;padding:4px 8px">Veličina</th><th style="text-align:right;padding:4px 8px">%</th></tr></thead>
+        <tbody>` +
         rows.map(r => `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
-                                                <td style="padding:3px 8px">${r.label}</td>
-                                                <td style="padding:3px 8px;color:var(--accent);font-family:monospace">${escHtml(r.key)}</td>
-                                                <td style="padding:3px 8px;text-align:right;color:var(--text3)">${fmt(r.bytes)}</td>
-                                                <td style="padding:3px 8px;text-align:right;color:var(--text3)">${totalBytes ? ((r.bytes / totalBytes * 100).toFixed(1)) : '0'}%</td>
-                                            </tr>`).join('') +
+          <td style="padding:3px 8px">${r.label}</td>
+          <td style="padding:3px 8px;color:var(--accent);font-family:monospace">${escHtml(r.key)}</td>
+          <td style="padding:3px 8px;text-align:right;color:var(--text3)">${fmt(r.bytes)}</td>
+          <td style="padding:3px 8px;text-align:right;color:var(--text3)">${totalBytes ? ((r.bytes / totalBytes * 100).toFixed(1)) : '0'}%</td>
+        </tr>`).join('') +
         `<tr style="border-top:1px solid var(--border2);font-weight:600"><td colspan="2" style="padding:4px 8px;color:var(--text)">Ukupno localStorage</td><td colspan="2" style="padding:4px 8px;text-align:right;color:var(--text)">${fmt(totalBytes)}</td></tr>
-                                        </tbody></table>
-                                    <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:right">Ažurirano: ${now}</div>`;
+        </tbody></table>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;text-align:right">Ažurirano: ${now}</div>`;
 
     // Also query full origin storage estimate (includes IndexedDB, SQLite, Cache API)
     if (navigator.storage && navigator.storage.estimate) {
@@ -15766,28 +15489,28 @@ function initStorageTab() {
     kt.innerHTML = STORE_DEFS.map(s => {
         const key = DB.getStorageKey(s.id);
         return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-                                        <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
-                                        <input id="storekey_${s.id}" value="${escHtml(key)}" style="width:140px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;font-family:monospace">
-                                            <button onclick="_saveStoreKey('${s.id}')" style="font-size:11px;padding:4px 8px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer">Save</button>
-                                            <button onclick="_migrateStore('${s.id}')" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Migrate</button>
-                                    </div>`;
+          <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
+          <input id="storekey_${s.id}" value="${escHtml(key)}" style="width:140px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px;font-family:monospace">
+          <button onclick="_saveStoreKey('${s.id}')" style="font-size:11px;padding:4px 8px;background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer">Save</button>
+          <button onclick="_migrateStore('${s.id}')" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">Migrate</button>
+        </div>`;
     }).join('');
 
     // Export/Import list
     const el = document.getElementById('storeExportList'); if (!el) return;
     el.innerHTML = STORE_DEFS.map(s => `
-                                    <div style="display:flex;align-items:center;gap:8px">
-                                        <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
-                                        <button onclick="_exportStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📤 Export</button>
-                                        <button onclick="_importStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📥 Import</button>
-                                    </div>`).join('');
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;font-size:12px;color:var(--text2)">${s.label}</span>
+          <button onclick="_exportStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📤 Export</button>
+          <button onclick="_importStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text2);cursor:pointer">📥 Import</button>
+        </div>`).join('');
 
     // Clear list
     const cl = document.getElementById('storeClearList'); if (!cl) return;
     cl.innerHTML = STORE_DEFS.map(s => `
-                                    <button onclick="_clearStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(192,57,43,.1);border:1px solid rgba(192,57,43,.3);border-radius:6px;color:#e74c3c;cursor:pointer">
-                                        🗑 ${s.label}
-                                    </button>`).join('');
+        <button onclick="_clearStore('${s.id}')" style="font-size:11px;padding:4px 10px;background:rgba(192,57,43,.1);border:1px solid rgba(192,57,43,.3);border-radius:6px;color:#e74c3c;cursor:pointer">
+          🗑 ${s.label}
+        </button>`).join('');
 
     refreshStorageUsage();
 }
@@ -16138,9 +15861,9 @@ function renderSitePermsList() {
         const d = perms[domain];
         const pills = Object.entries(d).map(([k, v]) => `<span style="background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-right:3px;font-size:10px;color:var(--text2)">${LABELS[k] || k}: <strong>${v}</strong></span>`).join('');
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">
-                                        <div><span style="color:var(--text);font-size:11px">${escHtml(domain)}</span><div style="margin-top:3px">${pills}</div></div>
-                                        <button onclick="(function(){var p=getSitePerms();delete p['${escHtml(domain)}'];saveSitePerms(p);renderSitePermsList();showToast('Cleared for ${escHtml(domain)}');})()" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px" title="Remove">✕</button>
-                                    </div>`;
+          <div><span style="color:var(--text);font-size:11px">${escHtml(domain)}</span><div style="margin-top:3px">${pills}</div></div>
+          <button onclick="(function(){var p=getSitePerms();delete p['${escHtml(domain)}'];saveSitePerms(p);renderSitePermsList();showToast('Cleared for ${escHtml(domain)}');})()" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px" title="Remove">✕</button>
+        </div>`;
     }).join('');
 }
 document.getElementById('sClearSitePerms')?.addEventListener('click', () => {
@@ -16282,11 +16005,11 @@ window.customPrompt = function (message, defaultValue, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:12px;font-size:14px;">${message}</div>
-                                    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
-                                        <div style="display:flex; justify-content:flex-end; gap:8px;">
-                                            <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-                                            <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
-                                        </div>`;
+    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+      <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
+    </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     const inp = document.getElementById('cpInput');
@@ -16306,11 +16029,11 @@ window.customPrompt = function (message, defaultValue, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:12px;font-size:14px;">${message}</div>
-                                        <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
-                                            <div style="display:flex; justify-content:flex-end; gap:8px;">
-                                                <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-                                                <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
-                                            </div>`;
+    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+      <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
+    </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     const inp = document.getElementById('cpInput');
@@ -16330,10 +16053,10 @@ window.customConfirm = function (message, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:20px;font-size:14px;white-space:pre-wrap;">${message}</div>
-                                            <div style="display:flex; justify-content:flex-end; gap:8px;">
-                                                <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-                                                <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
-                                            </div>`;
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+      <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
+    </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     document.getElementById('ccCancel').onclick = () => { overlay.remove(); callback(false); };
@@ -16346,10 +16069,10 @@ window.customConfirm = function (message, callback) {
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
     box.innerHTML = `<div style="margin-bottom:20px;font-size:14px;white-space:pre-wrap;">${message}</div>
-                                            <div style="display:flex; justify-content:flex-end; gap:8px;">
-                                                <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-                                                <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
-                                            </div>`;
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
+      <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
+    </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     document.getElementById('ccCancel').onclick = () => { overlay.remove(); callback(false); };
@@ -16392,11 +16115,11 @@ document.getElementById('sNewProfile')?.addEventListener('click', () => {
             const row = document.createElement('div'); row.className = 's-row';
             const isActive = p.name === active;
             row.innerHTML = `<div class="s-row-left"><div class="s-row-label">${p.name}</div><div class="s-row-desc">${p.isDefault ? 'System profile' : 'Custom persona'}</div></div>
-                                            <div style="display:flex;align-items:center;gap:6px">
-                                                ${isActive ? '<span style="color:var(--green);font-size:11px">✓ Active</span>' : `<button class="s-btn-sm" data-switch="${p.name}">Switch</button>`}
-                                                <button class="s-btn-sm" data-rename="${p.name}">Rename</button>
-                                                ${!p.isDefault ? `<button class="s-btn-sm" style="color:var(--red)" data-del="${p.name}">Remove</button>` : ''}
-                                            </div>`;
+            <div style="display:flex;align-items:center;gap:6px">
+              ${isActive ? '<span style="color:var(--green);font-size:11px">✓ Active</span>' : `<button class="s-btn-sm" data-switch="${p.name}">Switch</button>`}
+              <button class="s-btn-sm" data-rename="${p.name}">Rename</button>
+              ${!p.isDefault ? `<button class="s-btn-sm" style="color:var(--red)" data-del="${p.name}">Remove</button>` : ''}
+            </div>`;
 
             row.querySelector('[data-switch]')?.addEventListener('click', () => {
                 localStorage.setItem('ex_active_profile', p.name);
@@ -16487,12 +16210,10 @@ document.getElementById('sClearLocalStorage')?.addEventListener('click', () => {
     });
 });
 document.getElementById('sClearSessionStorage')?.addEventListener('click', () => {
-    window.customConfirm('Clear session storage?', (c) => {
+    window.customConfirm('Clear session storage?\n\nThis clears only temporary in-memory page data for the current window. Saved tabs and browser data stay intact.', (c) => {
         if (!c) return;
         sessionStorage.clear();
-        localStorage.removeItem('ex_session_tabs');
-        localStorage.removeItem('ex_session_active');
-        showToast('⚡ Session storage cleared');
+        showToast('⚡ Session storage cleared — saved tabs kept');
     });
 });
 document.getElementById('sClearServiceWorker')?.addEventListener('click', () => {
@@ -16570,10 +16291,10 @@ function updateSettingsExtCount() {
 }
 
 // ── Site info popup (padlock/URL icon click) ─────────────────────────────
-// Per-domain permission storage: ex_site_perms = {"example.com": {camera: "Ask", ... } }
+// Per-domain permission storage: ex_site_perms = { "example.com": { camera: "Ask", ... } }
 const SIP_PERM_KEYS = ['autoPlay', 'popups', 'camera', 'mic', 'screen', 'location'];
 const SIP_SETTING_MAP = { autoPlay: 'autoPlayDefault', popups: 'popupDefault', camera: 'camDefault', mic: 'micDefault', screen: 'screenDefault', location: 'locationDefault' };
-function getSitePerms() { try { return JSON.parse(localStorage.getItem('ex_site_perms') || '{ }'); } catch (e) { return {}; } }
+function getSitePerms() { try { return JSON.parse(localStorage.getItem('ex_site_perms') || '{}'); } catch (e) { return {}; } }
 function saveSitePerms(obj) { localStorage.setItem('ex_site_perms', JSON.stringify(obj)); }
 function getSitePerm(domain, key) {
     const perms = getSitePerms();
@@ -17481,10 +17202,10 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
                     status.innerHTML = `${platform.display}: ${isNew ? `Nova verzija v${data.latest} dostupna!` : `Koristiš najnoviju verziju v${data.latest}`}`;
 
                     buttons.innerHTML = matches.slice(0, 3).map(match =>
-                        `<button onclick="downloadAsset('${match.asset.url}', '${match.asset.name}')"
-                                                    style="font-size:11px;padding:6px 12px;background:${isNew ? '#27c93f' : '#4A9EFF'};border:none;border-radius:6px;color:white;cursor:pointer;white-space:nowrap">
-                                                    ⬇️ ${match.type} ${isNew ? '(NOVA!)' : ''}
-                                                </button>`
+                        `<button onclick="downloadAsset('${match.asset.url}', '${match.asset.name}')" 
+                   style="font-size:11px;padding:6px 12px;background:${isNew ? '#27c93f' : '#4A9EFF'};border:none;border-radius:6px;color:white;cursor:pointer;white-space:nowrap">
+                   ⬇️ ${match.type} ${isNew ? '(NOVA!)' : ''}
+                 </button>`
                     ).join('');
                 }
             }
@@ -17716,7 +17437,7 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             if (!wcStyle) {
                 wcStyle = document.createElement('style');
                 wcStyle.id = '_etx_willchange_style';
-                wcStyle.textContent = '.tab,.nav-bar,.panel,.ctx-menu,.settings-icon-tabs,.settings-body{will - change:transform,opacity;}';
+                wcStyle.textContent = '.tab,.nav-bar,.panel,.ctx-menu,.settings-icon-tabs,.settings-body{will-change:transform,opacity;}';
                 document.head.appendChild(wcStyle);
             }
         } else if (wcStyle) {
@@ -17783,7 +17504,14 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
     // ── Backup ───────────────────────────────────────────────────────────────
     document.getElementById('btnExportSettings')?.addEventListener('click', async () => {
         const allSettings = await window.etherx?.settings?.get?.() || {};
-        const json = JSON.stringify(allSettings, null, 2);
+        let aiLiveChatConfig = {};
+        try { aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {}; } catch (_) { aiLiveChatConfig = {}; }
+        const payload = {
+            exportedAt: new Date().toISOString(),
+            settings: allSettings,
+            aiLiveChatConfig
+        };
+        const json = JSON.stringify(payload, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -17803,7 +17531,14 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const text = await file.text();
             try {
                 const imported = JSON.parse(text);
-                await window.etherx?.settings?.set?.(imported);
+                const normalizedSettings = imported && typeof imported === 'object' && imported.settings && typeof imported.settings === 'object'
+                    ? imported.settings
+                    : imported;
+                const aiLiveChatConfig = imported && typeof imported === 'object' && imported.aiLiveChatConfig && typeof imported.aiLiveChatConfig === 'object'
+                    ? imported.aiLiveChatConfig
+                    : null;
+                await window.etherx?.settings?.set?.(normalizedSettings);
+                if (aiLiveChatConfig) localStorage.setItem('ex_tkai_cfg', JSON.stringify(aiLiveChatConfig));
                 alert('Postavke uspješno učitane. Browser će se restartirati.');
                 window.location.reload();
             } catch (err) {
@@ -17833,7 +17568,7 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         document.getElementById('bmSearchInput').value = '';
         _bmRenderTree();
         _bmRenderList();
-        document.getElementById('bmSearchInput').focus(); nasta
+        document.getElementById('bmSearchInput').focus();
     };
 
     document.getElementById('closeBmManager').addEventListener('click', () => {
@@ -17860,12 +17595,12 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         let html = '';
         // All bookmarks
         html += `<div class="bm-tree-item${_bmActiveFolder === null ? ' bm-tree-active' : ''}" data-folder="__all__" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px">
-                                                    <span>📚</span><span style="flex:1">Svi bookmarci</span><span style="font-size:10px;color:var(--text3)">${all.length}</span>
-                                                </div>`;
+          <span>📚</span><span style="flex:1">Svi bookmarci</span><span style="font-size:10px;color:var(--text3)">${all.length}</span>
+        </div>`;
         // Unfiled
         html += `<div class="bm-tree-item${_bmActiveFolder === '' ? ' bm-tree-active' : ''}" data-folder="__unfiled__" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px">
-                                                    <span>📄</span><span style="flex:1">Bez foldera</span><span style="font-size:10px;color:var(--text3)">${unfiledCount}</span>
-                                                </div>`;
+          <span>📄</span><span style="flex:1">Bez foldera</span><span style="font-size:10px;color:var(--text3)">${unfiledCount}</span>
+        </div>`;
         // Separator
         if (folders.length) html += '<div style="border-top:1px solid var(--border);margin:4px 0"></div>';
         // Folders
@@ -17873,14 +17608,14 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const cnt = all.filter(b => b.folder === f).length;
             const isActive = _bmActiveFolder === f;
             html += `<div class="bm-tree-item${isActive ? ' bm-tree-active' : ''}" data-folder="${escHtml(f)}"
-                                                    style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px"
-                                                    draggable="false">
-                                                    <span>📁</span>
-                                                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f)}</span>
-                                                    <span style="font-size:10px;color:var(--text3)">${cnt}</span>
-                                                    <button class="bm-tree-del" data-folder="${escHtml(f)}" title="Obriši folder"
-                                                        style="background:none;border:none;color:transparent;cursor:pointer;font-size:13px;padding:0 2px;transition:color .15s">×</button>
-                                                </div>`;
+            style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none;margin-bottom:2px"
+            draggable="false">
+            <span>📁</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f)}</span>
+            <span style="font-size:10px;color:var(--text3)">${cnt}</span>
+            <button class="bm-tree-del" data-folder="${escHtml(f)}" title="Obriši folder"
+              style="background:none;border:none;color:transparent;cursor:pointer;font-size:13px;padding:0 2px;transition:color .15s">×</button>
+          </div>`;
         });
         if (!tree) return;
         tree.innerHTML = html;
@@ -17890,13 +17625,13 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const s = document.createElement('style');
             s.id = 'bmMgrStyle';
             s.textContent = `
-                                                .bm-tree-item:hover {background: var(--bg3) !important; }
-                                                .bm-tree-item:hover .bm-tree-del {color: var(--text3) !important; }
-                                                .bm-tree-active {background: rgba(102,126,234,.18) !important; color: var(--accent) !important; font-weight:600 }
-                                                .bm-mgr-row:hover {background: var(--bg2) !important; }
-                                                .bm-mgr-row.bm-mgr-selected {background: rgba(102,126,234,.12) !important; }
-                                                .bm-tree-item {transition: background .12s; }
-                                                `;
+            .bm-tree-item:hover { background: var(--bg3) !important; }
+            .bm-tree-item:hover .bm-tree-del { color: var(--text3) !important; }
+            .bm-tree-active { background: rgba(102,126,234,.18) !important; color: var(--accent) !important; font-weight:600 }
+            .bm-mgr-row:hover { background: var(--bg2) !important; }
+            .bm-mgr-row.bm-mgr-selected { background: rgba(102,126,234,.12) !important; }
+            .bm-tree-item { transition: background .12s; }
+          `;
             document.head.appendChild(s);
         }
 
@@ -17970,24 +17705,24 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=16`;
             const tags = b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
             return `<div class="bm-mgr-row${sel ? ' bm-mgr-selected' : ''}" data-url="${escHtml(b.url)}"
-                                                    style="display:grid;grid-template-columns:28px 1fr 200px 120px 36px;gap:0;align-items:center;padding:6px 10px 6px 8px;border-bottom:1px solid var(--border);cursor:default;font-size:12px">
-                                                    <div><input type="checkbox" class="bm-chk" data-url="${escHtml(b.url)}" ${sel ? 'checked' : ''} style="cursor:pointer"></div>
-                                                    <div style="min-width:0;padding-right:8px">
-                                                        <div style="display:flex;align-items:center;gap:6px">
-                                                            <img src="${faviconUrl}" width="14" height="14" style="border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">
-                                                                <span class="bm-row-title" data-url="${escHtml(b.url)}" style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(b.title || b.url)}">${escHtml(b.title || b.url)}</span>
-                                                        </div>
-                                                        <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${escHtml(b.url)}</div>
-                                                        ${b.description ? `<div style="font-size:10px;color:var(--text3);margin-top:1px;font-style:italic">${escHtml(b.description.slice(0, 80))}</div>` : ''}
-                                                        ${tags.length ? `<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${tags.map(t => `<span style="background:rgba(102,126,234,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:10px">${escHtml(t)}</span>`).join('')}</div>` : ''}
-                                                    </div>
-                                                    <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px" title="${escHtml(b.url)}">${escHtml(domain)}</div>
-                                                    <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.folder ? `<span style="background:var(--bg3);border-radius:4px;padding:2px 6px">📁 ${escHtml(b.folder)}</span>` : ''}</div>
-                                                    <div style="display:flex;gap:2px;justify-content:flex-end">
-                                                        <button class="bm-row-edit" data-url="${escHtml(b.url)}" title="Uredi" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">✏️</button>
-                                                        <button class="bm-row-del" data-url="${escHtml(b.url)}" title="Obriši" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">🗑</button>
-                                                    </div>
-                                                </div>`;
+            style="display:grid;grid-template-columns:28px 1fr 200px 120px 36px;gap:0;align-items:center;padding:6px 10px 6px 8px;border-bottom:1px solid var(--border);cursor:default;font-size:12px">
+            <div><input type="checkbox" class="bm-chk" data-url="${escHtml(b.url)}" ${sel ? 'checked' : ''} style="cursor:pointer"></div>
+            <div style="min-width:0;padding-right:8px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <img src="${faviconUrl}" width="14" height="14" style="border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">
+                <span class="bm-row-title" data-url="${escHtml(b.url)}" style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${escHtml(b.title || b.url)}">${escHtml(b.title || b.url)}</span>
+              </div>
+              <div style="font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${escHtml(b.url)}</div>
+              ${b.description ? `<div style="font-size:10px;color:var(--text3);margin-top:1px;font-style:italic">${escHtml(b.description.slice(0, 80))}</div>` : ''}
+              ${tags.length ? `<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">${tags.map(t => `<span style="background:rgba(102,126,234,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:10px">${escHtml(t)}</span>`).join('')}</div>` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px" title="${escHtml(b.url)}">${escHtml(domain)}</div>
+            <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.folder ? `<span style="background:var(--bg3);border-radius:4px;padding:2px 6px">📁 ${escHtml(b.folder)}</span>` : ''}</div>
+            <div style="display:flex;gap:2px;justify-content:flex-end">
+              <button class="bm-row-edit" data-url="${escHtml(b.url)}" title="Uredi" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">✏️</button>
+              <button class="bm-row-del" data-url="${escHtml(b.url)}" title="Obriši" style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:3px">🗑</button>
+            </div>
+          </div>`;
         }).join('');
 
         // Row title click → navigate
