@@ -3818,11 +3818,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (normalized === 'chat-only') stack.classList.add('mode-chat-only');
             if (normalized === 'events-only') stack.classList.add('mode-events-only');
         }
-        if (expandChatBtn) {
-            expandChatBtn.textContent = normalized === 'chat-only'
-                ? '💬 Samo chat'
-                : (normalized === 'events-only' ? '🎁 Događaji' : '↕ Oba');
-        }
+        // expandChatBtn is now the chat popout button — don't override its text here
     }
 
     function setTkaiFeedMode(mode) {
@@ -6541,11 +6537,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     applyTkaiFeedMode();
     expandChatBtn?.addEventListener('click', () => {
-        const next = tkaiFeedMode === 'split'
-            ? 'chat-only'
-            : (tkaiFeedMode === 'chat-only' ? 'events-only' : 'split');
-        setTkaiFeedMode(next);
-        renderMessages();
+        if (chatPopout && document.body.contains(chatPopout)) closeChatPopout();
+        else openChatPopout();
     });
     expandLiveBtn?.addEventListener('click', () => {
         if (liveDashboardPopout && document.body.contains(liveDashboardPopout)) closeLiveDashboardPopout();
