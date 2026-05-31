@@ -2870,8 +2870,15 @@ function setupIPC() {
       const appName = path.basename(appBundle);
       const destApp = path.join("/Applications", appName);
 
+      // Disable Electron's ASAR interceptor so rmSync can unlink app.asar as a file
+      const _noAsar = process.noAsar;
+      process.noAsar = true;
       try {
         fs.rmSync(destApp, { recursive: true, force: true });
+      } finally {
+        process.noAsar = _noAsar;
+      }
+      try {
         await execFileAsync("/usr/bin/ditto", [appBundle, destApp]);
         await execFileAsync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destApp]).catch(() => ({ stdout: "", stderr: "" }));
       } catch (error) {
@@ -2890,7 +2897,9 @@ function setupIPC() {
       await execFileAsync("/usr/bin/open", ["-n", destApp]);
       return { appPath: destApp };
     } finally {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
+      const _noAsar2 = process.noAsar;
+      process.noAsar = true;
+      try { fs.rmSync(tempRoot, { recursive: true, force: true }); } finally { process.noAsar = _noAsar2; }
     }
   }
 
