@@ -9536,7 +9536,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.272</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">2.4.273</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -11018,7 +11018,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">2.4.272</span></div>
+                                    v<span id="helpVersionNum2">2.4.273</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -11389,7 +11389,7 @@
                         <button class="tkai-insights-btn" id="tkaiLayoutUnfoldBtn">🧩 Rasloži</button>
                         <button class="tkai-insights-btn" id="tkaiLayoutLockBtn">🔒 Zaključano</button>
                     </div>
-                    <div class="tkai-insights-row duo">
+                    <div class="tkai-insights-row triple">
                         <div class="tkai-insights-card tall">
                             <div class="tkai-insights-title" title="Sažetak tema, pitanja i sentimenta">
                                 Insights<span>★</span></div>
@@ -11408,8 +11408,6 @@
                             </div>
                             <div class="tkai-metric-bottom" id="tkaiEngagementSummary">Nema dovoljno podataka.</div>
                         </div>
-                    </div>
-                    <div class="tkai-insights-row">
                         <div class="tkai-insights-card hero" id="tkaiSentimentLabCard">
                             <div class="tkai-insights-title" title="Linija i valovi sentimenta live">Sentiment
                                 momentum<span>〰</span></div>
@@ -16785,10 +16783,10 @@
                 base.forEach((m) => {
                     const user = String(m?.user || '').trim();
                     if (!user) return;
-                    if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, lastTs: 0, texts: new Map() });
+                    if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, lastTs: 0, coins: 0, texts: new Map() });
                     const row = map.get(user);
                     row.total += 1;
-                    if (m.type === 'gift' || m.type === 'subscriber') row.gifts += 1;
+                    if (m.type === 'gift' || m.type === 'subscriber') { row.gifts += 1; row.coins += Number(m.coins || 0); }
                     else if (m.type === 'join') row.joins += 1;
                     else row.chat += 1;
                     const txt = String(m.text || '').trim().toLowerCase();
@@ -16803,6 +16801,7 @@
                         gifts: r.gifts,
                         joins: r.joins,
                         lastTs: r.lastTs,
+                        coins: r.coins,
                         repeatMax: Math.max(0, ...Array.from(r.texts.values()))
                     }))
                     .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
@@ -18021,6 +18020,12 @@
                 const padTop = 6;
                 const padBottom = 12;
                 const vals = points.map((p) => Number(p.count || 0));
+                const totalActivity = vals.reduce((a, b) => a + b, 0);
+                if (totalActivity === 0) {
+                    engagementAreaEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(148,163,184,.45);font-size:10px;pointer-events:none">Graf: čekam podatke…</div>';
+                    if (engagementAreaMetaEl) engagementAreaMetaEl.textContent = 'Trend: -';
+                    return;
+                }
                 const maxV = Math.max(1, ...vals);
                 const minV = Math.min(...vals);
                 const range = Math.max(1, maxV - minV);
@@ -19208,12 +19213,14 @@
 
                 liveDashboardPopout.querySelector('#tkaiLiveDashClose')?.addEventListener('click', closeLiveDashboardPopout);
 
-                syncLiveDashboardPopout();
-                liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+                // Always show button change and timer first — then populate content
                 if (expandLiveBtn) {
                     expandLiveBtn.textContent = '🖥 Zatvori live';
                     expandLiveBtn.style.background = 'rgba(45,212,191,.28)';
                 }
+                liveDashboardTimer = setInterval(syncLiveDashboardPopout, 1200);
+                try { if (typeof updateInsightsUI === 'function') updateInsightsUI(); } catch (_) { }
+                try { syncLiveDashboardPopout(); } catch (_) { }
             }
 
             window.openLiveDashboardPopout = openLiveDashboardPopout;
@@ -19237,7 +19244,7 @@
                         showToast('Live dashboard nije spreman. Osvjezi aplikaciju.');
                         return;
                     }
-                    openFn();
+                    try { openFn(); } catch (err) { showToast('⚠️ Live dashboard greška: ' + (err?.message || err)); console.error('[tkai] openLiveDashboardPopout error:', err); }
                 }
             });
             recJumpBtn?.addEventListener('click', () => {
@@ -19467,8 +19474,13 @@
                     const icon = message.type === 'subscriber' ? '⭐' : '🎁';
                     const countBadge = '<span style="margin-left:auto;font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.12);color:#fff">x' + (message.count || 1) + '</span>';
                     const coins = Number(message.totalCoins || 0);
-                    const unitCoins = Number(message.unitCoins || 0);
+                    let unitCoins = Number(message.unitCoins || 0);
                     const quantity = Math.max(1, Number(message.totalQuantity || message.quantity || 1));
+                    // Fallback: if catalog lookup during collection returned 0, try again by giftName
+                    if (unitCoins === 0 && coins === 0 && message.giftName) {
+                        const catMeta = getTkaiGiftMeta(message.giftName);
+                        unitCoins = Number(catMeta.unitCoins || 0);
+                    }
                     const coinsBadge = unitCoins > 0
                         ? '<span style="margin-left:auto;color:#ffd47a" title="Ukupno ' + formatNum(coins) + ' 🪙">'
                         + formatNum(unitCoins) + ' 🪙' + (quantity > 1 ? (' × ' + formatNum(quantity)) : '')
