@@ -403,11 +403,20 @@ if (window.electronWebview) {
                                 '[data-e2e*="chat-message" i]',
                                 '[data-e2e*="comment-level" i]',
                                 '[data-e2e*="comment-item" i]',
+                                '[data-e2e*="message-item" i]',
+                                '[data-e2e*="chat-item" i]',
+                                '[data-e2e*="chatroom-message" i]',
                                 '[data-e2e*="message" i]',
                                 '[class*="DivChatMessage" i]',
                                 '[class*="DivCommentItem" i]',
                                 '[class*="CommentItem" i]',
-                                '[class*="ChatMessageItem" i]'
+                                '[class*="ChatMessageItem" i]',
+                                '[class*="ChatItem" i]',
+                                '[class*="MessageItem" i]',
+                                '[class*="ChatCell" i]',
+                                '[class*="DivComment" i]',
+                                '.webcast-chatroom__message-item',
+                                '[class*="webcast-chatroom__message" i]'
                             ].join(',');
                             const textSelectors = [
                                 '[data-e2e*="comment-content" i]',
@@ -447,8 +456,30 @@ if (window.electronWebview) {
                                 if (!text) return null;
                                 return { user, text, type: detectType(text) };
                             };
+                            function findChatRowStructural(target) {
+                                if (!target) return null;
+                                let el = target;
+                                for (let i = 0; i < 8; i++) {
+                                    if (!el || !el.parentElement) break;
+                                    const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+                                    if (txt.length < 3) { el = el.parentElement; continue; }
+                                    const hasUserLike = !!(
+                                        el.querySelector('a[href*="/@"], strong, b, [class*="user" i], [class*="User"], [class*="author" i], [class*="nick" i], [data-e2e*="user" i], [data-e2e*="name" i]')
+                                    );
+                                    const hasTextLike = !!(
+                                        el.querySelector('[class*="text" i], [class*="Text"], [class*="comment" i], [class*="message" i], [class*="Message"], p, span')
+                                    );
+                                    if (hasUserLike && hasTextLike && el.children.length >= 1 && el.children.length <= 20) {
+                                        return el;
+                                    }
+                                    el = el.parentElement;
+                                }
+                                return null;
+                            }
                             document.addEventListener('contextmenu', (event) => {
-                                const row = event.target && event.target.closest ? event.target.closest(rowSelectors) : null;
+                                let row = event.target && event.target.closest ? event.target.closest(rowSelectors) : null;
+                                // Structural fallback: if no selector matched, walk up DOM
+                                if (!row) row = findChatRowStructural(event.target);
                                 const payload = extractPayload(row);
                                 if (!payload) return;
                                 event.preventDefault();
@@ -6806,7 +6837,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     function renderMessages() {
         if (!messagesEl) return;
-        const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-80) : [];
+        const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-200) : [];
         const chatMessages = allMessages.filter((message) => message && message.type === 'chat');
         const giftMessages = allMessages.filter((message) => message && ['gift', 'subscriber', 'share', 'join'].includes(String(message.type || '')));
         if (!collectedMessages.length) {
@@ -6877,6 +6908,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             container.appendChild(div);
         };
         chatMessages.slice(-30).forEach((message) => renderRow(message, messagesEl));
+        if (!chatMessages.length && collectedMessages.length) {
+            const nonChatCount = collectedMessages.length;
+            const types = [...new Set(collectedMessages.map(m => m.type).filter(Boolean))].join(', ');
+            messagesEl.innerHTML = '<div class="tkai-empty" style="font-size:11px;opacity:.75">Chat poruke nisu pronađene.<br>'
+                + 'Skupljeno ' + nonChatCount + ' event(a) (' + (types || 'nepoznato') + ').<br>'
+                + 'TikTok možda koristi novi DOM — provjeri Settings → Debug ili otvori live stranicu.</div>';
+        }
         if (giftFeedEl) {
             if (!giftMessages.length) {
                 giftFeedEl.innerHTML = '<div class="tkai-empty">Giftovi, share i sub događaji će se pojaviti ovdje.</div>';
@@ -7358,9 +7396,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
                         .slice(0, 12);
         }
-        // Primary selectors — TikTok Live chat (updated for 2025 DOM)
+        // Primary selectors — TikTok Live chat (updated for 2026 DOM)
         const primarySelectors = [
           '[data-e2e="chat-message-item"]',
+          '[data-e2e="chatroom-message-item"]',
           '[data-e2e="chat-room-message-item"]',
           '[data-e2e="chat-list-item"]',
           '[data-e2e="chat-item"]',
@@ -7370,14 +7409,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           '[data-e2e="chatroom-message-container"] > div',
           '[class*="DivChatMessage"]',
           '[class*="ChatMessageItem"]',
+          '[class*="ChatCell"]',
           '[class*="MessageItem"][class*="chat"]',
+          '[class*="MessageItem"][class*="Chat"]',
           '[class*="LiveComment"]',
           '.webcast-chatroom__message-list > div',
           '.webcast-chatroom__message-item',
           '[class*="webcast-chatroom__message"]',
           '[class*="ChatItem"]',
           '[class*="chat-message"]',
-          '[class*="CommentItem"]'
+          '[class*="CommentItem"]',
+          '[class*="DivComment"][class*="Item"]'
         ];
         let items = [];
         for (const sel of primarySelectors) {
@@ -7392,11 +7434,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             '[data-e2e="chat-message-list"]',
             '[data-e2e="chatroom-message-list"]',
             '[data-e2e="live-chat-container"]',
+            '[data-e2e="chatroom-container"]',
             '[class*="DivChatContainer"]',
+            '[class*="DivChatArea"]',
             '[class*="ChatContainer"]',
+            '[class*="ChatArea"]',
             '[class*="webcast-chatroom"] > ul',
             '[class*="webcast-chatroom"] > div',
-            '[class*="MessageList"]'
+            '[class*="MessageList"]',
+            '[class*="CommentList"]'
           ];
           for (const csel of chatContainerSelectors) {
             try {
@@ -7407,6 +7453,31 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               }
             } catch(_) {}
           }
+        }
+        // Structural fallback: inside #tiktok-live-main-container-id look for a right-side
+        // scrollable panel whose direct children look like chat rows (has user + text content)
+        if (items.length === 0) {
+          try {
+            const liveRoot = document.querySelector('#tiktok-live-main-container-id') || document.body;
+            const scrollCandidates = Array.from(liveRoot.querySelectorAll('div, ul')).filter(function(el) {
+              const s = window.getComputedStyle(el);
+              if (!['auto', 'scroll', 'overlay'].includes(s.overflowY)) return false;
+              const r = el.getBoundingClientRect();
+              if (r.width < 80 || r.height < 100) return false;
+              // Chat panel is typically on the right half of the live view
+              if (r.left < window.innerWidth * 0.35) return false;
+              const kids = Array.from(el.children).filter(c => c.textContent.trim().length > 4);
+              return kids.length >= 3;
+            });
+            if (scrollCandidates.length) {
+              // Pick the one furthest right (most likely the chat panel, not video controls)
+              scrollCandidates.sort(function(a, b) {
+                return b.getBoundingClientRect().left - a.getBoundingClientRect().left;
+              });
+              const container = scrollCandidates[0];
+              items = Array.from(container.children).filter(c => c.textContent.trim().length > 4);
+            }
+          } catch(_) {}
         }
         // --- Dodatno: skupi gift poruke iz chata koje su možda u posebnim elementima ---
         // TikTok prikazuje poklone kao: "[user] sent [gift-icon] x3" ili "[user] sent a gift"
