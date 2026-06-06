@@ -731,6 +731,61 @@ function setupDownloadTracking(ses) {
   });
 }
 
+function resolvePythonCandidates() {
+  const candidates = [];
+  const cwd = process.cwd();
+  const appPath = app.getAppPath();
+  const pushIf = (value) => {
+    if (!value || candidates.includes(value)) return;
+    candidates.push(value);
+  };
+
+  if (process.platform === "win32") {
+    pushIf(path.join(cwd, ".venv", "Scripts", "python.exe"));
+    pushIf(path.join(appPath, ".venv", "Scripts", "python.exe"));
+    pushIf("python");
+    pushIf("py");
+  } else {
+    pushIf(path.join(cwd, ".venv", "bin", "python"));
+    pushIf(path.join(appPath, ".venv", "bin", "python"));
+    pushIf("python3");
+    pushIf("python");
+  }
+  return candidates;
+}
+
+function execFileJson(command, args, timeoutMs = 240000) {
+  return new Promise((resolve) => {
+    execFile(
+      command,
+      args,
+      {
+        windowsHide: true,
+        timeout: Math.max(5000, Number(timeoutMs || 240000) || 240000),
+        maxBuffer: 16 * 1024 * 1024,
+        env: process.env,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          resolve({ ok: false, error, stdout: String(stdout || ""), stderr: String(stderr || "") });
+          return;
+        }
+        const raw = String(stdout || "").trim();
+        try {
+          resolve({ ok: true, data: JSON.parse(raw || "{}") });
+        } catch (parseErr) {
+          resolve({
+            ok: false,
+            error: new Error("Invalid JSON from scanner: " + parseErr.message),
+            stdout: raw,
+            stderr: String(stderr || ""),
+          });
+        }
+      },
+    );
+  });
+}
+
 // ─── Single instance lock ─────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -2536,6 +2591,128 @@ function setupIPC() {
       error:
         "SongRec nije pronađen. Instaliraj SongRec ili upiši komandu/putanju u Postavke → AI Live Chat (npr. songrec ili flatpak run com.github.marinm.songrec).",
     };
+  });
+
+  // ── Qwen3Guard-Stream moderation (local Python runtime) ───────────────────
+  ipcMain.handle("ai:qwen3GuardScan", async (_e, payload) => {
+    try {
+      const scriptPath = path.join(__dirname, "src", "main", "qwen3guard_scan.py");
+      if (!fs.existsSync(scriptPath)) {
+        return { ok: false, error: "Qwen3Guard scanner script missing: " + scriptPath };
+      }
+
+      const input = {
+        model: String(payload?.model || "Qwen/Qwen3Guard-Stream-0.6B"),
+        items: Array.isArray(payload?.items) ? payload.items : [],
+      };
+      if (!input.items.length) return { ok: true, results: [] };
+
+      const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
+      const candidates = resolvePythonCandidates();
+      let lastErr = "Python runtime not found";
+
+      for (const py of candidates) {
+        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        const run = await execFileJson(py, [scriptPath, encoded], 300000);
+        if (!run.ok) {
+          if (run.error?.code === "ENOENT") {
+            lastErr = "Python runtime not found: " + py;
+            continue;
+          }
+          lastErr = String(run.stderr || run.stdout || run.error?.message || "Qwen3Guard failed").trim();
+          continue;
+        }
+        const out = run.data || {};
+        if (out.ok) return out;
+        lastErr = String(out.error || "Qwen3Guard scanner returned error").trim();
+      }
+
+      return { ok: false, error: lastErr || "Qwen3Guard execution failed" };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // ── Opir moderation (local Python runtime) ───────────────────────────────
+  ipcMain.handle("ai:opirGuardScan", async (_e, payload) => {
+    try {
+      const scriptPath = path.join(__dirname, "src", "main", "opir_scan.py");
+      if (!fs.existsSync(scriptPath)) {
+        return { ok: false, error: "Opir scanner script missing: " + scriptPath };
+      }
+
+      const input = {
+        model: String(payload?.model || "knowledgator/opir-multitask-large-v1.0"),
+        items: Array.isArray(payload?.items) ? payload.items : [],
+      };
+      if (!input.items.length) return { ok: true, results: [] };
+
+      const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
+      const candidates = resolvePythonCandidates();
+      let lastErr = "Python runtime not found";
+
+      for (const py of candidates) {
+        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        const run = await execFileJson(py, [scriptPath, encoded], 300000);
+        if (!run.ok) {
+          if (run.error?.code === "ENOENT") {
+            lastErr = "Python runtime not found: " + py;
+            continue;
+          }
+          lastErr = String(run.stderr || run.stdout || run.error?.message || "Opir failed").trim();
+          continue;
+        }
+        const out = run.data || {};
+        if (out.ok) return out;
+        lastErr = String(out.error || "Opir scanner returned error").trim();
+      }
+
+      return { ok: false, error: lastErr || "Opir execution failed" };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
+  // ── NLLB-200 translation (Indonesian -> Croatian) ─────────────────────────
+  ipcMain.handle("ai:nllbTranslate", async (_e, payload) => {
+    try {
+      const scriptPath = path.join(__dirname, "src", "main", "nllb_translate.py");
+      if (!fs.existsSync(scriptPath)) {
+        return { ok: false, error: "NLLB translator script missing: " + scriptPath };
+      }
+
+      const input = {
+        model: String(payload?.model || "facebook/nllb-200-distilled-600M"),
+        src_lang: String(payload?.src_lang || "ind_Latn"),
+        tgt_lang: String(payload?.tgt_lang || "hrv_Latn"),
+        items: Array.isArray(payload?.items) ? payload.items : [],
+      };
+      if (!input.items.length) return { ok: true, results: [] };
+
+      const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
+      const candidates = resolvePythonCandidates();
+      let lastErr = "Python runtime not found";
+
+      for (const py of candidates) {
+        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        const run = await execFileJson(py, [scriptPath, encoded], 300000);
+        if (!run.ok) {
+          if (run.error?.code === "ENOENT") {
+            lastErr = "Python runtime not found: " + py;
+            continue;
+          }
+          lastErr = String(run.stderr || run.stdout || run.error?.message || "NLLB translation failed").trim();
+          continue;
+        }
+        const out = run.data || {};
+        if (out.ok) return out;
+        lastErr = String(out.error || "NLLB translator returned error").trim();
+      }
+
+      return { ok: false, error: lastErr || "NLLB execution failed" };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
   });
 
   // ── Screenshot Region (returns base64) ─────────────────────────────────────

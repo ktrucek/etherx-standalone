@@ -93,6 +93,26 @@ let _ctxSelectionText = '';
 let _ctxIsEditable = false;
 let _lastSavePromptKey = '';
 let _suppressNextWebviewContextMenuUntil = 0;
+// Early helpers used by multiple TikTok/session modules before deeper init blocks run.
+function normalizeSongTitleKey(title) {
+    return String(title || '')
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+function formatNum(value) {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) return '0';
+    if (Math.abs(n) >= 1000) {
+        return new Intl.NumberFormat('hr-HR').format(Math.round(n));
+    }
+    if (!Number.isInteger(n)) {
+        return new Intl.NumberFormat('hr-HR', { maximumFractionDigits: 2 }).format(n);
+    }
+    return String(n);
+}
 // Store the element that had focus before a context menu opened so paste targets it correctly
 let _ctxFocusedEl = null;
 function normalizePwdSite(site) {
@@ -477,6 +497,9 @@ if (window.electronWebview) {
                                 return null;
                             }
                             document.addEventListener('contextmenu', (event) => {
+                                const selectedText = String(window.getSelection?.()?.toString?.() || '').trim();
+                                // Let native/webview context menu work when user is selecting text.
+                                if (selectedText) return;
                                 let row = event.target && event.target.closest ? event.target.closest(rowSelectors) : null;
                                 // Structural fallback: if no selector matched, walk up DOM
                                 if (!row) row = findChatRowStructural(event.target);
@@ -724,6 +747,7 @@ function shouldCreateMissingFallback(id) {
         id.startsWith('setting') ||
         id.startsWith('btnClear') ||
         id.startsWith('save') ||
+        id === 'dlBadge' ||
         id.startsWith('mi-') ||
         id.startsWith('stab-') ||
         id === 'favBar'
@@ -1313,7 +1337,7 @@ initSettingsPanel();
             }))
             .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')));
         const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
-        const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, other: 0 };
+        const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, like: 0, other: 0 };
         const userStatsMap = new Map();
         const giftTypeMap = new Map();
         const questions = [];
@@ -1340,10 +1364,11 @@ initSettingsPanel();
                 : Number(m?.coins || 0);
             if (coins > 0 && Number(session?.totalCoins || 0) <= 0) coinsTotal += coins;
             if (!userStatsMap.has(userKey)) {
-                userStatsMap.set(userKey, { user, total: 0, chat: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map() });
+                userStatsMap.set(userKey, { user, total: 0, chat: 0, likes: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map(), lastMessage: '' });
             }
             const row = userStatsMap.get(userKey);
             row.total += 1;
+            if (text) row.lastMessage = text.slice(0, 160);
             if (type === 'gift' || type === 'subscriber') {
                 row.gifts += quantity;
                 row.giftEvents += 1;
@@ -1370,6 +1395,7 @@ initSettingsPanel();
                 if (user && user !== 'Unknown') overallGiftRow.users.add(user);
                 giftTypeMap.set(giftKey, overallGiftRow);
             } else if (type === 'join') row.joins += 1;
+            else if (type === 'like') row.likes += 1;
             else row.chat += 1;
             row.coins += Math.max(0, coins);
 
@@ -1385,8 +1411,10 @@ initSettingsPanel();
             gifts: row.gifts,
             giftEvents: row.giftEvents,
             joins: row.joins,
+            likes: row.likes,
             coins: row.coins,
-            giftDetails: serializeGiftDetails(row.giftTypes)
+            giftDetails: serializeGiftDetails(row.giftTypes),
+            lastMessage: row.lastMessage
         }));
         const usersByMessages = userRows.slice().sort((a, b) => b.total - a.total || b.coins - a.coins || b.gifts - a.gifts);
         const usersByCoins = userRows.slice().sort((a, b) => b.coins - a.coins || b.gifts - a.gifts || b.total - a.total);
@@ -2962,6 +2990,18 @@ function getSelectedAiProvider() {
     const saved = DB.getSettings().aiProvider;
     return saved || inferAiProviderFromModel(getSelectedAiModel());
 }
+function getProviderApiKey(provider, settings = null) {
+    const cfg = settings || DB.getSettings() || {};
+    const p = String(provider || '').toLowerCase();
+    if (p === 'gemini') return String(cfg.geminiApiKey || cfg.gemini_api_key || '').trim();
+    if (p === 'openai') return String(cfg.openaiApiKey || cfg.openai_api_key || '').trim();
+    if (p === 'anthropic') return String(cfg.anthropicApiKey || cfg.anthropic_api_key || '').trim();
+    if (p === 'openrouter') return String(cfg.openrouterApiKey || cfg.openrouter_api_key || '').trim();
+    if (p === 'groq') return String(cfg.groqApiKey || cfg.groq_api_key || '').trim();
+    if (p === 'huggingface') return String(cfg.hfApiKey || cfg.hf_api_key || '').trim();
+    if (p === 'local') return String(cfg.localAiApiKey || cfg.local_ai_api_key || '').trim();
+    return '';
+}
 function normalizeLocalAiBaseUrl(baseUrl) {
     let value = String(baseUrl || LOCAL_AI_DEFAULT_BASE_URL).trim();
     if (!value) value = LOCAL_AI_DEFAULT_BASE_URL;
@@ -3622,10 +3662,33 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let lastCaptionSpeakKey = '';
     let lastCaptionSpeakAt = 0;
     const translateCache = new Map();
+    const nllbTranslateCache = new Map();
+    const NLLB_CACHE_MAX = 500;
+    let nllbTranslateInFlight = false;
     const STORAGE_KEY = 'ex_tkai_cfg';
     const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
     const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
     const TKAI_SCAN_FAST_WINDOW_MS = 30000;
+
+    function normalizeIdLangKey(text) {
+        return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function isLikelyIndonesianText(text) {
+        const value = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!value || value.length < 6) return false;
+        const samples = [
+            'yang', 'dan', 'untuk', 'dengan', 'tidak', 'bisa', 'sudah', 'belum', 'terima kasih',
+            'selamat', 'pagi', 'siang', 'malam', 'kamu', 'aku', 'saya', 'apa kabar', 'bagaimana',
+            'ini', 'itu', 'lagi', 'banget', 'dong', 'nih', 'kok', 'aja', 'nya', 'sih'
+        ];
+        let hits = 0;
+        for (const token of samples) {
+            if (value.includes(token)) hits += 1;
+            if (hits >= 2) return true;
+        }
+        return false;
+    }
     function setGiftCatalogFromPage(rows) {
         try {
             const seen = new Set();
@@ -3658,7 +3721,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const DEFAULT_GIFT_CATALOG_LINES = [
         "2199 Jollie's Heartland",
         "2499 Summer Pass L",
-        "1 Freestyle",
+        "1800 Freestyle",
         "3999 T-Rex skeleton pup",
         "2199 Lemon Love Booth",
         "5 Tofu",
@@ -3744,7 +3807,97 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         "20000 TikTok Shuttle",
         "15000 Time for Family",
         "5 Name shoutout",
-        "10 Journey Pass"
+        "10 Journey Pass",
+        "1000 Galaxy",
+        "299 Come On!",
+        "299 Krenimo!",
+        "200 Semsemia",
+        "100 Hand Heart",
+        "100 Srce oblikovano rukama",
+        "30 Doughnut",
+        "30 Krafna",
+        "349 Electro Vibes",
+        "349 Elektro vibra",
+        "2499 Tom Thunderfoot",
+        "2499 Tom Gromonogi",
+        "599 Happy Weekend",
+        "599 Ugodan vikend",
+        "600 DJ with Cherry Blossoms",
+        "600 DJ s tresnjinim cvijetom",
+        "399 Good Night",
+        "399 Laku noc",
+        "99 Hat and Mustache",
+        "99 Sesir i brkovi",
+        "500 Money Gun",
+        "500 Pistolj za ispucavanje",
+        "5 Finger Heart",
+        "5 Srce oblikovano prstima",
+        "2150 Diving with Whales",
+        "2150 Ronjenje s kitovima",
+        "199 Hearts",
+        "199 Srca",
+        "1088 Fireworks",
+        "1088 Vatromet",
+        "349 Gramophone Record",
+        "349 Gramofonska ploca",
+        "5000 Magic Unicorn",
+        "5000 Carobni jednorog",
+        "699 Swan",
+        "699 Labud",
+        "299 Corgi",
+        "299 Korgi",
+        "5000 Flight of Jets",
+        "5000 Avioni u letu",
+        "4888 Leon Cub",
+        "4888 Macic Leon",
+        "3000 Meteor Shower",
+        "3000 Kisa meteora",
+        "10 Roza",
+        "10 Rosa",
+        "1 Wink wink",
+        "1 Mig",
+        "222 Cat",
+        "1 Orange Juice",
+        "99 Hot Shot",
+        "200 Balloons",
+        "500 XXXL Flowers",
+        "399 Rosie the Rose",
+        "1 Coffee",
+        "199 Dancing Hands",
+        "250 Tiny Diny Float",
+        "1000 Glowing Jellyfish",
+        "1088 Diamond Tree",
+        "500 Heart It Out",
+        "500 Lost in Your Music",
+        "1000 Lightning Bolt",
+        "899 Train",
+        "799 Sunset in Bali",
+        "5 Padang Rice",
+        "500 You are Amazing",
+        "499 Coral",
+        "1 Cake Slice",
+        "200 Gold Necklace",
+        "100 Bouquet",
+        "1 Ice Cream Cone",
+        "399 Jollie the Joy",
+        "449 Electronic Love",
+        "1000 Watermelon Love",
+        "500 Drum Pop",
+        "100 Mishka Bear",
+        "299 Fruit Friends",
+        "1 You are awesome",
+        "10000 Interstellar",
+        "299 Starlight Compass",
+        "199 Indoor Fan",
+        "1 Fried",
+        "1 GG",
+        "10 I love you",
+        "8000 Bird of Paradise",
+        "5 Spinning Soccer",
+        "1 Love you so much",
+        "5000 Spirits up",
+        "10 Whistle",
+        "2800 Celebration Time"
     ];
 
     const messagesEl = document.getElementById('tkaiMessages');
@@ -4123,14 +4276,26 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         base.forEach((m) => {
             const user = String(m?.user || '').trim();
             if (!user) return;
-            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, lastTs: 0, coins: 0, texts: new Map() });
+            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, likes: 0, lastTs: 0, coins: 0, texts: new Map(), giftTypes: new Map(), lastMessage: '' });
             const row = map.get(user);
             row.total += 1;
-            if (m.type === 'gift' || m.type === 'subscriber') { row.gifts += 1; row.coins += Number(m.coins || 0); }
+            if (m.type === 'gift' || m.type === 'subscriber') {
+                const meta = resolveGiftMetaFromMessage(m);
+                const quantity = Math.max(1, Number(m.quantity || meta?.quantity || 1));
+                const giftName = String(m.giftName || '').trim() || String(meta?.giftName || '').trim() || String(m.text || '').trim() || 'gift';
+                row.gifts += quantity;
+                row.coins += Number(m.coins || 0);
+                row.giftTypes.set(giftName, (row.giftTypes.get(giftName) || 0) + quantity);
+            }
             else if (m.type === 'join') row.joins += 1;
+            else if (m.type === 'like') row.likes += 1;
             else row.chat += 1;
-            const txt = String(m.text || '').trim().toLowerCase();
-            if (txt) row.texts.set(txt, (row.texts.get(txt) || 0) + 1);
+            const rawText = String(m.text || '').trim();
+            const txt = rawText.toLowerCase();
+            if (txt) {
+                row.texts.set(txt, (row.texts.get(txt) || 0) + 1);
+                row.lastMessage = rawText.slice(0, 160);
+            }
             row.lastTs = Math.max(row.lastTs, Number(m.ts || 0));
         });
         return Array.from(map.values())
@@ -4140,9 +4305,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 chat: r.chat,
                 gifts: r.gifts,
                 joins: r.joins,
+                likes: r.likes,
                 lastTs: r.lastTs,
                 coins: r.coins,
-                repeatMax: Math.max(0, ...Array.from(r.texts.values()))
+                repeatMax: Math.max(0, ...Array.from(r.texts.values())),
+                giftTypes: Array.from(r.giftTypes.entries()).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)).slice(0, 4),
+                lastMessage: r.lastMessage
             }))
             .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
     }
@@ -4431,24 +4599,70 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
+    function sanitizeGiftCandidateName(rawValue) {
+        let value = String(rawValue || '')
+            .replace(/[🎁🌹🪙❤️✨⭐🔥🎉]+/g, ' ')
+            .replace(/\[[^\]]{1,40}\]/g, ' ')
+            .replace(/\([^)]{1,40}\)/g, ' ')
+            .replace(/^[\s:|\-•.]+|[\s:|\-•.]+$/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        value = value
+            .replace(/^(?:@?[a-z0-9._]{2,40}\s+){1,2}(?=sent\b|gave\b|gifted\b|donated\b)/i, '')
+            .replace(/^(?:lvl|lv|level|rank|title)\s*[#:\-]?\s*[a-z0-9._-]{1,20}\s+/i, '')
+            .replace(/\b(?:gift|poklon|present|dar|donation)\b/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        return value;
+    }
+
+    function extractGiftSegmentFromText(src) {
+        const text = String(src || '').trim();
+        if (!text) return { name: '', quantity: 1 };
+        const patterns = [
+            /(?:^|\b)(?:sent|gave|gifted|donated|poklon(?:io|ila)?|darovao|donirao)\s+(?:an?\s+|the\s+)?(.+?)(?:\s*(?:x|×)\s*(\d{1,4}))?(?:\s*$|[.!?,;])/i,
+            /(?:^|\b)(.+?)\s+(?:sent|gave|gifted|donated|poklon(?:io|ila)?|darovao|donirao)\s+(?:an?\s+|the\s+)?(.+?)(?:\s*(?:x|×)\s*(\d{1,4}))?(?:\s*$|[.!?,;])/i
+        ];
+        for (const pattern of patterns) {
+            const m = text.match(pattern);
+            if (!m) continue;
+            const candidate = pattern === patterns[1] ? m[2] : m[1];
+            const qtyRaw = pattern === patterns[1] ? m[3] : m[2];
+            const cleaned = sanitizeGiftCandidateName(candidate)
+                .replace(/\b(?:from|by)\s+@?[a-z0-9._]{2,40}$/i, '')
+                .replace(/\s+(?:lvl|lv|level|rank|title)\s*[:#-]?\s*[a-z0-9._-]{1,20}$/i, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (!cleaned) continue;
+            const quantity = Math.max(1, Number(qtyRaw || 1));
+            return { name: cleaned, quantity };
+        }
+        return { name: sanitizeGiftCandidateName(text), quantity: 1 };
+    }
+
     function detectGiftMetaFromText(text) {
         const src = String(text || '').trim();
         const normalized = normalizeGiftKey(src);
+        const extracted = extractGiftSegmentFromText(src);
+        const extractedName = String(extracted.name || '').trim();
+        const extractedQty = Number(extracted.quantity || 0);
+        const lookupText = extractedName || src;
+        const lookupNorm = normalizeGiftKey(lookupText);
         const entries = getGiftCatalogEntries();
         let found = null;
         for (const [key, value] of entries) {
-            if (key && normalized.includes(key)) {
+            if (key && (normalized.includes(key) || lookupNorm.includes(key))) {
                 found = value;
                 break;
             }
         }
         const qtyMatch = src.match(/\b(?:x|×)\s*(\d{1,4})\b/i);
-        const quantity = Math.max(1, Number(qtyMatch?.[1] || 1));
+        const quantity = Math.max(1, Number(extractedQty || qtyMatch?.[1] || 1));
         let unitCoins = found ? Number(found.coins || 0) : 0;
         if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
         const coins = unitCoins * quantity;
         return {
-            giftName: found ? found.name : src.slice(0, 80),
+            giftName: found ? found.name : (extractedName || src.slice(0, 80)),
             coins: Math.max(0, Number(coins || 0)),
             unitCoins: Math.max(0, Number(unitCoins || 0)),
             quantity,
@@ -5086,11 +5300,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             caption: messages.filter((m) => m.type === 'caption').length,
             song: messages.filter((m) => m.type === 'song').length,
             join: messages.filter((m) => m.type === 'join').length,
-            share: messages.filter((m) => m.type === 'share').length
+            share: messages.filter((m) => m.type === 'share').length,
+            like: messages.filter((m) => m.type === 'like').length
         };
         const msgTypeTotal = Math.max(
             1,
-            msgTypeCounts.chat + msgTypeCounts.gift + msgTypeCounts.caption + msgTypeCounts.song + msgTypeCounts.join + msgTypeCounts.share
+            msgTypeCounts.chat + msgTypeCounts.gift + msgTypeCounts.caption + msgTypeCounts.song + msgTypeCounts.join + msgTypeCounts.share + msgTypeCounts.like
         );
         const pieBreakdown = [
             { key: 'chat', label: 'Chat', color: '#60a5fa', value: msgTypeCounts.chat },
@@ -5098,7 +5313,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             { key: 'caption', label: 'CC', color: '#a78bfa', value: msgTypeCounts.caption },
             { key: 'song', label: 'Songs', color: '#22c55e', value: msgTypeCounts.song },
             { key: 'join', label: 'Join', color: '#6b7280', value: msgTypeCounts.join },
-            { key: 'share', label: 'Share', color: '#f472b6', value: msgTypeCounts.share }
+            { key: 'share', label: 'Share', color: '#f472b6', value: msgTypeCounts.share },
+            { key: 'like', label: 'Likes', color: '#fb7185', value: msgTypeCounts.like }
         ].map((row) => ({
             ...row,
             pct: Math.round((row.value / msgTypeTotal) * 100)
@@ -5110,6 +5326,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (row.key === 'share') return cfg.tkaiPieIncludeShare === true;
             if (row.key === 'caption') return cfg.tkaiPieIncludeCaption !== false;
             if (row.key === 'song') return cfg.tkaiPieIncludeSong !== false;
+            if (row.key === 'like') return cfg.tkaiPieIncludeLike !== false;
             return true;
         });
 
@@ -5526,12 +5743,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<option value="gifts">Sort: Gifts</option>' +
             '<option value="chat">Sort: Chat</option>' +
             '<option value="joins">Sort: Joins</option>' +
+            '<option value="likes">Sort: Likes</option>' +
             '</select>' +
             '<span id="tkaiTopUsersMeta" style="font-size:10px;color:var(--text3)"></span>' +
             '</div>' +
             '<div style="max-height:220px;overflow:auto">' +
             '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
-            '<thead><tr style="color:var(--text3);text-align:left"><th style="padding:3px 4px">User</th><th style="padding:3px 4px">Total</th><th style="padding:3px 4px">Chat</th><th style="padding:3px 4px">Gifts</th><th style="padding:3px 4px">Coins</th><th style="padding:3px 4px">Join</th></tr></thead>' +
+            '<thead><tr style="color:var(--text3);text-align:left"><th style="padding:3px 4px">User</th><th style="padding:3px 4px">Total</th><th style="padding:3px 4px">Coins</th><th style="padding:3px 4px">Gifts</th><th style="padding:3px 4px">Likes</th><th style="padding:3px 4px">Top gifts</th><th style="padding:3px 4px">Last poruka</th></tr></thead>' +
             '<tbody id="tkaiTopUsersRows"></tbody>' +
             '</table></div></div>';
         root.appendChild(usersRow);
@@ -5562,8 +5780,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         document.getElementById('tkaiDashExportCsv')?.addEventListener('click', () => {
             const msgs = getDashboardRangeFilteredMessages();
             const users = buildUserStats(msgs, Math.max(100, msgs.length));
-            const lines = ['user,total,chat,gifts,coins,joins'];
-            users.forEach((u) => lines.push([u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')));
+            const lines = ['user,total,coins,gifts,likes,topGifts,lastMessage'];
+            users.forEach((u) => lines.push([
+                u.user,
+                u.total,
+                u.coins,
+                u.gifts,
+                u.likes,
+                (u.giftTypes || []).map((entry) => `${entry[0]} x${entry[1]}`).join(' | '),
+                u.lastMessage || ''
+            ].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(',')));
             downloadTextFile('tkai-detailed-users-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv', lines.join('\n'), 'text/csv;charset=utf-8');
             showToast('⬇️ Detailed dashboard CSV skinut.');
         });
@@ -5583,12 +5809,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         body.innerHTML = '';
         rows.slice(0, 180).forEach((u) => {
             const tr = document.createElement('tr');
+            const topGiftStr = (u.giftTypes || []).slice(0, 3).map((entry) => `${entry[0]} x${entry[1]}`).join(', ');
             tr.innerHTML = '<td style="padding:3px 4px;color:' + getUserColor(u.user) + '">@' + escHtml(u.user) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.total) + '</td>' +
-                '<td style="padding:3px 4px">' + formatNum(u.chat) + '</td>' +
-                '<td style="padding:3px 4px">' + formatNum(u.gifts) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.coins) + '</td>' +
-                '<td style="padding:3px 4px">' + formatNum(u.joins) + '</td>';
+                '<td style="padding:3px 4px">' + formatNum(u.gifts) + '</td>' +
+                '<td style="padding:3px 4px">' + formatNum(u.likes) + '</td>' +
+                '<td style="padding:3px 4px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(topGiftStr || '-') + '">' + escHtml(topGiftStr || '-') + '</td>' +
+                '<td style="padding:3px 4px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(u.lastMessage || '-') + '">' + escHtml(u.lastMessage || '-') + '</td>';
             tr.title = 'Klik za copy @' + u.user;
             tr.style.cursor = 'pointer';
             tr.addEventListener('click', () => { navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { }); });
@@ -6191,6 +6419,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const expandLiveBtn = document.getElementById('tkaiExpandLiveBtn');
     let chatPopout = null;
     let chatPopoutMirrorTimer = null;
+    let chatPopoutFilters = { chat: true, gifts: true, likes: true };
     let liveDashboardPopout = null;
     let liveDashboardTimer = null;
     function initTkaiButtonPressFeedback() {
@@ -6241,6 +6470,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<span style="font-size:12px;font-weight:700;color:#fff">💬 TikTok Chat</span>' +
             '<div style="display:flex;gap:6px;align-items:center">' +
             '<span id="tkaiPopoutMsgCount" style="font-size:10px;color:rgba(255,255,255,.7)"></span>' +
+            '<button id="tkaiPopoutFilterChat" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">💬 Tekst</button>' +
+            '<button id="tkaiPopoutFilterGifts" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">🎁 Gift</button>' +
+            '<button id="tkaiPopoutFilterLikes" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">❤️ Like</button>' +
             '<button id="tkaiPopoutClearFilter" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Sve</button>' +
             '<button id="tkaiPopoutClose" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:14px;padding:0 6px;border-radius:4px;cursor:pointer">×</button>' +
             '</div></div>' +
@@ -6278,9 +6510,39 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             e.stopPropagation();
             closeChatPopout();
         });
-        chatPopout.querySelector('#tkaiPopoutClearFilter').addEventListener('click', () => {
-            mirrorToPopout(collectedMessages);
+        const updatePopoutFilterButtons = () => {
+            [
+                ['tkaiPopoutFilterChat', chatPopoutFilters.chat],
+                ['tkaiPopoutFilterGifts', chatPopoutFilters.gifts],
+                ['tkaiPopoutFilterLikes', chatPopoutFilters.likes]
+            ].forEach(([id, on]) => {
+                const btn = chatPopout.querySelector('#' + id);
+                if (!btn) return;
+                btn.style.background = on ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.08)';
+                btn.style.opacity = on ? '1' : '.55';
+            });
+        };
+        chatPopout.querySelector('#tkaiPopoutFilterChat').addEventListener('click', () => {
+            chatPopoutFilters.chat = !chatPopoutFilters.chat;
+            updatePopoutFilterButtons();
+            mirrorToPopout(collectedMessages, { forceRender: true });
         });
+        chatPopout.querySelector('#tkaiPopoutFilterGifts').addEventListener('click', () => {
+            chatPopoutFilters.gifts = !chatPopoutFilters.gifts;
+            updatePopoutFilterButtons();
+            mirrorToPopout(collectedMessages, { forceRender: true });
+        });
+        chatPopout.querySelector('#tkaiPopoutFilterLikes').addEventListener('click', () => {
+            chatPopoutFilters.likes = !chatPopoutFilters.likes;
+            updatePopoutFilterButtons();
+            mirrorToPopout(collectedMessages, { forceRender: true });
+        });
+        chatPopout.querySelector('#tkaiPopoutClearFilter').addEventListener('click', () => {
+            chatPopoutFilters = { chat: true, gifts: true, likes: true };
+            updatePopoutFilterButtons();
+            mirrorToPopout(collectedMessages, { forceRender: true });
+        });
+        updatePopoutFilterButtons();
 
         expandChatBtn.textContent = '⤡ Zatvori';
         expandChatBtn.style.background = 'rgba(102,126,234,.35)';
@@ -6293,15 +6555,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (expandChatBtn) { expandChatBtn.textContent = '⤢ Proširi'; expandChatBtn.style.background = ''; }
     }
 
-    function mirrorToPopout(messages) {
+    function mirrorToPopout(messages, options = {}) {
         const container = document.getElementById('tkaiPopoutMessages');
         const countEl = document.getElementById('tkaiPopoutMsgCount');
         if (!container) return;
-        const msgs = messages || collectedMessages;
+        const src = Array.isArray(messages) ? messages : collectedMessages;
+        const msgs = src.filter((m) => {
+            const type = String(m?.type || 'chat');
+            if (type === 'like') return chatPopoutFilters.likes;
+            if (type === 'gift' || type === 'subscriber') return chatPopoutFilters.gifts;
+            return chatPopoutFilters.chat;
+        });
         if (countEl) countEl.textContent = msgs.length + ' poruka';
         // Only re-render if count changed
         const prev = container.dataset.lastCount;
-        if (prev === String(msgs.length)) return;
+        if (!options.forceRender && prev === String(msgs.length)) return;
         container.dataset.lastCount = String(msgs.length);
         const wasBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
         container.innerHTML = '';
@@ -6310,8 +6578,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             row.style.cssText = 'padding:3px 6px;border-radius:6px;line-height:1.4;' +
                 (m.type === 'gift' ? 'background:rgba(255,215,0,.1);border-left:2px solid #ffd700;' :
                     m.type === 'subscriber' ? 'background:rgba(74,222,128,.08);border-left:2px solid #4ade80;' :
-                        'background:rgba(255,255,255,.04);');
-            const icon = m.type === 'gift' ? '🎁 ' : m.type === 'subscriber' ? '⭐ ' : '';
+                        m.type === 'like' ? 'background:rgba(244,63,94,.12);border-left:2px solid #fb7185;' :
+                            'background:rgba(255,255,255,.04);');
+            const icon = m.type === 'gift' ? '🎁 ' : m.type === 'subscriber' ? '⭐ ' : m.type === 'like' ? '❤️ ' : '';
             row.innerHTML = '<span style="color:' + getUserColor(m.user || '?') + ';font-weight:600">' + (m.user || '?') + '</span>' +
                 '<span style="color:rgba(255,255,255,.35);margin:0 4px">·</span>' +
                 '<span style="color:var(--text,#e2e8f0)">' + icon + (m.translatedText || m.text || '') + '</span>' +
@@ -6837,9 +7106,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     function renderMessages() {
         if (!messagesEl) return;
+        const settings = DB.getSettings();
+        const showTextInFeed = settings.tkaiShowFeedChat !== false;
+        const showGiftsInFeed = settings.tkaiShowFeedGifts !== false;
+        const showLikesInFeed = settings.tkaiShowFeedLikes !== false;
         const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-200) : [];
-        const chatMessages = allMessages.filter((message) => message && message.type === 'chat');
-        const giftMessages = allMessages.filter((message) => message && ['gift', 'subscriber', 'share', 'join'].includes(String(message.type || '')));
+        const chatMessages = allMessages.filter((message) => message && (message.type === 'chat' || message.type === 'caption' || message.type === 'song'));
+        const giftMessages = allMessages.filter((message) => message && ['gift', 'subscriber', 'share', 'join', 'like'].includes(String(message.type || '')));
         if (!collectedMessages.length) {
             messagesEl.innerHTML = '<div class="tkai-empty">Nema poruka.<br>Klikni "Skeniranje ON" dok si<br>na TikTok Live.</div>';
             if (giftFeedEl) giftFeedEl.innerHTML = '<div class="tkai-empty">Giftovi, share i sub događaji će se pojaviti ovdje.</div>';
@@ -6873,10 +7146,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(120,200,255,.22);color:#bde7ff;border:1px solid rgba(150,220,255,.35)">⭐ sub</span>'
                     : (message.type === 'share'
                         ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(244,114,182,.18);color:#f9a8d4;border:1px solid rgba(244,114,182,.35)">↗ share</span>'
-                        : ''));
+                        : (message.type === 'like'
+                            ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(244,63,94,.18);color:#fda4af;border:1px solid rgba(244,63,94,.35)">❤️ like</span>'
+                            : '')));
             const showCaptionTranslation = message.type === 'caption' && !!message.translatedText;
-            const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation) && message.translatedText
-                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff">' + escHtml(message.translatedText) + '</div>'
+            const showNllbIdHrTranslation = message.type === 'chat'
+                && message.sourceLang === 'id'
+                && message.translatedLang === 'hr'
+                && !!message.translatedText;
+            const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showNllbIdHrTranslation) && message.translatedText
+                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">HR:</span> ' + escHtml(message.translatedText) + '</div>'
                 : '';
             const giftSummary = giftMeta
                 ? '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#ffd278">'
@@ -6884,8 +7163,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + ' × ' + formatNum(Math.max(1, Number(giftMeta.quantity || message.quantity || 1)))
                 + ' • ' + formatNum(Math.max(0, Number(giftMeta.coins || message.coins || 0))) + ' 🪙</div>'
                 : '';
+            const originalLabel = showNllbIdHrTranslation ? 'ID:' : 'Original:';
             const original = translated
-                ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65">' + escHtml(message.text) + '</div>'
+                ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65"><span style="font-size:10px;opacity:.7">' + originalLabel + '</span> ' + escHtml(message.text) + '</div>'
                 : '<div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
             const userColor = getUserColor(message.user);
             const userRow = typeBadge
@@ -6899,6 +7179,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 div.classList.toggle('selected', selectedMsgIds.has(message.id));
             });
             div.addEventListener('contextmenu', (event) => {
+                const selectedText = String(window.getSelection?.()?.toString?.() || '').trim();
+                if (selectedText) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    showCtxMenu(event.clientX, event.clientY, null, { selectionText: selectedText });
+                    return;
+                }
                 event.preventDefault();
                 event.stopPropagation();
                 selectedMsgIds = new Set([message.id]);
@@ -6907,8 +7194,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
             container.appendChild(div);
         };
-        chatMessages.slice(-30).forEach((message) => renderRow(message, messagesEl));
-        if (!chatMessages.length && collectedMessages.length) {
+        if (showTextInFeed) chatMessages.slice(-30).forEach((message) => renderRow(message, messagesEl));
+        else messagesEl.innerHTML = '<div class="tkai-empty">Tekst feed je sakriven filterom.</div>';
+        if (showTextInFeed && !chatMessages.length && collectedMessages.length) {
             const nonChatCount = collectedMessages.length;
             const types = [...new Set(collectedMessages.map(m => m.type).filter(Boolean))].join(', ');
             messagesEl.innerHTML = '<div class="tkai-empty" style="font-size:11px;opacity:.75">Chat poruke nisu pronađene.<br>'
@@ -6916,10 +7204,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + 'TikTok možda koristi novi DOM — provjeri Settings → Debug ili otvori live stranicu.</div>';
         }
         if (giftFeedEl) {
-            if (!giftMessages.length) {
+            const filteredGiftEvents = giftMessages.filter((message) => {
+                const type = String(message.type || '');
+                if (type === 'like') return showLikesInFeed;
+                if (type === 'gift' || type === 'subscriber') return showGiftsInFeed;
+                return true;
+            });
+            if (!filteredGiftEvents.length) {
                 giftFeedEl.innerHTML = '<div class="tkai-empty">Giftovi, share i sub događaji će se pojaviti ovdje.</div>';
             } else {
-                giftMessages.slice(-20).forEach((message) => renderRow(message, giftFeedEl));
+                filteredGiftEvents.slice(-20).forEach((message) => renderRow(message, giftFeedEl));
             }
         }
         if (targetedChatUser) {
@@ -7024,6 +7318,61 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return translated;
         } catch (_) {
             return text;
+        }
+    }
+
+    async function translateIndonesianToCroatianViaNllb(text) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!clean) return '';
+        const key = normalizeIdLangKey(clean);
+        if (nllbTranslateCache.has(key)) return nllbTranslateCache.get(key);
+        if (!window.electronAPI?.invoke) {
+            const fallback = await translateViaGoogle(clean, 'hr');
+            nllbTranslateCache.set(key, fallback || clean);
+            return fallback || clean;
+        }
+        const run = await window.electronAPI.invoke('ai:nllbTranslate', {
+            model: 'facebook/nllb-200-distilled-600M',
+            src_lang: 'ind_Latn',
+            tgt_lang: 'hrv_Latn',
+            items: [clean]
+        });
+        let translated = String(run?.results?.[0] || '').trim();
+        if (!run?.ok || !translated) {
+            translated = await translateViaGoogle(clean, 'hr');
+        }
+        translated = translated || clean;
+        if (nllbTranslateCache.has(key)) nllbTranslateCache.delete(key);
+        nllbTranslateCache.set(key, translated);
+        while (nllbTranslateCache.size > NLLB_CACHE_MAX) {
+            const oldest = nllbTranslateCache.keys().next().value;
+            if (!oldest) break;
+            nllbTranslateCache.delete(oldest);
+        }
+        return translated;
+    }
+
+    async function translateIndonesianMessagesInPlace(messages) {
+        if (!Array.isArray(messages) || !messages.length || nllbTranslateInFlight) return;
+        const candidates = messages
+            .filter((message) => message && message.type === 'chat')
+            .filter((message) => !message.translatedText || message.translatedLang !== 'hr' || message.sourceLang !== 'id')
+            .filter((message) => isLikelyIndonesianText(message.text))
+            .slice(0, 20);
+        if (!candidates.length) return;
+
+        nllbTranslateInFlight = true;
+        try {
+            for (const message of candidates) {
+                const translated = await translateIndonesianToCroatianViaNllb(message.text);
+                if (!translated) continue;
+                message.sourceLang = 'id';
+                message.translatedText = translated;
+                message.translatedLang = 'hr';
+                message.translatedBy = 'nllb-200-distilled-600M';
+            }
+        } finally {
+            nllbTranslateInFlight = false;
         }
     }
 
@@ -7532,7 +7881,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           '[class*="CaptionContainer"]',
           '[aria-live="polite"] span'
         ];
-        const songKeywords = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)/i;
+                const songKeywords = /(?:now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira|pinned\s+song|pin(?:ned)?\s+(?:music|track|audio)|pinovana\s+pjesma|zaka[cč]ena\s+pjesma)/i;
         for (const sel of captionSelectors) {
           try {
             document.querySelectorAll(sel).forEach(function(cap) {
@@ -7707,7 +8056,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
             const hasSent = /\bsent\b|\bgave\b/i.test(low);
             const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
-            const isGift = hasSent || hasGiftWord || giftEls.length > 0;
+            const hasLikeWord = /\blikes?\b|\bliked\b|\bheart(?:ed|s)?\b|\bthumbs\s*up\b|\bupvot(?:e|ed)\b|\blajk(?:ao|ala|ali|ale)?\b/i.test(low);
+            const isLike = hasLikeWord && !hasSent && giftEls.length === 0 && !hasGiftWord;
+            const isGift = !isLike && ((hasSent && (hasGiftWord || giftEls.length > 0)) || giftEls.length > 0 || /\b(?:gifted|poklon(?:io|ila)?|darovao|donirao)\b/i.test(low));
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
             const isShare = isStrictShareEvent(text, rawText, user, el);
@@ -7724,7 +8075,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               }
             }
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : 'chat')));
+                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : (isLike ? 'like' : 'chat'))));
                         if (isLikelyNoiseChatText(text, user, messageType)) return;
                         if ((messageType === 'gift' || messageType === 'join' || messageType === 'share') && (!user || String(user).toLowerCase() === 'unknown')) return;
                         const looksLikeCatalogGiftLine = /^(?:unknown\s*[·•|:\-]?\s*)?\d{1,7}\s+[^\s].*$/i.test(text)
@@ -7735,7 +8086,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               user: user || 'unknown',
               text,
               mid,
-                            type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : 'chat'))),
+                                                        type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : (isLike ? 'like' : 'chat')))),
               level: levelHint
             });
           }
@@ -7824,6 +8175,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const scanCaptions = DB.getSettings().tkaiScanCaptions !== false;
             const scanSongs = DB.getSettings().tkaiDetectSongs !== false;
             const scanJoins = DB.getSettings().tkaiScanJoins !== false;
+            const scanLikes = DB.getSettings().tkaiScanLikes !== false;
 
             const filteredMessages = messages.filter((m) => {
                 if (m.type === 'chat' && !scanChat) return false;
@@ -7832,6 +8184,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (m.type === 'caption' && !scanCaptions) return false;
                 if (m.type === 'song' && !scanSongs) return false;
                 if (m.type === 'join' && !scanJoins) return false;
+                if (m.type === 'like' && !scanLikes) return false;
                 return true;
             });
 
@@ -7849,6 +8202,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const incomingSeen = new Set();
             let added = 0;
             const incomingCaptions = [];
+            const incomingAddedMessages = [];
             const nowTs = Date.now();
             const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
             filteredMessages.forEach((message) => {
@@ -7861,8 +8215,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
                 if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
                 if (!existing.has(id)) {
-                    const giftMeta = getTkaiGiftMeta(message.text || '');
-                    collectedMessages.push({ ...message, id, ts: nowTs, coins: message.coins || giftMeta.coins || parseCoinsFromText(message.text), giftName: giftMeta.giftName || message.text, quantity: giftMeta.quantity || 1, unitCoins: giftMeta.unitCoins || 0 });
+                    const type = String(message.type || 'chat');
+                    const isGiftType = type === 'gift' || type === 'subscriber';
+                    const giftMeta = isGiftType ? getTkaiGiftMeta(message.giftName || message.text || '') : null;
+                    const normalizedMessage = {
+                        ...message,
+                        id,
+                        ts: nowTs,
+                        coins: isGiftType ? Number(message.coins || giftMeta?.coins || parseCoinsFromText(message.text)) : 0,
+                        giftName: isGiftType ? (message.giftName || giftMeta?.giftName || message.text) : '',
+                        quantity: isGiftType ? (message.quantity || giftMeta?.quantity || 1) : 1,
+                        unitCoins: isGiftType ? (message.unitCoins || giftMeta?.unitCoins || 0) : 0
+                    };
+                    collectedMessages.push(normalizedMessage);
+                    incomingAddedMessages.push(normalizedMessage);
                     existing.add(id);
                     existingRecent.set(recentKey, nowTs);
                     added += 1;
@@ -7876,6 +8242,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const targetLang = getTranslateTargetLang();
             if (targetLang !== 'auto' && added > 0) {
                 await translateMessagesInPlace(collectedMessages, targetLang);
+            }
+            if (incomingAddedMessages.length) {
+                await translateIndonesianMessagesInPlace(incomingAddedMessages);
             }
             if (incomingCaptions.length && isCcReadEnabled()) {
                 await Promise.all(incomingCaptions.map((message) => handleIncomingCaption(message).catch(() => { })));
@@ -7988,11 +8357,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         try {
             const _tkaiProviderOverride = DB.getSettings().tkaiProviderOverride || '';
             const _tkaiModelOverride = DB.getSettings().tkaiModelOverride || '';
+            const providerForReplies = _tkaiProviderOverride || getSelectedAiProvider();
+            const directTkaiApiInput = String(document.getElementById('tkaiStackTestApiKey')?.value || '').trim();
+            const resolvedApiKey = directTkaiApiInput || getProviderApiKey(providerForReplies);
             const raw = await runAiTextRequest(buildPrompt(messages), {
                 temperature: 0.85,
                 maxOutputTokens: 600,
                 ...(_tkaiProviderOverride ? { provider: _tkaiProviderOverride } : {}),
-                ...(_tkaiModelOverride ? { model: _tkaiModelOverride } : {})
+                ...(_tkaiModelOverride ? { model: _tkaiModelOverride } : {}),
+                ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {})
             });
             const suggestions = raw.split('\n')
                 .map(line => line.replace(/^[\d]+[\.)]\s*/, '').replace(/^[-*]\s*/, '').trim())
@@ -12376,6 +12749,8 @@ async function showCtxMenu(x, y, targetUrl, params = {}) {
     const onTikTok = !!(getActiveTab()?.url && getActiveTab().url.includes('tiktok.com'));
     const ctxSendTikTokEl = document.getElementById('ctx-send-tiktok-ai');
     if (ctxSendTikTokEl) ctxSendTikTokEl.style.display = (onTikTok && hasSel) ? '' : 'none';
+    const ctxRegionScanEl = document.getElementById('ctx-tiktok-region-scan');
+    if (ctxRegionScanEl) ctxRegionScanEl.style.display = (onTikTok && window.electronWebview) ? '' : 'none';
     const ctxShadowbanEl = document.getElementById('ctx-shadowban-check');
     if (ctxShadowbanEl) ctxShadowbanEl.style.display = onTikTok ? '' : 'none';
     const ctxPasteTextEl = document.getElementById('ctx-paste-text');
@@ -12504,6 +12879,765 @@ document.getElementById('ctx-copy-text').addEventListener('click', () => {
     if (sel) { navigator.clipboard.writeText(sel).then(() => showToast('📋 Kopirano')); }
     else { document.execCommand('copy'); }
 });
+async function executeTikTokRegionScan(region) {
+    const webview = getActiveTikTokWebview();
+    if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') {
+        throw new Error('TikTok webview nije spreman');
+    }
+    const raw = await webview.executeJavaScript(String.raw`(function(){
+      try {
+        const region = ${JSON.stringify(region)};
+        const x1 = Number(region.x || 0);
+        const y1 = Number(region.y || 0);
+        const x2 = x1 + Math.max(1, Number(region.width || 0));
+        const y2 = y1 + Math.max(1, Number(region.height || 0));
+        const intersect = (r) => !(r.right < x1 || r.left > x2 || r.bottom < y1 || r.top > y2);
+        const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+        const rows = [];
+        const seen = new Set();
+        const selectors = [
+          '[data-e2e="chat-message-item"]',
+          '[data-e2e="chatroom-message-item"]',
+          '[data-e2e*="message-item"]',
+          '[data-e2e*="chat-item"]',
+          '[class*="DivChatMessage"]',
+          '[class*="CommentItem"]',
+          '[class*="ChatMessageItem"]',
+          '[class*="GiftItem"]',
+          '[class*="gift-item"]',
+          '[class*="GiftMessage"]'
+        ];
+        document.querySelectorAll(selectors.join(',')).forEach((el) => {
+          if (!el || typeof el.getBoundingClientRect !== 'function') return;
+          const rect = el.getBoundingClientRect();
+          if (!rect || rect.width <= 1 || rect.height <= 1) return;
+          if (!intersect(rect)) return;
+          const text = clean(el.innerText || el.textContent || '');
+          if (!text || text.length < 2 || text.length > 520) return;
+          const userNode = el.querySelector('a[href*="/@"], [data-e2e*="user" i], [data-e2e*="name" i], strong, b');
+          const fromHref = String(userNode?.getAttribute?.('href') || '').match(/\/@([^/?#]+)/i);
+          let user = clean(fromHref?.[1] || userNode?.textContent || '');
+          if (!user) {
+            const m = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|liked)\b/i);
+            if (m && m[1]) user = clean(m[1]);
+          }
+          const low = text.toLowerCase();
+          const isGift = /\b(?:sent|gift|gifted|rose|diamond|coins?|poklon|darovao|donirao)\b/i.test(low);
+          const isLike = !isGift && /\b(?:likes?|liked|heart(?:ed|s)?)\b/i.test(low);
+          const type = isGift ? 'gift' : (isLike ? 'like' : 'chat');
+          const key = type + '|' + user.toLowerCase() + '|' + text.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          rows.push({ user: user || 'unknown', text, type });
+        });
+        return JSON.stringify(rows.slice(0, 140));
+      } catch(e) {
+        return JSON.stringify({ __error: String(e && e.message ? e.message : e) });
+      }
+    })()`);
+    try {
+        const parsed = JSON.parse(raw || '[]');
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed && parsed.__error) throw new Error(parsed.__error);
+        return [];
+    } catch (_) {
+        throw new Error('Ne mogu parsirati rezultat skeniranja regije');
+    }
+}
+function normalizeRegionScanRows(rows, source = 'dom') {
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const user = String(row?.user || 'unknown').trim().slice(0, 40) || 'unknown';
+        const text = String(row?.text || '').replace(/\s+/g, ' ').trim().slice(0, 320);
+        if (!text) return;
+        const low = text.toLowerCase();
+        const rawType = String(row?.type || '').toLowerCase();
+        const type = rawType === 'gift' || rawType === 'like' || rawType === 'chat'
+            ? rawType
+            : (/\b(?:sent|gift|gifted|rose|diamond|coins?|poklon|darovao|donirao)\b/i.test(low)
+                ? 'gift'
+                : (/\b(?:likes?|liked|heart(?:ed|s)?)\b/i.test(low) ? 'like' : 'chat'));
+        const key = `${type}:${user.toLowerCase()}:${text.toLowerCase()}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push({ user, text, type, source });
+    });
+    return out;
+}
+
+function ingestTikTokRegionRows(rows, options = {}) {
+    const source = String(options.source || 'region-dom');
+    const normalizedRows = normalizeRegionScanRows(rows, source);
+    if (!normalizedRows.length) return { added: 0, acceptedRows: [] };
+
+    const scanChat = DB.getSettings().tkaiScanChat !== false;
+    const scanGifts = DB.getSettings().tkaiScanGifts !== false;
+    const scanLikes = DB.getSettings().tkaiScanLikes !== false;
+    const nowTs = Date.now();
+    const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
+    const existingRecent = new Map();
+    collectedMessages.forEach((message) => {
+        const k = `${message.type || 'chat'}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim().toLowerCase()}`;
+        existingRecent.set(k, Number(message.ts || 0));
+    });
+
+    let added = 0;
+    const acceptedRows = [];
+    normalizedRows.forEach((row, index) => {
+        if (row.type === 'chat' && !scanChat) return;
+        if (row.type === 'gift' && !scanGifts) return;
+        if (row.type === 'like' && !scanLikes) return;
+
+        const recentKey = `${row.type}:${String(row.user || '').toLowerCase()}:${String(row.text || '').trim().toLowerCase()}`;
+        const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
+        if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
+
+        const isGiftType = row.type === 'gift';
+        const giftMeta = isGiftType ? getTkaiGiftMeta(row.text || '') : null;
+        const quantity = isGiftType ? Math.max(1, Number(giftMeta?.quantity || 1)) : 1;
+        const unitCoins = isGiftType ? Math.max(0, Number(giftMeta?.unitCoins || 0)) : 0;
+        const coins = isGiftType ? Math.max(0, Number(giftMeta?.coins || (unitCoins * quantity) || parseCoinsFromText(row.text || ''))) : 0;
+        const normalizedMessage = {
+            id: `region:${source}:${nowTs}:${index}`,
+            ts: nowTs,
+            type: row.type,
+            user: row.user,
+            text: row.text,
+            coins,
+            giftName: isGiftType ? String(giftMeta?.giftName || row.text || '').trim().slice(0, 80) : '',
+            quantity,
+            unitCoins,
+            source
+        };
+        collectedMessages.push(normalizedMessage);
+        existingRecent.set(recentKey, nowTs);
+        acceptedRows.push(row);
+        added += 1;
+    });
+
+    if (!added) return { added: 0, acceptedRows: [] };
+    const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 300;
+    if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
+    if (!sessionStartedAt) sessionStartedAt = Date.now();
+    extractAndTrackQuestions(collectedMessages.slice(-added));
+    renderMessages();
+    updateSessionStatsUI();
+    scheduleTkaiAutosave('region-scan');
+    return { added, acceptedRows };
+}
+
+function extractJsonArrayFromText(text) {
+    const src = String(text || '').trim();
+    if (!src) return null;
+    try {
+        const parsed = JSON.parse(src);
+        if (Array.isArray(parsed)) return parsed;
+    } catch (_) { }
+    const start = src.indexOf('[');
+    const end = src.lastIndexOf(']');
+    if (start < 0 || end <= start) return null;
+    const block = src.slice(start, end + 1);
+    try {
+        const parsed = JSON.parse(block);
+        return Array.isArray(parsed) ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function captureRegionImageDataUrl(regionScreenRect) {
+    if (!window.electronAPI?.invoke) return '';
+    const payload = {
+        x: Math.max(0, Math.round(regionScreenRect?.x || 0)),
+        y: Math.max(0, Math.round(regionScreenRect?.y || 0)),
+        width: Math.max(1, Math.round(regionScreenRect?.width || 0)),
+        height: Math.max(1, Math.round(regionScreenRect?.height || 0))
+    };
+    const rs = await window.electronAPI.invoke('app:captureRegion', payload);
+    if (typeof rs === 'string' && /^data:image\//.test(rs)) return rs;
+    if (rs && typeof rs === 'object' && rs.ok && typeof rs.dataUrl === 'string') return rs.dataUrl;
+    return '';
+}
+
+async function runAiVisionOcrRequest(imageDataUrl) {
+    const runtime = await getAiRuntimeSettings();
+    const provider = runtime.provider;
+    const model = runtime.model;
+    const prompt = [
+        'Extract TikTok chat overlay lines from this image.',
+        'Return ONLY a JSON array with objects: {"user":"...","text":"...","type":"gift|like|chat"}.',
+        'Rules:',
+        '- Keep one event per row.',
+        '- Preserve gift text exactly when possible (example: "sent Little Wing x1").',
+        '- Ignore decorative badges/rank/title noise.',
+        '- If user is unknown use "unknown".',
+        '- Output no markdown and no explanation.'
+    ].join('\n');
+
+    if (provider === 'gemini') {
+        const apiKey = runtime.geminiApiKey;
+        if (!apiKey) throw new Error('Gemini API kljuc nije postavljen za OCR fallback.');
+        const base64 = String(imageDataUrl || '').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inline_data: { mime_type: 'image/png', data: base64 } }
+                    ]
+                }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 900 }
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    }
+
+    const apiKey = provider === 'openai' ? runtime.openaiApiKey
+        : provider === 'local' ? runtime.localAiApiKey
+            : provider === 'groq' ? runtime.groqApiKey
+                : provider === 'openrouter' ? runtime.openrouterApiKey
+                    : provider === 'huggingface' ? runtime.hfApiKey
+                        : provider === 'anthropic' ? runtime.anthropicApiKey
+                            : runtime.localAiApiKey;
+    const baseUrl = provider === 'openai' ? 'https://api.openai.com/v1'
+        : provider === 'local' ? normalizeLocalAiBaseUrl(runtime.localAiBaseUrl)
+            : provider === 'groq' ? 'https://api.groq.com/openai/v1'
+                : provider === 'openrouter' ? 'https://openrouter.ai/api/v1'
+                    : provider === 'huggingface' ? 'https://router.huggingface.co/v1'
+                        : provider === 'ollama' ? normalizeLocalAiBaseUrl(runtime.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL)
+                            : '';
+
+    if (provider === 'anthropic') {
+        if (!apiKey) throw new Error('Anthropic API kljuc nije postavljen za OCR fallback.');
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model,
+                max_tokens: 900,
+                temperature: 0.1,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: prompt },
+                        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: String(imageDataUrl || '').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '') } }
+                    ]
+                }]
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        return (data.content || []).map((part) => String(part?.text || '')).join('').trim();
+    }
+
+    if (!baseUrl) throw new Error('Provider nema podrzan OCR fallback endpoint.');
+    if ((provider === 'openai' || provider === 'groq' || provider === 'openrouter' || provider === 'huggingface') && !apiKey) {
+        throw new Error('API kljuc nije postavljen za OCR fallback.');
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers.Authorization = 'Bearer ' + apiKey;
+    if (provider === 'openrouter') {
+        headers['HTTP-Referer'] = 'https://etherx.io';
+        headers['X-Title'] = 'EtherX Browser';
+    }
+
+    const response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            model,
+            temperature: 0.1,
+            max_tokens: 900,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: prompt },
+                    { type: 'image_url', image_url: { url: imageDataUrl } }
+                ]
+            }]
+        })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+    return (data.choices?.[0]?.message?.content || '').trim();
+}
+
+function parseRegionRowsFromOcrOutput(rawText) {
+    const parsedArray = extractJsonArrayFromText(rawText);
+    if (Array.isArray(parsedArray)) return normalizeRegionScanRows(parsedArray, 'ocr');
+    const lines = String(rawText || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 140)
+        .map((line) => {
+            const m = line.match(/^([^:]{2,40})\s*:\s*(.+)$/);
+            if (!m) return { user: 'unknown', text: line, type: 'chat', source: 'ocr' };
+            return { user: String(m[1] || 'unknown').trim(), text: String(m[2] || '').trim(), type: 'chat', source: 'ocr' };
+        });
+    return normalizeRegionScanRows(lines, 'ocr');
+}
+
+async function executeTikTokRegionScanOcr(regionScreenRect) {
+    const dataUrl = await captureRegionImageDataUrl(regionScreenRect);
+    if (!dataUrl) throw new Error('Ne mogu snimiti regiju za OCR fallback');
+    const raw = await runAiVisionOcrRequest(dataUrl);
+    return parseRegionRowsFromOcrOutput(raw);
+}
+
+const TKAI_GUARD_CACHE_MAX = 1800;
+const tkaiGuardCache = new Map();
+
+function normalizeGuardCacheText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 420);
+}
+
+function getGuardCacheKey(provider, text) {
+    return String(provider || 'guard') + '|' + normalizeGuardCacheText(text);
+}
+
+function getGuardCached(provider, text) {
+    const key = getGuardCacheKey(provider, text);
+    return tkaiGuardCache.get(key) || null;
+}
+
+function setGuardCached(provider, text, value) {
+    const key = getGuardCacheKey(provider, text);
+    if (!key || !value) return;
+    tkaiGuardCache.delete(key);
+    tkaiGuardCache.set(key, value);
+    while (tkaiGuardCache.size > TKAI_GUARD_CACHE_MAX) {
+        const oldest = tkaiGuardCache.keys().next().value;
+        if (!oldest) break;
+        tkaiGuardCache.delete(oldest);
+    }
+}
+
+function riskRank(level) {
+    const v = String(level || '').toLowerCase();
+    if (v === 'unsafe') return 3;
+    if (v === 'controversial') return 2;
+    if (v === 'safe') return 1;
+    return 0;
+}
+
+function resolveGuardRowVisual(row, cfg) {
+    const risk = String(row?.riskLevel || '-');
+    const rank = riskRank(risk);
+    const threshold = String(cfg?.tkaiGuardActionThreshold || 'controversial').toLowerCase();
+    const minRank = threshold === 'unsafe' ? 3 : (threshold === 'safe' ? 1 : 2);
+    if (rank < minRank) return { trStyle: '', badgeStyle: '' };
+
+    const unsafeAction = String(cfg?.tkaiGuardUnsafeAction || 'highlight').toLowerCase();
+    const controversialAction = String(cfg?.tkaiGuardControversialAction || 'tint').toLowerCase();
+
+    if (rank >= 3) {
+        if (unsafeAction === 'none') return { trStyle: '', badgeStyle: '' };
+        if (unsafeAction === 'warn') {
+            return {
+                trStyle: 'background:rgba(220,38,38,.09)',
+                badgeStyle: 'color:#fca5a5;font-weight:700'
+            };
+        }
+        return {
+            trStyle: 'background:linear-gradient(90deg,rgba(127,29,29,.48),rgba(69,10,10,.18))',
+            badgeStyle: 'color:#fca5a5;font-weight:700'
+        };
+    }
+
+    if (rank === 2) {
+        if (controversialAction === 'none') return { trStyle: '', badgeStyle: '' };
+        if (controversialAction === 'warn') {
+            return {
+                trStyle: 'background:rgba(217,119,6,.08)',
+                badgeStyle: 'color:#fcd34d;font-weight:700'
+            };
+        }
+        return {
+            trStyle: 'background:linear-gradient(90deg,rgba(120,53,15,.32),rgba(120,53,15,.08))',
+            badgeStyle: 'color:#fcd34d;font-weight:700'
+        };
+    }
+
+    return { trStyle: '', badgeStyle: '' };
+}
+
+function combineGuardSignals(signals) {
+    const list = (Array.isArray(signals) ? signals : []).filter(Boolean);
+    if (!list.length) return { risk_level: '-', category: '-', source: '-' };
+    const sorted = list
+        .map((s) => ({ ...s, _rank: riskRank(s.risk_level) }))
+        .sort((a, b) => b._rank - a._rank);
+    const top = sorted[0] || {};
+    const source = list.map((s) => String(s.source || '')).filter(Boolean).join('+') || '-';
+    return {
+        risk_level: String(top.risk_level || '-'),
+        category: String(top.category || '-'),
+        source,
+        score: Number(top.score || 0)
+    };
+}
+
+function readTkaiGuardSettings() {
+    const s = DB.getSettings() || {};
+    return {
+        mode: String(s.tkaiRegionGuardMode || 'both').toLowerCase(),
+        cacheEnabled: s.tkaiGuardCacheEnabled !== false,
+        actionThreshold: String(s.tkaiGuardActionThreshold || 'controversial').toLowerCase(),
+        unsafeAction: String(s.tkaiGuardUnsafeAction || 'highlight').toLowerCase(),
+        controversialAction: String(s.tkaiGuardControversialAction || 'tint').toLowerCase(),
+    };
+}
+
+async function runQwen3GuardForRegionRows(rows) {
+    if (!window.electronAPI?.invoke) throw new Error('Electron bridge nije dostupan');
+    const list = (Array.isArray(rows) ? rows : [])
+        .slice(0, 80)
+        .map((row) => ({
+            text: String(row?.text || '').slice(0, 1200),
+            role: 'user'
+        }))
+        .filter((item) => item.text);
+    if (!list.length) return { ok: true, results: [] };
+
+    const response = await window.electronAPI.invoke('ai:qwen3GuardScan', {
+        model: 'Qwen/Qwen3Guard-Stream-0.6B',
+        items: list
+    });
+    if (!response?.ok) {
+        throw new Error(String(response?.error || 'Qwen3Guard scan failed'));
+    }
+    return {
+        ok: true,
+        results: Array.isArray(response.results) ? response.results : []
+    };
+}
+
+async function runOpirGuardForRegionRows(rows) {
+    if (!window.electronAPI?.invoke) throw new Error('Electron bridge nije dostupan');
+    const list = (Array.isArray(rows) ? rows : [])
+        .slice(0, 80)
+        .map((row) => ({
+            text: String(row?.text || '').slice(0, 1200),
+        }))
+        .filter((item) => item.text);
+    if (!list.length) return { ok: true, results: [] };
+
+    const response = await window.electronAPI.invoke('ai:opirGuardScan', {
+        model: 'knowledgator/opir-multitask-large-v1.0',
+        items: list
+    });
+    if (!response?.ok) {
+        throw new Error(String(response?.error || 'Opir scan failed'));
+    }
+    return {
+        ok: true,
+        results: Array.isArray(response.results) ? response.results : []
+    };
+}
+
+async function runProviderGuardWithCache(provider, rows, runner, cacheEnabled) {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const out = Array(sourceRows.length).fill(null);
+    const pending = [];
+
+    sourceRows.forEach((row, index) => {
+        const text = String(row?.text || '').trim();
+        if (!text) return;
+        if (cacheEnabled) {
+            const cached = getGuardCached(provider, text);
+            if (cached) {
+                out[index] = { ...cached, source: provider };
+                return;
+            }
+        }
+        pending.push({ index, row });
+    });
+
+    if (pending.length) {
+        const resp = await runner(pending.map((entry) => entry.row));
+        const results = Array.isArray(resp?.results) ? resp.results : [];
+        pending.forEach((entry, i) => {
+            const res = results[i] || {};
+            const normalized = {
+                risk_level: String(res.risk_level || 'Safe'),
+                category: String(res.category || '-'),
+                score: Number(res.score || 0),
+                source: provider,
+            };
+            out[entry.index] = normalized;
+            if (cacheEnabled) setGuardCached(provider, entry.row?.text, normalized);
+        });
+    }
+
+    return out;
+}
+
+async function moderateRegionRows(rows, guardCfg) {
+    const mode = String(guardCfg?.mode || 'both').toLowerCase();
+    const useQwen = mode === 'qwen' || mode === 'both';
+    const useOpir = mode === 'opir' || mode === 'both';
+    const cacheEnabled = guardCfg?.cacheEnabled !== false;
+
+    let qwenRows = Array((Array.isArray(rows) ? rows.length : 0)).fill(null);
+    let opirRows = Array((Array.isArray(rows) ? rows.length : 0)).fill(null);
+    const warnings = [];
+
+    if (useQwen) {
+        try {
+            qwenRows = await runProviderGuardWithCache('qwen', rows, runQwen3GuardForRegionRows, cacheEnabled);
+        } catch (err) {
+            warnings.push('Qwen3Guard: ' + String(err?.message || err));
+        }
+    }
+    if (useOpir) {
+        try {
+            opirRows = await runProviderGuardWithCache('opir', rows, runOpirGuardForRegionRows, cacheEnabled);
+        } catch (err) {
+            warnings.push('Opir: ' + String(err?.message || err));
+        }
+    }
+
+    const merged = (Array.isArray(rows) ? rows : []).map((row, idx) => {
+        const combined = combineGuardSignals([qwenRows[idx], opirRows[idx]]);
+        return {
+            ...row,
+            guardRisk: combined.risk_level || '-',
+            guardCategory: combined.category || '-',
+            guardSource: combined.source || '-',
+            guardScore: Number(combined.score || 0)
+        };
+    });
+    return { rows: merged, warnings };
+}
+
+function showTikTokRegionScanResults(rows, region, options = {}) {
+    const old = document.getElementById('tkaiRegionScanModal');
+    if (old) old.remove();
+    const modal = document.createElement('div');
+    modal.id = 'tkaiRegionScanModal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:100004;background:rgba(3,6,20,.72);display:flex;align-items:center;justify-content:center;padding:14px';
+    const card = document.createElement('div');
+    card.style.cssText = 'width:min(980px,96vw);max-height:86vh;overflow:auto;background:#0f172a;border:1px solid rgba(148,163,184,.35);border-radius:12px;color:#e2e8f0;box-shadow:0 18px 46px rgba(0,0,0,.55)';
+    const guardCfg = options.guardCfg || readTkaiGuardSettings();
+    const normalized = (Array.isArray(rows) ? rows : []).map((row) => {
+        const type = String(row.type || 'chat');
+        const giftMeta = type === 'gift' ? getTkaiGiftMeta(row.text || '') : null;
+        const riskLevel = String(row.riskLevel || row.guardRisk || row.risk_level || '-');
+        const visual = resolveGuardRowVisual({ riskLevel }, guardCfg);
+        return {
+            user: String(row.user || 'unknown').slice(0, 40),
+            text: String(row.text || '').slice(0, 260),
+            type,
+            source: String(row.source || 'dom'),
+            giftName: giftMeta ? String(giftMeta.giftName || '') : '',
+            quantity: giftMeta ? Math.max(1, Number(giftMeta.quantity || 1)) : 1,
+            coins: giftMeta ? Math.max(0, Number(giftMeta.coins || 0)) : 0,
+            riskLevel,
+            riskCategory: String(row.riskCategory || row.guardCategory || row.category || '-'),
+            riskSource: String(row.guardSource || row.riskSource || '-'),
+            trStyle: visual.trStyle || '',
+            badgeStyle: visual.badgeStyle || ''
+        };
+    });
+    const totalCoins = normalized.reduce((sum, row) => sum + Math.max(0, Number(row.coins || 0)), 0);
+    const giftRows = normalized.filter((row) => row.type === 'gift');
+    const ingested = Math.max(0, Number(options.ingested || 0));
+    const domRows = Math.max(0, Number(options.domRows || 0));
+    const ocrRows = Math.max(0, Number(options.ocrRows || 0));
+    card.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:linear-gradient(135deg,#0f766e,#1d4ed8)">' +
+        '<div style="font-size:13px;font-weight:700">🔎 TikTok scan regije</div>' +
+        '<button id="tkaiRegionScanClose" style="background:rgba(255,255,255,.18);border:none;color:#fff;font-size:16px;padding:0 8px;border-radius:4px;cursor:pointer">×</button>' +
+        '</div>' +
+        '<div style="padding:10px 12px;font-size:11px;color:#cbd5e1">Regija: ' + Math.round(region.width) + '×' + Math.round(region.height) +
+        ' px • redova: ' + normalized.length + ' • dom: ' + domRows + ' • ocr: ' + ocrRows + ' • giftova: ' + giftRows.length + ' • coins: ' + formatNum(totalCoins) + ' 🪙 • feed+: ' + ingested + '</div>' +
+        '<div style="padding:0 12px 12px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">' +
+        '<thead><tr style="text-align:left;color:#94a3b8"><th style="padding:4px">User</th><th style="padding:4px">Type</th><th style="padding:4px">Src</th><th style="padding:4px">Gift</th><th style="padding:4px">Qty</th><th style="padding:4px">Coins</th><th style="padding:4px">Risk</th><th style="padding:4px">Category</th><th style="padding:4px">Guard</th><th style="padding:4px">Text</th></tr></thead>' +
+        '<tbody>' + normalized.map((row) =>
+            '<tr' + (row.trStyle ? (' style="' + row.trStyle + '"') : '') + '>' +
+            '<td style="padding:4px;color:' + getUserColor(row.user) + '">' + escHtml(row.user) + '</td>' +
+            '<td style="padding:4px">' + escHtml(row.type) + '</td>' +
+            '<td style="padding:4px">' + escHtml(row.source) + '</td>' +
+            '<td style="padding:4px">' + escHtml(row.giftName || '-') + '</td>' +
+            '<td style="padding:4px">' + formatNum(row.quantity || 1) + '</td>' +
+            '<td style="padding:4px;color:#fbbf24">' + (row.coins ? (formatNum(row.coins) + ' 🪙') : '-') + '</td>' +
+            '<td style="padding:4px;' + escHtml(row.badgeStyle || '') + '">' + escHtml(row.riskLevel || '-') + '</td>' +
+            '<td style="padding:4px">' + escHtml(row.riskCategory || '-') + '</td>' +
+            '<td style="padding:4px;color:#93c5fd">' + escHtml(row.riskSource || '-') + '</td>' +
+            '<td style="padding:4px;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(row.text) + '">' + escHtml(row.text) + '</td>' +
+            '</tr>'
+        ).join('') + '</tbody></table></div>';
+    modal.appendChild(card);
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('#tkaiRegionScanClose')?.addEventListener('click', close);
+    modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+}
+function startTikTokRegionScan() {
+    const tab = getActiveTab();
+    if (!tab?.url || !tab.url.includes('tiktok.com')) {
+        showToast('⚠️ Ova opcija radi na TikTok stranici');
+        return;
+    }
+    const webview = getActiveTikTokWebview();
+    if (!webview || webview.tagName !== 'WEBVIEW') {
+        showToast('⚠️ TikTok webview nije dostupan');
+        return;
+    }
+    const rect = webview.getBoundingClientRect();
+    if (!rect || rect.width < 20 || rect.height < 20) {
+        showToast('⚠️ TikTok prozor nije vidljiv za scan');
+        return;
+    }
+    const overlay = document.createElement('div');
+    overlay.id = 'tkaiRegionScanOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(2,6,23,.22);cursor:crosshair';
+    const info = document.createElement('div');
+    info.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.92);border:1px solid rgba(148,163,184,.4);color:#e2e8f0;padding:6px 10px;border-radius:999px;font-size:11px';
+    info.textContent = 'Označi regiju za scan (Esc za odustani)';
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;border:2px dashed #38bdf8;background:rgba(56,189,248,.14);display:none;pointer-events:none';
+    overlay.appendChild(info);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    let active = false;
+    let sx = 0;
+    let sy = 0;
+    const cleanup = () => {
+        window.removeEventListener('keydown', onKey, true);
+        overlay.removeEventListener('pointerdown', onDown, true);
+        overlay.removeEventListener('pointermove', onMove, true);
+        overlay.removeEventListener('pointerup', onUp, true);
+        overlay.remove();
+    };
+    const onKey = (event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        cleanup();
+        showToast('❎ Region scan otkazan');
+    };
+    const onDown = (event) => {
+        if (event.button !== 0) return;
+        sx = event.clientX;
+        sy = event.clientY;
+        active = true;
+        box.style.display = 'block';
+        box.style.left = sx + 'px';
+        box.style.top = sy + 'px';
+        box.style.width = '0px';
+        box.style.height = '0px';
+        event.preventDefault();
+    };
+    const onMove = (event) => {
+        if (!active) return;
+        const x = Math.min(sx, event.clientX);
+        const y = Math.min(sy, event.clientY);
+        const w = Math.abs(event.clientX - sx);
+        const h = Math.abs(event.clientY - sy);
+        box.style.left = x + 'px';
+        box.style.top = y + 'px';
+        box.style.width = w + 'px';
+        box.style.height = h + 'px';
+    };
+    const onUp = async (event) => {
+        if (!active) return;
+        active = false;
+        const x = Math.min(sx, event.clientX);
+        const y = Math.min(sy, event.clientY);
+        const w = Math.abs(event.clientX - sx);
+        const h = Math.abs(event.clientY - sy);
+        cleanup();
+        if (w < 20 || h < 20) {
+            showToast('⚠️ Regija je premala');
+            return;
+        }
+        const regionScreenRect = {
+            x: Math.max(0, Math.round(x)),
+            y: Math.max(0, Math.round(y)),
+            width: Math.max(1, Math.round(w)),
+            height: Math.max(1, Math.round(h))
+        };
+        const clamped = {
+            x: Math.max(0, Math.round(x - rect.left)),
+            y: Math.max(0, Math.round(y - rect.top)),
+            width: Math.max(1, Math.round(Math.min(w, rect.width))),
+            height: Math.max(1, Math.round(Math.min(h, rect.height)))
+        };
+        showToast('🔎 Skeniram označenu regiju...');
+        try {
+            const domRows = normalizeRegionScanRows(await executeTikTokRegionScan(clamped), 'dom');
+            const domIngest = ingestTikTokRegionRows(domRows, { source: 'region-dom' });
+
+            let ocrRows = [];
+            let ocrIngested = 0;
+            if (domRows.length < 2) {
+                showToast('🧠 DOM redovi su slabi, pokrecem OCR fallback...');
+                try {
+                    ocrRows = normalizeRegionScanRows(await executeTikTokRegionScanOcr(regionScreenRect), 'ocr');
+                    const rs = ingestTikTokRegionRows(ocrRows, { source: 'region-ocr' });
+                    ocrIngested = Number(rs.added || 0);
+                } catch (ocrErr) {
+                    showToast('⚠️ OCR fallback nije uspio: ' + String(ocrErr?.message || ocrErr));
+                }
+            }
+
+            const mergedRows = [...domRows, ...ocrRows];
+            let guardedRows = mergedRows;
+            const guardCfg = readTkaiGuardSettings();
+            try {
+                if (mergedRows.length) {
+                    const modeLabel = guardCfg.mode === 'qwen'
+                        ? 'Qwen3Guard'
+                        : (guardCfg.mode === 'opir' ? 'Opir' : 'Qwen3Guard + Opir');
+                    showToast('🛡️ ' + modeLabel + ' safety scan...');
+                    const moderation = await moderateRegionRows(mergedRows, guardCfg);
+                    guardedRows = moderation.rows;
+                    if (Array.isArray(moderation.warnings) && moderation.warnings.length) {
+                        showToast('⚠️ ' + moderation.warnings.join(' | '));
+                    }
+                }
+            } catch (guardErr) {
+                showToast('⚠️ Safety guard nije dostupan: ' + String(guardErr?.message || guardErr));
+            }
+            const totalIngested = Number(domIngest.added || 0) + ocrIngested;
+            if (totalIngested > 0) {
+                showToast('✅ Region scan ubacio ' + totalIngested + ' redova u live feed');
+            } else {
+                showToast('ℹ️ Region scan nije nasao novih redova za feed');
+            }
+            showTikTokRegionScanResults(guardedRows, clamped, {
+                guardCfg,
+                ingested: totalIngested,
+                domRows: domRows.length,
+                ocrRows: ocrRows.length
+            });
+        } catch (err) {
+            showToast('❌ Region scan greška: ' + String(err?.message || err));
+        }
+    };
+    window.addEventListener('keydown', onKey, true);
+    overlay.addEventListener('pointerdown', onDown, true);
+    overlay.addEventListener('pointermove', onMove, true);
+    overlay.addEventListener('pointerup', onUp, true);
+}
 document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', () => {
     const sel = String(_ctxSelectionText || window.getSelection()?.toString() || '').trim();
     if (!sel) {
@@ -12522,6 +13656,10 @@ document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', () => {
     const owner = parseTikTokOwnerFromUrl(tab.url) || 'TikTok user';
     window.pushTextToTikTokAI(sel, owner, { forceTranslate: true });
     closeCtxMenu();
+});
+document.getElementById('ctx-tiktok-region-scan')?.addEventListener('click', () => {
+    closeCtxMenu();
+    startTikTokRegionScan();
 });
 document.getElementById('ctx-shadowban-check')?.addEventListener('click', () => {
     const tab = getActiveTab();
@@ -13227,7 +14365,191 @@ document.getElementById('mi-speech')?.addEventListener('click', () => {
     else showToast('Speech not supported');
 });
 document.getElementById('mi-autofill')?.addEventListener('click', () => { showToast('✏️ AutoFill menu'); });
-document.getElementById('mi-dictation')?.addEventListener('click', () => { showToast('🎙 Dictation not available in browser mode'); });
+let _voiceIdHrRecognition = null;
+let _voiceIdHrActive = false;
+let _voiceIdHrPanel = null;
+let _voiceIdHrStatusEl = null;
+let _voiceIdHrInterimEl = null;
+let _voiceIdHrListEl = null;
+const _voiceIdHrCache = new Map();
+
+function ensureVoiceIdHrPanel() {
+    if (_voiceIdHrPanel && document.body.contains(_voiceIdHrPanel)) return _voiceIdHrPanel;
+    const wrap = document.createElement('div');
+    wrap.id = 'voiceIdHrPanel';
+    wrap.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:100006;width:min(480px,92vw);max-height:48vh;display:flex;flex-direction:column;background:rgba(2,6,23,.92);border:1px solid rgba(148,163,184,.38);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden';
+    wrap.innerHTML = '' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;background:linear-gradient(135deg,#0ea5a8,#2563eb);color:#fff">' +
+        '  <div style="font-size:12px;font-weight:700">🎙 ID -> HR Live Dictation</div>' +
+        '  <button id="voiceIdHrClose" style="border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:2px 8px;cursor:pointer">×</button>' +
+        '</div>' +
+        '<div id="voiceIdHrStatus" style="padding:8px 11px;font-size:11px;color:#93c5fd;border-bottom:1px solid rgba(148,163,184,.24)">Status: idle</div>' +
+        '<div id="voiceIdHrInterim" style="padding:8px 11px;font-size:12px;color:#e2e8f0;border-bottom:1px solid rgba(148,163,184,.24);min-height:38px"></div>' +
+        '<div id="voiceIdHrList" style="padding:8px 11px;overflow:auto;display:flex;flex-direction:column;gap:8px"></div>';
+    document.body.appendChild(wrap);
+    _voiceIdHrPanel = wrap;
+    _voiceIdHrStatusEl = wrap.querySelector('#voiceIdHrStatus');
+    _voiceIdHrInterimEl = wrap.querySelector('#voiceIdHrInterim');
+    _voiceIdHrListEl = wrap.querySelector('#voiceIdHrList');
+    wrap.querySelector('#voiceIdHrClose')?.addEventListener('click', () => {
+        if (_voiceIdHrActive) stopVoiceIdHrDictation();
+        wrap.remove();
+    });
+    return wrap;
+}
+
+function setVoiceIdHrStatus(text, color) {
+    ensureVoiceIdHrPanel();
+    if (!_voiceIdHrStatusEl) return;
+    _voiceIdHrStatusEl.textContent = 'Status: ' + String(text || 'idle');
+    if (color) _voiceIdHrStatusEl.style.color = color;
+}
+
+function cacheVoiceTranslation(idText, hrText) {
+    const key = String(idText || '').trim().toLowerCase();
+    if (!key) return;
+    if (_voiceIdHrCache.has(key)) _voiceIdHrCache.delete(key);
+    _voiceIdHrCache.set(key, String(hrText || '').trim());
+    while (_voiceIdHrCache.size > 200) {
+        const oldest = _voiceIdHrCache.keys().next().value;
+        if (!oldest) break;
+        _voiceIdHrCache.delete(oldest);
+    }
+}
+
+function getCachedVoiceTranslation(idText) {
+    const key = String(idText || '').trim().toLowerCase();
+    if (!key) return '';
+    return _voiceIdHrCache.get(key) || '';
+}
+
+async function translateIdToHrLive(text) {
+    const clean = String(text || '').trim();
+    if (!clean) return '';
+    const cached = getCachedVoiceTranslation(clean);
+    if (cached) return cached;
+    let translated = '';
+    try {
+        if (typeof translateViaGoogle === 'function') {
+            translated = await translateViaGoogle(clean, 'hr');
+        } else {
+            const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=hr&dt=t&q=' + encodeURIComponent(clean);
+            const response = await fetch(url);
+            const data = await response.json().catch(() => null);
+            translated = Array.isArray(data?.[0]) ? data[0].map((part) => part?.[0] || '').join('').trim() : '';
+        }
+    } catch (_) {
+        translated = '';
+    }
+    if (!translated) translated = clean;
+    cacheVoiceTranslation(clean, translated);
+    return translated;
+}
+
+function appendVoiceIdHrRow(idText, hrText) {
+    ensureVoiceIdHrPanel();
+    if (!_voiceIdHrListEl) return;
+    const row = document.createElement('div');
+    row.style.cssText = 'background:rgba(255,255,255,.04);border:1px solid rgba(148,163,184,.2);border-radius:8px;padding:8px';
+    row.innerHTML = '' +
+        '<div style="font-size:10px;color:#94a3b8;margin-bottom:4px">' + new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '</div>' +
+        '<div style="font-size:11px;color:#7dd3fc;margin-bottom:3px"><b>ID:</b> ' + escHtml(idText) + '</div>' +
+        '<div style="font-size:12px;color:#f8fafc"><b>HR:</b> ' + escHtml(hrText) + '</div>';
+    _voiceIdHrListEl.prepend(row);
+    while (_voiceIdHrListEl.children.length > 80) {
+        _voiceIdHrListEl.removeChild(_voiceIdHrListEl.lastChild);
+    }
+}
+
+function stopVoiceIdHrDictation() {
+    _voiceIdHrActive = false;
+    if (_voiceIdHrRecognition) {
+        try { _voiceIdHrRecognition.onresult = null; } catch (_) { }
+        try { _voiceIdHrRecognition.onend = null; } catch (_) { }
+        try { _voiceIdHrRecognition.onerror = null; } catch (_) { }
+        try { _voiceIdHrRecognition.stop(); } catch (_) { }
+    }
+    _voiceIdHrRecognition = null;
+    if (_voiceIdHrInterimEl) _voiceIdHrInterimEl.textContent = '';
+    setVoiceIdHrStatus('stopped', '#fda4af');
+    showToast('⏹️ Diktat zaustavljen');
+}
+
+function startVoiceIdHrDictation() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+        showToast('⚠️ SpeechRecognition nije podržan u ovom okruženju');
+        return;
+    }
+    ensureVoiceIdHrPanel();
+    if (_voiceIdHrActive) {
+        stopVoiceIdHrDictation();
+        return;
+    }
+    const rec = new Recognition();
+    rec.lang = 'id-ID';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    _voiceIdHrRecognition = rec;
+    _voiceIdHrActive = true;
+    setVoiceIdHrStatus('slušam indonezijski...', '#86efac');
+    showToast('🎙️ Diktat pokrenut (ID -> HR)');
+
+    rec.onresult = async (event) => {
+        let interim = '';
+        const finalParts = [];
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const txt = String(result?.[0]?.transcript || '').trim();
+            if (!txt) continue;
+            if (result.isFinal) finalParts.push(txt);
+            else interim += (interim ? ' ' : '') + txt;
+        }
+        if (_voiceIdHrInterimEl) {
+            _voiceIdHrInterimEl.innerHTML = interim
+                ? '<span style="color:#7dd3fc"><b>ID (live):</b></span> ' + escHtml(interim)
+                : '';
+        }
+        for (const part of finalParts) {
+            const hr = await translateIdToHrLive(part);
+            appendVoiceIdHrRow(part, hr);
+            if (_voiceIdHrInterimEl) {
+                _voiceIdHrInterimEl.innerHTML = '<span style="color:#93c5fd"><b>Zadnje:</b></span> ' + escHtml(hr);
+            }
+        }
+    };
+
+    rec.onerror = (event) => {
+        const code = String(event?.error || 'unknown');
+        if (code === 'not-allowed') {
+            setVoiceIdHrStatus('mikrofon nije dozvoljen', '#fda4af');
+            showToast('⚠️ Dozvoli mikrofon za diktat');
+            _voiceIdHrActive = false;
+            return;
+        }
+        setVoiceIdHrStatus('greška: ' + code, '#fda4af');
+    };
+
+    rec.onend = () => {
+        if (!_voiceIdHrActive) return;
+        // Auto-restart keeps the stream running until user explicitly stops it.
+        try { rec.start(); } catch (_) { }
+    };
+
+    try {
+        rec.start();
+    } catch (err) {
+        _voiceIdHrActive = false;
+        _voiceIdHrRecognition = null;
+        setVoiceIdHrStatus('start failed', '#fda4af');
+        showToast('⚠️ Diktat se nije pokrenuo: ' + String(err?.message || err));
+    }
+}
+
+document.getElementById('mi-dictation')?.addEventListener('click', () => {
+    startVoiceIdHrDictation();
+});
 document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast('😀 Emoji panel: Use your OS emoji picker (Win+. or Ctrl+Cmd+Space)'); });
 
 // ── Password Manager (macOS Keychain style) ──
