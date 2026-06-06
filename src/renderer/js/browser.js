@@ -7150,12 +7150,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                             ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(244,63,94,.18);color:#fda4af;border:1px solid rgba(244,63,94,.35)">❤️ like</span>'
                             : '')));
             const showCaptionTranslation = message.type === 'caption' && !!message.translatedText;
-            const showNllbIdHrTranslation = message.type === 'chat'
+            const nllbShowBoth = DB.getSettings().tkaiNllbShowBoth !== false;
+            const showNllbIdHrTranslation = nllbShowBoth
+                && message.type === 'chat'
                 && message.sourceLang === 'id'
                 && message.translatedLang === 'hr'
                 && !!message.translatedText;
+            const nllbBadge = showNllbIdHrTranslation
+                ? '<span style="margin-left:6px;font-size:9px;padding:1px 6px;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(56,189,248,.38);color:#7dd3fc;vertical-align:middle">'
+                + escHtml(String(message.translatedBy || 'NLLB').replace('facebook/', '').replace('nllb-200-distilled-', 'NLLB-'))
+                + '</span>'
+                : '';
             const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showNllbIdHrTranslation) && message.translatedText
-                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">HR:</span> ' + escHtml(message.translatedText) + '</div>'
+                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">HR:</span> ' + escHtml(message.translatedText) + nllbBadge + '</div>'
                 : '';
             const giftSummary = giftMeta
                 ? '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#ffd278">'
@@ -7321,10 +7328,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
-    async function translateIndonesianToCroatianViaNllb(text) {
+    async function translateIndonesianToCroatianViaNllb(text, modelName) {
         const clean = String(text || '').replace(/\s+/g, ' ').trim();
         if (!clean) return '';
-        const key = normalizeIdLangKey(clean);
+        const model = String(modelName || 'facebook/nllb-200-distilled-600M').trim() || 'facebook/nllb-200-distilled-600M';
+        const key = model + '|' + normalizeIdLangKey(clean);
         if (nllbTranslateCache.has(key)) return nllbTranslateCache.get(key);
         if (!window.electronAPI?.invoke) {
             const fallback = await translateViaGoogle(clean, 'hr');
@@ -7332,7 +7340,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return fallback || clean;
         }
         const run = await window.electronAPI.invoke('ai:nllbTranslate', {
-            model: 'facebook/nllb-200-distilled-600M',
+            model,
             src_lang: 'ind_Latn',
             tgt_lang: 'hrv_Latn',
             items: [clean]
@@ -7354,6 +7362,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     async function translateIndonesianMessagesInPlace(messages) {
         if (!Array.isArray(messages) || !messages.length || nllbTranslateInFlight) return;
+        const cfg = DB.getSettings() || {};
+        if (cfg.tkaiNllbIdHrEnabled === false) return;
+        const selectedModel = String(cfg.tkaiNllbModel || 'facebook/nllb-200-distilled-600M').trim() || 'facebook/nllb-200-distilled-600M';
         const candidates = messages
             .filter((message) => message && message.type === 'chat')
             .filter((message) => !message.translatedText || message.translatedLang !== 'hr' || message.sourceLang !== 'id')
@@ -7364,12 +7375,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         nllbTranslateInFlight = true;
         try {
             for (const message of candidates) {
-                const translated = await translateIndonesianToCroatianViaNllb(message.text);
+                const translated = await translateIndonesianToCroatianViaNllb(message.text, selectedModel);
                 if (!translated) continue;
                 message.sourceLang = 'id';
                 message.translatedText = translated;
                 message.translatedLang = 'hr';
-                message.translatedBy = 'nllb-200-distilled-600M';
+                message.translatedBy = selectedModel;
             }
         } finally {
             nllbTranslateInFlight = false;
