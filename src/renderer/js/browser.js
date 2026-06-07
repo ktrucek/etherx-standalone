@@ -8563,7 +8563,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     const tkaiParserDebugEnabled = DB.getSettings().tkaiParserDebug === true;
-    const tkaiLikeBurstUser = String(DB.getSettings().tkaiLikeBurstUser || DB.getSettings().tkaiLikeSenderName || 'Kristijan Trucek').trim() || 'Kristijan Trucek';
+    const tkaiLikeBurstUser = String(DB.getSettings().tkaiLikeBurstUser || DB.getSettings().tkaiLikeSenderName || '').trim();
     const scraperScript = String.raw`(function() {
         try {
         const TKAI_PARSER_DEBUG = ${tkaiParserDebugEnabled ? 'true' : 'false'};
@@ -9443,7 +9443,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     tkaiLastLikeBurstCount = burstCount;
                     tkaiLastLikeBurstAt = Date.now();
                     if (delta > 0) {
-                        const likeUser = String(meta?.likeBurstUser || tkaiLikeBurstUser || 'Kristijan Trucek').trim() || 'Kristijan Trucek';
+                        const recentLikeUser = (() => {
+                            for (let i = filteredMessages.length - 1; i >= 0; i -= 1) {
+                                const msg = filteredMessages[i];
+                                if (!msg) continue;
+                                const msgType = normalizeTkaiMessageType(msg);
+                                const msgUser = String(msg.user || '').trim();
+                                if (msgType === 'like' && msgUser && msgUser.toLowerCase() !== 'unknown') {
+                                    return msgUser;
+                                }
+                            }
+                            return '';
+                        })();
+                        const streamOwnerName = String(streamOwnerEl?.textContent || '').replace(/^@+/, '').trim();
+                        const likeUser = String(meta?.likeBurstUser || recentLikeUser || tkaiLikeBurstUser || streamOwnerName || 'Live audience').trim() || 'Live audience';
                         filteredMessages.push({
                             user: likeUser,
                             text: `liked ×${delta}`,
