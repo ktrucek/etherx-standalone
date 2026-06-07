@@ -16074,49 +16074,72 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
         document.getElementById('aiKeyRowOpenrouter')?.style && (document.getElementById('aiKeyRowOpenrouter').style.display = p === 'openrouter' ? '' : 'none');
         document.getElementById('aiKeyRowOllama')?.style && (document.getElementById('aiKeyRowOllama').style.display = p === 'ollama' ? '' : 'none');
         document.getElementById('aiKeyRowHuggingface')?.style && (document.getElementById('aiKeyRowHuggingface').style.display = p === 'huggingface' ? '' : 'none');
-        const geminiModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'];
-        const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
-        const localModels = ['llama3.1:8b', 'qwen2.5:7b-instruct', 'mistral:7b-instruct'];
-        const claudeModels = ['claude-3-5-sonnet', 'claude-3-haiku', 'claude-3-opus'];
-        const groqModels = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'qwen-qwq-32b'];
-        const openrouterModels = ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash-preview', 'anthropic/claude-3.5-sonnet', 'deepseek/deepseek-r1', 'openai/gpt-4o'];
-        const ollamaModels = ['llama3.1:8b', 'llama3.2:latest', 'mistral:7b-instruct', 'qwen2.5:7b'];
-        const hfModels = ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3', 'google/gemma-3-27b-it', 'deepseek-ai/DeepSeek-R1'];
-        const defaults = p === 'openai' ? openaiModels : p === 'local' ? localModels : p === 'anthropic' ? claudeModels
-            : p === 'groq' ? groqModels : p === 'openrouter' ? openrouterModels : p === 'ollama' ? ollamaModels
-                : p === 'huggingface' ? hfModels : geminiModels;
+        const defaults = defaultModelsByProvider[p] || defaultModelsByProvider.gemini;
         if (!modelSel.dataset['populated_' + p]) {
             const prev = modelSel.value;
             modelSel.innerHTML = defaults.map(m => `<option value="${m}">${m}</option>`).join('');
             if (defaults.includes(prev)) modelSel.value = prev;
         }
-        syncTranslateModelOptionsFromMain();
+        syncTranslateModelOptions();
     }
 
-    function syncTranslateModelOptionsFromMain() {
+    const defaultModelsByProvider = {
+        gemini: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+        openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+        local: ['llama3.1:8b', 'qwen2.5:7b-instruct', 'mistral:7b-instruct'],
+        anthropic: ['claude-3-5-sonnet', 'claude-3-haiku', 'claude-3-opus'],
+        groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'qwen-qwq-32b'],
+        openrouter: ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash-preview', 'anthropic/claude-3.5-sonnet', 'deepseek/deepseek-r1', 'openai/gpt-4o'],
+        ollama: ['llama3.1:8b', 'llama3.2:latest', 'mistral:7b-instruct', 'qwen2.5:7b'],
+        huggingface: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3', 'google/gemma-3-27b-it', 'deepseek-ai/DeepSeek-R1']
+    };
+    const fetchedModelsByProvider = {};
+
+    function syncTranslateModelOptions() {
         const mainModelSel = document.getElementById('settingsAiModel');
         const translateModelSel = document.getElementById('settingsTranslateModel');
-        if (!mainModelSel || !translateModelSel) return;
+        const translateProviderSel = document.getElementById('settingsTranslateProvider');
+        if (!mainModelSel || !translateModelSel || !translateProviderSel) return;
 
+        const provider = String(translateProviderSel.value || '__main__').trim() || '__main__';
         const prev = translateModelSel.value || '__main__';
         const unique = new Set();
         const options = ['<option value="__main__">Isti kao glavni AI model</option>'];
-        Array.from(mainModelSel.options || []).forEach((opt) => {
-            const value = String(opt.value || '').trim();
-            const label = String(opt.textContent || value).trim();
-            if (!value || value === '__main__' || unique.has(value)) return;
-            unique.add(value);
-            options.push(`<option value="${escHtml(value)}">${escHtml(label)}</option>`);
-        });
+
+        const pushOption = (value, label) => {
+            const modelValue = String(value || '').trim();
+            if (!modelValue || modelValue === '__main__' || unique.has(modelValue)) return;
+            unique.add(modelValue);
+            options.push(`<option value="${escHtml(modelValue)}">${escHtml(String(label || modelValue).trim())}</option>`);
+        };
+
+        if (provider === '__main__') {
+            Array.from(mainModelSel.options || []).forEach((opt) => {
+                pushOption(opt.value, opt.textContent || opt.value);
+            });
+        } else {
+            const fetched = Array.isArray(fetchedModelsByProvider[provider]) ? fetchedModelsByProvider[provider] : [];
+            const defaults = Array.isArray(defaultModelsByProvider[provider]) ? defaultModelsByProvider[provider] : [];
+            const filteredMain = Array.from(mainModelSel.options || [])
+                .map((opt) => String(opt.value || '').trim())
+                .filter((value) => value && inferAiProviderFromModel(value) === provider);
+            const models = fetched.length ? fetched : (filteredMain.length ? filteredMain : defaults);
+            models.forEach((model) => pushOption(model, model));
+        }
+
         translateModelSel.innerHTML = options.join('');
+
         if (prev !== '__main__' && unique.has(prev)) {
             translateModelSel.value = prev;
+        } else if (provider !== '__main__' && unique.size) {
+            translateModelSel.value = Array.from(unique)[0];
         } else {
             translateModelSel.value = '__main__';
         }
     }
     updateKeyRows();
     providerSel?.addEventListener('change', updateKeyRows);
+    document.getElementById('settingsTranslateProvider')?.addEventListener('change', syncTranslateModelOptions);
 
     if (tempSlider && tempVal) tempSlider.addEventListener('input', () => { tempVal.textContent = tempSlider.value; });
 
@@ -16171,7 +16194,8 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
             modelSel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
             if (models.includes(prev)) modelSel.value = prev;
             modelSel.dataset['populated_' + provider] = '1';
-            syncTranslateModelOptionsFromMain();
+            fetchedModelsByProvider[provider] = models.slice();
+            syncTranslateModelOptions();
             if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
                 window.syncTkaiModelSelectorsFromGlobal();
             }
