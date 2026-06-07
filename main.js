@@ -3044,11 +3044,18 @@ function setupIPC() {
               const sameOrigin = parsedRedirectUrl.origin === baseUrl.origin;
               const hasCredentials =
                 parsedRedirectUrl.username || parsedRedirectUrl.password;
-              if (!isHttp || !sameOrigin || hasCredentials) {
+              const hasPathTraversal =
+                parsedRedirectUrl.pathname.includes("/../") ||
+                parsedRedirectUrl.pathname.startsWith("/..");
+              if (!isHttp || !sameOrigin || hasCredentials || hasPathTraversal) {
                 reject(new Error("Unsafe redirect URL blocked"));
                 return;
               }
-              safeRedirectUrl = parsedRedirectUrl.toString();
+              safeRedirectUrl =
+                baseUrl.origin +
+                parsedRedirectUrl.pathname +
+                parsedRedirectUrl.search +
+                parsedRedirectUrl.hash;
             } catch (e) {
               reject(new Error("Invalid redirect URL"));
               return;
