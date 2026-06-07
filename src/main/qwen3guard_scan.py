@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, cast
 
 
 def _error(message: str) -> None:
@@ -19,34 +19,41 @@ def _error(message: str) -> None:
 
 def _last_of(value: Any, fallback: str = "Unknown") -> str:
     if isinstance(value, list) and value:
-        return str(value[-1])
+        last_item = cast(Any, value[-1])
+        return str(last_item)
     if value is None:
         return fallback
-    return str(value)
+    safe_value = cast(Any, value)
+    return str(safe_value)
 
 
 def _load_payload() -> Dict[str, Any]:
     if len(sys.argv) < 2:
         raise ValueError("Missing payload argument")
     raw = base64.b64decode(sys.argv[1].encode("utf-8"))
-    return json.loads(raw.decode("utf-8"))
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError("Payload must be a JSON object")
+    return cast(Dict[str, Any], parsed)
 
 
 def _normalize_items(items: Any) -> List[Dict[str, str]]:
     normalized: List[Dict[str, str]] = []
-    for row in items if isinstance(items, list) else []:
-        text = str((row or {}).get("text", "")).strip()
+    rows = cast(List[Any], items) if isinstance(items, list) else []
+    for row_any in rows:
+        row = cast(Dict[str, Any], row_any) if isinstance(row_any, dict) else {}
+        text = str(row.get("text", "")).strip()
         if not text:
             normalized.append({"text": "", "role": "user"})
             continue
-        role = str((row or {}).get("role", "user")).strip().lower()
+        role = str(row.get("role", "user")).strip().lower()
         if role not in {"user", "assistant"}:
             role = "user"
         normalized.append({"text": text[:1200], "role": role})
     return normalized
 
 
-def _moderate_one(model: Any, tokenizer: Any, text: str, role: str) -> Tuple[str, str]:
+def _moderate_one(model: Any, tokenizer: Any, text: str, role: str) -> tuple[str, str]:
     if not text:
         return "Safe", "None"
 
@@ -88,13 +95,17 @@ def main() -> int:
             print(json.dumps({"ok": True, "results": []}, ensure_ascii=False))
             return 0
 
-        import torch
+        import torch as torch_mod
         from transformers import AutoModel, AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-        use_cuda = bool(getattr(torch, "cuda", None) and torch.cuda.is_available())
-        dtype = torch.bfloat16 if use_cuda else torch.float32
-        model = AutoModel.from_pretrained(
+        torch_any = cast(Any, torch_mod)
+        tokenizer_cls = cast(Any, AutoTokenizer)
+        model_cls = cast(Any, AutoModel)
+
+        tokenizer: Any = tokenizer_cls.from_pretrained(model_id, trust_remote_code=True)
+        use_cuda = bool(getattr(torch_any, "cuda", None) and torch_any.cuda.is_available())
+        dtype = torch_any.bfloat16 if use_cuda else torch_any.float32
+        model: Any = model_cls.from_pretrained(
             model_id,
             device_map="auto",
             torch_dtype=dtype,

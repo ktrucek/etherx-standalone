@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 
 def _error(message: str) -> None:
@@ -21,13 +21,18 @@ def _load_payload() -> Dict[str, Any]:
     if len(sys.argv) < 2:
         raise ValueError("Missing payload argument")
     raw = base64.b64decode(sys.argv[1].encode("utf-8"))
-    return json.loads(raw.decode("utf-8"))
+    parsed = json.loads(raw.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise ValueError("Payload must be a JSON object")
+    return cast(Dict[str, Any], parsed)
 
 
 def _normalize_items(items: Any) -> List[Dict[str, str]]:
     out: List[Dict[str, str]] = []
-    for row in items if isinstance(items, list) else []:
-        text = str((row or {}).get("text", "")).strip()
+    rows = cast(List[Any], items) if isinstance(items, list) else []
+    for row_any in rows:
+        row = cast(Dict[str, Any], row_any) if isinstance(row_any, dict) else {}
+        text = str(row.get("text", "")).strip()
         if not text:
             out.append({"text": ""})
             continue
@@ -45,14 +50,19 @@ def main() -> int:
             print(json.dumps({"ok": True, "results": []}, ensure_ascii=False))
             return 0
 
-        from gliclass import GLiClassModel, ZeroShotClassificationPipeline
+        from gliclass import GLiClassModel, ZeroShotClassificationPipeline  # type: ignore[import-untyped]
         from transformers import AutoTokenizer
-        import torch
+        import torch as torch_mod
 
-        model = GLiClassModel.from_pretrained(model_id)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        device = "cuda:0" if getattr(torch, "cuda", None) and torch.cuda.is_available() else "cpu"
-        classifier = ZeroShotClassificationPipeline(
+        torch_any = cast(Any, torch_mod)
+        model_cls = cast(Any, GLiClassModel)
+        tokenizer_cls = cast(Any, AutoTokenizer)
+        pipeline_cls = cast(Any, ZeroShotClassificationPipeline)
+
+        model: Any = model_cls.from_pretrained(model_id)
+        tokenizer: Any = tokenizer_cls.from_pretrained(model_id)
+        device = "cuda:0" if getattr(torch_any, "cuda", None) and torch_any.cuda.is_available() else "cpu"
+        classifier: Any = pipeline_cls(
             model=model,
             tokenizer=tokenizer,
             classification_type="single-label",
@@ -68,7 +78,8 @@ def main() -> int:
                 results.append({"risk_level": "Safe", "category": "safe", "score": 1.0})
                 continue
 
-            pred = classifier(text, labels)[0]
+            pred_any: Any = classifier(text, labels)
+            pred = cast(List[Dict[str, Any]], pred_any[0] if pred_any else [])
             best = max(pred, key=lambda row: float(row.get("score", 0.0))) if pred else {"label": "safe", "score": 1.0}
             label = str(best.get("label", "safe")).strip().lower()
             score = float(best.get("score", 0.0))

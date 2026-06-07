@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import sys
-from typing import Any
+from typing import Any, cast
 
 
 def _emit(payload: dict[str, Any]) -> None:
@@ -24,7 +24,7 @@ def _load_payload() -> dict[str, Any]:
     parsed = json.loads(raw.decode("utf-8"))
     if not isinstance(parsed, dict):
         raise ValueError("Payload must be a JSON object")
-    return parsed
+    return cast(dict[str, Any], parsed)
 
 
 def main() -> int:
@@ -33,30 +33,46 @@ def main() -> int:
         model_name = str(payload.get("model") or "facebook/nllb-200-distilled-600M")
         src_lang = str(payload.get("src_lang") or "ind_Latn")
         tgt_lang = str(payload.get("tgt_lang") or "hrv_Latn")
-        texts = [str(item or "").strip() for item in (payload.get("items") or [])]
+        items_raw = payload.get("items")
+        if isinstance(items_raw, list):
+            items_iter = cast(list[Any], items_raw)
+        elif isinstance(items_raw, tuple):
+            tuple_items = cast(tuple[Any, ...], items_raw)
+            items_iter = list(tuple_items)
+        else:
+            items_iter = cast(list[Any], [])
+        texts = [str(item or "").strip() for item in items_iter]
         texts = [text[:1200] for text in texts if text]
 
         if not texts:
             _emit({"ok": True, "results": []})
             return 0
 
-        import torch
+        import torch as torch_mod
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name, src_lang=src_lang)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        torch_any = cast(Any, torch_mod)
+        tokenizer_cls = cast(Any, AutoTokenizer)
+        model_cls = cast(Any, AutoModelForSeq2SeqLM)
 
-        device = "cuda" if getattr(torch, "cuda", None) and torch.cuda.is_available() else "cpu"
+        tokenizer: Any = tokenizer_cls.from_pretrained(model_name, src_lang=src_lang)
+        model: Any = model_cls.from_pretrained(model_name)
+
+        device = "cuda" if getattr(torch_any, "cuda", None) and torch_any.cuda.is_available() else "cpu"
         model = model.to(device).eval()
 
-        encoded = tokenizer(texts, return_tensors="pt", padding=True, truncation=True, max_length=512)
-        encoded = {key: value.to(device) for key, value in encoded.items()}
+        encoded_any: Any = tokenizer(texts, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        encoded: dict[str, Any] = {
+            str(key): value.to(device)
+            for key, value in cast(dict[Any, Any], encoded_any).items()
+        }
 
-        forced_bos = tokenizer.lang_code_to_id.get(tgt_lang)
+        lang_code_to_id = cast(dict[str, int], getattr(tokenizer, "lang_code_to_id", {}) or {})
+        forced_bos = lang_code_to_id.get(tgt_lang)
         if forced_bos is None:
             raise ValueError(f"Unsupported target language code: {tgt_lang}")
 
-        with torch.no_grad():
+        with torch_any.no_grad():
             generated = model.generate(
                 **encoded,
                 forced_bos_token_id=forced_bos,
@@ -64,8 +80,9 @@ def main() -> int:
                 num_beams=4,
             )
 
-        out = tokenizer.batch_decode(generated, skip_special_tokens=True)
-        _emit({"ok": True, "results": [str(x or "").strip() for x in out]})
+        out_any: Any = tokenizer.batch_decode(generated, skip_special_tokens=True)
+        out_list = cast(list[Any], out_any)
+        _emit({"ok": True, "results": [str(x or "").strip() for x in out_list]})
         return 0
     except Exception as exc:
         _emit({"ok": False, "error": str(exc)})

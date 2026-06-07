@@ -4643,6 +4643,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const translateLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTranslateLang"]');
     const replyLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyLang"]');
     const autoTranslateEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiAutoTranslate"]');
+    const autoTranslateGiftEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiAutoTranslateGift"]');
+    const autoTranslateShareEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiAutoTranslateShare"]');
+    const autoTranslateLikeEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiAutoTranslateLike"]');
+    const autoTranslateSkipEnglishEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiAutoTranslateSkipEnglish"]');
+    const tkaiPresetResetBtn = document.getElementById('tkaiPresetResetBtn');
     const countEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReplyCount"]');
     const contextEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiContextCount"]');
     const customPromptEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiCustomPrompt"]');
@@ -4658,6 +4663,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const configInner = document.getElementById('tkaiConfigInner');
     const configArrow = document.getElementById('tkaiConfigArrow');
     let tkaiFeedMode = String(DB.getSettings().tkaiFeedMode || 'split').toLowerCase();
+    const TKAI_TRANSLATE_PRESET_DEFAULTS = {
+        autoTranslate: true,
+        autoTranslateGift: false,
+        autoTranslateShare: false,
+        autoTranslateLike: false,
+        autoTranslateSkipEnglish: true,
+    };
 
     function applyTkaiFeedMode() {
         const normalized = tkaiFeedMode === 'chat-only' || tkaiFeedMode === 'events-only' ? tkaiFeedMode : 'split';
@@ -4694,6 +4706,75 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (translateLang !== 'auto') return translateLang;
         if (readLang !== 'auto') return readLang;
         return 'en';
+    }
+
+    function isTkaiTypeTranslationEnabled(type, settings = null) {
+        const cfg = settings || DB.getSettings() || {};
+        const normalized = String(type || '').toLowerCase();
+        if (normalized === 'gift' || normalized === 'subscriber') {
+            if (autoTranslateGiftEl) return isToggleOn(autoTranslateGiftEl);
+            return cfg.tkaiAutoTranslateGift === true;
+        }
+        if (normalized === 'share') {
+            if (autoTranslateShareEl) return isToggleOn(autoTranslateShareEl);
+            return cfg.tkaiAutoTranslateShare === true;
+        }
+        if (normalized === 'like') {
+            if (autoTranslateLikeEl) return isToggleOn(autoTranslateLikeEl);
+            return cfg.tkaiAutoTranslateLike === true;
+        }
+        return true;
+    }
+
+    function shouldSkipEnglishAutoTranslate(settings = null) {
+        const cfg = settings || DB.getSettings() || {};
+        if (autoTranslateSkipEnglishEl) return isToggleOn(autoTranslateSkipEnglishEl);
+        return cfg.tkaiAutoTranslateSkipEnglish === true;
+    }
+
+    function detectLikelySourceLang(text) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!clean) return '';
+        const letters = clean.match(/[A-Za-z]/g) || [];
+        const latinRatio = letters.length / Math.max(clean.length, 1);
+        if (latinRatio < 0.55) return '';
+        const lower = clean.toLowerCase();
+        const englishHints = [
+            ' the ', ' and ', ' you ', ' your ', ' with ', ' this ', ' that ', ' is ', ' are ',
+            ' thanks ', ' thank you ', ' please ', ' i ', ' we ', ' they '
+        ];
+        const padded = ` ${lower} `;
+        if (englishHints.some((token) => padded.includes(token))) return 'en';
+        return '';
+    }
+
+    function ensureTkaiTranslatePresetDefaults() {
+        applyTkaiTranslatePresetRecommended({ force: false, syncUiOnly: true });
+    }
+
+    function applyTkaiTranslatePresetRecommended(options = {}) {
+        const force = options?.force === true;
+        const syncUiOnly = options?.syncUiOnly === true;
+        const cfg = DB.getSettings() || {};
+        const shouldApplyAutoTranslate = force || cfg.tkaiAutoTranslate === undefined;
+        const shouldApplyGift = force || cfg.tkaiAutoTranslateGift === undefined;
+        const shouldApplyShare = force || cfg.tkaiAutoTranslateShare === undefined;
+        const shouldApplyLike = force || cfg.tkaiAutoTranslateLike === undefined;
+        const shouldApplySkipEnglish = force || cfg.tkaiAutoTranslateSkipEnglish === undefined;
+
+        if (shouldApplyAutoTranslate) DB.saveSetting('tkaiAutoTranslate', TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslate);
+        if (shouldApplyGift) DB.saveSetting('tkaiAutoTranslateGift', TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateGift);
+        if (shouldApplyShare) DB.saveSetting('tkaiAutoTranslateShare', TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateShare);
+        if (shouldApplyLike) DB.saveSetting('tkaiAutoTranslateLike', TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateLike);
+        if (shouldApplySkipEnglish) DB.saveSetting('tkaiAutoTranslateSkipEnglish', TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateSkipEnglish);
+
+        if (force || shouldApplyAutoTranslate) setToggleOn(autoTranslateEl, TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslate);
+        if (force || shouldApplyGift) setToggleOn(autoTranslateGiftEl, TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateGift);
+        if (force || shouldApplyShare) setToggleOn(autoTranslateShareEl, TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateShare);
+        if (force || shouldApplyLike) setToggleOn(autoTranslateLikeEl, TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateLike);
+        if (force || shouldApplySkipEnglish) setToggleOn(autoTranslateSkipEnglishEl, TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateSkipEnglish);
+
+        if (!syncUiOnly) saveCfg();
     }
 
     function getCcTargetLang() {
@@ -4814,6 +4895,22 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function loadCfg() {
         try {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const cfg = DB.getSettings() || {};
+            const autoTranslate = saved.autoTranslate !== undefined
+                ? saved.autoTranslate !== false
+                : (cfg.tkaiAutoTranslate !== false && TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslate === true);
+            const autoTranslateGift = saved.autoTranslateGift !== undefined
+                ? saved.autoTranslateGift === true
+                : (cfg.tkaiAutoTranslateGift === true);
+            const autoTranslateShare = saved.autoTranslateShare !== undefined
+                ? saved.autoTranslateShare === true
+                : (cfg.tkaiAutoTranslateShare === true);
+            const autoTranslateLike = saved.autoTranslateLike !== undefined
+                ? saved.autoTranslateLike === true
+                : (cfg.tkaiAutoTranslateLike === true);
+            const autoTranslateSkipEnglish = saved.autoTranslateSkipEnglish !== undefined
+                ? saved.autoTranslateSkipEnglish === true
+                : (cfg.tkaiAutoTranslateSkipEnglish !== false && TKAI_TRANSLATE_PRESET_DEFAULTS.autoTranslateSkipEnglish === true);
             if (toneEl && saved.tone) toneEl.value = saved.tone;
             if (readLangEl && (saved.readLang || saved.lang)) readLangEl.value = saved.readLang || saved.lang;
             if (translateLangEl && saved.translateLang) translateLangEl.value = saved.translateLang;
@@ -4821,7 +4918,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (countEl && saved.count) countEl.value = saved.count;
             if (contextEl && saved.context) contextEl.value = saved.context;
             if (customPromptEl && saved.customPrompt) customPromptEl.value = saved.customPrompt;
-            setToggleOn(autoTranslateEl, saved.autoTranslate !== false);
+            setToggleOn(autoTranslateEl, autoTranslate);
+            setToggleOn(autoTranslateGiftEl, autoTranslateGift);
+            setToggleOn(autoTranslateShareEl, autoTranslateShare);
+            setToggleOn(autoTranslateLikeEl, autoTranslateLike);
+            setToggleOn(autoTranslateSkipEnglishEl, autoTranslateSkipEnglish);
             if (typeof saved.holdL === 'boolean') holdLActive = saved.holdL;
         } catch (e) { }
     }
@@ -4834,6 +4935,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 translateLang: translateLangEl?.value,
                 replyLang: replyLangEl?.value,
                 autoTranslate: isToggleOn(autoTranslateEl),
+                autoTranslateGift: isToggleOn(autoTranslateGiftEl),
+                autoTranslateShare: isToggleOn(autoTranslateShareEl),
+                autoTranslateLike: isToggleOn(autoTranslateLikeEl),
+                autoTranslateSkipEnglish: isToggleOn(autoTranslateSkipEnglishEl),
                 count: countEl?.value,
                 context: contextEl?.value,
                 customPrompt: customPromptEl?.value,
@@ -8269,22 +8374,32 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return true;
     };
     async function translateViaGoogle(text, targetLang) {
-        const key = targetLang + '|' + text;
-        if (translateCache.has(key)) return translateCache.get(key);
+        const detail = await translateViaGoogleDetailed(text, targetLang);
+        return String(detail?.translated || text || '');
+    }
+
+    async function translateViaGoogleDetailed(text, targetLang) {
+        const cleanText = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!cleanText) return { translated: '', sourceLang: '' };
+        const cleanLang = String(targetLang || '').trim() || 'en';
+        const key = cleanLang + '|' + cleanText;
+        if (translateCache.has(key)) {
+            const cached = translateCache.get(key);
+            if (cached && typeof cached === 'object') return cached;
+            return { translated: String(cached || cleanText || ''), sourceLang: '' };
+        }
+        const inferredSource = detectLikelySourceLang(cleanText);
         try {
-            const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='
-                + encodeURIComponent(targetLang) + '&dt=t&q=' + encodeURIComponent(text);
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            const translated = Array.isArray(data?.[0])
-                ? data[0].map(part => part?.[0] || '').join('').trim()
-                : '';
-            if (!translated) throw new Error('Empty translation');
-            translateCache.set(key, translated);
-            return translated;
+            const tr = await window.etherx?.ai?.translate?.(cleanText, cleanLang);
+            const translated = String(tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '')).trim();
+            const payload = {
+                translated: translated || cleanText,
+                sourceLang: inferredSource
+            };
+            translateCache.set(key, payload);
+            return payload;
         } catch (_) {
-            return text;
+            return { translated: cleanText, sourceLang: inferredSource };
         }
     }
 
@@ -8352,13 +8467,23 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!targetLang || targetLang === 'auto' || isTranslating) return;
         isTranslating = true;
         try {
+            const cfg = DB.getSettings() || {};
+            const skipEnglish = shouldSkipEnglishAutoTranslate(cfg);
             const candidates = messages
                 .filter(message => message && message.text)
+                .filter(message => isTkaiTypeTranslationEnabled(normalizeTkaiMessageType(message), cfg))
                 .filter(message => message.translatedLang !== targetLang)
                 .slice(-20);
             await Promise.all(candidates.map(async (message) => {
-                const translated = await translateViaGoogle(message.text, targetLang);
-                message.translatedText = translated;
+                const detail = await translateViaGoogleDetailed(message.text, targetLang);
+                const detected = String(detail?.sourceLang || message.sourceLang || '').toLowerCase();
+                if (detected) message.sourceLang = detected;
+                if (skipEnglish && detected === 'en') {
+                    message.translatedText = message.text;
+                    message.translatedLang = targetLang;
+                    return;
+                }
+                message.translatedText = String(detail?.translated || message.text || '');
                 message.translatedLang = targetLang;
             }));
         } finally {
@@ -9915,10 +10040,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }, seconds * 1000);
     }
 
+    ensureTkaiTranslatePresetDefaults();
     loadCfg();
     restoreTkaiAutosaveIfAny();
     initTkaiAutosave();
-    [toneEl, readLangEl, translateLangEl, replyLangEl, autoTranslateEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
+    [toneEl, readLangEl, translateLangEl, replyLangEl, autoTranslateEl, autoTranslateGiftEl, autoTranslateShareEl, autoTranslateLikeEl, autoTranslateSkipEnglishEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
 
     btnTkaiGiftImport?.addEventListener('click', () => tkaiGiftImportFile?.click());
     tkaiGiftImportFile?.addEventListener('change', async (event) => {
@@ -10016,6 +10142,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             await translateMessagesInPlace(collectedMessages, targetLang);
         }
         renderMessages();
+    });
+    tkaiPresetResetBtn?.addEventListener('click', async () => {
+        applyTkaiTranslatePresetRecommended({ force: true, syncUiOnly: false });
+        const targetLang = getTranslateTargetLang();
+        if (targetLang !== 'auto') {
+            await translateMessagesInPlace(collectedMessages, targetLang);
+        }
+        renderMessages();
+        showToast('✅ Vraćen preporučeni preset prijevoda');
     });
 
     configToggle?.addEventListener('click', () => {
@@ -11465,20 +11600,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
             if (String(out || '').trim()) return String(out).trim();
         } catch (_) { }
-
-        try {
-            const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='
-                + encodeURIComponent(cleanLang) + '&dt=t&q=' + encodeURIComponent(cleanText);
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            const translated = Array.isArray(data?.[0])
-                ? data[0].map(part => part?.[0] || '').join('').trim()
-                : '';
-            return translated || cleanText;
-        } catch (_) {
-            return cleanText;
-        }
+        return cleanText;
     }
 
     function resolveAiTranslateConfig() {
@@ -15909,11 +16031,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         try {
             if (typeof translateViaGoogle === 'function') {
                 translated = await translateViaGoogle(clean, 'hr');
-            } else {
-                const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=hr&dt=t&q=' + encodeURIComponent(clean);
-                const response = await fetch(url);
-                const data = await response.json().catch(() => null);
-                translated = Array.isArray(data?.[0]) ? data[0].map((part) => part?.[0] || '').join('').trim() : '';
             }
         } catch (_) {
             translated = '';
