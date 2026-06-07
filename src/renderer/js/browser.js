@@ -757,6 +757,38 @@ if (window.electronWebview) {
     else document.body.classList.add('is-electron');
 })();
 
+function resetBlockingOverlays() {
+    const ids = [
+        'settingsBackdrop',
+        'sipBackdrop',
+        'blockedOverlay',
+        'iconPickerOverlay',
+        'customToolbarOverlay',
+        'shareSheet',
+        'qrSyncOverlay',
+        'bmManagerModal',
+        'tkaiPanelLockOverlay',
+        'pwdModal'
+    ];
+
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('show', 'open', 'active');
+        el.style.display = 'none';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Defensive reset in case a stale overlay/backdrop remained visible.
+    resetBlockingOverlays();
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    resetBlockingOverlays();
+}, true);
+
 const STATE = { tabs: [], activeTabId: null, isPrivate: false, zoom: 100, devtoolsOpen: false, readerMode: false, respMode: false, autoBookmark: false };
 
 // 🔥 PERFORMANCE: Throttle and Debounce helpers
