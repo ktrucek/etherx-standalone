@@ -114,6 +114,48 @@ function formatNum(value) {
     }
     return String(n);
 }
+
+// Runtime-safe fallbacks for builds where TikTok helpers end up outside current scope.
+if (typeof globalThis.getSongPerfDb !== 'function') {
+    globalThis.getSongPerfDb = function getSongPerfDbFallback() {
+        try {
+            const raw = localStorage.getItem('ex_tkai_song_perf_db') || '{}';
+            const db = JSON.parse(raw);
+            return db && typeof db === 'object' ? db : {};
+        } catch (_) {
+            return {};
+        }
+    };
+}
+if (typeof globalThis.saveSongPerfDb !== 'function') {
+    globalThis.saveSongPerfDb = function saveSongPerfDbFallback(db) {
+        try {
+            localStorage.setItem('ex_tkai_song_perf_db', JSON.stringify(db || {}));
+        } catch (_) { }
+    };
+}
+if (typeof globalThis.getActiveTikTokWebview !== 'function') {
+    globalThis.getActiveTikTokWebview = function getActiveTikTokWebviewFallback() {
+        try {
+            let tabId = null;
+            if (typeof getActiveTab === 'function') {
+                const tab = getActiveTab();
+                tabId = Number(tab?.id || 0) || null;
+            }
+            if (!tabId && typeof STATE === 'object' && STATE) {
+                tabId = Number(STATE.activeTabId || 0) || null;
+            }
+            if (tabId) {
+                const byId = document.getElementById('browseFrame_' + tabId);
+                if (byId && byId.tagName === 'WEBVIEW') return byId;
+            }
+            const main = document.getElementById('browseFrame');
+            return main && main.tagName === 'WEBVIEW' ? main : null;
+        } catch (_) {
+            return null;
+        }
+    };
+}
 // Store the element that had focus before a context menu opened so paste targets it correctly
 let _ctxFocusedEl = null;
 function normalizePwdSite(site) {
@@ -1043,6 +1085,9 @@ initSettingsPanel();
             if (drawerId === 'tkaiDrawerAiModel' && !isOpen) {
                 const gname = document.getElementById('tkaiGlobalModelName');
                 if (gname) gname.textContent = (typeof getSelectedAiModel === 'function' ? getSelectedAiModel() : '—') || '—';
+                if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
+                    window.syncTkaiModelSelectorsFromGlobal();
+                }
             }
         });
     });
@@ -1140,6 +1185,53 @@ initSettingsPanel();
         const saveBtn = document.getElementById('tkaiStackTestSaveCreds');
         if (!providerEl || !apiEl) return;
 
+        const syncTkaiModelSelectorsFromGlobal = () => {
+            const globalModelSel = document.getElementById('settingsAiModel');
+            const tkaiModelSel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiModelOverride"]');
+            const stackModelSel = document.getElementById('tkaiStackTestModel');
+            if (!globalModelSel) return;
+
+            const models = [];
+            const seen = new Set();
+            Array.from(globalModelSel.options || []).forEach((opt) => {
+                const value = String(opt?.value || '').trim();
+                if (!value || value === '__main__' || seen.has(value)) return;
+                seen.add(value);
+                models.push(value);
+            });
+
+            if (tkaiModelSel) {
+                const prev = String(tkaiModelSel.value || '').trim();
+                const options = ['<option value="">🌐 Global model (default)</option>']
+                    .concat(models.map((m) => `<option value="${escHtml(m)}">${escHtml(m)}</option>`));
+                tkaiModelSel.innerHTML = options.join('');
+                if (prev && seen.has(prev)) {
+                    tkaiModelSel.value = prev;
+                } else if (prev) {
+                    tkaiModelSel.insertAdjacentHTML('beforeend', `<option value="${escHtml(prev)}">${escHtml(prev)} (custom)</option>`);
+                    tkaiModelSel.value = prev;
+                } else {
+                    tkaiModelSel.value = '';
+                }
+            }
+
+            if (stackModelSel) {
+                const prev = String(stackModelSel.value || '').trim();
+                const options = ['<option value="">(override/global model)</option>']
+                    .concat(models.map((m) => `<option value="${escHtml(m)}">${escHtml(m)}</option>`));
+                stackModelSel.innerHTML = options.join('');
+                if (prev && seen.has(prev)) {
+                    stackModelSel.value = prev;
+                } else if (prev) {
+                    stackModelSel.insertAdjacentHTML('beforeend', `<option value="${escHtml(prev)}">${escHtml(prev)} (custom)</option>`);
+                    stackModelSel.value = prev;
+                } else {
+                    stackModelSel.value = '';
+                }
+            }
+        };
+        window.syncTkaiModelSelectorsFromGlobal = syncTkaiModelSelectorsFromGlobal;
+
         const readProviderKey = (provider, cfg) => {
             if (provider === 'gemini') return cfg.geminiApiKey || cfg.gemini_api_key || '';
             if (provider === 'openai') return cfg.openaiApiKey || cfg.openai_api_key || '';
@@ -1180,6 +1272,7 @@ initSettingsPanel();
             const cfg = DB.getSettings() || {};
             const provider = String(cfg.tkaiProviderOverride || cfg.aiProvider || 'gemini');
             const model = String(cfg.tkaiModelOverride || cfg.aiModel || '');
+            syncTkaiModelSelectorsFromGlobal();
             providerEl.value = provider;
             if (modelEl) modelEl.value = model;
             apiEl.value = readProviderKey(provider, cfg);
@@ -1206,6 +1299,7 @@ initSettingsPanel();
         });
 
         syncFromSettings();
+        document.getElementById('settingsAiModel')?.addEventListener('change', syncTkaiModelSelectorsFromGlobal);
     })();
 
     // HF token for Cardiff NLP — load saved token + wire save button
@@ -1568,46 +1662,49 @@ initSettingsPanel();
         };
         return { sessionData, analytics, giftBreakdowns, stamp, baseName, summary };
     }
-    function openTkaiSessionStatsPage(session, indexLabel) {
-        const payload = buildTkaiSessionStatsPayload(session, indexLabel);
-        const storagePrefix = 'tkai_session_dashboard_payload_';
-        const now = Date.now();
+
+    const TKAI_STATS_STORAGE_KEY = 'ex_tkai_stats_storage';
+    function getTkaiStatsStorage() {
         try {
-            Object.keys(localStorage)
-                .filter((key) => key.startsWith(storagePrefix))
-                .forEach((key) => {
-                    try {
-                        const raw = JSON.parse(localStorage.getItem(key) || 'null');
-                        const createdAt = Number(raw?.createdAt || 0);
-                        if (!createdAt || now - createdAt > 86400000) localStorage.removeItem(key);
-                    } catch (_) {
-                        localStorage.removeItem(key);
-                    }
-                });
+            const list = JSON.parse(localStorage.getItem(TKAI_STATS_STORAGE_KEY) || '[]');
+            return Array.isArray(list) ? list : [];
+        } catch (_) {
+            return [];
+        }
+    }
+    function saveTkaiStatsStorage(list) {
+        try {
+            localStorage.setItem(TKAI_STATS_STORAGE_KEY, JSON.stringify(Array.isArray(list) ? list : []));
         } catch (_) { }
-        const token = storagePrefix + now + '_' + Math.random().toString(36).slice(2, 9);
+    }
+    function saveTkaiStatsSnapshot(session, label = '') {
         try {
-            localStorage.setItem(token, JSON.stringify({ createdAt: now, payload: payload.summary }));
+            const payload = buildTkaiSessionStatsPayload(session, label);
+            const summary = payload.summary || {};
+            const rec = {
+                id: 'tkai-stats-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                savedAt: summary.savedAt || new Date().toISOString(),
+                label: label || '',
+                messageCount: Number(summary.messageCount || 0),
+                totalCoins: Number(summary.totalCoins || 0),
+                uniqueUsers: Number(summary.uniqueUsers || 0),
+                durationMinutes: Number(summary.durationMinutes || 0),
+                peakViewers: Number(summary.peakViewers || 0),
+                typeCounts: summary.typeCounts || {},
+                summary,
+            };
+            const list = getTkaiStatsStorage();
+            list.push(rec);
+            if (list.length > 80) list.splice(0, list.length - 80);
+            saveTkaiStatsStorage(list);
+            return rec;
         } catch (_) {
-            showToast('⚠️ Ne mogu spremiti session dashboard payload.');
-            openTkaiSessionStatsDashboard(session, indexLabel);
-            return;
+            return null;
         }
-        let pageUrl = '';
-        try {
-            const relativePath = /\/renderer\//i.test(String(window.location.pathname || '')) ? './tkai-session-dashboard.html' : './renderer/tkai-session-dashboard.html';
-            const next = new URL(relativePath, window.location.href);
-            next.hash = encodeURIComponent(token);
-            pageUrl = next.toString();
-        } catch (_) {
-            pageUrl = 'renderer/tkai-session-dashboard.html#' + encodeURIComponent(token);
-        }
-        const win = window.open(pageUrl, '_blank', 'noopener,noreferrer,width=1480,height=960');
-        if (!win) {
-            try { localStorage.removeItem(token); } catch (_) { }
-            showToast('⚠️ Popup blokiran. Otvaram ugrađeni dashboard.');
-            openTkaiSessionStatsDashboard(session, indexLabel);
-        }
+    }
+    function openTkaiSessionStatsPage(session, indexLabel) {
+        // Keep dashboard in-app to avoid popup blockers and ensure nav/export always work.
+        openTkaiSessionStatsDashboard(session, indexLabel);
     }
     function openTkaiSessionStatsDashboard(session, indexLabel) {
         const sessionData = session || {};
@@ -1748,9 +1845,30 @@ initSettingsPanel();
             acc.push(`${row.color} ${a}% ${b}%`);
             return acc;
         }, []).join(', ')})`;
-        const topUsersHtml = analytics.usersByMessages.slice(0, 25).map((u, idx) =>
-            `<tr><td style="padding:4px 6px;color:#9ec6ff">#${idx + 1} @${escHtml(u.user)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.total)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.chat)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.gifts)}</td><td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(u.coins)}</td><td style="padding:4px 6px;text-align:right">${formatNum(u.joins)}</td></tr>`
-        ).join('');
+        const topUsersHtml = analytics.usersByMessages.slice(0, 25).map((u, idx) => {
+            const detailRows = (Array.isArray(u.giftDetails) ? u.giftDetails : []).slice(0, 18);
+            const details = detailRows.length
+                ? detailRows.map((g) =>
+                    `<div style="padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.06)">`
+                    + `<span style="color:#fcd34d">${escHtml(g.name || '-')}</span>`
+                    + ` • qty ${formatNum(g.quantity)} • events ${formatNum(g.events)} • coins ${formatNum(g.coins)}`
+                    + `</div>`
+                ).join('')
+                : '<div style="color:#94a3b8">Nema gift detalja za ovog korisnika.</div>';
+            return `<tr class="tkai-user-row" data-user-row="u-${idx}" style="cursor:pointer">`
+                + `<td style="padding:4px 6px;color:#9ec6ff">#${idx + 1} @${escHtml(u.user)}</td>`
+                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.total)}</td>`
+                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.chat)}</td>`
+                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.gifts)}</td>`
+                + `<td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(u.coins)}</td>`
+                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.joins)}</td>`
+                + `</tr>`
+                + `<tr class="tkai-user-details" data-user-details="u-${idx}" style="display:none;background:rgba(148,163,184,.08)">`
+                + `<td colspan="6" style="padding:6px 8px;font-size:10px">`
+                + `<div style="font-weight:600;color:#cbd5e1;margin-bottom:4px">Gift breakdown za @${escHtml(u.user)}</div>`
+                + details
+                + `</td></tr>`;
+        }).join('');
         const questionsHtml = analytics.questions.slice(-50).reverse().map((q) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#a5b4fc">@${escHtml(q.user)}</span>: ${escHtml(q.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema pitanja u sesiji.</div>';
@@ -1806,11 +1924,33 @@ initSettingsPanel();
             + `</div>`;
         const close = () => { modal.remove(); };
         modal.querySelector('#tkaiSessionStatsClose')?.addEventListener('click', close);
+        modal.querySelectorAll('.tkai-user-row').forEach((row) => {
+            row.addEventListener('click', () => {
+                const key = row.getAttribute('data-user-row') || '';
+                const details = key ? modal.querySelector(`[data-user-details="${key}"]`) : null;
+                if (!details) return;
+                const isOpen = details.style.display !== 'none';
+                details.style.display = isOpen ? 'none' : '';
+            });
+        });
         modal.querySelectorAll('.tkai-sess-nav').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const targetId = btn.getAttribute('data-target');
                 const target = targetId ? modal.querySelector('#' + targetId) : null;
-                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                modal.querySelectorAll('.tkai-sess-nav').forEach((b) => {
+                    b.style.outline = '';
+                    b.style.background = '';
+                });
+                btn.style.outline = '1px solid rgba(125,211,252,.65)';
+                btn.style.background = 'rgba(56,189,248,.12)';
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    target.animate([
+                        { boxShadow: '0 0 0 0 rgba(125,211,252,0)' },
+                        { boxShadow: '0 0 0 2px rgba(125,211,252,.45)' },
+                        { boxShadow: '0 0 0 0 rgba(125,211,252,0)' }
+                    ], { duration: 700, easing: 'ease-out' });
+                }
             });
         });
         modal.querySelector('#tkaiSessExportCsv')?.addEventListener('click', () => {
@@ -1888,14 +2028,41 @@ initSettingsPanel();
                     return;
                 }
             };
+            renderTkaiStatsStorageSummary();
         } catch (e) {
             listEl.innerHTML = '<div style="color:var(--text3)">Greška pri učitavanju sesija.</div>';
         }
     }
 
+    function renderTkaiStatsStorageSummary() {
+        const host = document.getElementById('tkaiSessionMergeResult');
+        if (!host || !host.parentElement) return;
+        let box = document.getElementById('tkaiStatsStorageSummary');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'tkaiStatsStorageSummary';
+            box.style.cssText = 'margin-top:10px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03);font-size:11px;color:var(--text2)';
+            host.parentElement.appendChild(box);
+        }
+        const rows = getTkaiStatsStorage();
+        const totalSessions = rows.length;
+        const totalMessages = rows.reduce((s, r) => s + Number(r.messageCount || 0), 0);
+        const totalCoins = rows.reduce((s, r) => s + Number(r.totalCoins || 0), 0);
+        const totalDuration = rows.reduce((s, r) => s + Number(r.durationMinutes || 0), 0);
+        box.innerHTML = '<div style="font-weight:600;margin-bottom:6px">📦 Stats storage</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+            + '<span>Sesija: <b>' + formatNum(totalSessions) + '</b></span>'
+            + '<span>Poruka: <b>' + formatNum(totalMessages) + '</b></span>'
+            + '<span>Coina: <b>' + formatNum(totalCoins) + '</b></span>'
+            + '<span>Trajanje: <b>' + formatNum(totalDuration) + ' min</b></span>'
+            + '</div>'
+            + '<div style="margin-top:6px;color:var(--text3)">Automatski snapshot statsa se sprema pri save sesije/merge.</div>';
+    }
+
     document.getElementById('btnTkaiSessionsClearAll')?.addEventListener('click', () => {
         if (!confirm('Obriši sve spremljene sesije?')) return;
         localStorage.removeItem('ex_tkai_sessions');
+        localStorage.removeItem(TKAI_STATS_STORAGE_KEY);
         const mergeResult = document.getElementById('tkaiSessionMergeResult');
         if (mergeResult) mergeResult.style.display = 'none';
         renderTkaiSessionHistory();
@@ -1930,16 +2097,15 @@ initSettingsPanel();
                 messages: merged,
                 totalCoins, peakViewers, sessionMinutes: totalMinutes
             };
-
-            const blob = new Blob([JSON.stringify(mergedSession, null, 2)], { type: 'application/json' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = 'tkai-merged-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json'; a.click();
-            setTimeout(() => URL.revokeObjectURL(a.href), 0);
+            sessions.push(mergedSession);
+            if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
+            localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
+            saveTkaiStatsSnapshot(mergedSession, 'Merged ' + selected.length + ' sessions');
 
             const resultEl = document.getElementById('tkaiSessionMergeResult');
             if (resultEl) {
                 resultEl.style.display = '';
-                resultEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px">✅ Spojene ' + selected.length + ' sesije — preuzeto</div>'
+                resultEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px">✅ Spojene ' + selected.length + ' sesije — spremljeno kao jedna nova sesija</div>'
                     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
                     + '<span>💬 Ukupno poruka: <b>' + merged.length + '</b></span>'
                     + '<span>👤 Jedinstveni: <b>' + uniqueUsers + '</b></span>'
@@ -1949,6 +2115,9 @@ initSettingsPanel();
                     + '<span>👁 Peak viewers: <b>' + (peakViewers || '—') + '</b></span>'
                     + '</div>';
             }
+            renderTkaiSessionHistory();
+            const latest = getRecentTkaiSessions()[0];
+            if (latest) openTkaiSessionStatsPage(latest, 1);
         } catch (e) { showToast('Greška pri spajanju: ' + e.message); }
     });
 })();
@@ -4263,6 +4432,134 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
     window.runSongRecRecognition = runSongRecRecognition;
+
+    async function runDjCcNow(manualTrigger) {
+        setSongToolButtonState('djcc', true);
+        setSongToolStatus('DJ CC: čitam titlove...');
+        if (manualTrigger) showToast('▶ DJ CC pokrenut');
+        try {
+            await scrapeTikTokChat();
+            const latestCaption = [...collectedMessages].reverse().find((m) => String(m?.type || '').toLowerCase() === 'caption');
+            if (!latestCaption) {
+                setSongToolStatus('DJ CC: nema novih titlova');
+                if (manualTrigger) showToast('DJ CC nije našao svježe titlove.');
+                return;
+            }
+            const text = String(latestCaption.text || '').trim();
+            const shortText = text.length > 96 ? text.slice(0, 96) + '...' : text;
+            setSongToolStatus('DJ CC: ' + shortText);
+            if (isCcReadEnabled()) {
+                await handleIncomingCaption(latestCaption).catch(() => { });
+            }
+            if (manualTrigger) showToast('💬 DJ CC: ' + shortText);
+        } catch (err) {
+            setSongToolStatus('DJ CC: greška');
+            if (manualTrigger) showToast('DJ CC poziv nije uspio: ' + String(err?.message || err));
+        } finally {
+            setSongToolButtonState('djcc', false);
+        }
+    }
+    window.runDjCcNow = runDjCcNow;
+
+    const TKAI_FAV_SOUNDS_KEY = 'ex_tkai_fav_sounds';
+    function readTkaiFavSounds() {
+        try {
+            const rows = JSON.parse(localStorage.getItem(TKAI_FAV_SOUNDS_KEY) || '[]');
+            return Array.isArray(rows) ? rows.map((v) => String(v || '').trim()).filter(Boolean) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+    function writeTkaiFavSounds(rows) {
+        try { localStorage.setItem(TKAI_FAV_SOUNDS_KEY, JSON.stringify(Array.isArray(rows) ? rows : [])); } catch (_) { }
+    }
+    function collectTkaiSoundCandidates(limit = 24) {
+        const seen = new Set();
+        const out = [];
+        for (let i = collectedMessages.length - 1; i >= 0 && out.length < limit; i -= 1) {
+            const row = collectedMessages[i];
+            const type = String(row?.type || '').toLowerCase();
+            if (type !== 'song' && type !== 'caption') continue;
+            const text = String(row?.text || '').trim();
+            if (!text || seen.has(text.toLowerCase())) continue;
+            seen.add(text.toLowerCase());
+            out.push(text);
+        }
+        return out;
+    }
+    function playTkaiSoundPreview(text) {
+        const phrase = String(text || '').trim();
+        if (!phrase) return;
+        if ('speechSynthesis' in window && window.speechSynthesis) {
+            try {
+                const u = new SpeechSynthesisUtterance(phrase);
+                u.lang = 'en-US';
+                u.rate = 1;
+                u.pitch = 1;
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(u);
+                return;
+            } catch (_) { }
+        }
+        showToast('Sound preview nije podržan u ovom okruženju.');
+    }
+    function renderTkaiFavSoundsQuick(mode = 'fav') {
+        const wrap = document.getElementById('tkaiFavSoundsQuickWrap');
+        const list = document.getElementById('tkaiFavSoundsQuickList');
+        if (!wrap || !list) return;
+        const fav = readTkaiFavSounds();
+        const candidates = collectTkaiSoundCandidates(30);
+        const rows = mode === 'all'
+            ? Array.from(new Set(candidates.concat(fav))).slice(0, 24)
+            : fav.slice(0, 24);
+
+        wrap.style.display = '';
+        list.innerHTML = '';
+
+        if (!rows.length) {
+            list.innerHTML = '<span style="font-size:10px;color:var(--text3)">Nema favoriziranih soundova. Klikni Soundboard pa ⭐ na stavku.</span>';
+            return;
+        }
+
+        rows.forEach((label) => {
+            const holder = document.createElement('div');
+            holder.style.cssText = 'display:flex;align-items:center;gap:4px;max-width:100%';
+            const playBtn = document.createElement('button');
+            playBtn.className = 'tkai-insights-btn';
+            playBtn.type = 'button';
+            playBtn.textContent = '▶ ' + (label.length > 40 ? label.slice(0, 40) + '...' : label);
+            playBtn.title = label;
+            playBtn.style.maxWidth = '220px';
+            playBtn.style.overflow = 'hidden';
+            playBtn.style.textOverflow = 'ellipsis';
+            playBtn.addEventListener('click', () => playTkaiSoundPreview(label));
+
+            const starBtn = document.createElement('button');
+            starBtn.className = 'tkai-insights-btn';
+            starBtn.type = 'button';
+            const isFav = fav.some((v) => v.toLowerCase() === label.toLowerCase());
+            starBtn.textContent = isFav ? '★' : '☆';
+            starBtn.title = isFav ? 'Ukloni iz favorita' : 'Dodaj u favorite';
+            starBtn.addEventListener('click', () => {
+                const current = readTkaiFavSounds();
+                const idx = current.findIndex((v) => v.toLowerCase() === label.toLowerCase());
+                if (idx >= 0) {
+                    current.splice(idx, 1);
+                    writeTkaiFavSounds(current);
+                    showToast('Uklonjeno iz favorita.');
+                } else {
+                    current.unshift(label);
+                    writeTkaiFavSounds(Array.from(new Set(current)).slice(0, 40));
+                    showToast('Dodano u favorite.');
+                }
+                renderTkaiFavSoundsQuick(mode);
+            });
+
+            holder.appendChild(playBtn);
+            holder.appendChild(starBtn);
+            list.appendChild(holder);
+        });
+    }
     function getUserColor(name) {
         const input = String(name || '').trim().toLowerCase();
         let h = 0;
@@ -4486,7 +4783,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         tkaiMsgCtxEl.querySelector('[data-act="region-scan"]')?.addEventListener('click', () => {
             closeTkaiMsgContextMenu();
-            startTikTokRegionScan();
+            setTimeout(triggerTikTokRegionScanFromUi, 30);
         });
 
         document.addEventListener('click', (event) => {
@@ -8636,7 +8933,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         try {
             const giftStats = computeGiftStats();
             const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-            sessions.push({
+            const sessionRecord = {
                 savedAt: new Date().toISOString(),
                 messageCount: collectedMessages.length,
                 sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
@@ -8644,9 +8941,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 totalCoins: giftStats.totalCoins,
                 questions: collectedQuestions.slice(),
                 messages: collectedMessages.slice()
-            });
+            };
+            sessions.push(sessionRecord);
             if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
             localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
+            saveTkaiStatsSnapshot(sessionRecord, 'Auto-saved session');
         } catch (e) { }
     }
 
@@ -8889,6 +9188,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         showToast(next ? '🔊 AI audio uključen' : '🔇 AI audio isključen');
     });
 
+    document.getElementById('tkaiSongRecNowBtn')?.addEventListener('click', () => {
+        if (typeof window.runSongRecRecognition === 'function') window.runSongRecRecognition(true);
+    });
+    document.getElementById('tkaiDjCcNowBtn')?.addEventListener('click', () => {
+        if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
+    });
+    document.getElementById('tkaiOpenSoundboardBtn')?.addEventListener('click', () => {
+        renderTkaiFavSoundsQuick('all');
+        showToast('Soundboard otvoren. Klikni ▶ za preview i ★ za favorite.');
+    });
+    document.getElementById('tkaiFavSoundsQuickBtn')?.addEventListener('click', () => {
+        renderTkaiFavSoundsQuick('fav');
+    });
+
     document.querySelector('#stab-ai-live-chat [data-setting="tkaiCcReadEnabled"]')?.addEventListener('click', () => {
         setTimeout(() => {
             updateCcReadButton();
@@ -8915,6 +9228,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     updateCcReadButton();
     updateTkaiAudioButton();
     refreshTkaiSongRecOutputs();
+    if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
+        window.syncTkaiModelSelectorsFromGlobal();
+    }
 
     genBtn?.addEventListener('click', () => {
         const selected = selectedMsgIds.size
@@ -13855,6 +14171,23 @@ function startTikTokRegionScan() {
     overlay.addEventListener('pointermove', onMove, true);
     overlay.addEventListener('pointerup', onUp, true);
 }
+window.startTikTokRegionScan = startTikTokRegionScan;
+
+function triggerTikTokRegionScanFromUi() {
+    try {
+        const run = (typeof startTikTokRegionScan === 'function')
+            ? startTikTokRegionScan
+            : (typeof window.startTikTokRegionScan === 'function' ? window.startTikTokRegionScan : null);
+        if (!run) {
+            showToast('⚠️ Region scan nije dostupan. Osvjezi aplikaciju.');
+            return;
+        }
+        run();
+    } catch (err) {
+        showToast('❌ Region scan nije pokrenut: ' + String(err?.message || err));
+        console.warn('[TikTokAI] region scan trigger error:', err);
+    }
+}
 document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', async () => {
     const sel = String(_ctxSelectionText || window.getSelection()?.toString() || '').trim();
     if (!sel) {
@@ -13886,7 +14219,8 @@ document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', async (
 });
 document.getElementById('ctx-tiktok-region-scan')?.addEventListener('click', () => {
     closeCtxMenu();
-    startTikTokRegionScan();
+    // Delay avoids menu teardown stealing first pointer event from overlay.
+    setTimeout(triggerTikTokRegionScanFromUi, 30);
 });
 document.getElementById('ctx-shadowban-check')?.addEventListener('click', () => {
     const tab = getActiveTab();
@@ -15342,8 +15676,61 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
     if (cfg.aiModel) modelSel.value = cfg.aiModel;
     if (cfg.translateAiProvider) { const el = document.getElementById('settingsTranslateProvider'); if (el) el.value = cfg.translateAiProvider; }
     if (cfg.translateAiModel) { const el = document.getElementById('settingsTranslateModel'); if (el) el.value = cfg.translateAiModel; }
+    {
+        const nllbModel = String(cfg.tkaiNllbModel || 'facebook/nllb-200-distilled-600M');
+        const nllbSel = document.getElementById('settingsTranslateNllbModel');
+        if (nllbSel) nllbSel.value = nllbModel;
+    }
     if (cfg.translateMaxChars) { const el = document.getElementById('settingsTranslateMaxChars'); if (el) el.value = cfg.translateMaxChars; }
     if (cfg.translateAiApiKey) { const el = document.getElementById('settingsTranslateApiKey'); if (el) el.value = cfg.translateAiApiKey; }
+    function updateTranslateCapabilityBadges() {
+        const aiBadge = document.getElementById('settingsTranslateAiBadge');
+        const nllbBadge = document.getElementById('settingsTranslateNllbBadge');
+        if (!aiBadge && !nllbBadge) return;
+
+        const providerSelEl = document.getElementById('settingsTranslateProvider');
+        const modelSelEl = document.getElementById('settingsTranslateModel');
+        const nllbSelEl = document.getElementById('settingsTranslateNllbModel');
+        const activeProvider = String(providerSelEl?.value || '__main__').trim() || '__main__';
+        const activeModel = String(modelSelEl?.value || '__main__').trim() || '__main__';
+        const nllbModel = String(nllbSelEl?.value || DB.getSettings().tkaiNllbModel || 'facebook/nllb-200-distilled-600M').trim();
+        const nllbEnabledRaw = DB.getSettings().tkaiNllbIdHrEnabled;
+        const nllbEnabled = nllbEnabledRaw !== false && nllbEnabledRaw !== 'false';
+
+        if (aiBadge) {
+            const providerLabel = activeProvider === '__main__' ? 'global' : activeProvider;
+            const modelLabel = activeModel === '__main__' ? 'global' : activeModel;
+            aiBadge.textContent = 'AI: ' + providerLabel + ' • ' + modelLabel;
+            aiBadge.title = 'Aktivni AI prijevodni provider/model';
+        }
+        if (nllbBadge) {
+            const shortModel = nllbModel.replace('facebook/', '').replace('nllb-200-distilled-', 'NLLB-');
+            nllbBadge.textContent = (nllbEnabled ? 'NLLB ON: ' : 'NLLB OFF: ') + shortModel;
+            nllbBadge.title = 'NLLB ID→HR status i model';
+            nllbBadge.style.opacity = nllbEnabled ? '1' : '.55';
+            nllbBadge.style.filter = nllbEnabled ? '' : 'grayscale(.15)';
+        }
+    }
+
+    document.getElementById('settingsTranslateProvider')?.addEventListener('change', updateTranslateCapabilityBadges);
+    document.getElementById('settingsTranslateModel')?.addEventListener('change', updateTranslateCapabilityBadges);
+    document.getElementById('settingsTranslateNllbModel')?.addEventListener('change', updateTranslateCapabilityBadges);
+    document.querySelector('#stab-ai-live-chat [data-setting="tkaiNllbIdHrEnabled"]')?.addEventListener('click', () => {
+        setTimeout(updateTranslateCapabilityBadges, 0);
+    });
+    (function syncAiNllbSelector() {
+        const nllbSel = document.getElementById('settingsTranslateNllbModel');
+        if (!nllbSel) return;
+        nllbSel.addEventListener('change', () => {
+            const next = String(nllbSel.value || 'facebook/nllb-200-distilled-600M').trim() || 'facebook/nllb-200-distilled-600M';
+            DB.saveSetting('tkaiNllbModel', next);
+            document.querySelectorAll('[data-setting="tkaiNllbModel"]').forEach((el) => {
+                try { el.value = next; } catch (_) { }
+            });
+            updateTranslateCapabilityBadges();
+            showToast('✅ NLLB model spremljen: ' + next.replace('facebook/', ''));
+        });
+    })();
     (function syncTranslateKeyRow() {
         const prov = cfg.translateAiProvider || '__main__';
         const row = document.getElementById('translateApiKeyRow');
@@ -15351,8 +15738,10 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
         const provSel = document.getElementById('settingsTranslateProvider');
         if (provSel) provSel.addEventListener('change', () => {
             if (row) row.style.display = (provSel.value !== '__main__' && provSel.value !== 'ollama') ? '' : 'none';
+            updateTranslateCapabilityBadges();
         });
     })();
+    updateTranslateCapabilityBadges();
     if (localBaseUrlEl) localBaseUrlEl.value = cfg.localAiBaseUrl || cfg.local_ai_base_url || LOCAL_AI_DEFAULT_BASE_URL;
     if (ollamaBaseUrlEl) ollamaBaseUrlEl.value = cfg.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL;
     getStoredApiKey('gemini').then(gk => {
@@ -15493,6 +15882,9 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
             if (models.includes(prev)) modelSel.value = prev;
             modelSel.dataset['populated_' + provider] = '1';
             syncTranslateModelOptionsFromMain();
+            if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
+                window.syncTkaiModelSelectorsFromGlobal();
+            }
             if (modelDesc) modelDesc.textContent = `✅ Dohvaćeno ${models.length} modela`;
             showBanner(true, `Dohvaćeno <strong>${models.length}</strong> dostupnih modela za <strong>${provider}</strong>.`);
             _saveAiTestResult({ ts: Date.now(), action: 'fetch-models', provider, ok: true, detail: models.length + ' modela' });

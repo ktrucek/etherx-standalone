@@ -3126,7 +3126,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.7</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.8</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -3452,6 +3452,33 @@
                                     <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
                                     <option value="llama3.1:8b">llama3.1:8b (Ollama)</option>
                                     <option value="mistral:7b-instruct">mistral:7b-instruct (Ollama)</option>
+                                </select>
+                            </div>
+                            <div class="s-row">
+                                <div class="s-row-left">
+                                    <div class="s-row-label" style="font-weight:400">Mogućnosti prijevoda</div>
+                                    <div class="s-row-desc">AI prijevod koristi provider/model iznad. NLLB je dodatni
+                                        ID→HR pipeline za TikTok Chat.</div>
+                                </div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                                    <span id="settingsTranslateAiBadge"
+                                        style="font-size:10px;padding:4px 8px;border:1px solid rgba(102,126,234,.35);border-radius:999px;background:rgba(102,126,234,.12);color:#c7d2fe">AI
+                                        provider/model</span>
+                                    <span id="settingsTranslateNllbBadge"
+                                        style="font-size:10px;padding:4px 8px;border:1px solid rgba(16,185,129,.35);border-radius:999px;background:rgba(16,185,129,.12);color:#bbf7d0">NLLB
+                                        ID→HR</span>
+                                </div>
+                            </div>
+                            <div class="s-row">
+                                <div class="s-row-left" style="flex:0 0 auto">
+                                    <div class="s-row-label" style="font-weight:400">NLLB model (ID→HR)</div>
+                                </div>
+                                <select class="s-select" id="settingsTranslateNllbModel">
+                                    <option value="facebook/nllb-200-distilled-600M">NLLB-200 distilled 600M (brži)
+                                    </option>
+                                    <option value="facebook/nllb-200-distilled-1.3B">NLLB-200 distilled 1.3B
+                                        (precizniji)
+                                    </option>
                                 </select>
                             </div>
                             <div class="s-row">
@@ -4727,7 +4754,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.7</span></div>
+                                    v<span id="helpVersionNum2">3.0.8</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
