@@ -937,6 +937,51 @@ const DB = {
     getStorageKey(store) { const cfg = this.getStorageConfig(); return cfg[store] || { hist: 'ex_hist', bm: 'ex_bm', cfg: 'ex_cfg', user: 'ex_user', notes: 'ex_notes', dl: 'ex_dl', passwords: 'ex_passwords', sessions: 'ex_sessions' }[store] || ('ex_' + store); },
     setStorageKey(store, key) { const cfg = this.getStorageConfig(); cfg[store] = key; localStorage.setItem('ex_storage_cfg', JSON.stringify(cfg)); showToast('💾 Storage key for "' + store + '" set to "' + key + '"'); }
 };
+function parseStoredSettingValue(value) {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (trimmed === 'true') return true;
+    if (trimmed === 'false') return false;
+    if (trimmed === 'null') return null;
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+        const numeric = Number(trimmed);
+        if (Number.isFinite(numeric)) return numeric;
+    }
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try { return JSON.parse(trimmed); } catch (_) { }
+    }
+    return value;
+}
+
+let _settingsHydratedFromSqlite = false;
+async function hydrateSettingsFromSqlite() {
+    if (_settingsHydratedFromSqlite) return;
+    _settingsHydratedFromSqlite = true;
+    if (!window.etherx?.settings?.get) return;
+    try {
+        const sqliteRaw = await window.etherx.settings.get();
+        if (!sqliteRaw || typeof sqliteRaw !== 'object') return;
+
+        const sqliteParsed = {};
+        Object.entries(sqliteRaw).forEach(([key, value]) => {
+            sqliteParsed[key] = parseStoredSettingValue(value);
+        });
+
+        const local = DB.getSettings() || {};
+        // Keep current in-memory/local values if present, fill missing from SQLite backup.
+        const merged = { ...sqliteParsed, ...local };
+        localStorage.setItem('ex_cfg', JSON.stringify(merged));
+        PENDING_SETTINGS = { ...merged };
+
+        if (typeof _refreshSettingsToggles === 'function') _refreshSettingsToggles();
+        if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
+            try { window.syncTkaiModelSelectorsFromGlobal(); } catch (_) { }
+        }
+    } catch (err) {
+        console.warn('Settings hydration from SQLite failed:', err);
+    }
+}
 
 // ── Sync all localStorage data to Electron SQLite backend ──────────────
 function syncLocalToSqlite() {
@@ -1052,6 +1097,7 @@ document.getElementById('btnSaveSettings')?.addEventListener('click', () => {
 });
 
 initSettingsPanel();
+setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
 // ── TikTok AI settings drawers ────────────────────────────────────────────
 (function initTkaiSettingsDrawers() {
@@ -16177,6 +16223,22 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
     });
 
     const saveBtn = document.getElementById('saveAiSettings');
+
+    providerSel?.addEventListener('change', () => {
+        DB.saveSetting('aiProvider', providerSel.value || 'gemini');
+    });
+    modelSel?.addEventListener('change', () => {
+        DB.saveSetting('aiModel', modelSel.value || GEMINI_DEFAULT_MODEL);
+        if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
+            try { window.syncTkaiModelSelectorsFromGlobal(); } catch (_) { }
+        }
+    });
+    document.getElementById('settingsTranslateProvider')?.addEventListener('change', (e) => {
+        DB.saveSetting('translateAiProvider', e.target?.value || '__main__');
+    });
+    document.getElementById('settingsTranslateModel')?.addEventListener('change', (e) => {
+        DB.saveSetting('translateAiModel', e.target?.value || '__main__');
+    });
     if (saveBtn) saveBtn.addEventListener('click', () => {
         const p = providerSel?.value || 'gemini';
         const gKey = geminiKeyEl?.value.trim() || '';
