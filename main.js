@@ -3300,8 +3300,22 @@ function setupIPC() {
         };
         if (token) headers["Authorization"] = "Bearer " + token;
         const maxRedirects = 8;
+        const maxTransientRetries = 2;
+        const isBenignRedirectAbort = (error) => {
+          const raw = String(error?.message || error || "").toLowerCase();
+          const code = Number(error?.code || 0);
+          return (
+            code === -3 ||
+            raw.includes("err_aborted") ||
+            raw.includes("redirect was cancelled")
+          );
+        };
 
-        const requestWithRedirects = (currentUrl, redirectCount = 0) => {
+        const requestWithRedirects = (
+          currentUrl,
+          redirectCount = 0,
+          transientRetryCount = 0,
+        ) => {
           const req = net.request({
             method: "GET",
             url: currentUrl,
@@ -3334,7 +3348,20 @@ function setupIPC() {
             handleResponse(res);
           });
 
-          req.on("error", reject);
+          req.on("error", (err) => {
+            if (
+              isBenignRedirectAbort(err) &&
+              transientRetryCount < maxTransientRetries
+            ) {
+              requestWithRedirects(
+                currentUrl,
+                redirectCount,
+                transientRetryCount + 1,
+              );
+              return;
+            }
+            reject(err);
+          });
           req.end();
         };
 

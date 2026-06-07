@@ -528,6 +528,18 @@ if (window.electronWebview) {
             const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
             const failedUrl = e.validatedURL || (tab ? tab.url : '');
             const errMsg = e.errorDescription || 'Failed to load page';
+
+            // Some sites explicitly block embedded/webview rendering (XFO/CSP frame-ancestors).
+            // For ERR_BLOCKED_BY_RESPONSE, fall back to opening in the system browser.
+            if (e.errorCode === -27 && failedUrl && /^https?:\/\//i.test(failedUrl)) {
+                consoleLog('warn', `Site blocks embedded rendering, opening externally: ${errMsg} (code: ${e.errorCode})`, failedUrl);
+                try {
+                    window.etherx?.openExternal?.(failedUrl)?.catch?.(() => { });
+                    showToast('🌐 Stranica blokira ugrađeni prikaz, otvoreno izvan aplikacije');
+                } catch (_) { }
+                return;
+            }
+
             if (tab) {
                 consoleLog('error', `Page load failed: ${errMsg} (code: ${e.errorCode})`, failedUrl);
                 tab.title = '⚠ ' + (failedUrl ? new URL(failedUrl).hostname : 'Error');
@@ -8038,7 +8050,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             html += '<div style="margin-top:4px"><a href="#" id="tkaiSbSearchLink" style="color:#a5b4fc;font-size:10px">🔍 TikTok Search @' + username + '</a></div>';
         }
         if (resultEl) resultEl.innerHTML = html;
-        document.getElementById('tkaiSbSearchLink')?.addEventListener('click', e => {
+        resultEl?.querySelector('#tkaiSbSearchLink')?.addEventListener('click', e => {
             e.preventDefault();
             if (username) navigateTo('https://www.tiktok.com/search/user?q=' + encodeURIComponent(username));
         });
@@ -12900,7 +12912,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             return text;
         }
 
-        document.getElementById('qrsGenerate').addEventListener('click', () => {
+        document.getElementById('qrsGenerate').addEventListener('click', async () => {
             const payload = buildPayload();
             const json = JSON.stringify(payload);
             const b64 = btoa(unescape(encodeURIComponent(json)));
@@ -12908,15 +12920,33 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const wrap = document.getElementById('qrsQrWrap');
             const img = document.getElementById('qrsQrImg');
             const note = document.getElementById('qrsQrNote');
+            const genBtn = document.getElementById('qrsGenerate');
 
-            // Use Google Charts QR API (works without Node.js)
-            const qrUrl = 'https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl=' + encodeURIComponent(b64.slice(0, 1800)) + '&choe=UTF-8';
-            img.src = qrUrl;
-            img.onerror = () => {
-                // Fallback: show as copyable code
+            if (genBtn) {
+                genBtn.disabled = true;
+                genBtn.textContent = '⏳ Generating...';
+            }
+
+            img.style.display = 'block';
+            img.onerror = null;
+
+            try {
+                const qrRes = await window.etherx?.qrSync?.generate?.(json);
+                if (qrRes?.ok && qrRes.qrDataUrl) {
+                    img.src = qrRes.qrDataUrl;
+                } else {
+                    throw new Error(String(qrRes?.error || 'QR generator unavailable'));
+                }
+            } catch (_) {
+                // Fallback: show as copyable code when QR generation is unavailable.
                 img.style.display = 'none';
-                note.innerHTML = '<strong>Scan not available — copy code below:</strong><br><textarea style="width:100%;font-size:9px;margin-top:6px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:4px;height:80px;resize:none" readonly>' + escHtml(b64) + '</textarea>';
-            };
+                note.innerHTML = '<strong>QR nije dostupan — kopiraj code:</strong><br><textarea style="width:100%;font-size:9px;margin-top:6px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;color:var(--text2);padding:4px;height:80px;resize:none" readonly>' + escHtml(b64) + '</textarea>';
+            } finally {
+                if (genBtn) {
+                    genBtn.disabled = false;
+                    genBtn.textContent = '🔄 Generate QR Code';
+                }
+            }
 
             const items = Object.keys(payload).filter(k => !['type', 'v', 'ts'].includes(k));
             const counts = items.map(k => {
@@ -12939,11 +12969,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const raw = document.getElementById('qrsSyncInput').value.trim();
             if (!raw) { showToast('⚠️ Paste a sync code first'); return; }
             try {
-                const json = decodeURIComponent(escape(atob(raw)));
-                const data = JSON.parse(json);
+                let data = null;
+                try {
+                    // Accept direct JSON input
+                    data = JSON.parse(raw);
+                } catch (_) {
+                    // Or legacy base64 payload
+                    const json = decodeURIComponent(escape(atob(raw)));
+                    data = JSON.parse(json);
+                }
                 if (data.type !== 'etherx-sync') { showToast('❌ Invalid sync code'); return; }
+                if (data.token && !data.bookmarks && !data.settings && !data.extensions && !data.profiles && !data.history) {
+                    document.getElementById('qrsImportResult').innerHTML = 'ℹ️ QR token mode detected. For now use smaller export selection (bookmarks/settings only).';
+                    showToast('ℹ️ Token QR detected — odaberi manje stavki za single QR');
+                    return;
+                }
                 let imported = [];
                 if (data.bookmarks) { data.bookmarks.forEach(b => DB.addBookmark(b)); imported.push(data.bookmarks.length + ' bookmarks'); }
+                if (data.history) { data.history.forEach(h => DB.addHistory(h)); imported.push(data.history.length + ' history'); }
                 if (data.extensions) { data.extensions.forEach(e => EXT_DB.add(e)); imported.push(data.extensions.length + ' extensions'); renderExtIconBar(); }
                 if (data.settings) { Object.entries(data.settings).forEach(([k, v]) => DB.saveSetting(k, v)); imported.push('settings'); }
                 if (data.profiles) { localStorage.setItem('ex_profiles', JSON.stringify(data.profiles)); imported.push(data.profiles.length + ' profiles'); }
@@ -20356,6 +20399,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         document.getElementById('updOneClickBtn')?.addEventListener('click', async function () {
             if (!window._pendingUpdateAsset || !window.etherx?.update?.download) return;
             const btn = this;
+            const redirectRetryCount = Number(btn.dataset.redirectRetryCount || '0');
             const progressWrap = document.getElementById('updProgressWrap');
             const progressBar = document.getElementById('updProgressBar');
             const progressPct = document.getElementById('updProgressPct');
@@ -20397,9 +20441,24 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 }
 
                 // App will quit — but just in case show success
+                btn.dataset.redirectRetryCount = '0';
                 btn.textContent = '✅ Gotovo — restartam...';
             } catch (err) {
                 if (isBenignUpdateRedirectError(err)) {
+                    if (redirectRetryCount < 1) {
+                        btn.dataset.redirectRetryCount = String(redirectRetryCount + 1);
+                        if (progressLabel) {
+                            progressLabel.textContent = 'ℹ️ Preusmjerenje update servera - ponovno pokušavam...';
+                            progressLabel.style.color = '#ffbd2e';
+                        }
+                        showToast('ℹ️ Update server preusmjerenje, automatski retry...');
+                        setTimeout(() => {
+                            btn.disabled = false;
+                            btn.click();
+                        }, 1200);
+                        return;
+                    }
+                    btn.dataset.redirectRetryCount = '0';
                     btn.disabled = false;
                     btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
                     if (progressLabel) {
@@ -20409,6 +20468,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     showToast('ℹ️ Update preusmjerenje je privremeno prekinulo zahtjev. Probaj ponovno.');
                     return;
                 }
+                btn.dataset.redirectRetryCount = '0';
                 const friendlyErr = humanizeUpdateError(err);
                 btn.disabled = false;
                 btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
