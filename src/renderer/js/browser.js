@@ -20404,6 +20404,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const progressBar = document.getElementById('updProgressBar');
             const progressPct = document.getElementById('updProgressPct');
             const progressLabel = document.getElementById('updProgressLabel');
+            const platform = detectPlatform();
+            const canDeployFromGithub = platform?.os === 'linux' && typeof window.etherx?.update?.deployFromGithub === 'function';
 
             btn.disabled = true;
             btn.textContent = '⏳ Preuzimanje...';
@@ -20411,6 +20413,27 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (progressBar) progressBar.style.width = '0%';
 
             try {
+                if (canDeployFromGithub) {
+                    if (progressLabel) {
+                        progressLabel.textContent = '⬇️ GitHub pull + deploy.sh...';
+                        progressLabel.style.color = '#7dd3fc';
+                    }
+                    const deployRes = await window.etherx.update.deployFromGithub();
+                    if (!deployRes?.ok) {
+                        throw new Error(deployRes?.error || 'GitHub deploy error');
+                    }
+                    if (progressBar) progressBar.style.width = '100%';
+                    if (progressPct) progressPct.textContent = '100%';
+                    if (progressLabel) {
+                        progressLabel.textContent = '✅ GitHub deploy završen. Restartaj aplikaciju.';
+                        progressLabel.style.color = '#27c93f';
+                    }
+                    btn.textContent = '✅ Deploy gotov';
+                    btn.disabled = false;
+                    showToast('✅ Ažurirano s GitHuba i deployano. Pokreni aplikaciju ponovno.');
+                    return;
+                }
+
                 // Listen for progress
                 if (window.etherx?.update?.onProgress) {
                     window.etherx.update.onProgress((data) => {

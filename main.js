@@ -3301,6 +3301,17 @@ function setupIPC() {
         if (token) headers["Authorization"] = "Bearer " + token;
         const maxRedirects = 8;
         const maxTransientRetries = 2;
+        let settled = false;
+        const finishResolve = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const finishReject = (err) => {
+          if (settled) return;
+          settled = true;
+          reject(err);
+        };
         const isBenignRedirectAbort = (error) => {
           const raw = String(error?.message || error || "").toLowerCase();
           const code = Number(error?.code || 0);
@@ -3316,6 +3327,7 @@ function setupIPC() {
           redirectCount = 0,
           transientRetryCount = 0,
         ) => {
+          let redirectHopStarted = false;
           const req = net.request({
             method: "GET",
             url: currentUrl,
@@ -3330,8 +3342,13 @@ function setupIPC() {
               [301, 302, 303, 307, 308].includes(status) &&
               hasLocation
             ) {
+              redirectHopStarted = true;
+              try {
+                // Drain redirect response so Electron does not surface abort races.
+                res.resume();
+              } catch (_) { }
               if (redirectCount >= maxRedirects) {
-                reject(new Error("Too many update redirects"));
+                finishReject(new Error("Too many update redirects"));
                 return;
               }
               const rUrl = Array.isArray(res.headers.location)
@@ -3339,7 +3356,7 @@ function setupIPC() {
                 : res.headers.location;
               const safeRedirectUrl = normalizeUpdateUrl(rUrl, currentUrl);
               if (!safeRedirectUrl) {
-                reject(new Error("Blocked unsafe update redirect"));
+                finishReject(new Error("Blocked unsafe update redirect"));
                 return;
               }
               requestWithRedirects(safeRedirectUrl, redirectCount + 1);
@@ -3349,6 +3366,10 @@ function setupIPC() {
           });
 
           req.on("error", (err) => {
+            if (settled) return;
+            if (redirectHopStarted && isBenignRedirectAbort(err)) {
+              return;
+            }
             if (
               isBenignRedirectAbort(err) &&
               transientRetryCount < maxTransientRetries
@@ -3360,7 +3381,7 @@ function setupIPC() {
               );
               return;
             }
-            reject(err);
+            finishReject(err);
           });
           req.end();
         };
@@ -3369,7 +3390,7 @@ function setupIPC() {
 
         function handleResponse(res) {
           if (res.statusCode !== 200) {
-            reject(new Error("HTTP " + res.statusCode));
+            finishReject(new Error("HTTP " + res.statusCode));
             return;
           }
           const total = parseInt(res.headers["content-length"] || "0", 10);
@@ -3393,11 +3414,11 @@ function setupIPC() {
             }
           });
           res.on("end", () => {
-            ws.end(() => resolve());
+            ws.end(() => finishResolve());
           });
           res.on("error", (err) => {
             ws.destroy();
-            reject(err);
+            finishReject(err);
           });
         }
       });
@@ -3405,6 +3426,67 @@ function setupIPC() {
       return { ok: true, filePath: dest, filename };
     } catch (e) {
       return { ok: false, error: e.message };
+    }
+  });
+
+  // Source-based update path: pull latest from GitHub and run local deploy.sh
+  ipcMain.handle("update:deployFromGithub", async () => {
+    try {
+      const candidates = [
+        process.cwd(),
+        __dirname,
+        path.resolve(__dirname, ".."),
+      ];
+
+      const root = candidates.find((p) => {
+        try {
+          return (
+            fs.existsSync(path.join(p, ".git")) &&
+            fs.existsSync(path.join(p, "deploy.sh"))
+          );
+        } catch (_) {
+          return false;
+        }
+      });
+
+      if (!root) {
+        return {
+          ok: false,
+          error: "Nisam pronašao Git repozitorij s deploy.sh za source deploy.",
+        };
+      }
+
+      const branchRun = await execFileAsync("git", [
+        "-C",
+        root,
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD",
+      ]);
+      const branch = String(branchRun.stdout || "main").trim() || "main";
+
+      await execFileAsync("git", ["-C", root, "fetch", "--tags", "origin"]);
+      await execFileAsync("git", [
+        "-C",
+        root,
+        "pull",
+        "--ff-only",
+        "origin",
+        branch,
+      ]);
+
+      await execFileAsync("bash", [path.join(root, "deploy.sh")], { cwd: root });
+
+      return {
+        ok: true,
+        root,
+        branch,
+      };
+    } catch (e) {
+      return {
+        ok: false,
+        error: String(e?.message || e),
+      };
     }
   });
 

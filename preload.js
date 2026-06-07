@@ -224,6 +224,7 @@ contextBridge.exposeInMainWorld('etherx', {
     check: () => ipcRenderer.invoke('update:check'),
     download: (url, filename) => ipcRenderer.invoke('update:download', url, filename),
     install: (filePath) => ipcRenderer.invoke('update:install', filePath),
+    deployFromGithub: () => ipcRenderer.invoke('update:deployFromGithub'),
     onProgress: (callback) => ipcRenderer.on('update:progress', (_e, data) => callback(data)),
   },
 
