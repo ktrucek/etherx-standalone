@@ -1198,20 +1198,50 @@ initSettingsPanel();
         const saveBtn = document.getElementById('tkaiStackTestSaveCreds');
         if (!providerEl || !apiEl) return;
 
-        const syncTkaiModelSelectorsFromGlobal = () => {
-            const globalModelSel = document.getElementById('settingsAiModel');
-            const tkaiModelSel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiModelOverride"]');
-            const stackModelSel = document.getElementById('tkaiStackTestModel');
-            if (!globalModelSel) return;
+        const tkaiProviderDefaultModels = {
+            gemini: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+            openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+            anthropic: ['claude-3-5-sonnet', 'claude-3-haiku', 'claude-3-opus'],
+            groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+            openrouter: ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash-preview', 'deepseek/deepseek-r1'],
+            huggingface: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3'],
+            local: ['llama3.1:8b', 'qwen2.5:7b-instruct', 'mistral:7b-instruct'],
+            ollama: ['llama3.1:8b', 'llama3.2:latest', 'qwen2.5:7b']
+        };
 
-            const models = [];
+        const getTkaiProviderModels = (provider) => {
+            const selectedProvider = String(provider || '').trim();
+            const globalModelSel = document.getElementById('settingsAiModel');
             const seen = new Set();
-            Array.from(globalModelSel.options || []).forEach((opt) => {
+            const models = [];
+
+            Array.from(globalModelSel?.options || []).forEach((opt) => {
                 const value = String(opt?.value || '').trim();
                 if (!value || value === '__main__' || seen.has(value)) return;
+                const inferred = inferAiProviderFromModel(value);
+                if (selectedProvider && inferred !== selectedProvider) return;
                 seen.add(value);
                 models.push(value);
             });
+
+            if (!models.length && selectedProvider && Array.isArray(tkaiProviderDefaultModels[selectedProvider])) {
+                tkaiProviderDefaultModels[selectedProvider].forEach((value) => {
+                    const model = String(value || '').trim();
+                    if (!model || seen.has(model)) return;
+                    seen.add(model);
+                    models.push(model);
+                });
+            }
+
+            return models;
+        };
+
+        const syncTkaiModelSelectorsFromGlobal = () => {
+            const tkaiModelSel = document.querySelector('#stab-ai-live-chat [data-setting="tkaiModelOverride"]');
+            const stackModelSel = document.getElementById('tkaiStackTestModel');
+            const provider = String(providerEl?.value || DB.getSettings()?.tkaiProviderOverride || DB.getSettings()?.aiProvider || 'gemini').trim();
+            const models = getTkaiProviderModels(provider);
+            const seen = new Set(models);
 
             if (tkaiModelSel) {
                 const prev = String(tkaiModelSel.value || '').trim();
@@ -1295,6 +1325,7 @@ initSettingsPanel();
             const cfg = DB.getSettings() || {};
             const provider = String(providerEl.value || '').trim();
             apiEl.value = readProviderKey(provider, cfg);
+            syncTkaiModelSelectorsFromGlobal();
         });
 
         saveBtn?.addEventListener('click', () => {
@@ -4392,6 +4423,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             message.translatedLang = targetLang;
         }
         speakCaptionText(message.translatedText || message.text, targetLang);
+    }
+
+    async function handleIncomingChatForCcRead(message) {
+        if (!message || message.type !== 'chat' || !isCcReadEnabled()) return;
+        const raw = String(message.translatedText || message.text || '').replace(/\s+/g, ' ').trim();
+        if (!raw) return;
+        const targetLang = getCcTargetLang();
+        if (!message.translatedText || message.translatedLang !== targetLang) {
+            const translated = await translateViaGoogle(raw, targetLang);
+            message.translatedText = translated;
+            message.translatedLang = targetLang;
+        }
+        speakCaptionText(message.translatedText || raw, targetLang);
     }
 
     function loadCfg() {
@@ -8701,6 +8745,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const incomingSeen = new Set();
             let added = 0;
             const incomingCaptions = [];
+            const incomingChatsForCcRead = [];
             const incomingAddedMessages = [];
             let lastAddedGiftMessage = null;
             const nowTs = Date.now();
@@ -8734,6 +8779,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     existingRecent.set(recentKey, nowTs);
                     added += 1;
                     if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
+                    if (message.type === 'chat') incomingChatsForCcRead.push(collectedMessages[collectedMessages.length - 1]);
                 }
             });
             if (lastAddedGiftMessage) updateTkaiLastGiftDebug(lastAddedGiftMessage);
@@ -8750,6 +8796,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
             if (incomingCaptions.length && isCcReadEnabled()) {
                 await Promise.all(incomingCaptions.map((message) => handleIncomingCaption(message).catch(() => { })));
+            }
+            if (incomingChatsForCcRead.length && isCcReadEnabled()) {
+                await Promise.all(incomingChatsForCcRead.map((message) => handleIncomingChatForCcRead(message).catch(() => { })));
             }
             renderMessages();
             updateSessionStatsUI();
@@ -8921,7 +8970,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 push(null, 'Qwen3Guard bridge', 'Preskočeno: Electron bridge nije dostupan');
             }
         } catch (e) {
-            push(false, 'Qwen3Guard bridge', e?.message || 'Qwen3Guard scan nije dostupan');
+            const msg = String(e?.message || 'Qwen3Guard scan nije dostupan');
+            if (/python runtime not found/i.test(msg)) {
+                push(null, 'Qwen3Guard bridge', 'Preskočeno: Python runtime nije pronađen (instaliraj python3 za Qwen3Guard).');
+            } else {
+                push(false, 'Qwen3Guard bridge', msg);
+            }
         }
 
         const samples = [

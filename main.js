@@ -2610,15 +2610,17 @@ function setupIPC() {
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const candidates = resolvePythonCandidates();
       let lastErr = "Python runtime not found";
+      let hadRuntimeError = false;
 
       for (const py of candidates) {
         if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
         const run = await execFileJson(py, [scriptPath, encoded], 300000);
         if (!run.ok) {
           if (run.error?.code === "ENOENT") {
-            lastErr = "Python runtime not found: " + py;
+            if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
             continue;
           }
+          hadRuntimeError = true;
           lastErr = String(run.stderr || run.stdout || run.error?.message || "Qwen3Guard failed").trim();
           continue;
         }
@@ -2650,15 +2652,17 @@ function setupIPC() {
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const candidates = resolvePythonCandidates();
       let lastErr = "Python runtime not found";
+      let hadRuntimeError = false;
 
       for (const py of candidates) {
         if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
         const run = await execFileJson(py, [scriptPath, encoded], 300000);
         if (!run.ok) {
           if (run.error?.code === "ENOENT") {
-            lastErr = "Python runtime not found: " + py;
+            if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
             continue;
           }
+          hadRuntimeError = true;
           lastErr = String(run.stderr || run.stdout || run.error?.message || "Opir failed").trim();
           continue;
         }
@@ -2692,15 +2696,17 @@ function setupIPC() {
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const candidates = resolvePythonCandidates();
       let lastErr = "Python runtime not found";
+      let hadRuntimeError = false;
 
       for (const py of candidates) {
         if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
         const run = await execFileJson(py, [scriptPath, encoded], 300000);
         if (!run.ok) {
           if (run.error?.code === "ENOENT") {
-            lastErr = "Python runtime not found: " + py;
+            if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
             continue;
           }
+          hadRuntimeError = true;
           lastErr = String(run.stderr || run.stdout || run.error?.message || "NLLB translation failed").trim();
           continue;
         }
