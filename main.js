@@ -754,6 +754,48 @@ function resolvePythonCandidates() {
   return candidates;
 }
 
+function _withAsarUnpacked(p) {
+  if (!p) return p;
+  return String(p).replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+}
+
+function resolvePythonScriptPath(fileName) {
+  const relParts = ["src", "main", fileName];
+  const candidates = [];
+  const pushIf = (value) => {
+    if (!value || candidates.includes(value)) return;
+    candidates.push(value);
+  };
+
+  const fromDirname = path.join(__dirname, ...relParts);
+  const fromAppPath = path.join(app.getAppPath(), ...relParts);
+  pushIf(fromDirname);
+  pushIf(_withAsarUnpacked(fromDirname));
+  pushIf(fromAppPath);
+  pushIf(_withAsarUnpacked(fromAppPath));
+
+  if (process.resourcesPath) {
+    pushIf(path.join(process.resourcesPath, "app.asar.unpacked", ...relParts));
+    pushIf(path.join(process.resourcesPath, "app", ...relParts));
+    pushIf(path.join(process.resourcesPath, ...relParts));
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return "";
+}
+
+function logPythonBridgeDebug(scope, message, extra = undefined) {
+  try {
+    if (extra === undefined) {
+      console.log(`[AI Python Bridge][${scope}] ${message}`);
+    } else {
+      console.log(`[AI Python Bridge][${scope}] ${message}`, extra);
+    }
+  } catch (_) { }
+}
+
 function execFileJson(command, args, timeoutMs = 240000) {
   return new Promise((resolve) => {
     execFile(
@@ -2596,9 +2638,10 @@ function setupIPC() {
   // ── Qwen3Guard-Stream moderation (local Python runtime) ───────────────────
   ipcMain.handle("ai:qwen3GuardScan", async (_e, payload) => {
     try {
-      const scriptPath = path.join(__dirname, "src", "main", "qwen3guard_scan.py");
+      const scriptPath = resolvePythonScriptPath("qwen3guard_scan.py");
+      logPythonBridgeDebug("qwen3guard", "Resolved script path", scriptPath || "(not found)");
       if (!fs.existsSync(scriptPath)) {
-        return { ok: false, error: "Qwen3Guard scanner script missing: " + scriptPath };
+        return { ok: false, error: "Qwen3Guard scanner script missing (checked app.asar/app.asar.unpacked): qwen3guard_scan.py" };
       }
 
       const input = {
@@ -2609,11 +2652,13 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const candidates = resolvePythonCandidates();
+      logPythonBridgeDebug("qwen3guard", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
 
       for (const py of candidates) {
         if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        logPythonBridgeDebug("qwen3guard", "Trying python runtime", py);
         const run = await execFileJson(py, [scriptPath, encoded], 300000);
         if (!run.ok) {
           if (run.error?.code === "ENOENT") {
@@ -2625,9 +2670,14 @@ function setupIPC() {
           continue;
         }
         const out = run.data || {};
-        if (out.ok) return out;
+        if (out.ok) {
+          logPythonBridgeDebug("qwen3guard", "Scan finished successfully via", py);
+          return out;
+        }
         lastErr = String(out.error || "Qwen3Guard scanner returned error").trim();
       }
+
+      logPythonBridgeDebug("qwen3guard", "Scan failed", lastErr);
 
       return { ok: false, error: lastErr || "Qwen3Guard execution failed" };
     } catch (err) {
@@ -2638,9 +2688,10 @@ function setupIPC() {
   // ── Opir moderation (local Python runtime) ───────────────────────────────
   ipcMain.handle("ai:opirGuardScan", async (_e, payload) => {
     try {
-      const scriptPath = path.join(__dirname, "src", "main", "opir_scan.py");
+      const scriptPath = resolvePythonScriptPath("opir_scan.py");
+      logPythonBridgeDebug("opir", "Resolved script path", scriptPath || "(not found)");
       if (!fs.existsSync(scriptPath)) {
-        return { ok: false, error: "Opir scanner script missing: " + scriptPath };
+        return { ok: false, error: "Opir scanner script missing (checked app.asar/app.asar.unpacked): opir_scan.py" };
       }
 
       const input = {
@@ -2651,11 +2702,13 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const candidates = resolvePythonCandidates();
+      logPythonBridgeDebug("opir", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
 
       for (const py of candidates) {
         if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        logPythonBridgeDebug("opir", "Trying python runtime", py);
         const run = await execFileJson(py, [scriptPath, encoded], 300000);
         if (!run.ok) {
           if (run.error?.code === "ENOENT") {
@@ -2667,9 +2720,14 @@ function setupIPC() {
           continue;
         }
         const out = run.data || {};
-        if (out.ok) return out;
+        if (out.ok) {
+          logPythonBridgeDebug("opir", "Scan finished successfully via", py);
+          return out;
+        }
         lastErr = String(out.error || "Opir scanner returned error").trim();
       }
+
+      logPythonBridgeDebug("opir", "Scan failed", lastErr);
 
       return { ok: false, error: lastErr || "Opir execution failed" };
     } catch (err) {
@@ -2680,9 +2738,10 @@ function setupIPC() {
   // ── NLLB-200 translation (Indonesian -> Croatian) ─────────────────────────
   ipcMain.handle("ai:nllbTranslate", async (_e, payload) => {
     try {
-      const scriptPath = path.join(__dirname, "src", "main", "nllb_translate.py");
+      const scriptPath = resolvePythonScriptPath("nllb_translate.py");
+      logPythonBridgeDebug("nllb", "Resolved script path", scriptPath || "(not found)");
       if (!fs.existsSync(scriptPath)) {
-        return { ok: false, error: "NLLB translator script missing: " + scriptPath };
+        return { ok: false, error: "NLLB translator script missing (checked app.asar/app.asar.unpacked): nllb_translate.py" };
       }
 
       const input = {
@@ -2695,11 +2754,13 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const candidates = resolvePythonCandidates();
+      logPythonBridgeDebug("nllb", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
 
       for (const py of candidates) {
         if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        logPythonBridgeDebug("nllb", "Trying python runtime", py);
         const run = await execFileJson(py, [scriptPath, encoded], 300000);
         if (!run.ok) {
           if (run.error?.code === "ENOENT") {
@@ -2711,9 +2772,14 @@ function setupIPC() {
           continue;
         }
         const out = run.data || {};
-        if (out.ok) return out;
+        if (out.ok) {
+          logPythonBridgeDebug("nllb", "Translate finished successfully via", py);
+          return out;
+        }
         lastErr = String(out.error || "NLLB translator returned error").trim();
       }
+
+      logPythonBridgeDebug("nllb", "Translate failed", lastErr);
 
       return { ok: false, error: lastErr || "NLLB execution failed" };
     } catch (err) {
