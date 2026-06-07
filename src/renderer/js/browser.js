@@ -115,6 +115,56 @@ function formatNum(value) {
     return String(n);
 }
 
+function escHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function logNetworkEntry(url, type, status, size, time) {
+    const buffer = Array.isArray(globalThis.__etherxNetBuffer)
+        ? globalThis.__etherxNetBuffer
+        : (globalThis.__etherxNetBuffer = []);
+
+    buffer.push({
+        url,
+        type: type || 'HTML',
+        status: status || 200,
+        size,
+        time,
+    });
+
+    if (buffer.length > 300) buffer.shift();
+
+    if (typeof globalThis.__etherxRenderNetEntry === 'function' && STATE?.devtoolsOpen) {
+        try {
+            globalThis.__etherxRenderNetEntry(buffer[buffer.length - 1]);
+        } catch (_) { }
+    }
+}
+
+function renderQuickLinks(...args) {
+    if (typeof globalThis.__etherxRenderQuickLinksImpl === 'function') {
+        return globalThis.__etherxRenderQuickLinksImpl(...args);
+    }
+}
+
+function renderRecentSites(...args) {
+    if (typeof globalThis.__etherxRenderRecentSitesImpl === 'function') {
+        return globalThis.__etherxRenderRecentSitesImpl(...args);
+    }
+}
+
+function getSiteFavicon(...args) {
+    if (typeof globalThis.__etherxGetSiteFaviconImpl === 'function') {
+        return globalThis.__etherxGetSiteFaviconImpl(...args);
+    }
+    return '🌐';
+}
+
 // Runtime-safe fallbacks for builds where TikTok helpers end up outside current scope.
 if (typeof globalThis.getSongPerfDb !== 'function') {
     globalThis.getSongPerfDb = function getSongPerfDbFallback() {
@@ -11786,6 +11836,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     const networkLog = document.getElementById('networkLog');
     const _netBuffer = [];  // buffer entries captured when DevTools is closed
     const _NET_BUF_MAX = 300;
+    if (Array.isArray(globalThis.__etherxNetBuffer) && globalThis.__etherxNetBuffer.length) {
+        _netBuffer.push(...globalThis.__etherxNetBuffer.slice(-_NET_BUF_MAX));
+        globalThis.__etherxNetBuffer = _netBuffer;
+    } else {
+        globalThis.__etherxNetBuffer = _netBuffer;
+    }
     function _renderNetEntry(entry) {
         if (!networkLog) return;
         const { url, type, status, size, time } = entry;
@@ -11798,6 +11854,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         tr.innerHTML = `<td title="${escHtml(url)}">${escHtml(name)}</td><td style="color:${s >= 400 ? '#f48771' : '#89d185'}">${s}</td><td><span class="badge ${badgeClass}">${t}</span></td><td>${sz}</td><td>${ms}</td><td><div class="net-bar-wrap"><div class="net-bar" style="width:${bar}%"></div></div></td>`;
         networkLog.appendChild(tr);
     }
+    globalThis.__etherxRenderNetEntry = _renderNetEntry;
     function _flushNetBuffer() {
         if (!networkLog || !_netBuffer.length) return;
         _netBuffer.forEach(entry => _renderNetEntry(entry));
@@ -12918,6 +12975,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         ql.innerHTML = '';
         links.forEach(l => { const el = document.createElement('div'); el.className = 'ql-item'; el.innerHTML = `<div class="ql-icon">${l.icon}</div><div class="ql-label">${l.label}</div>`; el.addEventListener('click', () => navigateTo(l.url)); ql.appendChild(el); });
     }
+    globalThis.__etherxRenderQuickLinksImpl = renderQuickLinks;
 
     // Recently Visited
     function addRecentSite(url, title) {
@@ -12937,6 +12995,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             for (const k in map) if (h.includes(k)) return map[k];
         } catch (e) { } return '\uD83C\uDF10';
     }
+    globalThis.__etherxGetSiteFaviconImpl = getSiteFavicon;
     function renderRecentSites() {
         const r = JSON.parse(localStorage.getItem('ex_recent') || '[]').slice(0, 8);
         const sec = document.getElementById('ntpRecentSection');
@@ -12952,6 +13011,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             cont.appendChild(el);
         });
     }
+    globalThis.__etherxRenderRecentSitesImpl = renderRecentSites;
 
     // NTP Customize
     function applyNtpSettings() {
