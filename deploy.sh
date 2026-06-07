@@ -86,8 +86,10 @@ validate_etherx_download_links() {
   local latest_tag=""
   local live_broken=0
   local expected_missing=0
+  local legacy_pattern_hits=0
   local -a live_urls=()
   local -a expected_names=()
+  local -a expected_urls=()
 
   info "Post-deploy check: validating EtherX.io download links"
 
@@ -121,6 +123,11 @@ PY
       warn "Live link broken ($code): $url"
       ((live_broken++))
     fi
+
+    # Detect old naming conventions still present on the page.
+    if [[ "$url" == *".dmg"* ]] || [[ "$url" == *"etherx-standalone_"*"_amd64.deb"* ]] || [[ "$url" == *"EtherX.Browser."*".exe"* ]] || [[ "$url" == *"EtherX.Browser-"*".AppImage"* ]]; then
+      ((legacy_pattern_hits++))
+    fi
   done
 
   if [[ $live_broken -eq 0 ]]; then
@@ -146,8 +153,10 @@ PY
   fi
 
   for asset_name in "${expected_names[@]}"; do
+    local expected_url="https://github.com/ktrucek/etherx-standalone/releases/download/$latest_tag/$asset_name"
+    expected_urls+=("$expected_url")
     if ! printf '%s\n' "${live_urls[@]}" | grep -Fq "/$latest_tag/$asset_name"; then
-      warn "Missing on live page: https://github.com/ktrucek/etherx-standalone/releases/download/$latest_tag/$asset_name"
+      warn "Missing on live page: $expected_url"
       ((expected_missing++))
     fi
   done
@@ -156,6 +165,15 @@ PY
     success "Live page contains all assets from latest GitHub release ($latest_tag)"
   else
     warn "Live page is missing $expected_missing asset link(s) from latest GitHub release ($latest_tag)"
+    warn "Expected download URLs for copy/paste fix:"
+    for expected_url in "${expected_urls[@]}"; do
+      echo "  - $expected_url"
+    done
+  fi
+
+  if [[ $legacy_pattern_hits -gt 0 ]]; then
+    warn "Detected $legacy_pattern_hits legacy filename pattern(s) on live page (e.g. .dmg, old .deb/.exe naming)."
+    warn "Current release naming is: -linux.AppImage, -linux.deb, -mac-arm64.zip, -mac-x64.zip, -win.exe, -win.zip"
   fi
 }
 
