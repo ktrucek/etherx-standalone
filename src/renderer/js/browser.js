@@ -214,6 +214,12 @@ function updateSettingsExtCount() {
     }
 }
 
+function renderSitePermsList(...args) {
+    if (typeof globalThis.__etherxRenderSitePermsListImpl === 'function') {
+        return globalThis.__etherxRenderSitePermsListImpl(...args);
+    }
+}
+
 // Runtime-safe fallbacks for builds where TikTok helpers end up outside current scope.
 if (typeof globalThis.getSongPerfDb !== 'function') {
     globalThis.getSongPerfDb = function getSongPerfDbFallback() {
@@ -18823,6 +18829,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         </div>`;
         }).join('');
     }
+    globalThis.__etherxRenderSitePermsListImpl = renderSitePermsList;
     document.getElementById('sClearSitePerms')?.addEventListener('click', () => {
         window.customConfirm('Clear all per-site permission overrides?', ok => {
             if (!ok) return;
