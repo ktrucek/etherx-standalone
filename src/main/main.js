@@ -1266,6 +1266,17 @@ function setupIPC() {
 
   // ── Auto-update (GitHub Releases) ─────────────────────────────────────────
   // Token is stored ONLY in SQLite — never returned to the renderer.
+  const approvedUpdateAssetsByName = new Map();
+
+  function rememberApprovedUpdateAssets(assets) {
+    approvedUpdateAssetsByName.clear();
+    (Array.isArray(assets) ? assets : []).forEach((asset) => {
+      const name = String(asset?.name || '').trim();
+      const url = String(asset?.url || '').trim();
+      if (name && url) approvedUpdateAssetsByName.set(name, url);
+    });
+  }
+
   ipcMain.handle('update:saveToken', (_e, token) => {
     if (!db) return { ok: false, error: 'DB not ready' };
     db.saveSettings({ ...db.getSettings(), githubUpdateToken: token.trim() });
@@ -1378,6 +1389,7 @@ function setupIPC() {
       if (!result.ok) {
         result = await fetchRelease(GITHUB_API, githubToken, 'Bearer');
       }
+      if (result?.ok) rememberApprovedUpdateAssets(result.assets);
       return result;
     } catch (e) {
       return { ok: false, error: e.message };
@@ -1414,31 +1426,51 @@ function setupIPC() {
           return null;
         }
       };
-      const safeUrl = normalizeUpdateUrl(url);
+      const requestedName = String(filename || '').trim();
+      const approvedUrl = approvedUpdateAssetsByName.get(requestedName) || '';
+      const candidateUrl = approvedUrl || String(url || '').trim();
+      const safeUrl = normalizeUpdateUrl(candidateUrl);
       if (!safeUrl) return { ok: false, error: 'Invalid update URL' };
+      if (!approvedUrl) return { ok: false, error: 'Update asset must be selected from latest approved release list' };
 
       await new Promise((resolve, reject) => {
-        const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/octet-stream' };
-        if (token) headers['Authorization'] = 'Bearer ' + token;
-        const req = net.request({ method: 'GET', url: safeUrl, headers, redirect: 'manual' });
-        req.on('response', (res) => {
-          if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-            const rUrl = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
-            const safeRedirectUrl = normalizeUpdateUrl(rUrl, safeUrl);
-            if (!safeRedirectUrl) {
-              reject(new Error('Blocked unsafe update redirect'));
+        const redirectCodes = new Set([301, 302, 303, 307, 308]);
+        const authHosts = new Set(['api.github.com', 'github.com']);
+
+        const buildHeaders = (requestUrl) => {
+          const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/octet-stream' };
+          if (!token) return headers;
+          try {
+            const host = String(new URL(requestUrl).hostname || '').toLowerCase();
+            if (authHosts.has(host)) headers['Authorization'] = 'Bearer ' + token;
+          } catch (_) { }
+          return headers;
+        };
+
+        const requestAsset = (requestUrl, redirectsLeft = 5) => {
+          const req = net.request({ method: 'GET', url: requestUrl, headers: buildHeaders(requestUrl), redirect: 'manual' });
+          req.on('response', (res) => {
+            if (redirectCodes.has(res.statusCode) && res.headers.location) {
+              if (redirectsLeft <= 0) {
+                reject(new Error('Too many update redirects'));
+                return;
+              }
+              const rUrl = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
+              const safeRedirectUrl = normalizeUpdateUrl(rUrl, requestUrl);
+              if (!safeRedirectUrl) {
+                reject(new Error('Blocked unsafe update redirect'));
+                return;
+              }
+              requestAsset(safeRedirectUrl, redirectsLeft - 1);
               return;
             }
-            const req2 = net.request({ method: 'GET', url: safeRedirectUrl, headers, redirect: 'error' });
-            req2.on('response', (res2) => handleResponse(res2));
-            req2.on('error', reject);
-            req2.end();
-            return;
-          }
-          handleResponse(res);
-        });
-        req.on('error', reject);
-        req.end();
+            handleResponse(res);
+          });
+          req.on('error', reject);
+          req.end();
+        };
+
+        requestAsset(safeUrl);
 
         function handleResponse(res) {
           if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode)); return; }
