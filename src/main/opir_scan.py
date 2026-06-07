@@ -80,9 +80,15 @@ def main() -> int:
 
             pred_any: Any = classifier(text, labels)
             pred = cast(List[Dict[str, Any]], pred_any[0] if pred_any else [])
-            best = max(pred, key=lambda row: float(row.get("score", 0.0))) if pred else {"label": "safe", "score": 1.0}
-            label = str(best.get("label", "safe")).strip().lower()
-            score = float(best.get("score", 0.0))
+            default_best: Dict[str, Any] = {"label": "safe", "score": 1.0}
+            if pred:
+                best = max(pred, key=lambda row: float(row.get("score", 0.0)))
+            else:
+                best = default_best
+            label_raw = best.get("label", "safe")
+            score_raw = best.get("score", 0.0)
+            label = str(label_raw).strip().lower()
+            score = float(score_raw)
             risk_level = "Unsafe" if label == "unsafe" else "Safe"
             category = "unsafe-content" if risk_level == "Unsafe" else "safe"
             results.append({
