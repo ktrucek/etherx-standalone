@@ -1402,31 +1402,6 @@ function setupIPC() {
         if (token) headers['Authorization'] = 'Bearer ' + token;
         const req = net.request({ method: 'GET', url, headers, redirect: 'follow' });
         req.on('response', (res) => {
-          if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-            const rUrl = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
-            let redirectedUrl;
-            try {
-              const baseUrl = new URL(url);
-              redirectedUrl = new URL(rUrl, baseUrl);
-              const allowedProtocols = new Set(['http:', 'https:']);
-              if (!allowedProtocols.has(redirectedUrl.protocol)) {
-                reject(new Error('Disallowed redirect protocol'));
-                return;
-              }
-              if (redirectedUrl.host !== baseUrl.host) {
-                reject(new Error('Disallowed redirect host'));
-                return;
-              }
-            } catch (_err) {
-              reject(new Error('Invalid redirect URL'));
-              return;
-            }
-            const req2 = net.request({ method: 'GET', url: redirectedUrl.toString(), headers });
-            req2.on('response', (res2) => handleResponse(res2));
-            req2.on('error', reject);
-            req2.end();
-            return;
-          }
           handleResponse(res);
         });
         req.on('error', reject);
