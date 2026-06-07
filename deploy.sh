@@ -26,6 +26,9 @@ WRITE_ENV_LOCAL=false
 ALLOW_NON_MAIN=false
 SECRETS_FILE_DEFAULT="${HOME}/.config/etherx/deploy.env"
 SECRETS_FILE="${DEPLOY_SECRETS_FILE:-$SECRETS_FILE_DEFAULT}"
+DIRTY_WORKTREE=false
+DIRTY_CONTINUE_APPROVED=false
+AUTO_STASH_REF=""
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 is_semver() {
@@ -77,6 +80,57 @@ info()    { echo -e "${CYAN}[deploy]${NC} $*"; }
 success() { echo -e "${GREEN}[✓]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $*"; }
 error()   { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
+
+ensure_github_remote() {
+  local github_repo_url="https://github.com/ktrucek/etherx-standalone.git"
+  if git remote get-url github &>/dev/null; then
+    git remote set-url github "$github_repo_url"
+  else
+    git remote add github "$github_repo_url"
+  fi
+}
+
+sync_github_main_before_deploy() {
+  [[ "$NO_PUSH" == false ]] || return 0
+
+  ensure_github_remote
+
+  info "Fetching github/main before version bump..."
+  git fetch github main:refs/remotes/github/main >/dev/null 2>&1 || error "Failed to fetch github/main"
+
+  local behind ahead
+  read -r behind ahead < <(git rev-list --left-right --count github/main...HEAD)
+  behind="${behind:-0}"
+  ahead="${ahead:-0}"
+
+  if (( behind > 0 )); then
+    if [[ -n "$(git status --porcelain)" ]]; then
+      if [[ "$DIRTY_CONTINUE_APPROVED" != true ]]; then
+        error "Local branch is behind github/main by ${behind} commit(s), but worktree is dirty. Commit/stash changes first, then rerun deploy."
+      fi
+
+      local stash_label="deploy-autostash-$(date +%s)"
+      info "Dirty worktree detected and approved — auto-stashing before rebase..."
+      git stash push --include-untracked -m "$stash_label" >/dev/null || error "Auto-stash before rebase failed"
+      AUTO_STASH_REF="stash@{0}"
+    fi
+
+    info "Local branch is behind github/main by ${behind} commit(s) — rebasing before deploy..."
+    git rebase github/main >/dev/null || error "Auto-rebase onto github/main failed"
+
+    if [[ -n "$AUTO_STASH_REF" ]]; then
+      info "Restoring auto-stashed local changes after rebase..."
+      git stash pop "$AUTO_STASH_REF" >/dev/null || error "Auto-stash restore failed after rebase. Resolve conflicts and rerun deploy."
+      AUTO_STASH_REF=""
+    fi
+
+    success "Rebased onto github/main"
+  elif (( ahead > 0 )); then
+    info "Local branch is ahead of github/main by ${ahead} commit(s)"
+  else
+    success "Local branch is in sync with github/main"
+  fi
+}
 
 validate_etherx_download_links() {
   local page_url="https://etherx.io/browser.html"
@@ -263,13 +317,17 @@ fi
 
 # Check git status
 if [[ -n "$(git status --porcelain)" ]]; then
+  DIRTY_WORKTREE=true
   warn "Working directory has uncommitted changes!"
   git status --short
   if [[ -t 0 ]]; then
     read -rp "$(echo -e "${YELLOW}Continue anyway? [y/N] ${NC}")" CONTINUE
     [[ "$CONTINUE" =~ ^[Yy]$ ]] || { info "Aborted."; exit 0; }
+    DIRTY_CONTINUE_APPROVED=true
   fi
 fi
+
+sync_github_main_before_deploy
 
 # ── Determine version ──────────────────────────────────────────────────────────
 CURRENT_VERSION=$(python3 -c "import json; print(json.load(open('package.json'))['version'])" 2>/dev/null || echo "0.0.0")
@@ -445,11 +503,7 @@ GITHUB_REPO_URL="https://github.com/ktrucek/etherx-standalone.git"
 GITHUB_AUTH_REPO_URL=""
 
 # Ensure github remote points to clean URL (without token)
-if git remote get-url github &>/dev/null; then
-  git remote set-url github "$GITHUB_REPO_URL"
-else
-  git remote add github "$GITHUB_REPO_URL"
-fi
+ensure_github_remote
 
 # ── Push to GitHub ───────────────────────────────────────────────────────
 if [[ "$NO_PUSH" == false ]]; then
@@ -481,7 +535,13 @@ if [[ "$NO_PUSH" == false ]]; then
 
   info "Fetching github/main to refresh stale tracking ref..."
   GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" ls-remote "$GITHUB_AUTH_REPO_URL" >/dev/null || error "GitHub auth failed for deploy token (check scopes/revocation)"
-  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch "$GITHUB_AUTH_REPO_URL" main 2>/dev/null || true
+  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch github main:refs/remotes/github/main >/dev/null 2>&1 || true
+
+  read -r GITHUB_BEHIND_COUNT GITHUB_AHEAD_COUNT < <(git rev-list --left-right --count github/main...HEAD)
+  GITHUB_BEHIND_COUNT="${GITHUB_BEHIND_COUNT:-0}"
+  if (( GITHUB_BEHIND_COUNT > 0 )); then
+    error "github/main changed during deploy and local branch is now behind by ${GITHUB_BEHIND_COUNT} commit(s). Rerun deploy to rebase first."
+  fi
 
   info "Pushing to GitHub (triggers build)..."
   if [[ "$FORCE_PUSH" == true ]]; then
