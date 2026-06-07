@@ -2845,6 +2845,23 @@ function setupIPC() {
   });
   ipcMain.handle("update:check", async () => {
     try {
+      const isSemverNewer = (nextVersion, currentVersion) => {
+        const nextParts = String(nextVersion || "")
+          .split(".")
+          .map((part) => Number.parseInt(part, 10) || 0);
+        const currentParts = String(currentVersion || "")
+          .split(".")
+          .map((part) => Number.parseInt(part, 10) || 0);
+        const len = Math.max(nextParts.length, currentParts.length);
+        for (let i = 0; i < len; i += 1) {
+          const next = nextParts[i] || 0;
+          const current = currentParts[i] || 0;
+          if (next > current) return true;
+          if (next < current) return false;
+        }
+        return false;
+      };
+
       const s = db ? db.getSettings() : {};
       const token = s.giteaUpdateToken || s.githubUpdateToken || "";
       const headers = {
@@ -2890,7 +2907,7 @@ function setupIPC() {
                 ok: true,
                 current,
                 latest,
-                isNew: latest !== current && latest > current,
+                isNew: isSemverNewer(latest, current),
                 name: data.name || data.tag_name,
                 body: data.body || "",
                 assets,
