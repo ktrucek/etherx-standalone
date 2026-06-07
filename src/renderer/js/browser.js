@@ -17705,19 +17705,77 @@ document.getElementById('helpSongRecRunTest')?.addEventListener('click', () => {
 
 // ── Help → Browser Versions download buttons ──────────────────────────────
 ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
-    document.getElementById('dlBtn' + platform)?.addEventListener('click', () => {
+    document.getElementById('dlBtn' + platform)?.addEventListener('click', async () => {
         const s = DB.getSettings();
         const customUrl = (s.download_links || {})[platform.toLowerCase()];
         if (customUrl) { window.open(customUrl, '_blank'); return; }
-        // Auto-generate GitHub release URL from current version
+
+        // Prefer real assets from latest GitHub release (prevents stale filename mismatches).
+        try {
+            const relRes = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
+                headers: { 'Accept': 'application/vnd.github+json' },
+                cache: 'no-store'
+            });
+            if (relRes.ok) {
+                const rel = await relRes.json();
+                const assets = Array.isArray(rel.assets) ? rel.assets : [];
+                const findAsset = (predicates) => {
+                    for (const pred of predicates) {
+                        const hit = assets.find((a) => {
+                            const n = String(a?.name || '').toLowerCase();
+                            return pred(n);
+                        });
+                        if (hit?.browser_download_url) return hit.browser_download_url;
+                    }
+                    return '';
+                };
+
+                const releaseUrl = rel.html_url || 'https://github.com/ktrucek/etherx-standalone/releases';
+                const releaseLinkByPlatform = {
+                    Linux: findAsset([
+                        (n) => n.includes('linux') && n.endsWith('.appimage'),
+                        (n) => n.includes('linux') && n.endsWith('.deb')
+                    ]),
+                    Windows: findAsset([
+                        (n) => n.includes('win') && n.endsWith('.exe'),
+                        (n) => n.includes('win') && n.endsWith('.zip')
+                    ]),
+                    MacIntel: findAsset([
+                        (n) => n.includes('mac-x64') && n.endsWith('.dmg'),
+                        (n) => n.includes('mac-x64') && n.endsWith('.zip')
+                    ]),
+                    MacArm: findAsset([
+                        (n) => n.includes('mac-arm64') && n.endsWith('.dmg'),
+                        (n) => n.includes('mac-arm64') && n.endsWith('.zip')
+                    ]),
+                    Android: '',
+                    IOS: ''
+                };
+
+                const bestUrl = releaseLinkByPlatform[platform] || '';
+                if (bestUrl) {
+                    window.open(bestUrl, '_blank');
+                    showToast('📥 Preuzimanje za ' + platform + '...');
+                    return;
+                }
+
+                if (platform === 'Android' || platform === 'IOS') {
+                    window.open(releaseUrl, '_blank');
+                    showToast('📱 Otvaram stranicu izdanja...');
+                    return;
+                }
+            }
+        } catch (_) { }
+
+        // Fallback: compose URL from currently displayed version.
         const ver = (document.getElementById('helpVersionNum')?.textContent || document.getElementById('helpVersionNum2')?.textContent || '').replace(/^v/, '').trim();
         if (!ver || ver === '0.0.0') { showToast('⚠️ Verzija nije dostupna'); return; }
         const base = `https://github.com/ktrucek/etherx-standalone/releases/download/v${ver}/`;
         const files = {
-            Linux: `EtherX.Browser-${ver}.AppImage`,
-            Windows: `EtherX.Browser-${ver}-x64-Setup.exe`,
-            MacIntel: `EtherX.Browser-${ver}-x64-mac.zip`,
-            MacArm: `EtherX.Browser-${ver}-arm64.dmg`,
+            Linux: `EtherX.Browser-${ver}-linux.AppImage`,
+            Windows: `EtherX.Browser-${ver}-win.exe`,
+            MacIntel: `EtherX.Browser-${ver}-mac-x64.zip`,
+            MacArm: `EtherX.Browser-${ver}-mac-arm64.zip`,
             Android: null,
             IOS: null,
         };

@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "3.0.15",
+  "version": "3.0.16",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "tkai:env": "node scripts/tkai-hashes-to-env.js",
     "dist:linux": "electron-builder --linux",
     "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac"
+    "dist:mac": "electron-builder --mac",
+    "dist:mac:notarized": "electron-builder --mac --publish never"
   },
   "author": {
     "name": "EtherX Team",
@@ -41,6 +42,7 @@
     "directories": {
       "output": "dist"
     },
+    "afterSign": "scripts/notarize.js",
     "files": [
       "main.js",
       "preload.js",
@@ -85,12 +87,12 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": false,
       "artifactName": "EtherX.Browser-${version}-mac-${arch}.${ext}"
     },
     "artifactName": "EtherX.Browser-${version}-${arch}.${ext}"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "electron": "^39.8.5",
     "electron-builder": "^24.13.3",
     "picomatch": "^4.0.4",
@@ -109,5 +111,5 @@
     "uuid": "^11.1.1",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-06-07T01:56:59Z"
+  "buildTime": "2026-06-07T02:26:02Z"
 }
