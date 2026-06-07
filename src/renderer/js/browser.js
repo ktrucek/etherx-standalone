@@ -19890,6 +19890,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         function humanizeUpdateError(err) {
             const raw = String(err?.message || err || 'Nepoznata greška').trim();
             if (!raw) return 'Nepoznata greška tijekom ažuriranja.';
+            if (/redirect was cancelled|err_aborted|\(-3\)/i.test(raw)) {
+                return 'Update server je vratio preusmjerenje (normalno), pokušaj ponovno za trenutak.';
+            }
             if (/\b504\b/.test(raw)) {
                 return 'HTTP 504 (timeout) - server za update trenutno ne odgovara na vrijeme. Pokušaj ponovno za 1-2 minute.';
             }
@@ -19897,6 +19900,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 return 'Mrežna greška tijekom ažuriranja. Provjeri internet vezu i pokušaj ponovno.';
             }
             return raw;
+        }
+
+        function isBenignUpdateRedirectError(err) {
+            const raw = String(err?.message || err || '').trim();
+            return /redirect was cancelled|err_aborted|\(-3\)/i.test(raw);
         }
 
         window.checkForUpdates = async function (silent = false) {
@@ -19943,6 +19951,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 _applyUpdateResult(data, currentTag);
                 if (!silent) showToast(data.isNew ? ('⬆️ Nova verzija: v' + data.latest + ' dostupna!') : ('✓ Browser je ažuran — v' + currentTag));
             } catch (err) {
+                if (isBenignUpdateRedirectError(err)) {
+                    if (badge) {
+                        badge.textContent = '↻ Preusmjerenje';
+                        badge.style.background = 'rgba(255,189,46,.12)';
+                        badge.style.color = '#ffbd2e';
+                        badge.style.borderColor = 'rgba(255,189,46,.35)';
+                    }
+                    if (!silent) showToast('ℹ️ Update server radi preusmjerenje. Pokušaj ponovno za par sekundi.');
+                    return;
+                }
                 const friendlyErr = humanizeUpdateError(err);
                 if (badge) { badge.textContent = '? Greška'; badge.style.background = 'rgba(255,95,86,.1)'; badge.style.color = '#ff5f56'; badge.style.borderColor = 'rgba(255,95,86,.3)'; }
                 if (!silent) showToast('❌ Greška pri provjeri: ' + friendlyErr);
@@ -20014,6 +20032,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 // App will quit — but just in case show success
                 btn.textContent = '✅ Gotovo — restartam...';
             } catch (err) {
+                if (isBenignUpdateRedirectError(err)) {
+                    btn.disabled = false;
+                    btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
+                    if (progressLabel) {
+                        progressLabel.textContent = 'ℹ️ Preusmjerenje update servera - pokušaj ponovno';
+                        progressLabel.style.color = '#ffbd2e';
+                    }
+                    showToast('ℹ️ Update preusmjerenje je privremeno prekinulo zahtjev. Probaj ponovno.');
+                    return;
+                }
                 const friendlyErr = humanizeUpdateError(err);
                 btn.disabled = false;
                 btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
