@@ -165,6 +165,55 @@ function getSiteFavicon(...args) {
     return '🌐';
 }
 
+// Global helper wrappers used before deeper UI modules finish initialization.
+// Later modules register concrete implementations via __etherx*Impl hooks.
+function consoleLog(type, msg, src) {
+    if (typeof globalThis.__etherxConsoleLogImpl === 'function') {
+        return globalThis.__etherxConsoleLogImpl(type, msg, src);
+    }
+    try {
+        const text = src ? `[${src}] ${msg}` : String(msg || '');
+        if (type === 'error') console.error(text);
+        else if (type === 'warn') console.warn(text);
+        else if (type === 'info') console.info(text);
+        else console.log(text);
+    } catch (_) { }
+}
+
+function showToast(msg, duration) {
+    if (typeof globalThis.__etherxShowToastImpl === 'function') {
+        return globalThis.__etherxShowToastImpl(msg, duration);
+    }
+    if (msg) consoleLog('info', String(msg), 'toast');
+}
+
+function addRecentSite(url, title) {
+    if (typeof globalThis.__etherxAddRecentSiteImpl === 'function') {
+        return globalThis.__etherxAddRecentSiteImpl(url, title);
+    }
+    if (!url || url === 'about:blank' || url === 'etherx://newtab') return;
+    try {
+        let recent = JSON.parse(localStorage.getItem('ex_recent') || '[]');
+        recent = recent.filter((entry) => entry.url !== url);
+        recent.unshift({ url, title: title || url, ts: Date.now() });
+        localStorage.setItem('ex_recent', JSON.stringify(recent.slice(0, 20)));
+    } catch (_) { }
+}
+
+function hideAutofillBox() {
+    if (typeof globalThis.__etherxHideAutofillBoxImpl === 'function') {
+        return globalThis.__etherxHideAutofillBoxImpl();
+    }
+    const box = document.getElementById('autofillBox');
+    if (box) box.style.display = 'none';
+}
+
+function updateSettingsExtCount() {
+    if (typeof globalThis.__etherxUpdateSettingsExtCountImpl === 'function') {
+        return globalThis.__etherxUpdateSettingsExtCountImpl();
+    }
+}
+
 // Runtime-safe fallbacks for builds where TikTok helpers end up outside current scope.
 if (typeof globalThis.getSongPerfDb !== 'function') {
     globalThis.getSongPerfDb = function getSongPerfDbFallback() {
@@ -11520,6 +11569,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (!_conFilterTimer) { _conFilterTimer = setTimeout(() => { _conFilterTimer = null; applyConsoleFilter(); }, 150); }
         } catch (e) { /* prevent recursion */ }
     }
+    globalThis.__etherxConsoleLogImpl = consoleLog;
 
     // ── Hook browser console & errors ────────────────────────────────────────
     (function hookBrowserConsole() {
@@ -12988,6 +13038,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         renderRecentSites();
         renderQuickLinks();
     }
+    globalThis.__etherxAddRecentSiteImpl = addRecentSite;
     function getSiteFavicon(url) {
         try {
             const h = new URL(url).hostname;
@@ -13530,6 +13581,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.body.appendChild(afBox);
 
     function hideAutofillBox() { afBox.style.display = 'none'; }
+    globalThis.__etherxHideAutofillBoxImpl = hideAutofillBox;
     function injectAutofillIntoPage(username, password) {
         const wv = document.getElementById('browseFrame');
         if (!wv || typeof wv.executeJavaScript !== 'function') {
@@ -15039,6 +15091,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => t.classList.remove('show'), ms);
     }
+    globalThis.__etherxShowToastImpl = showToast;
     function showPrompt(message, defaultVal = '', opts = {}) {
         return new Promise(resolve => {
             const overlay = document.createElement('div');
@@ -19192,6 +19245,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const enabled = exts.filter(e => e.enabled).length;
         el.textContent = `${exts.length} installed, ${enabled} active`;
     }
+    globalThis.__etherxUpdateSettingsExtCountImpl = updateSettingsExtCount;
 
     // ── Site info popup (padlock/URL icon click) ─────────────────────────────
     // Per-domain permission storage: ex_site_perms = { "example.com": { camera: "Ask", ... } }
