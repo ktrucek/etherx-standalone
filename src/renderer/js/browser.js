@@ -18963,7 +18963,10 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         const now = new Date().toLocaleString('hr-HR');
         if (lastCheckedEl) lastCheckedEl.textContent = (window.i18n ? window.i18n.t('lastCheck') : 'Zadnja provjera: ') + now;
         const latestTag = data.latest || data.tag_name?.replace(/^v/, '') || '';
-        const isNew = data.isNew ?? semverNewer(latestTag, currentTag);
+        // Some older desktop builds can return an incorrect explicit isNew=false
+        // due to lexical version comparison in main process. Always trust semver check.
+        const derivedIsNew = semverNewer(latestTag, currentTag);
+        const isNew = Boolean(data.isNew) || derivedIsNew;
         if (isNew) {
             if (badge) { badge.textContent = '⬆ Dostupno v' + latestTag; badge.style.background = 'rgba(255,189,46,.1)'; badge.style.color = '#ffbd2e'; badge.style.borderColor = 'rgba(255,189,46,.3)'; }
         } else {
