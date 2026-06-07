@@ -1096,7 +1096,7 @@ initSettingsPanel();
     // Tools drawer — delegate to TikTok AI panel buttons
     document.getElementById('btnTkaiToolsOpenPanel')?.addEventListener('click', () => {
         document.getElementById('settingsPanel')?.classList.remove('open');
-        togglePanel('tiktokAIPanel');
+        openPanel('tiktokAIPanel');
     });
     const openLiveDashboardSafely = () => {
         const openFn = (typeof openLiveDashboardPopout === 'function')
@@ -1115,7 +1115,7 @@ initSettingsPanel();
     };
     document.getElementById('btnTkaiToolsOpenLive')?.addEventListener('click', () => {
         document.getElementById('settingsPanel')?.classList.remove('open');
-        togglePanel('tiktokAIPanel');
+        openPanel('tiktokAIPanel');
         openLiveDashboardSafely();
     });
     document.getElementById('btnTkaiToolsExportJson')?.addEventListener('click', () => {
@@ -3075,6 +3075,51 @@ function togglePanel(id) {
     closeAllPanels();
     if (!wasOpen) panel.classList.add('open');
 }
+function openPanel(id) {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    closeAllPanels();
+    panel.classList.add('open');
+    if (id === 'tiktokAIPanel') {
+        requestAnimationFrame(() => ensurePanelInViewport(panel));
+    }
+}
+function ensurePanelInViewport(panelOrId) {
+    const panel = typeof panelOrId === 'string' ? document.getElementById(panelOrId) : panelOrId;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    const topBoundary = (() => {
+        const tabBar = document.querySelector('.tab-bar')?.getBoundingClientRect();
+        if (tabBar && Number.isFinite(tabBar.bottom)) return Math.max(0, Math.round(tabBar.bottom));
+        const content = document.querySelector('.content-area')?.getBoundingClientRect();
+        if (content && Number.isFinite(content.top)) return Math.max(0, Math.round(content.top));
+        return 72;
+    })();
+
+    const margin = 10;
+    const maxLeft = Math.max(0, window.innerWidth - Math.max(120, rect.width) - margin);
+    const leftNow = Number.isFinite(parseFloat(panel.style.left)) ? parseFloat(panel.style.left) : rect.left;
+    let nextLeft = Math.max(margin, Math.min(leftNow, maxLeft));
+
+    const maxTop = Math.max(topBoundary, window.innerHeight - Math.max(120, rect.height) - margin);
+    const topNow = rect.top;
+    let nextTop = Math.max(topBoundary, Math.min(topNow, maxTop));
+
+    const offscreen = rect.right < 120 || rect.left > window.innerWidth - 120 || rect.bottom < topBoundary + 120 || rect.top > window.innerHeight - 60;
+    if (offscreen) {
+        panel.style.right = '0';
+        panel.style.left = 'auto';
+        panel.style.top = 'auto';
+        panel.style.bottom = '10px';
+        return;
+    }
+
+    panel.style.right = 'auto';
+    panel.style.left = Math.round(nextLeft) + 'px';
+    panel.style.top = Math.round(nextTop) + 'px';
+    panel.style.bottom = 'auto';
+}
 document.addEventListener('mousedown', e => {
     const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'tiktokAIPanel', 'aiInspectPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel', 'shieldPanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
@@ -3245,6 +3290,32 @@ async function runAiTextRequest(prompt, opts = {}) {
         throw new Error(label + ' odgovor je i dalje u obradi (HTTP 202). Pokušaj ponovno za nekoliko sekundi.' + (detail ? ' Detalj: ' + detail : ''));
     };
 
+    const providerLabel = (name) => ({
+        gemini: 'Gemini',
+        openai: 'OpenAI',
+        local: 'Local AI',
+        groq: 'Groq',
+        openrouter: 'OpenRouter',
+        huggingface: 'HuggingFace',
+        ollama: 'Ollama',
+        anthropic: 'Anthropic'
+    }[String(name || '').toLowerCase()] || String(name || 'AI provider'));
+
+    const throwApiError = (name, response, data, selectedModel) => {
+        const status = Number(response?.status || 0);
+        const raw = String(data?.error?.message || data?.message || data?.error || '').trim();
+        const label = providerLabel(name);
+        if (status === 402) {
+            throw new Error(label + ' HTTP 402 - račun nema aktivan billing/kredit za model "' + String(selectedModel || '') + '". Provjeri billing/credits kod providera ili promijeni provider/model.');
+        }
+        if (status === 429) {
+            throw new Error(label + ' HTTP 429 - rate limit. Pričekaj i pokušaj ponovno.' + (raw ? ' Detalj: ' + raw : ''));
+        }
+        if (!response?.ok || data?.error) {
+            throw new Error(raw || ('HTTP ' + status));
+        }
+    };
+
     if (provider === 'gemini') {
         const apiKey = opts.apiKey || runtime.geminiApiKey;
         if (!apiKey) throw new Error('Gemini API ključ nije postavljen.');
@@ -3257,7 +3328,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'Gemini');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
     }
 
@@ -3281,7 +3352,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, provider === 'openai' ? 'OpenAI' : 'Local AI');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
@@ -3302,7 +3373,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'Groq');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
@@ -3328,7 +3399,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'OpenRouter');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
@@ -3349,7 +3420,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'HuggingFace');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
@@ -3372,7 +3443,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'Ollama');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.choices?.[0]?.message?.content || '').trim();
     }
 
@@ -3395,7 +3466,7 @@ async function runAiTextRequest(prompt, opts = {}) {
             })
         }, 'Anthropic');
         const data = await response.json().catch(() => ({}));
-        if (!response.ok || data.error) throw new Error(data.error?.message || ('HTTP ' + response.status));
+        throwApiError(provider, response, data, model);
         return (data.content || []).map(part => part?.text || '').join('').trim();
     }
 
@@ -3536,7 +3607,15 @@ document.getElementById('ascClose').addEventListener('click', () => {
     document.getElementById('aiSummaryCard').classList.remove('open');
 });
 document.getElementById('btnAiAgent').addEventListener('click', () => togglePanel('aiAgentPanel'));
-document.getElementById('btnTikTokAI')?.addEventListener('click', () => togglePanel('tiktokAIPanel'));
+const tkaiNavBtn = document.getElementById('btnTikTokAI');
+if (tkaiNavBtn && tkaiNavBtn.dataset.tkaiOpenBound !== '1') {
+    tkaiNavBtn.dataset.tkaiOpenBound = '1';
+    tkaiNavBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openPanel('tiktokAIPanel');
+    });
+}
 document.getElementById('btnAiInspect')?.addEventListener('click', () => togglePanel('aiInspectPanel'));
 document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
 document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
@@ -3564,6 +3643,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 ['closeBmPanel', 'closeHistPanel', 'closeDlPanel', 'closeSettingsPanel', 'closeWalletPanel', 'closeBobiaiPanel', 'closeAiAgentPanel', 'closeTiktokAIPanel', 'closeAiInspectPanel', 'closeKriptoPanel', 'closeEtherxPanel', 'closeCryptoPricePanel', 'closeBotDetectionPanel', 'closeShieldPanel'].forEach(id => document.getElementById(id)?.addEventListener('click', closeAllPanels));
 
 (function initTikTokChatAI() {
+    if (window.__etherxTkaiInitDone) return;
+    window.__etherxTkaiInitDone = true;
     const panel = document.getElementById('tiktokAIPanel');
     if (!panel) return;
 
@@ -4706,6 +4787,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const fontScale = Math.max(85, Math.min(170, Number(s.tkaiFontScale || 100)));
         panel.style.setProperty('--tkai-ui-scale', String(uiScale / 100));
         panel.style.setProperty('--tkai-font-scale', String(fontScale / 100));
+        requestAnimationFrame(() => ensurePanelInViewport(panel));
     }
     function renderUserSummary() {
         if (!userSummaryListEl || !userSummaryMetaEl) return;
@@ -9450,13 +9532,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     // Apply on panel open
-    document.getElementById('btnTikTokAI')?.addEventListener('click', () => {
-        setTimeout(() => {
-            applyTkaiFeatureToggles();
-            applyTkaiButtonTheme();
-            initInsightCardControls();
-        }, 50);
-    });
+    const tkaiThemeBtn = document.getElementById('btnTikTokAI');
+    if (tkaiThemeBtn && tkaiThemeBtn.dataset.tkaiThemeBound !== '1') {
+        tkaiThemeBtn.dataset.tkaiThemeBound = '1';
+        tkaiThemeBtn.addEventListener('click', () => {
+            setTimeout(() => {
+                applyTkaiFeatureToggles();
+                applyTkaiButtonTheme();
+                initInsightCardControls();
+            }, 50);
+        });
+    }
     // Re-apply whenever a tkai feature toggle is clicked in settings
     document.getElementById('settingsPanel')?.addEventListener('click', e => {
         const t = e.target.closest('.toggle[data-setting]');
