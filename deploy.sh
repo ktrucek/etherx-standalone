@@ -453,16 +453,31 @@ fi
 # ── Push to GitHub ───────────────────────────────────────────────────────
 if [[ "$NO_PUSH" == false ]]; then
 
-  # Provjera tokena
+  # Provjera tokena (env var ili gh auth fallback)
   if [[ -z "${GITHUB_TOKEN_DEPLOY:-}" ]]; then
-    error "GITHUB_TOKEN_DEPLOY nije postavljen (set in $SECRETS_FILE or export env var)"
+    if command -v gh &>/dev/null; then
+      GH_TOKEN_FALLBACK="$(gh auth token 2>/dev/null || true)"
+      if [[ -n "$GH_TOKEN_FALLBACK" ]]; then
+        GITHUB_TOKEN_DEPLOY="$GH_TOKEN_FALLBACK"
+        info "Using GitHub token from gh auth session"
+      fi
+    fi
+  fi
+
+  if [[ -z "${GITHUB_TOKEN_DEPLOY:-}" ]]; then
+    error "GitHub token missing. Set GITHUB_TOKEN_DEPLOY or run: gh auth login && gh auth setup-git"
   fi
 
   # Credentials via -c http.extraHeader — ne upisuje se u .git/config, vidljivo samo za ovaj poziv
-  GIT_AUTH=(-c "http.extraHeader=Authorization: Basic $(printf 'x-token:%s' "${GITHUB_TOKEN_DEPLOY}" | base64_noline)")
+  # GIT_TERMINAL_PROMPT=0 prevents interactive username/password prompts during deploy.
+  GIT_AUTH=(
+    -c "core.askPass="
+    -c "credential.helper="
+    -c "http.extraHeader=Authorization: Basic $(printf 'x-token:%s' "${GITHUB_TOKEN_DEPLOY}" | base64_noline)"
+  )
 
   info "Fetching github/main to refresh stale tracking ref..."
-  git "${GIT_AUTH[@]}" fetch github main 2>/dev/null || true
+  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch github main 2>/dev/null || true
 
   info "Pushing to GitHub (triggers build)..."
   if [[ "$FORCE_PUSH" == true ]]; then
@@ -471,8 +486,8 @@ if [[ "$NO_PUSH" == false ]]; then
     PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push github "HEAD:main")
   fi
 
-  if "${PUSH_MAIN_CMD[@]}" && \
-     git "${GIT_AUTH[@]}" push github "$TAG_NAME"; then
+    if GIT_TERMINAL_PROMPT=0 "${PUSH_MAIN_CMD[@]}" && \
+      GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" push github "$TAG_NAME"; then
     success "Pushed to GitHub → GitHub Actions će buildati"
     
     # ── Update EtherX.io download page ─────────────────────────────────────────
