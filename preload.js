@@ -87,6 +87,18 @@ contextBridge.exposeInMainWorld('etherx', {
     applyDoH: (enabled) => ipcRenderer.invoke('settings:applyDoH', enabled),
   },
 
+  secrets: {
+    getSettings: () => ipcRenderer.invoke('secrets:getSettings'),
+    saveSettings: (values) => ipcRenderer.invoke('secrets:saveSettings', values),
+    deleteSettings: (keys) => ipcRenderer.invoke('secrets:deleteSettings', keys),
+  },
+
+  secretStorage: {
+    getItem: (key) => ipcRenderer.sendSync('secretStorage:getItem', key),
+    setItem: (key, value) => ipcRenderer.sendSync('secretStorage:setItem', key, value),
+    removeItem: (key) => ipcRenderer.sendSync('secretStorage:removeItem', key),
+  },
+
   // ── Network Monitoring ───────────────────────────────────────────────────────
   network: {
     getLog: () => ipcRenderer.invoke('network:getLog'),

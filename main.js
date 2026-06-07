@@ -115,7 +115,7 @@ const CHROME_CLEAN_UA =
 app.userAgentFallback = CHROME_CLEAN_UA;
 
 // ─── New modules (wrapped in try/catch — native modules can crash on wrong arch) ─
-let DatabaseManager, AdBlocker, SecurityManager, PasswordManager;
+let DatabaseManager, AdBlocker, SecurityManager, PasswordManager, SecretStore;
 let QRSyncManager, DefaultBrowser, UserAgentManager, I18nManager, AIManager;
 try {
   DatabaseManager = require("./src/main/database");
@@ -136,6 +136,11 @@ try {
   PasswordManager = require("./src/main/passwordManager");
 } catch (e) {
   console.error("❌ passwordManager module failed:", e.message);
+}
+try {
+  SecretStore = require("./src/main/secretStore");
+} catch (e) {
+  console.error("❌ secretStore module failed:", e.message);
 }
 try {
   QRSyncManager = require("./src/main/qrSync");
@@ -214,6 +219,7 @@ let mainWindow = null;
 let db = null;
 let adBlocker = null;
 let ai = null;
+let secretStore = null;
 let _rendererRecoveryAttempted = false;
 const INCOGNITO_TABS = new Map(); // RAM-only, never persisted
 let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
@@ -221,6 +227,71 @@ const _downloadTrackedSessions = new Set();
 let _envBootstrapDone = false;
 const RENDERER_STORAGE_FILE = "renderer-storage.json";
 let rendererStorageCache = null;
+
+const SECRET_SETTING_KEYS = new Set([
+  "geminiApiKey",
+  "gemini_api_key",
+  "openaiApiKey",
+  "openai_api_key",
+  "anthropicApiKey",
+  "anthropic_api_key",
+  "hfApiKey",
+  "hf_api_key",
+  "openrouterApiKey",
+  "openrouter_api_key",
+  "groqApiKey",
+  "groq_api_key",
+  "localAiApiKey",
+  "local_ai_api_key",
+  "giteaUpdateToken",
+  "githubUpdateToken",
+]);
+
+function getSecretStore() {
+  if (!SecretStore) return null;
+  if (!secretStore) secretStore = new SecretStore(app.getPath("userData"));
+  return secretStore;
+}
+
+function splitSensitiveSettings(settings = {}) {
+  const publicSettings = {};
+  const secretSettings = {};
+  Object.entries(settings || {}).forEach(([key, value]) => {
+    if (SECRET_SETTING_KEYS.has(key)) secretSettings[key] = value;
+    else publicSettings[key] = value;
+  });
+  return { publicSettings, secretSettings };
+}
+
+function getMergedSettings() {
+  const base = db ? db.getSettings() : {};
+  const store = getSecretStore();
+  return store ? { ...base, ...store.getNamespace("settings") } : { ...base };
+}
+
+function saveSettingsSecurely(settings = {}) {
+  if (!db) return { ok: false, error: "Database not available" };
+  const { publicSettings, secretSettings } = splitSensitiveSettings(settings);
+  const store = getSecretStore();
+  if (store) {
+    const currentSecrets = store.getNamespace("settings");
+    const keysToDelete = Object.keys(currentSecrets).filter((key) => !(key in secretSettings));
+    if (keysToDelete.length) store.deleteKeys("settings", keysToDelete);
+    if (Object.keys(secretSettings).length) store.mergeNamespace("settings", secretSettings);
+  }
+  return db.saveSettings(publicSettings);
+}
+
+function migrateSensitiveSettingsToSecretStore() {
+  if (!db) return;
+  const store = getSecretStore();
+  if (!store) return;
+  const current = db.getSettings();
+  const { publicSettings, secretSettings } = splitSensitiveSettings(current);
+  if (!Object.keys(secretSettings).length) return;
+  store.mergeNamespace("settings", secretSettings);
+  db.saveSettings(publicSettings);
+}
 
 function _getRendererStorageFilePath() {
   return path.join(app.getPath("userData"), RENDERER_STORAGE_FILE);
@@ -882,8 +953,9 @@ app.whenReady().then(async () => {
     if (DatabaseManager) {
       db = new DatabaseManager(app.getPath("userData"));
       await db.init();
+      migrateSensitiveSettingsToSecretStore();
       // Prune history on startup if setting exists
-      const settings = db.getSettings();
+      const settings = getMergedSettings();
       if (settings.history_retention_days) {
         const days = parseInt(settings.history_retention_days);
         if (days > 0) db.pruneHistory(days);
@@ -1771,6 +1843,37 @@ function setupIPC() {
   ipcMain.on("storage:clear", (event) => {
     event.returnValue = _clearRendererStorage();
   });
+  ipcMain.on("secretStorage:getItem", (event, key) => {
+    const store = getSecretStore();
+    const value = store ? store.getValue("renderer", String(key), null) : null;
+    event.returnValue = value == null ? null : JSON.stringify(value);
+  });
+  ipcMain.on("secretStorage:setItem", (event, key, value) => {
+    const store = getSecretStore();
+    if (!store) {
+      event.returnValue = { ok: false, error: "Secret store not available" };
+      return;
+    }
+    let parsed = value;
+    try { parsed = JSON.parse(String(value)); } catch (_) { }
+    event.returnValue = store.setValue("renderer", String(key), parsed);
+  });
+  ipcMain.on("secretStorage:removeItem", (event, key) => {
+    const store = getSecretStore();
+    event.returnValue = store ? store.removeValue("renderer", String(key)) : { ok: false, error: "Secret store not available" };
+  });
+  ipcMain.handle("secrets:getSettings", () => {
+    const store = getSecretStore();
+    return store ? store.getNamespace("settings") : {};
+  });
+  ipcMain.handle("secrets:saveSettings", (_e, values) => {
+    const store = getSecretStore();
+    return store ? store.mergeNamespace("settings", values || {}) : noDb();
+  });
+  ipcMain.handle("secrets:deleteSettings", (_e, keys) => {
+    const store = getSecretStore();
+    return store ? store.deleteKeys("settings", Array.isArray(keys) ? keys : []) : noDb();
+  });
 
   const noDb = () => ({ ok: false, error: "Database not available" });
   const noAi = () => ({ ok: false, error: "AI not available" });
@@ -1843,9 +1946,9 @@ function setupIPC() {
   );
 
   // ── Settings ───────────────────────────────────────────────────────────────
-  ipcMain.handle("db:getSettings", () => (db ? db.getSettings() : {}));
+  ipcMain.handle("db:getSettings", () => (db ? getMergedSettings() : {}));
   ipcMain.handle("db:saveSettings", (_e, s) =>
-    db ? db.saveSettings(s) : noDb(),
+    db ? saveSettingsSecurely(s) : noDb(),
   );
 
   // ── DoH runtime toggle ─────────────────────────────────────────────────────
@@ -1937,9 +2040,9 @@ function setupIPC() {
   );
   ipcMain.handle("ai:translate", async (_e, text, targetLang) => {
     if (!ai) return noAi();
-    const settings = db ? db.getSettings() : {};
+    const settings = db ? getMergedSettings() : {};
     const geminiKey =
-      settings.gemini_api_key || process.env.GEMINI_API_KEY || "";
+      settings.geminiApiKey || settings.gemini_api_key || process.env.GEMINI_API_KEY || "";
     return ai.translate(text, targetLang, geminiKey);
   });
   ipcMain.handle("ai:detectBotUA", (_e, ua) =>
@@ -1952,9 +2055,9 @@ function setupIPC() {
   // ── AI: Page Summarizer (proxied through main to keep API key secure) ─────
   ipcMain.handle("ai:summarizePage", async (_e, url, htmlContent) => {
     if (!ai) return noAi();
-    const settings = db ? db.getSettings() : {};
+    const settings = db ? getMergedSettings() : {};
     const geminiKey =
-      settings.gemini_api_key || process.env.GEMINI_API_KEY || "";
+      settings.geminiApiKey || settings.gemini_api_key || process.env.GEMINI_API_KEY || "";
     return ai.summarizePage(url, htmlContent, geminiKey, db);
   });
 
@@ -2001,7 +2104,7 @@ function setupIPC() {
     if (!QRSyncManager) return noDb();
     const tabs = db ? db.getTabs() : [];
     const bookmarks = db ? db.getBookmarks() : [];
-    const settings = db ? db.getSettings() : {};
+    const settings = db ? getMergedSettings() : {};
     return QRSyncManager.generateQR(
       JSON.stringify({ tabs, bookmarks, settings }),
     );
@@ -2907,12 +3010,12 @@ function setupIPC() {
   // ── Update: check / token / download / install ───────────────────────────
   ipcMain.handle("update:saveToken", (_e, token) => {
     if (!db) return { ok: false, error: "DB not ready" };
-    db.saveSettings({ ...db.getSettings(), githubUpdateToken: token.trim() });
+    saveSettingsSecurely({ ...getMergedSettings(), githubUpdateToken: token.trim() });
     return { ok: true };
   });
   ipcMain.handle("update:hasToken", () => {
     if (!db) return false;
-    const s = db.getSettings();
+    const s = getMergedSettings();
     return !!(s.githubUpdateToken && s.githubUpdateToken.length > 0);
   });
   ipcMain.handle("update:check", async () => {
@@ -2934,7 +3037,7 @@ function setupIPC() {
         return false;
       };
 
-      const s = db ? db.getSettings() : {};
+      const s = db ? getMergedSettings() : {};
       const token = s.giteaUpdateToken || s.githubUpdateToken || "";
       const headers = {
         "User-Agent": "EtherX-Browser",
@@ -3010,8 +3113,28 @@ function setupIPC() {
       if (fs.existsSync(dest)) fs.unlinkSync(dest);
 
       const { net } = require("electron");
-      const s = db ? db.getSettings() : {};
+      const s = db ? getMergedSettings() : {};
       const token = s.giteaUpdateToken || s.githubUpdateToken || "";
+      const allowedUpdateHosts = new Set([
+        "github.com",
+        "api.github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "github-releases.githubusercontent.com",
+      ]);
+      const normalizeUpdateUrl = (candidate, baseUrl = null) => {
+        try {
+          const parsed = baseUrl ? new URL(candidate, baseUrl) : new URL(candidate);
+          const host = String(parsed.hostname || "").toLowerCase();
+          if (parsed.protocol !== "https:") return null;
+          if (!allowedUpdateHosts.has(host)) return null;
+          return parsed.toString();
+        } catch (_) {
+          return null;
+        }
+      };
+      const safeUrl = normalizeUpdateUrl(url);
+      if (!safeUrl) return { ok: false, error: "Invalid update URL" };
 
       await new Promise((resolve, reject) => {
         const headers = {
@@ -3021,9 +3144,9 @@ function setupIPC() {
         if (token) headers["Authorization"] = "Bearer " + token;
         const req = net.request({
           method: "GET",
-          url,
+          url: safeUrl,
           headers,
-          redirect: "follow",
+          redirect: "manual",
         });
         req.on("response", (res) => {
           // Follow redirect manually for GitHub asset downloads
@@ -3034,7 +3157,12 @@ function setupIPC() {
             const rUrl = Array.isArray(res.headers.location)
               ? res.headers.location[0]
               : res.headers.location;
-            const req2 = net.request({ method: "GET", url: rUrl });
+            const safeRedirectUrl = normalizeUpdateUrl(rUrl, safeUrl);
+            if (!safeRedirectUrl) {
+              reject(new Error("Blocked unsafe update redirect"));
+              return;
+            }
+            const req2 = net.request({ method: "GET", url: safeRedirectUrl, headers, redirect: "error" });
             req2.on("response", (res2) => handleResponse(res2));
             req2.on("error", reject);
             req2.end();

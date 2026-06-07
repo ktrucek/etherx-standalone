@@ -1396,15 +1396,40 @@ function setupIPC() {
       const { net } = require('electron');
       const s = db ? db.getSettings() : {};
       const token = s.giteaUpdateToken || s.githubUpdateToken || '';
+      const allowedUpdateHosts = new Set([
+        'github.com',
+        'api.github.com',
+        'objects.githubusercontent.com',
+        'release-assets.githubusercontent.com',
+        'github-releases.githubusercontent.com'
+      ]);
+      const normalizeUpdateUrl = (candidate, baseUrl = null) => {
+        try {
+          const parsed = baseUrl ? new URL(candidate, baseUrl) : new URL(candidate);
+          const host = String(parsed.hostname || '').toLowerCase();
+          if (parsed.protocol !== 'https:') return null;
+          if (!allowedUpdateHosts.has(host)) return null;
+          return parsed.toString();
+        } catch (_) {
+          return null;
+        }
+      };
+      const safeUrl = normalizeUpdateUrl(url);
+      if (!safeUrl) return { ok: false, error: 'Invalid update URL' };
 
       await new Promise((resolve, reject) => {
         const headers = { 'User-Agent': 'EtherX-Browser', 'Accept': 'application/octet-stream' };
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        const req = net.request({ method: 'GET', url, headers, redirect: 'follow' });
+        const req = net.request({ method: 'GET', url: safeUrl, headers, redirect: 'manual' });
         req.on('response', (res) => {
           if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
             const rUrl = Array.isArray(res.headers.location) ? res.headers.location[0] : res.headers.location;
-            const req2 = net.request({ method: 'GET', url: rUrl });
+            const safeRedirectUrl = normalizeUpdateUrl(rUrl, safeUrl);
+            if (!safeRedirectUrl) {
+              reject(new Error('Blocked unsafe update redirect'));
+              return;
+            }
+            const req2 = net.request({ method: 'GET', url: safeRedirectUrl, headers, redirect: 'error' });
             req2.on('response', (res2) => handleResponse(res2));
             req2.on('error', reject);
             req2.end();
