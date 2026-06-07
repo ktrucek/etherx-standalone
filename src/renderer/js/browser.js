@@ -4104,8 +4104,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const giftToggleBtn = document.getElementById('tkaiGiftToggle');
     const filterStarredBtn = document.getElementById('tkaiFilterStarredBtn');
     const sessionInfoEl = document.getElementById('tkaiSessionInfo');
+    const sessionLikesMetaEl = document.getElementById('tkaiSessionLikesMeta');
     const viewerCountEl = document.getElementById('tkaiViewerCount');
     const viewerSampleMetaEl = document.getElementById('tkaiViewerSampleMeta');
+    const viewerCoinsMetaEl = document.getElementById('tkaiViewerCoinsMeta');
     const coinTotalEl = document.getElementById('tkaiCoinTotal');
     const supporterCountEl = document.getElementById('tkaiSupporterCount');
     const topSupportersEl = document.getElementById('tkaiTopSupporters');
@@ -7343,7 +7345,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function updateSessionStatsUI() {
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         const giftStats = computeGiftStats();
+        const likesTotal = collectedMessages.filter((message) => message && String(message.type || '').toLowerCase() === 'like').length;
+        const topCoinSender = Array.isArray(giftStats.leaders) && giftStats.leaders.length > 0 ? giftStats.leaders[0] : null;
         if (sessionInfoEl) sessionInfoEl.textContent = elapsedMin + 'm';
+        if (sessionLikesMetaEl) sessionLikesMetaEl.textContent = 'Likes: ' + formatNum(likesTotal);
         if (viewerCountEl) {
             if (liveViewerCount > 0) viewerCountEl.textContent = formatNum(liveViewerCount) + ' (peak ' + formatNum(peakViewerCount) + ')';
             else if (peakViewerCount > 0) viewerCountEl.textContent = 'peak ' + formatNum(peakViewerCount);
@@ -7356,6 +7361,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 viewerSampleMetaEl.textContent = 'sample ' + formatNum(sampleSec) + 's • zadnje ' + formatNum(ageSec) + 's';
             } else {
                 viewerSampleMetaEl.textContent = 'Čekam očitanje';
+            }
+        }
+        if (viewerCoinsMetaEl) {
+            if (topCoinSender) {
+                viewerCoinsMetaEl.textContent = 'Top coin sender: ' + String(topCoinSender.user || 'Unknown') + ' • ' + new Intl.NumberFormat('hr-HR').format(Math.round(Number(topCoinSender.coins || 0))) + ' 🪙';
+            } else {
+                viewerCoinsMetaEl.textContent = 'Top coin sender: -';
             }
         }
         if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
@@ -7423,8 +7435,17 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function renderGiftGallery() {
         if (!giftGalleryEl) return;
         const giftEvents = collectedMessages
-            .filter(message => message && (message.type === 'gift' || message.type === 'subscriber'))
-            .slice(-40)
+            .filter((message) => {
+                if (!message) return false;
+                const type = String(message.type || '').toLowerCase();
+                if (type === 'gift' || type === 'subscriber') return true;
+                const text = String(message.text || message.giftRawText || '').trim();
+                if (!text) return false;
+                const meta = getTkaiGiftMeta(text);
+                const parsedCoins = Number(meta?.coins || 0) || Number(parseCoinsFromText(text) || 0);
+                return parsedCoins > 0 || /(?:sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted|slika)/i.test(text);
+            })
+            .slice(-120)
             .reverse();
         if (!giftEvents.length) {
             giftGalleryEl.innerHTML = '<div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>';
