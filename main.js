@@ -3034,7 +3034,22 @@ function setupIPC() {
             const rUrl = Array.isArray(res.headers.location)
               ? res.headers.location[0]
               : res.headers.location;
-            const req2 = net.request({ method: "GET", url: rUrl });
+            let safeRedirectUrl;
+            try {
+              const baseUrl = new URL(url);
+              const parsedRedirectUrl = new URL(rUrl, baseUrl);
+              const isHttp = parsedRedirectUrl.protocol === "http:" || parsedRedirectUrl.protocol === "https:";
+              const sameHost = parsedRedirectUrl.host === baseUrl.host;
+              if (!isHttp || !sameHost) {
+                reject(new Error("Unsafe redirect URL blocked"));
+                return;
+              }
+              safeRedirectUrl = parsedRedirectUrl.toString();
+            } catch (e) {
+              reject(new Error("Invalid redirect URL"));
+              return;
+            }
+            const req2 = net.request({ method: "GET", url: safeRedirectUrl });
             req2.on("response", (res2) => handleResponse(res2));
             req2.on("error", reject);
             req2.end();
