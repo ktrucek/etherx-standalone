@@ -1438,7 +1438,8 @@ initSettingsPanel();
         const giftTypeMap = new Map();
         const questions = [];
         const answers = [];
-        let coinsTotal = Number(session?.totalCoins || 0);
+        const sessionCoinsTotal = Math.max(0, Number(session?.totalCoins || 0));
+        let derivedCoinsTotal = 0;
         let joinsTotal = 0;
         sorted.forEach((m) => {
             const type = String(m?.type || 'chat').toLowerCase();
@@ -1448,17 +1449,11 @@ initSettingsPanel();
             const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
             const user = String(m?.user || '').trim() || 'Unknown';
             const userKey = user.toLowerCase();
-            const directGiftName = String(m?.giftName || '').trim();
-            const giftMeta = (type === 'gift' || type === 'subscriber')
-                ? getTkaiGiftMeta(directGiftName || m?.text || '')
-                : null;
-            const quantity = giftMeta ? Math.max(1, Number(m?.quantity || giftMeta.quantity || 1)) : 0;
-            const unitCoins = giftMeta ? Math.max(0, Number(m?.unitCoins || giftMeta.unitCoins || 0)) : 0;
-            const directCoins = Number(m?.coins || 0);
-            const coins = giftMeta
-                ? Math.max(0, Number(directCoins > 0 ? directCoins : (unitCoins > 0 ? unitCoins * quantity : giftMeta.coins || 0)))
-                : Number(m?.coins || 0);
-            if (coins > 0 && Number(session?.totalCoins || 0) <= 0) coinsTotal += coins;
+            const resolvedGift = (type === 'gift' || type === 'subscriber') ? resolveGiftMetaFromMessage(m) : null;
+            const quantity = resolvedGift ? Math.max(1, Number(resolvedGift.quantity || 1)) : 0;
+            const unitCoins = resolvedGift ? Math.max(0, Number(resolvedGift.unitCoins || 0)) : 0;
+            const coins = resolvedGift ? Math.max(0, Number(resolvedGift.coins || 0)) : Math.max(0, Number(m?.coins || 0));
+            if (coins > 0 && (type === 'gift' || type === 'subscriber')) derivedCoinsTotal += coins;
             if (!userStatsMap.has(userKey)) {
                 userStatsMap.set(userKey, { user, total: 0, chat: 0, likes: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map(), lastMessage: '' });
             }
@@ -1468,7 +1463,7 @@ initSettingsPanel();
             if (type === 'gift' || type === 'subscriber') {
                 row.gifts += quantity;
                 row.giftEvents += 1;
-                const giftName = directGiftName || giftMeta?.giftName || text || 'Unknown gift';
+                const giftName = String(resolvedGift?.giftName || m?.giftName || text || 'Unknown gift').trim();
                 const giftKey = normalizeTkaiGiftKeySafe(giftName) || 'unknown gift';
                 const userGiftRow = row.giftTypes.get(giftKey) || {
                     name: giftName,
@@ -1538,6 +1533,7 @@ initSettingsPanel();
             .map((row) => ({ giftName: row.giftName, events: row.events, quantity: row.quantity, coins: row.coins, users: row.users.size }))
             .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events)
             .slice(0, 80);
+        const coinsTotal = derivedCoinsTotal > 0 ? derivedCoinsTotal : sessionCoinsTotal;
         return {
             messages: sorted,
             typeCounts,
@@ -4336,6 +4332,34 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function setStatus(html) {
         if (statusEl) statusEl.innerHTML = html;
     }
+    function ensureTkaiLastGiftDebugEl() {
+        let el = document.getElementById('tkaiLastGiftDebug');
+        if (el) return el;
+        const host = statusEl?.parentElement;
+        if (!host) return null;
+        el = document.createElement('span');
+        el.id = 'tkaiLastGiftDebug';
+        el.style.cssText = 'font-size:10px;color:#fcd34d;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle;margin-left:6px';
+        el.textContent = '🎁 Gift debug: čekam event';
+        host.appendChild(el);
+        return el;
+    }
+    function updateTkaiLastGiftDebug(message) {
+        const el = ensureTkaiLastGiftDebugEl();
+        if (!el) return;
+        if (!message) {
+            el.textContent = '🎁 Gift debug: čekam event';
+            el.title = 'Pokreni skeniranje i pošalji gift da vidiš zadnji uhvaćeni event.';
+            return;
+        }
+        const user = String(message.user || 'unknown').replace(/^@+/, '').slice(0, 24) || 'unknown';
+        const gift = String(message.giftName || message.text || 'gift').replace(/\s+/g, ' ').trim().slice(0, 28) || 'gift';
+        const coins = Math.max(0, Number(message.coins || 0));
+        el.textContent = '🎁 Zadnji gift: @' + user + ' • ' + gift + ' • ' + formatNum(coins) + ' 🪙';
+        const ts = Number(message.ts || Date.now());
+        el.title = 'Zadnji uhvaćeni gift event: @' + user + ' | ' + gift + ' | ' + formatNum(coins) + ' coins | ' + new Date(ts).toLocaleTimeString('hr-HR');
+    }
+    ensureTkaiLastGiftDebugEl();
     window.parseTikTokOwnerFromUrl = function parseTikTokOwnerFromUrl(url) {
         try {
             const pathname = new URL(String(url || ''), window.location.origin).pathname || '';
@@ -4995,14 +5019,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const directName = String(message?.giftName || '').trim();
         const meta = detectGiftMetaFromText(directName || message?.text || '');
         const quantity = Math.max(1, Number(message?.quantity || meta.quantity || 1));
-        const unitCoins = Math.max(0, Number(message?.unitCoins || meta.unitCoins || 0));
-        const directCoins = Number(message?.coins || 0);
+        const initialUnitCoins = Math.max(0, Number(message?.unitCoins || meta.unitCoins || 0));
+        const directCoins = Math.max(0, Number(message?.coins || 0));
+        const textCoins = Math.max(0, Number(parseCoinsFromText(directName || message?.text || '') || 0));
+        const explicitCoins = Math.max(directCoins, textCoins);
+        let unitCoins = initialUnitCoins;
+        if (!unitCoins && explicitCoins > 0 && quantity > 0) {
+            unitCoins = Math.max(1, Math.round(explicitCoins / quantity));
+        }
         const fallbackCoins = unitCoins > 0 ? unitCoins * quantity : Number(meta.coins || 0);
         return {
             giftName: directName || meta.giftName || String(message?.text || '').trim().slice(0, 80) || 'Unknown gift',
             quantity,
             unitCoins,
-            coins: Math.max(0, Number(directCoins > 0 ? directCoins : fallbackCoins || 0))
+            coins: Math.max(0, Number(explicitCoins > 0 ? explicitCoins : fallbackCoins || 0))
         };
     }
 
@@ -8536,6 +8566,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             let added = 0;
             const incomingCaptions = [];
             const incomingAddedMessages = [];
+            let lastAddedGiftMessage = null;
             const nowTs = Date.now();
             const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
             filteredMessages.forEach((message) => {
@@ -8562,12 +8593,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     };
                     collectedMessages.push(normalizedMessage);
                     incomingAddedMessages.push(normalizedMessage);
+                    if (isGiftType) lastAddedGiftMessage = normalizedMessage;
                     existing.add(id);
                     existingRecent.set(recentKey, nowTs);
                     added += 1;
                     if (message.type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
                 }
             });
+            if (lastAddedGiftMessage) updateTkaiLastGiftDebug(lastAddedGiftMessage);
             const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 300;
             if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
             if (!sessionStartedAt) sessionStartedAt = Date.now();
@@ -8849,6 +8882,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (repliesEl) {
             repliesEl.innerHTML = '<div class="tkai-empty">Razgovor očišćen.<br>Pokreni skeniranje za nove poruke.</div>';
         }
+        updateTkaiLastGiftDebug(null);
         renderMessages();
         renderGiftGallery();
         updateSessionStatsUI();
@@ -19015,6 +19049,18 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
         }
     }
 
+    function humanizeUpdateError(err) {
+        const raw = String(err?.message || err || 'Nepoznata greška').trim();
+        if (!raw) return 'Nepoznata greška tijekom ažuriranja.';
+        if (/\b504\b/.test(raw)) {
+            return 'HTTP 504 (timeout) - server za update trenutno ne odgovara na vrijeme. Pokušaj ponovno za 1-2 minute.';
+        }
+        if (/failed to fetch|networkerror|ecconnreset|etimedout|timeout/i.test(raw)) {
+            return 'Mrežna greška tijekom ažuriranja. Provjeri internet vezu i pokušaj ponovno.';
+        }
+        return raw;
+    }
+
     window.checkForUpdates = async function (silent = false) {
         const btn = document.getElementById('btnCheckUpdates');
         const badge = document.getElementById('updStatusBadge');
@@ -19059,8 +19105,9 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             _applyUpdateResult(data, currentTag);
             if (!silent) showToast(data.isNew ? ('⬆️ Nova verzija: v' + data.latest + ' dostupna!') : ('✓ Browser je ažuran — v' + currentTag));
         } catch (err) {
+            const friendlyErr = humanizeUpdateError(err);
             if (badge) { badge.textContent = '? Greška'; badge.style.background = 'rgba(255,95,86,.1)'; badge.style.color = '#ff5f56'; badge.style.borderColor = 'rgba(255,95,86,.3)'; }
-            if (!silent) showToast('❌ Greška pri provjeri: ' + err.message);
+            if (!silent) showToast('❌ Greška pri provjeri: ' + friendlyErr);
             // Show error in result box
             const resultBox = document.getElementById('updResultBox');
             const newLabel = document.getElementById('updNewVerLabel');
@@ -19068,12 +19115,12 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
                 resultBox.style.display = 'block';
                 if (newLabel) {
                     newLabel.style.color = '#e74c3c';
-                    newLabel.textContent = '❌ ' + err.message;
+                    newLabel.textContent = '❌ ' + friendlyErr;
                 }
                 const newNum = document.getElementById('updNewVerNum');
                 if (newNum) newNum.textContent = '';
                 const notes = document.getElementById('updReleaseNotes');
-                if (notes) notes.textContent = 'Provjera nije uspjela. Provjeri internetsku vezu i pokušaj ponovno.';
+                if (notes) notes.textContent = 'Provjera nije uspjela. ' + friendlyErr;
             }
         } finally {
             if (btn) { btn.textContent = '🔍 Provjeri sada'; btn.disabled = false; }
@@ -19129,10 +19176,11 @@ if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/etherx-st
             // App will quit — but just in case show success
             btn.textContent = '✅ Gotovo — restartam...';
         } catch (err) {
+            const friendlyErr = humanizeUpdateError(err);
             btn.disabled = false;
             btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
-            if (progressLabel) { progressLabel.textContent = '❌ Greška: ' + err.message; progressLabel.style.color = '#e74c3c'; }
-            showToast('❌ Greška pri ažuriranju: ' + err.message);
+            if (progressLabel) { progressLabel.textContent = '❌ Greška: ' + friendlyErr; progressLabel.style.color = '#e74c3c'; }
+            showToast('❌ Greška pri ažuriranju: ' + friendlyErr);
         }
     });
 
