@@ -1167,8 +1167,20 @@ initSettingsPanel();
                 const color = t.ok === true ? '#27c93f' : t.ok === false ? '#ff6b6b' : 'var(--text3)';
                 return '<div style="margin:4px 0"><span style="color:' + color + '">' + icon + ' ' + esc(t.name) + '</span><div style="margin-left:16px;color:var(--text3)">' + esc(t.detail || '') + '</div></div>';
             }).join('');
+            const rec = report.recommendations || {};
+            const general = rec.general || {};
+            const liveChat = rec.liveChat || {};
+            const qwenGuardNote = String(rec.qwenGuardNote || '').trim();
+            const recommendationHtml =
+                '<div style="margin:6px 0 8px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.02)">' +
+                '<div style="font-size:10px;color:var(--text2);margin-bottom:4px">Preporuka</div>' +
+                '<div style="margin:2px 0"><b>Opći AI:</b> ' + esc(String(general.provider || '-')) + ' / ' + esc(String(general.model || '-')) + '<span style="color:var(--text3)"> — ' + esc(String(general.reason || '')) + '</span></div>' +
+                '<div style="margin:2px 0"><b>AI live chat:</b> ' + esc(String(liveChat.provider || '-')) + ' / ' + esc(String(liveChat.model || '-')) + '<span style="color:var(--text3)"> — ' + esc(String(liveChat.reason || '')) + '</span></div>' +
+                (qwenGuardNote ? '<div style="margin:2px 0;color:var(--text3)">' + esc(qwenGuardNote) + '</div>' : '') +
+                '</div>';
             resultEl.innerHTML =
                 '<div style="font-size:11px;margin-bottom:6px">Provider: <b>' + esc(report.provider || '-') + '</b> · Model: <b>' + esc(report.model || '-') + '</b></div>' +
+                recommendationHtml +
                 items;
             if (statusEl) statusEl.textContent = report.ok ? 'Test: sve radi ✅' : ('Test: ' + String(report.failed || 0) + ' fail');
         } catch (e) {
@@ -4360,6 +4372,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         el.title = 'Zadnji uhvaćeni gift event: @' + user + ' | ' + gift + ' | ' + formatNum(coins) + ' coins | ' + new Date(ts).toLocaleTimeString('hr-HR');
     }
     ensureTkaiLastGiftDebugEl();
+    function getTkaiAiRecommendations(provider, model) {
+        const currentProvider = String(provider || '').trim() || 'global';
+        const currentModel = String(model || '').trim() || 'global model';
+        return {
+            general: {
+                provider: 'gemini',
+                model: 'gemini-2.5-flash',
+                reason: 'najbolji balans kvalitete, brzine i stabilnosti za opći AI'
+            },
+            liveChat: {
+                provider: 'groq',
+                model: 'llama-3.3-70b-versatile',
+                reason: 'najbrži odgovor za live chat i kratke reakcije'
+            },
+            current: {
+                provider: currentProvider,
+                model: currentModel
+            },
+            qwenGuardNote: 'Qwen3Guard nije obični chat model; koristi se kao guard/moderation scan preko Electron bridge-a.'
+        };
+    }
     window.parseTikTokOwnerFromUrl = function parseTikTokOwnerFromUrl(url) {
         try {
             const pathname = new URL(String(url || ''), window.location.origin).pathname || '';
@@ -8774,6 +8807,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             push(false, 'AI provider/model', e?.message || 'Neuspjela konekcija');
         }
 
+        try {
+            if (typeof runQwen3GuardForRegionRows === 'function' && window.electronAPI?.invoke) {
+                const guardProbe = await runQwen3GuardForRegionRows([
+                    { type: 'gift', user: 'tester', text: 'Sent rose x1' }
+                ]);
+                const guardCount = Array.isArray(guardProbe?.results) ? guardProbe.results.length : 0;
+                push(guardCount >= 0, 'Qwen3Guard bridge', guardCount > 0 ? 'Bridge radi i vraća ' + guardCount + ' rezultat(a)' : 'Bridge radi (prazan rezultat je OK za test sample)');
+            } else {
+                push(null, 'Qwen3Guard bridge', 'Preskočeno: Electron bridge nije dostupan');
+            }
+        } catch (e) {
+            push(false, 'Qwen3Guard bridge', e?.message || 'Qwen3Guard scan nije dostupan');
+        }
+
         const samples = [
             { type: 'chat', user: 'viewer_chat', text: 'Kako ide stream?' },
             { type: 'gift', user: 'viewer_gift', text: 'Sent rose x5' },
@@ -8847,6 +8894,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             provider,
             model,
             failed,
+            recommendations: getTkaiAiRecommendations(provider, model),
         };
     }
 
