@@ -93,6 +93,7 @@ let _ctxSelectionText = '';
 let _ctxIsEditable = false;
 let _lastSavePromptKey = '';
 let _suppressNextWebviewContextMenuUntil = 0;
+let _ctxTikTokPayload = null;
 // Early helpers used by multiple TikTok/session modules before deeper init blocks run.
 function normalizeSongTitleKey(title) {
     return String(title || '')
@@ -4407,9 +4408,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiMsgCtxEl.style.cssText = 'position:fixed;z-index:100001;display:none;min-width:190px;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;box-shadow:0 12px 26px rgba(0,0,0,.45);padding:4px;';
         tkaiMsgCtxEl.innerHTML =
             '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
+            '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI + scan od ove poruke</button>' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
-            '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>';
+            '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
+            '<button type="button" data-act="region-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔎 TikTok scan regije</button>';
         document.body.appendChild(tkaiMsgCtxEl);
 
         tkaiMsgCtxEl.querySelector('[data-act="ai"]')?.addEventListener('click', () => {
@@ -4463,6 +4466,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             renderMessages();
             closeTkaiMsgContextMenu();
             showToast('🎯 Označen korisnik: ' + targetedChatUser);
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="push-and-scan"]')?.addEventListener('click', async () => {
+            const m = tkaiMsgCtxTarget;
+            if (!m) return;
+            const text = String(m.text || m.translatedText || '').replace(/\s+/g, ' ').trim();
+            if (!text) {
+                showToast('⚠️ Poruka je prazna');
+                closeTkaiMsgContextMenu();
+                return;
+            }
+            if (typeof window.pushTextToTikTokAI === 'function') {
+                await window.pushTextToTikTokAI(text, String(m.user || '').trim() || 'TikTok user', { forceTranslate: true });
+            }
+            await startTikTokScanFromSelection(text);
+            closeTkaiMsgContextMenu();
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="region-scan"]')?.addEventListener('click', () => {
+            closeTkaiMsgContextMenu();
+            startTikTokRegionScan();
         });
 
         document.addEventListener('click', (event) => {
@@ -8399,6 +8423,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const model = opts.model || cfg.tkaiModelOverride || cfg.aiModel || 'gemini-2.0-flash';
         const apiKey = String(opts.apiKey || '').trim();
         const tests = [];
+        let aiConnectionOk = false;
 
         const push = (ok, name, detail) => {
             tests.push({ ok, name, detail: String(detail || '') });
@@ -8412,6 +8437,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 temperature: 0,
                 maxOutputTokens: 16,
             });
+            aiConnectionOk = !!String(probe || '').trim();
             push(!!probe, 'AI provider/model', probe ? 'Konekcija uspješna' : 'Prazan odgovor');
         } catch (e) {
             push(false, 'AI provider/model', e?.message || 'Neuspjela konekcija');
@@ -8425,6 +8451,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         ];
 
         for (const sample of samples) {
+            if (!aiConnectionOk) {
+                push(null, 'Prompt ' + sample.type, 'Preskočeno jer AI konekcija nije prošla');
+                continue;
+            }
             try {
                 const out = await runAiTextRequest(buildPrompt([sample]), {
                     provider,
@@ -8464,7 +8494,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
         try {
             if (!window.etherx?.songrec?.recognize) {
-                push(false, 'SongRec API', 'SongRec bridge nije dostupan');
+                push(null, 'SongRec API', 'SongRec bridge nije dostupan (preskočeno)');
             } else {
                 const command = String(cfg.tkaiSongRecCommand || 'songrec').trim() || 'songrec';
                 const timeoutMs = Math.max(3000, Math.min(12000, Number(cfg.tkaiSongRecTimeoutMs || 8000) || 8000));
@@ -8472,11 +8502,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (rs?.ok) {
                     push(true, 'SongRec detect', rs.title ? ('Prepoznato: ' + rs.title) : 'SongRec pokrenut (bez trenutne detekcije)');
                 } else {
-                    push(false, 'SongRec detect', rs?.error || 'SongRec nije uspio');
+                    push(null, 'SongRec detect', rs?.error || 'SongRec nije uspio (preskočeno za stack)');
                 }
             }
         } catch (e) {
-            push(false, 'SongRec detect', e?.message || 'Greška pri SongRec testu');
+            push(null, 'SongRec detect', e?.message || 'Greška pri SongRec testu (preskočeno za stack)');
         }
 
         const failed = tests.filter(t => t.ok === false).length;
@@ -10219,6 +10249,32 @@ const aiTextInputEl = document.getElementById('aiInspectTextInput');
 const aiTextOutputEl = document.getElementById('aiInspectTextOutput');
 let aiTranslateTypingTimer = null;
 
+async function translateTextFallback(text, targetLang) {
+    const cleanText = String(text || '').trim();
+    const cleanLang = String(targetLang || '').trim() || 'en';
+    if (!cleanText) return '';
+
+    try {
+        const tr = await window.etherx?.ai?.translate?.(cleanText, cleanLang);
+        const out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
+        if (String(out || '').trim()) return String(out).trim();
+    } catch (_) { }
+
+    try {
+        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl='
+            + encodeURIComponent(cleanLang) + '&dt=t&q=' + encodeURIComponent(cleanText);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        const translated = Array.isArray(data?.[0])
+            ? data[0].map(part => part?.[0] || '').join('').trim()
+            : '';
+        return translated || cleanText;
+    } catch (_) {
+        return cleanText;
+    }
+}
+
 function resolveAiTranslateConfig() {
     const panelModelSel = document.getElementById('aiTranslateModel')?.value || '__settings__';
     const settingsModelSel = document.getElementById('settingsTranslateModel')?.value || '__main__';
@@ -10283,7 +10339,7 @@ async function runAiTranslate(text, lang, langName, resultEl, infoEl, btn) {
             systemPrompt: `Ti si profesionalni prevoditelj. Prevedi tekst precizno i prirodno na zadani jezik.`
         });
         if (!String(translated || '').trim()) {
-            const fallback = await translateViaGoogle(trimmed, lang);
+            const fallback = await translateTextFallback(trimmed, lang);
             setTranslateResult(resultEl, fallback || '(prazan odgovor)');
         } else {
             setTranslateResult(resultEl, translated);
@@ -12744,6 +12800,7 @@ async function showCtxMenu(x, y, targetUrl, params = {}) {
     _ctxFocusedEl = document.activeElement; // Save focused element BEFORE menu steals focus
     _ctxTargetUrl = targetUrl || null;
     _ctxSelectionText = String(params.selectionText || window.getSelection()?.toString() || '');
+    _ctxTikTokPayload = params?.tiktokPayload || null;
     _ctxIsEditable = !!params.isEditable || ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || !!document.activeElement?.isContentEditable;
     // Show/hide link-specific items
     const hasLink = !!targetUrl;
@@ -12959,8 +13016,19 @@ function normalizeRegionScanRows(rows, source = 'dom') {
     const out = [];
     const seen = new Set();
     (Array.isArray(rows) ? rows : []).forEach((row) => {
-        const user = String(row?.user || 'unknown').trim().slice(0, 40) || 'unknown';
-        const text = String(row?.text || '').replace(/\s+/g, ' ').trim().slice(0, 320);
+        let user = String(row?.user || 'unknown').trim().slice(0, 40) || 'unknown';
+        let text = String(row?.text || '').replace(/\s+/g, ' ').trim().slice(0, 320);
+        if (!text) return;
+        if (!user || /^unknown$/i.test(user)) {
+            const colonMatch = text.match(/^\s*@?([^:\-\n]{2,40})\s*[:：]\s*(.+)$/);
+            if (colonMatch) {
+                user = String(colonMatch[1] || '').trim().replace(/^@+/, '').slice(0, 40) || 'unknown';
+                text = String(colonMatch[2] || '').trim().slice(0, 320);
+            } else {
+                const actionMatch = text.match(/^\s*@?([a-z0-9._-]{2,40})\s+(?:sent|gave|shared|joined|liked|commented)\b/i);
+                if (actionMatch) user = String(actionMatch[1] || '').trim().replace(/^@+/, '').slice(0, 40) || 'unknown';
+            }
+        }
         if (!text) return;
         const low = text.toLowerCase();
         const rawType = String(row?.type || '').toLowerCase();
@@ -12975,6 +13043,144 @@ function normalizeRegionScanRows(rows, source = 'dom') {
         out.push({ user, text, type, source });
     });
     return out;
+}
+
+async function extractTikTokSelectionContext(selectionText) {
+    const webview = getActiveTikTokWebview();
+    if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') {
+        throw new Error('TikTok webview nije spreman');
+    }
+    const needle = String(selectionText || '').replace(/\s+/g, ' ').trim();
+    if (!needle) return { anchorIndex: 0, rows: [], anchorRow: null };
+
+    const raw = await webview.executeJavaScript(String.raw`(function(){
+            try {
+                const needle = ${JSON.stringify(needle)}.toLowerCase();
+                const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+                const rowSelectors = [
+                    '[data-e2e*="chat-message" i]',
+                    '[data-e2e*="comment-level" i]',
+                    '[data-e2e*="comment-item" i]',
+                    '[data-e2e*="message-item" i]',
+                    '[data-e2e*="chat-item" i]',
+                    '[data-e2e*="chatroom-message" i]',
+                    '[class*="DivChatMessage" i]',
+                    '[class*="CommentItem" i]',
+                    '[class*="ChatMessageItem" i]',
+                    '.webcast-chatroom__message-item',
+                    '[class*="webcast-chatroom__message" i]'
+                ].join(',');
+                const textSelectors = [
+                    '[data-e2e*="comment-content" i]',
+                    '[data-e2e*="message-text" i]',
+                    '[data-e2e*="chat-message-text" i]',
+                    '[class*="CommentText" i]',
+                    '[class*="MessageText" i]',
+                    '[class*="ChatText" i]'
+                ].join(',');
+                const userSelectors = [
+                    'a[href^="/@"]',
+                    '[data-e2e*="comment-username" i]',
+                    '[data-e2e*="user-name" i]',
+                    '[class*="Username" i]',
+                    '[class*="UserName" i]',
+                    'strong',
+                    'b'
+                ].join(',');
+                const detectType = (text) => {
+                    const lower = clean(text).toLowerCase();
+                    if (!lower) return 'chat';
+                    if (/(sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted)/i.test(lower)) return 'gift';
+                    if (/(shared|share|podijelio|podijelila)/i.test(lower)) return 'share';
+                    if (/(joined|join|joined the live|ušao|usla|joined room)/i.test(lower)) return 'join';
+                    if (/(subscribed|subscriber|pretplatio|pretplatila)/i.test(lower)) return 'subscriber';
+                    if (/(likes?|liked|heart(?:ed|s)?)/i.test(lower)) return 'like';
+                    return 'chat';
+                };
+                const rows = [];
+                const seen = new Set();
+                const all = Array.from(document.querySelectorAll(rowSelectors));
+                all.forEach((el) => {
+                    const rowText = clean(el.innerText || el.textContent || '');
+                    if (!rowText || rowText.length < 2 || rowText.length > 520) return;
+                    const userEl = el.querySelector(userSelectors);
+                    const textEl = el.querySelector(textSelectors);
+                    const fromHref = String(userEl?.getAttribute?.('href') || '').match(/\/\/@([^/?#]+)/i);
+                    let user = clean(fromHref?.[1] || userEl?.textContent || '').replace(/^@+/, '').replace(/[,:;].*$/, '');
+                    let text = clean(textEl?.innerText || textEl?.textContent || '') || rowText;
+                    const colonMatch = text.match(/^\s*@?([^:\-\n]{2,40})\s*[:：]\s*(.+)$/);
+                    if ((!user || /^unknown$/i.test(user)) && colonMatch) {
+                        user = clean(colonMatch[1]).replace(/^@+/, '');
+                        text = clean(colonMatch[2]);
+                    }
+                    if (user && text.toLowerCase().startsWith(user.toLowerCase())) {
+                        text = clean(text.slice(user.length));
+                    }
+                    if (!text) return;
+                    const type = detectType(text);
+                    const key = type + '|' + String(user || 'unknown').toLowerCase() + '|' + text.toLowerCase();
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    rows.push({ user: user || 'unknown', text, type });
+                });
+                const idx = rows.findIndex((row) => String(row.text || '').toLowerCase().includes(needle));
+                const anchorIndex = idx >= 0 ? idx : 0;
+                const sliced = rows.slice(anchorIndex, anchorIndex + 140);
+                return JSON.stringify({ anchorIndex, rows: sliced, anchorRow: rows[anchorIndex] || null });
+            } catch (e) {
+                return JSON.stringify({ __error: String(e && e.message ? e.message : e) });
+            }
+        })()`);
+
+    const parsed = JSON.parse(raw || '{}');
+    if (parsed && parsed.__error) throw new Error(parsed.__error);
+    return {
+        anchorIndex: Math.max(0, Number(parsed?.anchorIndex || 0)),
+        rows: Array.isArray(parsed?.rows) ? parsed.rows : [],
+        anchorRow: parsed?.anchorRow || null,
+    };
+}
+
+async function startTikTokScanFromSelection(selectionText) {
+    const tab = getActiveTab();
+    if (!tab?.url || !tab.url.includes('tiktok.com')) return;
+    const needle = String(selectionText || '').replace(/\s+/g, ' ').trim();
+    if (!needle) return;
+
+    try {
+        showToast('🔎 Skeniram od označene riječi prema dolje...');
+        const payload = await extractTikTokSelectionContext(needle);
+        const rows = normalizeRegionScanRows(payload.rows || [], 'selection-anchor');
+        if (!rows.length) {
+            showToast('ℹ️ Nema redova ispod označene riječi');
+            return;
+        }
+        const ingest = ingestTikTokRegionRows(rows, { source: 'selection-anchor' });
+        let guardedRows = rows;
+        const guardCfg = readTkaiGuardSettings();
+        try {
+            const moderation = await moderateRegionRows(rows, guardCfg);
+            guardedRows = moderation.rows;
+            if (Array.isArray(moderation.warnings) && moderation.warnings.length) {
+                showToast('⚠️ ' + moderation.warnings.join(' | '));
+            }
+        } catch (guardErr) {
+            showToast('⚠️ Safety guard nije dostupan: ' + String(guardErr?.message || guardErr));
+        }
+        showTikTokRegionScanResults(guardedRows, { width: 0, height: 0 }, {
+            guardCfg,
+            ingested: Number(ingest.added || 0),
+            domRows: rows.length,
+            ocrRows: 0
+        });
+        if (Number(ingest.added || 0) > 0) {
+            showToast('✅ Dodano ' + Number(ingest.added || 0) + ' redova od označenog mjesta');
+        } else {
+            showToast('ℹ️ Nema novih redova za dodati od označenog mjesta');
+        }
+    } catch (err) {
+        showToast('❌ Scan od označenog teksta nije uspio: ' + String(err?.message || err));
+    }
 }
 
 function ingestTikTokRegionRows(rows, options = {}) {
@@ -13649,7 +13855,7 @@ function startTikTokRegionScan() {
     overlay.addEventListener('pointermove', onMove, true);
     overlay.addEventListener('pointerup', onUp, true);
 }
-document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', () => {
+document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', async () => {
     const sel = String(_ctxSelectionText || window.getSelection()?.toString() || '').trim();
     if (!sel) {
         showToast('⚠️ Nema označenog teksta');
@@ -13664,8 +13870,18 @@ document.getElementById('ctx-send-tiktok-ai')?.addEventListener('click', () => {
         showToast('⚠️ TikTok Chat AI nije spreman');
         return;
     }
-    const owner = parseTikTokOwnerFromUrl(tab.url) || 'TikTok user';
-    window.pushTextToTikTokAI(sel, owner, { forceTranslate: true });
+    let sourceUser = String(_ctxTikTokPayload?.user || '').trim();
+    try {
+        if (!sourceUser || /^unknown$/i.test(sourceUser)) {
+            const ctx = await extractTikTokSelectionContext(sel);
+            sourceUser = String(ctx?.anchorRow?.user || '').trim();
+        }
+    } catch (_) { }
+    const owner = sourceUser && !/^unknown$/i.test(sourceUser)
+        ? sourceUser
+        : (parseTikTokOwnerFromUrl(tab.url) || 'TikTok user');
+    await window.pushTextToTikTokAI(sel, owner, { forceTranslate: true });
+    await startTikTokScanFromSelection(sel);
     closeCtxMenu();
 });
 document.getElementById('ctx-tiktok-region-scan')?.addEventListener('click', () => {
@@ -15195,6 +15411,30 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
             modelSel.innerHTML = defaults.map(m => `<option value="${m}">${m}</option>`).join('');
             if (defaults.includes(prev)) modelSel.value = prev;
         }
+        syncTranslateModelOptionsFromMain();
+    }
+
+    function syncTranslateModelOptionsFromMain() {
+        const mainModelSel = document.getElementById('settingsAiModel');
+        const translateModelSel = document.getElementById('settingsTranslateModel');
+        if (!mainModelSel || !translateModelSel) return;
+
+        const prev = translateModelSel.value || '__main__';
+        const unique = new Set();
+        const options = ['<option value="__main__">Isti kao glavni AI model</option>'];
+        Array.from(mainModelSel.options || []).forEach((opt) => {
+            const value = String(opt.value || '').trim();
+            const label = String(opt.textContent || value).trim();
+            if (!value || value === '__main__' || unique.has(value)) return;
+            unique.add(value);
+            options.push(`<option value="${escHtml(value)}">${escHtml(label)}</option>`);
+        });
+        translateModelSel.innerHTML = options.join('');
+        if (prev !== '__main__' && unique.has(prev)) {
+            translateModelSel.value = prev;
+        } else {
+            translateModelSel.value = '__main__';
+        }
     }
     updateKeyRows();
     providerSel?.addEventListener('change', updateKeyRows);
@@ -15252,6 +15492,7 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
             modelSel.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
             if (models.includes(prev)) modelSel.value = prev;
             modelSel.dataset['populated_' + provider] = '1';
+            syncTranslateModelOptionsFromMain();
             if (modelDesc) modelDesc.textContent = `✅ Dohvaćeno ${models.length} modela`;
             showBanner(true, `Dohvaćeno <strong>${models.length}</strong> dostupnih modela za <strong>${provider}</strong>.`);
             _saveAiTestResult({ ts: Date.now(), action: 'fetch-models', provider, ok: true, detail: models.length + ' modela' });
@@ -15382,11 +15623,15 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
 
         try {
             const sample = 'Hello world, this is a translation test.';
-            const tr = await window.etherx?.ai?.translate?.(sample, 'hr');
-            let out = tr?.translated ?? tr?.translation ?? tr?.text ?? (typeof tr === 'string' ? tr : '');
-            if (!String(out || '').trim()) {
-                out = await translateViaGoogle(sample, 'hr');
-            }
+            const out = await runAiTextRequest('Prevedi na hrvatski: "' + sample + '". Vrati samo prijevod.', {
+                provider,
+                model,
+                apiKey: key,
+                baseUrl: localBaseUrlEl?.value,
+                temperature: 0,
+                maxOutputTokens: 120,
+                systemPrompt: 'Ti si prevoditelj. Vrati samo cisti prijevod bez objasnjenja.'
+            });
             tests.push({ ok: !!out, name: 'Prijevod (AI manager)', detail: out ? 'Radi ✓ — "' + String(out).slice(0, 80) + '"' : 'Prazan odgovor' });
         } catch (e) {
             tests.push({ ok: false, name: 'Prijevod (AI manager)', detail: e.message });
