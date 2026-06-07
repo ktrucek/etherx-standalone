@@ -840,10 +840,10 @@ function resolvePythonScriptPath(fileName) {
 
   const fromDirname = path.join(__dirname, ...relParts);
   const fromAppPath = path.join(app.getAppPath(), ...relParts);
-  pushIf(fromDirname);
   pushIf(_withAsarUnpacked(fromDirname));
-  pushIf(fromAppPath);
+  pushIf(fromDirname);
   pushIf(_withAsarUnpacked(fromAppPath));
+  pushIf(fromAppPath);
 
   if (process.resourcesPath) {
     pushIf(path.join(process.resourcesPath, "app.asar.unpacked", ...relParts));
@@ -860,7 +860,8 @@ function resolvePythonScriptPath(fileName) {
 function materializePythonScriptForExec(scriptPath, fileName) {
   const script = String(scriptPath || "");
   if (!script) return "";
-  if (!script.includes(`${path.sep}app.asar${path.sep}`)) return script;
+  const asarSegmentRe = new RegExp(`\\${path.sep}app\\.asar(?:\\${path.sep}|$)`);
+  if (!asarSegmentRe.test(script)) return script;
   try {
     const cacheDir = path.join(app.getPath("temp"), "etherx-python-scripts");
     fs.mkdirSync(cacheDir, { recursive: true });
@@ -876,6 +877,8 @@ function materializePythonScriptForExec(scriptPath, fileName) {
     if (shouldWrite) fs.writeFileSync(outPath, source, { mode: 0o600 });
     return outPath;
   } catch (_) {
+    const unpacked = _withAsarUnpacked(script);
+    if (unpacked && unpacked !== script && fs.existsSync(unpacked)) return unpacked;
     return script;
   }
 }

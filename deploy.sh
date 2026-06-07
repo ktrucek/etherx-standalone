@@ -18,6 +18,14 @@ set -euo pipefail
 trap 'echo -e "\033[0;31m[✗]\033[0m Deploy failed at line $LINENO" >&2' ERR
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Always run deploy from the root workspace script.
+# If this script is executed inside ./etherx-standalone, hand off to ../deploy.sh.
+if [[ "$(basename "$REPO_DIR")" == "etherx-standalone" && -f "$REPO_DIR/../deploy.sh" ]]; then
+  echo "[deploy] Nested etherx-standalone detected — delegating to root deploy.sh"
+  exec "$REPO_DIR/../deploy.sh" "$@"
+fi
+
 NO_PUSH=false
 FORCE_PUSH=false
 SYNC_BROWSER_HTML=false
@@ -80,6 +88,27 @@ info()    { echo -e "${CYAN}[deploy]${NC} $*"; }
 success() { echo -e "${GREEN}[✓]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[!]${NC} $*"; }
 error()   { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
+
+sync_nested_standalone_copy() {
+  local nested_dir="$REPO_DIR/etherx-standalone"
+  [[ -d "$nested_dir" ]] || return 0
+
+  if ! command -v rsync &>/dev/null; then
+    warn "rsync not found — skipping root→etherx-standalone sync"
+    return 0
+  fi
+
+  info "Syncing root project into ./etherx-standalone before deploy..."
+  rsync -ah --delete \
+    --exclude='.git/' \
+    --exclude='node_modules/' \
+    --exclude='dist/' \
+    --exclude='.venv/' \
+    --exclude='etherx-standalone/' \
+    "$REPO_DIR/" "$nested_dir/" || error "Failed to sync root→etherx-standalone"
+
+  success "Root and ./etherx-standalone are synchronized"
+}
 
 ensure_github_remote() {
   local github_repo_url="https://github.com/ktrucek/etherx-standalone.git"
@@ -328,6 +357,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 sync_github_main_before_deploy
+sync_nested_standalone_copy
 
 # ── Determine version ──────────────────────────────────────────────────────────
 CURRENT_VERSION=$(python3 -c "import json; print(json.load(open('package.json'))['version'])" 2>/dev/null || echo "0.0.0")
@@ -451,6 +481,9 @@ if [[ -f "$TARGET_BROWSER_HTML" ]]; then
 else
   warn "No browser.html target found at $TARGET_BROWSER_HTML — skipping sync"
 fi
+
+# Ensure nested mirror reflects all just-updated files (version, sw cache, html).
+sync_nested_standalone_copy
 
 # ── Git commit and tag ─────────────────────────────────────────────────────────
 info "Committing changes..."
