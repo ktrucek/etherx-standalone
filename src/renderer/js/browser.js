@@ -158,11 +158,76 @@ if (typeof globalThis.getActiveTikTokWebview !== 'function') {
 }
 // Store the element that had focus before a context menu opened so paste targets it correctly
 let _ctxFocusedEl = null;
+let _savedPasswordsCache = null;
+let _savedCardsCache = null;
+
+function readSecureJsonStore(secretKey, fallback) {
+    const fallbackValue = typeof fallback === 'function' ? fallback() : fallback;
+    if (!window.electronWebview || !window.etherx?.secretStorage?.getItem) return fallbackValue;
+    try {
+        const raw = window.etherx.secretStorage.getItem(secretKey);
+        if (!raw) return fallbackValue;
+        return JSON.parse(raw);
+    } catch (_) {
+        return fallbackValue;
+    }
+}
+function writeSecureJsonStore(secretKey, value) {
+    if (window.electronWebview && window.etherx?.secretStorage?.setItem) {
+        try {
+            window.etherx.secretStorage.setItem(secretKey, JSON.stringify(value ?? null));
+            return;
+        } catch (_) { }
+    }
+    try {
+        window.localStorage.setItem(secretKey, JSON.stringify(value ?? null));
+    } catch (_) { }
+}
+function removeLegacyLocalSecret(secretKey) {
+    try { window.localStorage.removeItem(secretKey); } catch (_) { }
+}
+
 function normalizePwdSite(site) {
     return String(site || '').trim().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').toLowerCase();
 }
-function getSavedPasswords() { return JSON.parse(localStorage.getItem('ex_passwords') || '[]'); }
-function saveSavedPasswords(passwords) { localStorage.setItem('ex_passwords', JSON.stringify(passwords)); }
+function getSavedPasswords() {
+    if (_savedPasswordsCache) return _savedPasswordsCache;
+    const legacyFallback = () => {
+        try { return JSON.parse(window.localStorage.getItem('ex_passwords') || '[]'); } catch (_) { return []; }
+    };
+    _savedPasswordsCache = Array.isArray(readSecureJsonStore('ex_passwords', legacyFallback))
+        ? readSecureJsonStore('ex_passwords', legacyFallback)
+        : [];
+    if (_savedPasswordsCache.length) {
+        writeSecureJsonStore('ex_passwords', _savedPasswordsCache);
+        removeLegacyLocalSecret('ex_passwords');
+    }
+    return _savedPasswordsCache;
+}
+function saveSavedPasswords(passwords) {
+    _savedPasswordsCache = Array.isArray(passwords) ? passwords.map((entry) => ({ ...entry })) : [];
+    writeSecureJsonStore('ex_passwords', _savedPasswordsCache);
+    removeLegacyLocalSecret('ex_passwords');
+}
+function getSavedCards() {
+    if (_savedCardsCache) return _savedCardsCache;
+    const legacyFallback = () => {
+        try { return JSON.parse(window.localStorage.getItem('ex_cards') || '[]'); } catch (_) { return []; }
+    };
+    _savedCardsCache = Array.isArray(readSecureJsonStore('ex_cards', legacyFallback))
+        ? readSecureJsonStore('ex_cards', legacyFallback)
+        : [];
+    if (_savedCardsCache.length) {
+        writeSecureJsonStore('ex_cards', _savedCardsCache);
+        removeLegacyLocalSecret('ex_cards');
+    }
+    return _savedCardsCache;
+}
+function saveSavedCards(cards) {
+    _savedCardsCache = Array.isArray(cards) ? cards.map((entry) => ({ ...entry })) : [];
+    writeSecureJsonStore('ex_cards', _savedCardsCache);
+    removeLegacyLocalSecret('ex_cards');
+}
 function getActiveHost() {
     try { return new URL(getActiveTab()?.url || '').hostname.replace(/^www\./, '').toLowerCase(); } catch (_) { return ''; }
 }
@@ -832,6 +897,56 @@ document.getElementById = function (id) {
     // Guard against hard crashes when an expected node was removed/renamed.
     return getOrCreateMissingElement(id);
 };
+const SENSITIVE_SETTING_KEYS = new Set([
+    'geminiApiKey',
+    'gemini_api_key',
+    'openaiApiKey',
+    'openai_api_key',
+    'anthropicApiKey',
+    'anthropic_api_key',
+    'hfApiKey',
+    'hf_api_key',
+    'openrouterApiKey',
+    'openrouter_api_key',
+    'groqApiKey',
+    'groq_api_key',
+    'localAiApiKey',
+    'local_ai_api_key',
+    'giteaUpdateToken',
+    'githubUpdateToken'
+]);
+let SECURE_SETTINGS_CACHE = {};
+function splitSensitiveSettingsObject(settings) {
+    const publicSettings = {};
+    const secretSettings = {};
+    Object.entries(settings || {}).forEach(([key, value]) => {
+        if (SENSITIVE_SETTING_KEYS.has(key)) secretSettings[key] = value;
+        else publicSettings[key] = value;
+    });
+    return { publicSettings, secretSettings };
+}
+function getPublicSettingsSnapshot() {
+    try {
+        return JSON.parse(localStorage.getItem('ex_cfg') || '{}');
+    } catch (_) {
+        return {};
+    }
+}
+function writePublicSettingsSnapshot(settings) {
+    localStorage.setItem('ex_cfg', JSON.stringify(settings || {}));
+}
+async function persistSensitiveSettings(settings) {
+    if (!window.etherx?.secrets) return;
+    const { secretSettings } = splitSensitiveSettingsObject(settings);
+    const keysToDelete = Array.from(SENSITIVE_SETTING_KEYS).filter((key) => !(key in (settings || {})));
+    if (keysToDelete.length && window.etherx.secrets.deleteSettings) {
+        await window.etherx.secrets.deleteSettings(keysToDelete).catch(() => { });
+    }
+    if (Object.keys(secretSettings).length && window.etherx.secrets.saveSettings) {
+        await window.etherx.secrets.saveSettings(secretSettings).catch(() => { });
+    }
+}
+
 const DB = {
     getHistory: () => JSON.parse(localStorage.getItem('ex_hist') || '[]'),
     addHistory(e) {
@@ -884,15 +999,18 @@ const DB = {
     createBookmarkFolder(name) { let f = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); if (!f.includes(name)) { f.push(name); localStorage.setItem('ex_bm_folders', JSON.stringify(f)); } },
     getBookmarkFolderList() { const fromBm = this.getBookmarkFolders(); const saved = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); return [...new Set([...fromBm, ...saved])].filter(Boolean).sort(); },
     deleteBookmarkFolder(name) { let f = JSON.parse(localStorage.getItem('ex_bm_folders') || '[]'); f = f.filter(x => x !== name); localStorage.setItem('ex_bm_folders', JSON.stringify(f)); this.getBookmarks().filter(b => b.folder === name).forEach(b => this.updateBookmark(b.url, { folder: '' })); },
-    getSettings: () => JSON.parse(localStorage.getItem('ex_cfg') || '{}'),
+    getSettings: () => ({ ...getPublicSettingsSnapshot(), ...SECURE_SETTINGS_CACHE }),
     saveSetting(k, v) {
         const s = this.getSettings();
         s[k] = v;
-        localStorage.setItem('ex_cfg', JSON.stringify(s));
+        const { publicSettings, secretSettings } = splitSensitiveSettingsObject(s);
+        SECURE_SETTINGS_CACHE = { ...secretSettings };
+        writePublicSettingsSnapshot(publicSettings);
         // Sync to SQLite
         if (window.etherx?.settings?.save) {
-            window.etherx.settings.save(s).catch(() => { });
+            window.etherx.settings.save({ ...publicSettings, ...secretSettings }).catch(() => { });
         }
+        persistSensitiveSettings({ ...publicSettings, ...secretSettings }).catch(() => { });
     },
     // ── Extended user data ──────────────────────────────────────────────────
     getUser: () => JSON.parse(localStorage.getItem('ex_user') || '{"name":"","email":"","avatar":"👤","bio":"","createdAt":' + Date.now() + '}'),
@@ -960,6 +1078,14 @@ async function hydrateSettingsFromSqlite() {
     _settingsHydratedFromSqlite = true;
     if (!window.etherx?.settings?.get) return;
     try {
+        const legacyLocal = getPublicSettingsSnapshot();
+        const { publicSettings: legacyPublic, secretSettings: legacySecrets } = splitSensitiveSettingsObject(legacyLocal);
+        if (Object.keys(legacySecrets).length) {
+            SECURE_SETTINGS_CACHE = { ...SECURE_SETTINGS_CACHE, ...legacySecrets };
+            writePublicSettingsSnapshot(legacyPublic);
+            await persistSensitiveSettings({ ...legacyPublic, ...legacySecrets });
+        }
+
         const sqliteRaw = await window.etherx.settings.get();
         if (!sqliteRaw || typeof sqliteRaw !== 'object') return;
 
@@ -971,7 +1097,9 @@ async function hydrateSettingsFromSqlite() {
         const local = DB.getSettings() || {};
         // Keep current in-memory/local values if present, fill missing from SQLite backup.
         const merged = { ...sqliteParsed, ...local };
-        localStorage.setItem('ex_cfg', JSON.stringify(merged));
+        const { publicSettings, secretSettings } = splitSensitiveSettingsObject(merged);
+        SECURE_SETTINGS_CACHE = { ...secretSettings };
+        writePublicSettingsSnapshot(publicSettings);
         PENDING_SETTINGS = { ...merged };
 
         if (typeof _refreshSettingsToggles === 'function') _refreshSettingsToggles();
@@ -11979,7 +12107,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             c.innerHTML = _sqliteLoading('Passwords');
             const fetchPw = (window.electronWebview && window.etherx?.passwords?.list)
                 ? window.etherx.passwords.list()
-                : Promise.resolve(JSON.parse(localStorage.getItem('ex_passwords') || '[]'));
+                : Promise.resolve(getSavedPasswords());
             fetchPw.then(rows => {
                 if (!rows || !rows.length) { c.innerHTML = _sqliteEmpty('passwords'); return; }
                 c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">SQLite • etherx.db • table: <strong>passwords</strong> • ${rows.length} entries <span style="color:#e74c3c">(passwords are masked)</span></div>` +
@@ -12036,7 +12164,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
     function _deleteSetting(k) {
         if (!confirm('Delete setting: ' + k + '?')) return;
-        const s = DB.getSettings(); delete s[k]; localStorage.setItem('ex_cfg', JSON.stringify(s));
+        const s = DB.getSettings();
+        delete s[k];
+        const { publicSettings, secretSettings } = splitSensitiveSettingsObject(s);
+        SECURE_SETTINGS_CACHE = { ...secretSettings };
+        writePublicSettingsSnapshot(publicSettings);
+        if (window.etherx?.settings?.save) window.etherx.settings.save({ ...publicSettings, ...secretSettings }).catch(() => { });
+        persistSensitiveSettings({ ...publicSettings, ...secretSettings }).catch(() => { });
         renderAppTab('sqlite-settings');
         showToast('🗑 Setting "' + k + '" deleted');
     }
@@ -13294,8 +13428,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // Shows saved passwords/cards when user clicks username/password/card fields in the URL bar context
     // (Since we are a browser shell, we intercept via a floating overlay near the URL bar)
     const CARDS_KEY = 'ex_cards';
-    function getCards() { return JSON.parse(localStorage.getItem(CARDS_KEY) || '[]'); }
-    function saveCards(c) { localStorage.setItem(CARDS_KEY, JSON.stringify(c)); }
+    function getCards() { return getSavedCards(); }
+    function saveCards(c) { saveSavedCards(c); }
 
     // Create autofill suggestion box
     const afBox = document.createElement('div');
@@ -13361,7 +13495,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (!t?.url) return;
         const host = (() => { try { return new URL(t.url).hostname; } catch (e) { return ''; } })();
         if (!host) return;
-        const pwds = JSON.parse(localStorage.getItem('ex_passwords') || '[]').filter(p => host.includes(new URL('https://' + p.site.replace(/https?:\/\//, '')).hostname.replace('www.', ''))).map(p => ({ ...p, _type: 'password' }));
+        const pwds = getSavedPasswords().filter(p => host.includes(new URL('https://' + p.site.replace(/https?:\/\//, '')).hostname.replace('www.', ''))).map(p => ({ ...p, _type: 'password' }));
         if (pwds.length) {
             const rect = document.getElementById('urlInput').getBoundingClientRect();
             showAutofillBox(rect.left, rect.bottom + 4, pwds, (item) => {
@@ -13386,7 +13520,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             e.stopPropagation();
             const t = getActiveTab();
             const host = t?.url ? (() => { try { return new URL(t.url).hostname.replace('www.', ''); } catch (e2) { return ''; } })() : '';
-            const pwds = JSON.parse(localStorage.getItem('ex_passwords') || '[]')
+            const pwds = getSavedPasswords()
                 .filter(p => !host || normalizePwdSite(p.site) === normalizePwdSite(host) || normalizePwdSite(host).includes(normalizePwdSite(p.site)) || normalizePwdSite(p.site).includes(normalizePwdSite(host)))
                 .map(p => ({ ...p, _type: 'password' }));
             const cards = getCards().map(c => ({ ...c, _type: 'card' }));
@@ -15110,9 +15244,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             let iOk = 0; iframes.forEach(id => { if (document.getElementById(id)) iOk++; });
             checks.push(iOk === iframes.length ? '\u2705 Svi iframe-ovi ucitani (' + iOk + '/' + iframes.length + ')' : '\u26a0\ufe0f Iframes: ' + iOk + '/' + iframes.length);
             // Check localStorage
-            const storageKeys = ['ex_settings', 'ex_bookmarks', 'ex_history', 'ex_downloads', 'ex_profiles', 'ex_passwords'];
+            const storageKeys = ['ex_settings', 'ex_bookmarks', 'ex_history', 'ex_downloads', 'ex_profiles'];
             let sOk = 0; storageKeys.forEach(k => { if (localStorage.getItem(k)) sOk++; });
-            checks.push('💾 Lokalni podaci: ' + sOk + '/' + storageKeys.length + ' kljuceva aktivno');
+            if (getSavedPasswords().length) sOk += 1;
+            checks.push('💾 Lokalni podaci: ' + sOk + '/' + (storageKeys.length + 1) + ' kljuceva aktivno');
             // Check memory
             if (performance && performance.memory) {
                 const mb = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
@@ -15630,7 +15765,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
     // ── Password Manager (macOS Keychain style) ──
     (function initPasswords() {
-        const PWD_KEY = 'ex_passwords';
         const modal = document.getElementById('pwdModal');
         const authInput = document.getElementById('pwdAuthInput');
         const unlockBtn = document.getElementById('pwdUnlock');
@@ -15643,8 +15777,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const BIO_KEY = 'ex_bio_cred_v2';
         const bytesToBase64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
         const base64ToBytes = str => Uint8Array.from(atob(str), ch => ch.charCodeAt(0));
-        function getPasswords() { return JSON.parse(localStorage.getItem(PWD_KEY) || '[]'); }
-        function savePasswords(p) { localStorage.setItem(PWD_KEY, JSON.stringify(p)); }
+        function getPasswords() { return getSavedPasswords(); }
+        function savePasswords(p) { saveSavedPasswords(p); }
         function getSavedBioCred() {
             try { return JSON.parse(localStorage.getItem(BIO_KEY) || 'null'); } catch (_) { return null; }
         }
@@ -15742,9 +15876,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
     // ── Inline Password Panel (stab-passwords) ──
     (function initInlinePwdPanel() {
-        const PWD_KEY = 'ex_passwords';
-        function getPwds() { return JSON.parse(localStorage.getItem(PWD_KEY) || '[]'); }
-        function savePwds(p) { localStorage.setItem(PWD_KEY, JSON.stringify(p)); }
+        function getPwds() { return getSavedPasswords(); }
+        function savePwds(p) { saveSavedPasswords(p); }
         function splitCsvLine(line) {
             const out = []; let cur = ''; let inQuotes = false;
             for (let i = 0; i < line.length; i++) {
