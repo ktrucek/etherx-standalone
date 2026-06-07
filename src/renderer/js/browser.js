@@ -468,7 +468,8 @@ if (window.electronWebview) {
         wv.addEventListener('did-stop-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) { setLoading(100); updateAutofillBtnState(); document.getElementById('sbUrl').textContent = ''; } });
         wv.addEventListener('update-target-url', (e) => { if (Number(wv.dataset.tabId) === STATE.activeTabId) document.getElementById('sbUrl').textContent = e.url || ''; });
         wv.addEventListener('did-fail-load', (e) => {
-            if (e.errorCode === -3) return; // Aborted, ignore
+            const errDesc = String(e.errorDescription || '').toLowerCase();
+            if (e.errorCode === -3 || errDesc.includes('err_aborted') || errDesc.includes('redirect was cancelled')) return;
             if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(0);
             const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
             const failedUrl = e.validatedURL || (tab ? tab.url : '');
