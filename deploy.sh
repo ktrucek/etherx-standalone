@@ -442,6 +442,7 @@ success "Tagged: $TAG_NAME"
 
 # Token se NIKAD ne upisuje u .git/config — koristi se samo za push komandu
 GITHUB_REPO_URL="https://github.com/ktrucek/etherx-standalone.git"
+GITHUB_AUTH_REPO_URL=""
 
 # Ensure github remote points to clean URL (without token)
 if git remote get-url github &>/dev/null; then
@@ -468,26 +469,29 @@ if [[ "$NO_PUSH" == false ]]; then
     error "GitHub token missing. Set GITHUB_TOKEN_DEPLOY or run: gh auth login && gh auth setup-git"
   fi
 
-  # Credentials via -c http.extraHeader — ne upisuje se u .git/config, vidljivo samo za ovaj poziv
-  # GIT_TERMINAL_PROMPT=0 prevents interactive username/password prompts during deploy.
+  # Build one-off authenticated URL (not persisted in git config).
+  # Using x-access-token form works reliably for PAT/App tokens on GitHub HTTPS git endpoints.
+  GITHUB_AUTH_REPO_URL="https://x-access-token:${GITHUB_TOKEN_DEPLOY}@github.com/ktrucek/etherx-standalone.git"
+
+  # Keep git non-interactive during deploy.
   GIT_AUTH=(
     -c "core.askPass="
     -c "credential.helper="
-    -c "http.extraHeader=Authorization: Basic $(printf 'x-token:%s' "${GITHUB_TOKEN_DEPLOY}" | base64_noline)"
   )
 
   info "Fetching github/main to refresh stale tracking ref..."
-  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch github main 2>/dev/null || true
+  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" ls-remote "$GITHUB_AUTH_REPO_URL" >/dev/null || error "GitHub auth failed for deploy token (check scopes/revocation)"
+  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch "$GITHUB_AUTH_REPO_URL" main 2>/dev/null || true
 
   info "Pushing to GitHub (triggers build)..."
   if [[ "$FORCE_PUSH" == true ]]; then
-    PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push --force-with-lease github "HEAD:main")
+    PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push --force-with-lease "$GITHUB_AUTH_REPO_URL" "HEAD:main")
   else
-    PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push github "HEAD:main")
+    PUSH_MAIN_CMD=(git "${GIT_AUTH[@]}" push "$GITHUB_AUTH_REPO_URL" "HEAD:main")
   fi
 
     if GIT_TERMINAL_PROMPT=0 "${PUSH_MAIN_CMD[@]}" && \
-      GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" push github "$TAG_NAME"; then
+     GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" push "$GITHUB_AUTH_REPO_URL" "$TAG_NAME"; then
     success "Pushed to GitHub → GitHub Actions će buildati"
     
     # ── Update EtherX.io download page ─────────────────────────────────────────
