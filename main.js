@@ -857,6 +857,29 @@ function resolvePythonScriptPath(fileName) {
   return "";
 }
 
+function materializePythonScriptForExec(scriptPath, fileName) {
+  const script = String(scriptPath || "");
+  if (!script) return "";
+  if (!script.includes(`${path.sep}app.asar${path.sep}`)) return script;
+  try {
+    const cacheDir = path.join(app.getPath("temp"), "etherx-python-scripts");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const outPath = path.join(cacheDir, String(fileName || path.basename(script)));
+    const source = fs.readFileSync(script);
+    let shouldWrite = true;
+    if (fs.existsSync(outPath)) {
+      try {
+        const existing = fs.readFileSync(outPath);
+        shouldWrite = !existing.equals(source);
+      } catch (_) { }
+    }
+    if (shouldWrite) fs.writeFileSync(outPath, source, { mode: 0o600 });
+    return outPath;
+  } catch (_) {
+    return script;
+  }
+}
+
 function logPythonBridgeDebug(scope, message, extra = undefined) {
   try {
     if (extra === undefined) {
@@ -2741,7 +2764,8 @@ function setupIPC() {
   // ── Qwen3Guard-Stream moderation (local Python runtime) ───────────────────
   ipcMain.handle("ai:qwen3GuardScan", async (_e, payload) => {
     try {
-      const scriptPath = resolvePythonScriptPath("qwen3guard_scan.py");
+      const resolvedScriptPath = resolvePythonScriptPath("qwen3guard_scan.py");
+      const scriptPath = materializePythonScriptForExec(resolvedScriptPath, "qwen3guard_scan.py");
       logPythonBridgeDebug("qwen3guard", "Resolved script path", scriptPath || "(not found)");
       if (!fs.existsSync(scriptPath)) {
         return { ok: false, error: "Qwen3Guard scanner script missing (checked app.asar/app.asar.unpacked): qwen3guard_scan.py" };
@@ -2791,7 +2815,8 @@ function setupIPC() {
   // ── Opir moderation (local Python runtime) ───────────────────────────────
   ipcMain.handle("ai:opirGuardScan", async (_e, payload) => {
     try {
-      const scriptPath = resolvePythonScriptPath("opir_scan.py");
+      const resolvedScriptPath = resolvePythonScriptPath("opir_scan.py");
+      const scriptPath = materializePythonScriptForExec(resolvedScriptPath, "opir_scan.py");
       logPythonBridgeDebug("opir", "Resolved script path", scriptPath || "(not found)");
       if (!fs.existsSync(scriptPath)) {
         return { ok: false, error: "Opir scanner script missing (checked app.asar/app.asar.unpacked): opir_scan.py" };
@@ -2841,7 +2866,8 @@ function setupIPC() {
   // ── NLLB-200 translation (Indonesian -> Croatian) ─────────────────────────
   ipcMain.handle("ai:nllbTranslate", async (_e, payload) => {
     try {
-      const scriptPath = resolvePythonScriptPath("nllb_translate.py");
+      const resolvedScriptPath = resolvePythonScriptPath("nllb_translate.py");
+      const scriptPath = materializePythonScriptForExec(resolvedScriptPath, "nllb_translate.py");
       logPythonBridgeDebug("nllb", "Resolved script path", scriptPath || "(not found)");
       if (!fs.existsSync(scriptPath)) {
         return { ok: false, error: "NLLB translator script missing (checked app.asar/app.asar.unpacked): nllb_translate.py" };

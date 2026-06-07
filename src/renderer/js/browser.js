@@ -220,6 +220,26 @@ function renderSitePermsList(...args) {
     }
 }
 
+function getTabWebview(tabId) {
+    if (typeof globalThis.__etherxGetTabWebviewImpl === 'function') {
+        return globalThis.__etherxGetTabWebviewImpl(tabId);
+    }
+    if (!window.electronWebview) return null;
+    try {
+        const normalizedId = Number(tabId || 0) || null;
+        if (normalizedId) {
+            const byId = document.getElementById('browseFrame_' + normalizedId);
+            if (byId && byId.tagName === 'WEBVIEW') return byId;
+        }
+        const active = typeof getActiveTikTokWebview === 'function' ? getActiveTikTokWebview() : null;
+        if (active && active.tagName === 'WEBVIEW') return active;
+        const main = document.getElementById('browseFrame');
+        return main && main.tagName === 'WEBVIEW' ? main : null;
+    } catch (_) {
+        return null;
+    }
+}
+
 // Runtime-safe fallbacks for builds where TikTok helpers end up outside current scope.
 if (typeof globalThis.getSongPerfDb !== 'function') {
     globalThis.getSongPerfDb = function getSongPerfDbFallback() {
@@ -800,6 +820,10 @@ if (window.electronWebview) {
 
         // ── Webview context-menu (Electron fires 'context-menu' on the webview element) ──
         wv.addEventListener('context-menu', (e) => {
+            const selectionText = String(e.params?.selectionText || '').trim();
+            const isEditable = !!e.params?.isEditable;
+            // Preserve native menu for text selection and editable fields.
+            if (isEditable || selectionText.length > 0) return;
             if (Date.now() < _suppressNextWebviewContextMenuUntil) {
                 e.preventDefault();
                 return;
@@ -840,6 +864,9 @@ if (window.electronWebview) {
     // ── Also receive context-menu info from main process (via IPC) ──────────
     if (window.etherx?.on) {
         window.etherx.on('webview-context-menu', (params) => {
+            const selectionText = String(params?.selectionText || '').trim();
+            const isEditable = !!params?.isEditable;
+            if (isEditable || selectionText.length > 0) return;
             showCtxMenu(params.x, params.y, params.linkURL || null, params || {});
         });
         window.etherx.on('app:createTab', (url) => {
@@ -13979,12 +14006,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     window.addEventListener('blur', closeCtxMenu);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtxMenu(); });
     document.addEventListener('contextmenu', e => {
+        const sel = String(window.getSelection()?.toString() || '').trim();
+        const isEditableTarget = !!(e.target?.isContentEditable || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName));
+        // Keep native browser context menu for copy/paste and selected text.
+        if (isEditableTarget || sel.length > 0) return;
         // Check if user right-clicked on a link
         const link = e.target.closest('a[href]');
         e.preventDefault();
         showCtxMenu(e.clientX, e.clientY, link?.href || null, {
-            selectionText: window.getSelection()?.toString() || '',
-            isEditable: !!(e.target?.isContentEditable || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName))
+            selectionText: sel,
+            isEditable: isEditableTarget
         });
     });
     // New context menu item handlers
