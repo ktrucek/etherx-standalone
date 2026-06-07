@@ -758,18 +758,37 @@ if (window.electronWebview) {
                                 }
                                 return null;
                             }
+                            function extractUserFromNode(target) {
+                                let el = target;
+                                for (let i = 0; i < 7; i++) {
+                                    if (!el) break;
+                                    const userEl = el.querySelector ? el.querySelector(userSelectors) : null;
+                                    const user = clean(userEl?.textContent || userEl?.getAttribute('href')?.split('/@')[1] || '')
+                                        .replace(/^@+/, '')
+                                        .replace(/[,:;].*$/, '');
+                                    if (user) return user;
+                                    el = el.parentElement;
+                                }
+                                return '';
+                            }
                             document.addEventListener('contextmenu', (event) => {
                                 const selectedText = String(window.getSelection?.()?.toString?.() || '').trim();
-                                // Let native/webview context menu work when user is selecting text.
-                                if (selectedText) return;
                                 let row = event.target && event.target.closest ? event.target.closest(rowSelectors) : null;
                                 // Structural fallback: if no selector matched, walk up DOM
                                 if (!row) row = findChatRowStructural(event.target);
-                                const payload = extractPayload(row);
+                                let payload = extractPayload(row);
+                                if (!payload && selectedText) {
+                                    payload = {
+                                        user: extractUserFromNode(row || event.target),
+                                        text: selectedText,
+                                        type: detectType(selectedText)
+                                    };
+                                }
                                 if (!payload) return;
                                 event.preventDefault();
                                 console.log('__ETHERX_TKAI_CTX__' + JSON.stringify({
                                     ...payload,
+                                    selectedText,
                                     x: Math.round(event.clientX || 0),
                                     y: Math.round(event.clientY || 0),
                                     href: location.href
@@ -850,8 +869,11 @@ if (window.electronWebview) {
         wv.addEventListener('context-menu', (e) => {
             const selectionText = String(e.params?.selectionText || '').trim();
             const isEditable = !!e.params?.isEditable;
-            // Preserve native menu for text selection and editable fields.
-            if (isEditable || selectionText.length > 0) return;
+            const activeTab = getActiveTab();
+            const onTikTokPage = !!(activeTab?.url && activeTab.url.includes('tiktok.com'));
+            // Keep native menu for editable fields. On TikTok allow selected text through custom menu.
+            if (isEditable || (selectionText.length > 0 && !onTikTokPage)) return;
+            if (typeof globalThis.__etherxShowCtxMenuImpl !== 'function') return;
             if (Date.now() < _suppressNextWebviewContextMenuUntil) {
                 e.preventDefault();
                 return;
@@ -894,7 +916,9 @@ if (window.electronWebview) {
         window.etherx.on('webview-context-menu', (params) => {
             const selectionText = String(params?.selectionText || '').trim();
             const isEditable = !!params?.isEditable;
-            if (isEditable || selectionText.length > 0) return;
+            const activeTab = getActiveTab();
+            const onTikTokPage = !!(activeTab?.url && activeTab.url.includes('tiktok.com'));
+            if (isEditable || (selectionText.length > 0 && !onTikTokPage)) return;
             showCtxMenu(params.x, params.y, params.linkURL || null, params || {});
         });
         window.etherx.on('app:createTab', (url) => {
@@ -4708,6 +4732,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return 'en';
     }
 
+    function getManualTranslateTargetLang() {
+        const cfg = DB.getSettings() || {};
+        const readLang = readLangEl?.value || 'auto';
+        const translateLang = translateLangEl?.value || cfg.tkaiTranslateLang || 'auto';
+        if (translateLang !== 'auto') return translateLang;
+        if (readLang !== 'auto') return readLang;
+        return 'en';
+    }
+
     function isTkaiTypeTranslationEnabled(type, settings = null) {
         const cfg = settings || DB.getSettings() || {};
         const normalized = String(type || '').toLowerCase();
@@ -5372,7 +5405,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (tkaiMsgCtxEl && document.body.contains(tkaiMsgCtxEl)) return tkaiMsgCtxEl;
         tkaiMsgCtxEl = document.createElement('div');
         tkaiMsgCtxEl.id = 'tkaiMsgCtxMenu';
-        tkaiMsgCtxEl.style.cssText = 'position:fixed;z-index:100001;display:none;min-width:190px;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;box-shadow:0 12px 26px rgba(0,0,0,.45);padding:4px;';
+        tkaiMsgCtxEl.style.cssText = 'position:fixed;z-index:2147483646;display:none;min-width:190px;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;box-shadow:0 12px 26px rgba(0,0,0,.45);padding:4px;';
         tkaiMsgCtxEl.innerHTML =
             '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI + scan od ove poruke</button>' +
@@ -5988,18 +6021,35 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         await startHoldL();
         if (holdLActive) showToast('⌨️ L Hold uključen (Ctrl+Shift+L)');
     }
+    function isTkaiGiftLikeMessage(message) {
+        if (!message) return false;
+        const type = normalizeTkaiMessageType(message);
+        if (type === 'gift' || type === 'subscriber') return true;
+        const text = String(message.text || message.giftRawText || '').trim();
+        if (!text) return false;
+        const meta = getTkaiGiftMeta(text);
+        const parsedCoins = Number(meta?.coins || 0) || Number(parseCoinsFromText(text) || 0);
+        return parsedCoins > 0 || /(?:sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted|slika)/i.test(text);
+    }
+    function getTkaiGiftEventsForStats() {
+        return (Array.isArray(collectedMessages) ? collectedMessages : []).filter(isTkaiGiftLikeMessage);
+    }
     function computeGiftStats() {
-        const gifts = collectedMessages.filter((message) => {
-            const type = normalizeTkaiMessageType(message);
-            return type === 'gift' || type === 'subscriber';
-        });
+        const gifts = getTkaiGiftEventsForStats();
         let totalCoins = 0;
         const byUser = new Map();
         gifts.forEach((message) => {
             const resolved = resolveGiftMetaFromMessage(message);
-            const coins = Math.max(0, Number(message.coins || resolved?.coins || parseCoinsFromText(message.text) || 0));
+            const coins = Math.max(0, Number(
+                message.coins
+                || resolved?.coins
+                || parseCoinsFromText(message.text)
+                || parseCoinsFromText(message.giftRawText)
+                || 0
+            ));
             totalCoins += coins;
             const userKey = String(message.user || '').trim().toLowerCase();
+            if (!userKey) return;
             const row = byUser.get(userKey) || { user: String(message.user || '').trim(), coins: 0, events: 0 };
             row.coins += coins;
             row.events += 1;
@@ -7503,6 +7553,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<span style="font-size:12px;font-weight:700;color:#fff">💬 TikTok Chat</span>' +
             '<div style="display:flex;gap:6px;align-items:center">' +
             '<span id="tkaiPopoutMsgCount" style="font-size:10px;color:rgba(255,255,255,.7)"></span>' +
+            '<span id="tkaiPopoutGiftCount" style="font-size:10px;color:#fde68a"></span>' +
             '<button id="tkaiPopoutFilterChat" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">💬 Tekst</button>' +
             '<button id="tkaiPopoutFilterGifts" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">🎁 Gift</button>' +
             '<button id="tkaiPopoutFilterLikes" style="background:rgba(255,255,255,.22);border:none;color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">❤️ Like</button>' +
@@ -7591,15 +7642,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function mirrorToPopout(messages, options = {}) {
         const container = document.getElementById('tkaiPopoutMessages');
         const countEl = document.getElementById('tkaiPopoutMsgCount');
+        const giftCountEl = document.getElementById('tkaiPopoutGiftCount');
         if (!container) return;
         const src = Array.isArray(messages) ? messages : collectedMessages;
         const msgs = src.filter((m) => {
-            const type = String(m?.type || 'chat');
+            const type = normalizeTkaiMessageType(m);
             if (type === 'like') return chatPopoutFilters.likes;
-            if (type === 'gift' || type === 'subscriber') return chatPopoutFilters.gifts;
+            if (isTkaiGiftLikeMessage(m)) return chatPopoutFilters.gifts;
             return chatPopoutFilters.chat;
         });
+        const giftLikeVisibleCount = msgs.reduce((acc, m) => acc + (isTkaiGiftLikeMessage(m) ? 1 : 0), 0);
         if (countEl) countEl.textContent = msgs.length + ' poruka';
+        if (giftCountEl) giftCountEl.textContent = '🎁 ' + giftLikeVisibleCount;
         // Only re-render if count changed
         const prev = container.dataset.lastCount;
         if (!options.forceRender && prev === String(msgs.length)) return;
@@ -7607,17 +7661,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const wasBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
         container.innerHTML = '';
         msgs.slice(-150).forEach(m => {
+            const type = normalizeTkaiMessageType(m);
+            const isGiftLike = isTkaiGiftLikeMessage(m);
+            const coins = Math.max(0, Number(m?.coins || 0));
             const row = document.createElement('div');
             row.style.cssText = 'padding:3px 6px;border-radius:6px;line-height:1.4;' +
-                (m.type === 'gift' ? 'background:rgba(255,215,0,.1);border-left:2px solid #ffd700;' :
-                    m.type === 'subscriber' ? 'background:rgba(74,222,128,.08);border-left:2px solid #4ade80;' :
-                        m.type === 'like' ? 'background:rgba(244,63,94,.12);border-left:2px solid #fb7185;' :
-                            'background:rgba(255,255,255,.04);');
-            const icon = m.type === 'gift' ? '🎁 ' : m.type === 'subscriber' ? '⭐ ' : m.type === 'like' ? '❤️ ' : '';
+                (type === 'gift' ? 'background:rgba(255,215,0,.1);border-left:2px solid #ffd700;' :
+                    type === 'subscriber' ? 'background:rgba(74,222,128,.08);border-left:2px solid #4ade80;' :
+                        type === 'like' ? 'background:rgba(244,63,94,.12);border-left:2px solid #fb7185;' :
+                            isGiftLike ? 'background:rgba(245,158,11,.14);border-left:2px solid #fbbf24;' :
+                                'background:rgba(255,255,255,.04);');
+            const icon = type === 'gift' ? '🎁 ' : type === 'subscriber' ? '⭐ ' : type === 'like' ? '❤️ ' : (isGiftLike ? '🎁 ' : '');
             row.innerHTML = '<span style="color:' + getUserColor(m.user || '?') + ';font-weight:600">' + (m.user || '?') + '</span>' +
                 '<span style="color:rgba(255,255,255,.35);margin:0 4px">·</span>' +
                 '<span style="color:var(--text,#e2e8f0)">' + icon + (m.translatedText || m.text || '') + '</span>' +
-                (m.coins ? '<span style="color:#ffd700;font-size:10px;margin-left:4px">🪙' + m.coins + '</span>' : '');
+                (coins > 0 ? '<span style="color:#ffd700;font-size:10px;margin-left:4px">🪙' + coins + '</span>' : '');
             container.appendChild(row);
         });
         if (wasBottom) container.scrollTop = container.scrollHeight;
@@ -8082,17 +8140,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     function renderGiftGallery() {
         if (!giftGalleryEl) return;
-        const giftEvents = collectedMessages
-            .filter((message) => {
-                if (!message) return false;
-                const type = normalizeTkaiMessageType(message);
-                if (type === 'gift' || type === 'subscriber') return true;
-                const text = String(message.text || message.giftRawText || '').trim();
-                if (!text) return false;
-                const meta = getTkaiGiftMeta(text);
-                const parsedCoins = Number(meta?.coins || 0) || Number(parseCoinsFromText(text) || 0);
-                return parsedCoins > 0 || /(?:sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted|slika)/i.test(text);
-            })
+        const giftEvents = getTkaiGiftEventsForStats()
             .slice(-120)
             .reverse();
         if (!giftEvents.length) {
@@ -8359,7 +8407,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
         const forceTranslate = options && (options.forceTranslate === true || options.forceTranslate === 'true');
         const preferredLang = getTranslateTargetLang();
-        const targetLang = preferredLang !== 'auto' ? preferredLang : (forceTranslate ? 'en' : 'auto');
+        const targetLang = preferredLang !== 'auto' ? preferredLang : (forceTranslate ? getManualTranslateTargetLang() : 'auto');
         if (targetLang !== 'auto') {
             const translated = await translateViaGoogle(text, targetLang);
             const latest = collectedMessages[collectedMessages.length - 1];
@@ -14157,6 +14205,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     let _ctxTargetUrl = null; // URL of right-clicked link (if any)
     let _ctxImageUrl = null;  // URL of right-clicked image (if any)
     async function showCtxMenu(x, y, targetUrl, params = {}) {
+        if (!ctxMenu) return false;
         _ctxFocusedEl = document.activeElement; // Save focused element BEFORE menu steals focus
         _ctxTargetUrl = targetUrl || null;
         _ctxSelectionText = String(params.selectionText || window.getSelection()?.toString() || '');
@@ -14215,6 +14264,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         ctxMenu.style.left = Math.min(x, window.innerWidth - menuW - 8) + 'px';
         ctxMenu.style.top = Math.min(y, window.innerHeight - menuH - 8) + 'px';
         ctxMenu.classList.add('show');
+        return true;
     }
     globalThis.__etherxShowCtxMenuImpl = showCtxMenu;
     const closeCtxMenu = () => ctxMenu.classList.remove('show');
@@ -14228,6 +14278,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const isEditableTarget = !!(e.target?.isContentEditable || ['INPUT', 'TEXTAREA'].includes(e.target?.tagName));
         // Keep native browser context menu for copy/paste and selected text.
         if (isEditableTarget || sel.length > 0) return;
+        if (!ctxMenu || typeof globalThis.__etherxShowCtxMenuImpl !== 'function') return;
         // Check if user right-clicked on a link
         const link = e.target.closest('a[href]');
         e.preventDefault();
@@ -18818,6 +18869,59 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
     });
 
+    document.getElementById('helpInstallPythonDepsBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('helpInstallPythonDepsBtn');
+        const statusEl = document.getElementById('helpInstallPythonDepsStatus');
+        if (!btn || !statusEl) return;
+
+        if (!window.etherx?.ai?.installPythonDeps) {
+            statusEl.textContent = 'Greška: install API nije dostupan u ovom buildu.';
+            showToast('⚠️ Python install API nije dostupan');
+            return;
+        }
+
+        const before = btn.textContent;
+        btn.disabled = true;
+        btn.style.opacity = '.7';
+        btn.textContent = '⏳ Instalacija u tijeku...';
+        statusEl.textContent = 'Pokrećem .venv + pip install -r requirements.txt ...';
+
+        try {
+            const res = await window.etherx.ai.installPythonDeps();
+            if (res?.ok) {
+                const lines = [
+                    '✅ Instalacija završena.',
+                    'Python: ' + (res.python || 'n/a'),
+                    'Requirements: ' + (res.requirementsPath || 'n/a'),
+                    'Kreiran novi .venv: ' + (res.createdVenv ? 'da' : 'ne'),
+                ];
+                if (res.stderr) lines.push('', 'Log (stderr):', String(res.stderr));
+                else if (res.stdout) lines.push('', 'Log (tail):', String(res.stdout));
+                statusEl.textContent = lines.join('\n');
+                showToast('✅ Python paketi su instalirani');
+            } else {
+                const lines = [
+                    '❌ Instalacija nije uspjela.',
+                    'Greška: ' + (res?.error || 'Nepoznata greška'),
+                    'Requirements: ' + (res?.requirementsPath || 'n/a'),
+                    'Python: ' + (res?.python || 'n/a'),
+                ];
+                if (res?.stderr) lines.push('', 'stderr:', String(res.stderr));
+                else if (res?.stdout) lines.push('', 'stdout:', String(res.stdout));
+                statusEl.textContent = lines.join('\n');
+                showToast('❌ Python instalacija nije uspjela');
+            }
+        } catch (err) {
+            const msg = String(err?.message || err || 'Nepoznata greška');
+            statusEl.textContent = '❌ Iznimka: ' + msg;
+            showToast('❌ Iznimka tijekom instalacije');
+        } finally {
+            btn.disabled = false;
+            btn.style.opacity = '';
+            btn.textContent = before || '⚡ Instaliraj Python pakete';
+        }
+    });
+
     // ── Help → Browser Versions download buttons ──────────────────────────────
     ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {
         document.getElementById('dlBtn' + platform)?.addEventListener('click', async () => {
@@ -20136,6 +20240,15 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (!raw) return 'Nepoznata greška tijekom ažuriranja.';
             if (/redirect was cancelled|err_aborted|\(-3\)/i.test(raw)) {
                 return 'Update server je vratio privremeno preusmjerenje (normalno).';
+            }
+            if (/blocked unsafe update redirect/i.test(raw)) {
+                return 'GitHub je vratio neočekivani redirect host. Ažuriraj ponovno za par sekundi.';
+            }
+            if (/too many update redirects/i.test(raw)) {
+                return 'Previše preusmjerenja tijekom update preuzimanja. Pokušaj ponovno.';
+            }
+            if (/github api greška:\s*http\s*403/i.test(raw)) {
+                return 'GitHub API limit (403). Pričekaj minutu ili spremi GitHub token u Updates postavkama.';
             }
             if (/\b504\b/.test(raw)) {
                 return 'HTTP 504 (timeout) - server za update trenutno ne odgovara na vrijeme. Pokušaj ponovno za 1-2 minute.';

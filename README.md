@@ -66,6 +66,20 @@ Ovo je čisti standalone build EtherX browsera **bez n8n proxy-ja**.
 2. `npm start` — pokreće Electron app
 3. `npm run build` — kreira distributable pakete
 
+### Python AI bridge (lokalni setup)
+
+Za lokalni rad AI skripti (`qwen3guard_scan.py`, `opir_scan.py`, `nllb_translate.py`) koristi virtualno okruženje i `requirements.txt`:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Napomena:
+
+- `.venv/` je ignoriran u `.gitignore` i ne commit-a se u repozitorij.
+
 ### Siguran deploy bez .env commita
 
 `.env.local` je ignoriran i ne treba ići na GitHub.

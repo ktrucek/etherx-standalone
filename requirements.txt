@@ -1,0 +1,8 @@
+# Python dependencies for local AI bridge scripts:
+# - src/main/qwen3guard_scan.py
+# - src/main/opir_scan.py
+# - src/main/nllb_translate.py
+
+torch
+transformers
+gliclass

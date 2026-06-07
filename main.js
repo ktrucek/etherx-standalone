@@ -925,6 +925,30 @@ function execFileJson(command, args, timeoutMs = 240000) {
   });
 }
 
+function execFileText(command, args, timeoutMs = 240000, options = {}) {
+  return new Promise((resolve) => {
+    execFile(
+      command,
+      args,
+      {
+        windowsHide: true,
+        timeout: Math.max(5000, Number(timeoutMs || 240000) || 240000),
+        maxBuffer: 32 * 1024 * 1024,
+        env: process.env,
+        ...options,
+      },
+      (error, stdout, stderr) => {
+        resolve({
+          ok: !error,
+          error,
+          stdout: String(stdout || ""),
+          stderr: String(stderr || ""),
+        });
+      },
+    );
+  });
+}
+
 // ─── Single instance lock ─────────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -2087,6 +2111,101 @@ function setupIPC() {
     return ai.summarizePage(url, htmlContent, geminiKey, db);
   });
 
+  ipcMain.handle("ai:installPythonDeps", async () => {
+    const trimOut = (value, maxLen = 12000) => {
+      const text = String(value || "").trim();
+      if (text.length <= maxLen) return text;
+      return text.slice(-maxLen);
+    };
+
+    try {
+      const requirementsCandidates = [
+        path.join(process.cwd(), "requirements.txt"),
+        path.join(app.getAppPath(), "requirements.txt"),
+      ];
+      const requirementsPath = requirementsCandidates.find((p) => fs.existsSync(p));
+      if (!requirementsPath) {
+        return {
+          ok: false,
+          error: "requirements.txt nije pronađen.",
+          tried: requirementsCandidates,
+        };
+      }
+
+      const projectRoot = path.dirname(requirementsPath);
+      const venvDir = path.join(projectRoot, ".venv");
+      const venvPython =
+        process.platform === "win32"
+          ? path.join(venvDir, "Scripts", "python.exe")
+          : path.join(venvDir, "bin", "python");
+
+      let createdVenv = false;
+      let venvCreateError = "";
+      if (!fs.existsSync(venvPython)) {
+        const bootCandidates = resolvePythonCandidates();
+        for (const py of bootCandidates) {
+          if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+          const mk = await execFileText(py, ["-m", "venv", venvDir], 300000, { cwd: projectRoot });
+          if (mk.ok) {
+            createdVenv = true;
+            venvCreateError = "";
+            break;
+          }
+          if (mk.error?.code === "ENOENT") continue;
+          venvCreateError = trimOut(mk.stderr || mk.stdout || mk.error?.message || "Neuspješno kreiranje .venv");
+        }
+      }
+
+      if (!fs.existsSync(venvPython)) {
+        return {
+          ok: false,
+          error: venvCreateError || "Ne mogu pronaći ili kreirati Python virtual environment (.venv).",
+          requirementsPath,
+          venvDir,
+        };
+      }
+
+      const pipUpgrade = await execFileText(
+        venvPython,
+        ["-m", "pip", "install", "--upgrade", "pip"],
+        420000,
+        { cwd: projectRoot },
+      );
+
+      const install = await execFileText(
+        venvPython,
+        ["-m", "pip", "install", "-r", requirementsPath],
+        900000,
+        { cwd: projectRoot },
+      );
+
+      if (!install.ok) {
+        return {
+          ok: false,
+          error: trimOut(install.stderr || install.stdout || install.error?.message || "pip install nije uspio"),
+          createdVenv,
+          requirementsPath,
+          python: venvPython,
+          pipUpgrade: pipUpgrade.ok,
+          stdout: trimOut(install.stdout),
+          stderr: trimOut(install.stderr),
+        };
+      }
+
+      return {
+        ok: true,
+        createdVenv,
+        requirementsPath,
+        python: venvPython,
+        pipUpgrade: pipUpgrade.ok,
+        stdout: trimOut(install.stdout),
+        stderr: trimOut(install.stderr),
+      };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
+
   // ── Ad Blocker ─────────────────────────────────────────────────────────────
   ipcMain.handle("adblock:isEnabled", () =>
     adBlocker ? adBlocker.isEnabled() : false,
@@ -3148,15 +3267,24 @@ function setupIPC() {
         "github.com",
         "api.github.com",
         "objects.githubusercontent.com",
+        "objects-origin.githubusercontent.com",
         "release-assets.githubusercontent.com",
         "github-releases.githubusercontent.com",
       ]);
+      const isAllowedUpdateHost = (host) => {
+        const h = String(host || "").toLowerCase();
+        if (!h) return false;
+        if (allowedUpdateHosts.has(h)) return true;
+        // GitHub release assets can be served from githubusercontent subdomains.
+        if (h.endsWith(".githubusercontent.com")) return true;
+        return false;
+      };
       const normalizeUpdateUrl = (candidate, baseUrl = null) => {
         try {
           const parsed = baseUrl ? new URL(candidate, baseUrl) : new URL(candidate);
           const host = String(parsed.hostname || "").toLowerCase();
           if (parsed.protocol !== "https:") return null;
-          if (!allowedUpdateHosts.has(host)) return null;
+          if (!isAllowedUpdateHost(host)) return null;
           return parsed.toString();
         } catch (_) {
           return null;

@@ -3810,7 +3810,7 @@ iframe.browse-frame.active {
   border-radius: 10px;
   padding: 5px 0;
   min-width: 240px;
-  z-index: 9999;
+  z-index: 2147483645;
   display: none;
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.7),
