@@ -20005,7 +20005,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const raw = String(err?.message || err || 'Nepoznata greška').trim();
             if (!raw) return 'Nepoznata greška tijekom ažuriranja.';
             if (/redirect was cancelled|err_aborted|\(-3\)/i.test(raw)) {
-                return 'Update server je vratio preusmjerenje (normalno), pokušaj ponovno za trenutak.';
+                return 'Update server je vratio privremeno preusmjerenje (normalno).';
             }
             if (/\b504\b/.test(raw)) {
                 return 'HTTP 504 (timeout) - server za update trenutno ne odgovara na vrijeme. Pokušaj ponovno za 1-2 minute.';
@@ -20072,7 +20072,17 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                         badge.style.color = '#ffbd2e';
                         badge.style.borderColor = 'rgba(255,189,46,.35)';
                     }
-                    if (!silent) showToast('ℹ️ Update server radi preusmjerenje. Pokušaj ponovno za par sekundi.');
+                    // Auto-retry once in background for benign redirect-abort races.
+                    if (!window.__etherxUpdateRedirectRetryInFlight) {
+                        window.__etherxUpdateRedirectRetryInFlight = true;
+                        setTimeout(async () => {
+                            try {
+                                await window.checkForUpdates(true);
+                            } catch (_) { }
+                            window.__etherxUpdateRedirectRetryInFlight = false;
+                        }, 1800);
+                    }
+                    if (!silent) showToast('ℹ️ Update server preusmjerenje je obrađeno automatski.');
                     return;
                 }
                 const friendlyErr = humanizeUpdateError(err);

@@ -3171,36 +3171,46 @@ function setupIPC() {
           Accept: "application/octet-stream",
         };
         if (token) headers["Authorization"] = "Bearer " + token;
-        const req = net.request({
-          method: "GET",
-          url: safeUrl,
-          headers,
-          redirect: "manual",
-        });
-        req.on("response", (res) => {
-          // Follow redirect manually for GitHub asset downloads
-          if (
-            (res.statusCode === 301 || res.statusCode === 302) &&
-            res.headers.location
-          ) {
-            const rUrl = Array.isArray(res.headers.location)
-              ? res.headers.location[0]
-              : res.headers.location;
-            const safeRedirectUrl = normalizeUpdateUrl(rUrl, safeUrl);
-            if (!safeRedirectUrl) {
-              reject(new Error("Blocked unsafe update redirect"));
+        const maxRedirects = 8;
+
+        const requestWithRedirects = (currentUrl, redirectCount = 0) => {
+          const req = net.request({
+            method: "GET",
+            url: currentUrl,
+            headers,
+            redirect: "manual",
+          });
+
+          req.on("response", (res) => {
+            const status = Number(res.statusCode || 0);
+            const hasLocation = !!res.headers.location;
+            if (
+              [301, 302, 303, 307, 308].includes(status) &&
+              hasLocation
+            ) {
+              if (redirectCount >= maxRedirects) {
+                reject(new Error("Too many update redirects"));
+                return;
+              }
+              const rUrl = Array.isArray(res.headers.location)
+                ? res.headers.location[0]
+                : res.headers.location;
+              const safeRedirectUrl = normalizeUpdateUrl(rUrl, currentUrl);
+              if (!safeRedirectUrl) {
+                reject(new Error("Blocked unsafe update redirect"));
+                return;
+              }
+              requestWithRedirects(safeRedirectUrl, redirectCount + 1);
               return;
             }
-            const req2 = net.request({ method: "GET", url: safeRedirectUrl, headers, redirect: "error" });
-            req2.on("response", (res2) => handleResponse(res2));
-            req2.on("error", reject);
-            req2.end();
-            return;
-          }
-          handleResponse(res);
-        });
-        req.on("error", reject);
-        req.end();
+            handleResponse(res);
+          });
+
+          req.on("error", reject);
+          req.end();
+        };
+
+        requestWithRedirects(safeUrl, 0);
 
         function handleResponse(res) {
           if (res.statusCode !== 200) {
