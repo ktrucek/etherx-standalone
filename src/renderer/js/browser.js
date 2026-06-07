@@ -790,6 +790,7 @@ function shouldCreateMissingFallback(id) {
         id.startsWith('setting') ||
         id.startsWith('btnClear') ||
         id.startsWith('save') ||
+        id === 'tkaiStatsStorageSummary' ||
         id === 'dlBadge' ||
         id.startsWith('mi-') ||
         id.startsWith('stab-') ||
@@ -15715,7 +15716,7 @@ document.getElementById('mi-emoji')?.addEventListener('click', () => { showToast
     document.getElementById('settingsTranslateProvider')?.addEventListener('change', updateTranslateCapabilityBadges);
     document.getElementById('settingsTranslateModel')?.addEventListener('change', updateTranslateCapabilityBadges);
     document.getElementById('settingsTranslateNllbModel')?.addEventListener('change', updateTranslateCapabilityBadges);
-    document.querySelector('#stab-ai-live-chat [data-setting="tkaiNllbIdHrEnabled"]')?.addEventListener('click', () => {
+    document.querySelector('[data-setting="tkaiNllbIdHrEnabled"]')?.addEventListener('click', () => {
         setTimeout(updateTranslateCapabilityBadges, 0);
     });
     (function syncAiNllbSelector() {
