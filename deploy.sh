@@ -500,6 +500,41 @@ except Exception as e:
 PYEOF
 fi
 
+# ── Update etherx-update-manifest.json ───────────────────────────────────────
+MANIFEST_FILES=()
+[[ -f "etherx-update-manifest.json" ]] && MANIFEST_FILES+=("etherx-update-manifest.json")
+[[ -f "etherx-standalone/etherx-update-manifest.json" ]] && MANIFEST_FILES+=("etherx-standalone/etherx-update-manifest.json")
+
+if [[ ${#MANIFEST_FILES[@]} -gt 0 ]]; then
+  info "Updating etherx-update-manifest.json → v$NEW_VERSION"
+  python3 - <<PYEOF
+import json, sys
+from datetime import date
+
+version   = '$NEW_VERSION'
+zip_url   = f'https://github.com/ktrucek/etherx-standalone/releases/download/v{version}/EtherX.Browser-{version}-mac-arm64.zip'
+today     = date.today().isoformat()
+
+manifest_files = [f for f in ['etherx-update-manifest.json', 'etherx-standalone/etherx-update-manifest.json'] if __import__('os').path.isfile(f)]
+
+for path in manifest_files:
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        data['version']     = version
+        data['releaseDate'] = today
+        data['downloadUrl'] = zip_url
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+            f.write('\n')
+        print(f'  ✓ {path} → v{version}')
+    except Exception as e:
+        print(f'  ⚠ {path}: {e}', file=sys.stderr)
+PYEOF
+else
+  warn "etherx-update-manifest.json not found — skipping"
+fi
+
 # ── Keep browser.html in sync with src/index.html ────────────────────────────
 TARGET_BROWSER_HTML="src/renderer/browser.html"
 if [[ -f "$TARGET_BROWSER_HTML" ]]; then

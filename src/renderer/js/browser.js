@@ -20395,6 +20395,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         document.getElementById('btnCheckUpdates')?.addEventListener('click', () => window.checkForUpdates(false));
 
+        // Resolve packaged state once so update flow can decide source-deploy vs download
+        if (window._etherxIsPackaged === undefined && window.etherx?.update?.isPackaged) {
+            window.etherx.update.isPackaged().then(v => { window._etherxIsPackaged = !!v; }).catch(() => { window._etherxIsPackaged = true; });
+        }
+
         // ── One-click auto-update (Electron only) ──────────────────────────────
         document.getElementById('updOneClickBtn')?.addEventListener('click', async function () {
             if (!window._pendingUpdateAsset || !window.etherx?.update?.download) return;
@@ -20405,7 +20410,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const progressPct = document.getElementById('updProgressPct');
             const progressLabel = document.getElementById('updProgressLabel');
             const platform = detectPlatform();
-            const canDeployFromGithub = platform?.os === 'linux' && typeof window.etherx?.update?.deployFromGithub === 'function';
+            const canDeployFromGithub = platform?.os === 'linux' &&
+                typeof window.etherx?.update?.deployFromGithub === 'function' &&
+                window._etherxIsPackaged !== true;
 
             btn.disabled = true;
             btn.textContent = '⏳ Preuzimanje...';

@@ -162,8 +162,23 @@ jobs:
       - name: � Install npm packages
         run: npm ci
 
-      - name: 🔨 Build macOS x64 ZIP (cross-compile, no DMG — hdiutil can't mount x64 DMG on ARM64 runner)
-        run: npx electron-builder --mac zip --x64 --publish never
+      - name: 🔨 Build macOS x64 ZIP (with retry for transient Electron download errors)
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_attempts=4
+          attempt=1
+          until npx electron-builder --mac zip --x64 --publish never; do
+            if [[ "$attempt" -ge "$max_attempts" ]]; then
+              echo "Build failed after ${max_attempts} attempts"
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "Attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..."
+            rm -rf "$HOME/Library/Caches/electron" || true
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -193,8 +208,23 @@ jobs:
       - name: � Install npm packages
         run: npm ci
 
-      - name: 🔨 Build macOS arm64 DMG + ZIP
-        run: npx electron-builder --mac dmg zip --arm64 --publish never
+      - name: 🔨 Build macOS arm64 DMG + ZIP (with retry for transient Electron download errors)
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_attempts=4
+          attempt=1
+          until npx electron-builder --mac dmg zip --arm64 --publish never; do
+            if [[ "$attempt" -ge "$max_attempts" ]]; then
+              echo "Build failed after ${max_attempts} attempts"
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "Attempt ${attempt}/${max_attempts} failed; retrying in ${sleep_seconds}s..."
+            rm -rf "$HOME/Library/Caches/electron" || true
+            sleep "$sleep_seconds"
+            attempt=$((attempt + 1))
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

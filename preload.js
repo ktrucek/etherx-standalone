@@ -226,6 +226,7 @@ contextBridge.exposeInMainWorld('etherx', {
     install: (filePath) => ipcRenderer.invoke('update:install', filePath),
     deployFromGithub: () => ipcRenderer.invoke('update:deployFromGithub'),
     onProgress: (callback) => ipcRenderer.on('update:progress', (_e, data) => callback(data)),
+    isPackaged: () => ipcRenderer.invoke('app:isPackaged'),
   },
 
   extensions: {

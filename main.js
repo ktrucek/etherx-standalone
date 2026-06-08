@@ -2502,6 +2502,7 @@ function setupIPC() {
 
   // ── App info ────────────────────────────────────────────────
   ipcMain.handle("app:getVersion", () => app.getVersion());
+  ipcMain.handle("app:isPackaged", () => app.isPackaged);
   ipcMain.handle("app:getPlatform", () => process.platform);
   ipcMain.handle("app:getUserDataPath", () => app.getPath("userData"));
   ipcMain.handle("app:getAppPath", () => app.getAppPath());
@@ -3491,6 +3492,12 @@ function setupIPC() {
 
   // Source-based update path: pull latest from GitHub and run local deploy.sh
   ipcMain.handle("update:deployFromGithub", async () => {
+    if (app.isPackaged) {
+      return {
+        ok: false,
+        error: "Source deploy nije dostupan u pakiranoj aplikaciji. Koristi Ažuriranja → Preuzmi za standardni update.",
+      };
+    }
     try {
       const candidates = [
         process.cwd(),
