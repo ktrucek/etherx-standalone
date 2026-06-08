@@ -111,7 +111,7 @@ app.setName("EtherX Browser");
 // Prevents Electron from ever sending "Electron/x.x" in any session that hasn't
 // had setUserAgent() called on it (e.g. extension background pages, new sessions).
 const CHROME_CLEAN_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 app.userAgentFallback = CHROME_CLEAN_UA;
 
 // ─── New modules (wrapped in try/catch — native modules can crash on wrong arch) ─
@@ -2075,6 +2075,23 @@ function setupIPC() {
       /* ignore */
     }
     return { ok: true, requiresRestart: true };
+  });
+
+  // ── Tor SOCKS5 proxy runtime toggle ────────────────────────────────────────
+  ipcMain.handle("settings:applyTorProxy", async (_e, enabled, host, port) => {
+    try {
+      const ses = session.defaultSession;
+      if (enabled) {
+        const h = String(host || '127.0.0.1').trim() || '127.0.0.1';
+        const p = parseInt(port, 10) || 9050;
+        await ses.setProxy({ proxyRules: `socks5://${h}:${p}` });
+      } else {
+        await ses.setProxy({ proxyRules: '' });
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
 
   // ── Passwords ─────────────────────────────────────────────────────────────

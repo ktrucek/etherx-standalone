@@ -53,9 +53,12 @@ jobs:
             rpm \
             libsecret-1-dev \
             squashfs-tools \
-            fuse
+            fuse \
+            ruby \
+            ruby-dev
           sudo modprobe fuse || true
           sudo chmod 666 /dev/fuse || true
+          sudo gem install fpm --no-document
 
       - name: 📦 Install npm packages (runs electron-rebuild via postinstall)
         run: npm ci

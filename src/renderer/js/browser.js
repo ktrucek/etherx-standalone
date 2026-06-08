@@ -613,6 +613,11 @@ if (window.electronWebview) {
                     updateNavBtns(tab);
                 }
             }
+            // On TikTok SPA navigation (e.g. home → live), reset ctx flag so the
+            // handler re-installs on the new page context if needed.
+            if (e.url && e.url.includes('tiktok.com')) {
+                try { wv.executeJavaScript('window.__etherxTikTokCtxInstalled = false').catch(() => { }); } catch (_) { }
+            }
         });
         wv.addEventListener('dom-ready', async () => {
             // Mark ready and flush any executeJavaScript calls queued before dom-ready
@@ -686,6 +691,10 @@ if (window.electronWebview) {
               return true;
             })()`);
             } catch (_) { }
+            // ── TikTok live chat right-click interceptor ──────────────────────────────
+            // Injected early (dom-ready) so our capture handler is registered BEFORE
+            // TikTok's own scripts add their contextmenu listeners. We call
+            // stopImmediatePropagation() so TikTok cannot block our handler.
             try {
                 await wv.executeJavaScript(`(() => {
                             if (window.__etherxTikTokCtxInstalled) return true;
@@ -700,6 +709,7 @@ if (window.electronWebview) {
                                 '[data-e2e*="message-item" i]',
                                 '[data-e2e*="chat-item" i]',
                                 '[data-e2e*="chatroom-message" i]',
+                                '[data-e2e*="live-chat" i]',
                                 '[data-e2e*="message" i]',
                                 '[class*="DivChatMessage" i]',
                                 '[class*="DivCommentItem" i]',
@@ -709,8 +719,14 @@ if (window.electronWebview) {
                                 '[class*="MessageItem" i]',
                                 '[class*="ChatCell" i]',
                                 '[class*="DivComment" i]',
+                                '[class*="ChatContentItem" i]',
+                                '[class*="LiveCommentItem" i]',
+                                '[class*="CommentListItem" i]',
+                                '[class*="chat-comment" i]',
+                                '[class*="message-body" i]',
                                 '.webcast-chatroom__message-item',
-                                '[class*="webcast-chatroom__message" i]'
+                                '[class*="webcast-chatroom__message" i]',
+                                '[class*="webcast-live" i]'
                             ].join(',');
                             const textSelectors = [
                                 '[data-e2e*="comment-content" i]',
@@ -796,7 +812,18 @@ if (window.electronWebview) {
                                         type: detectType(selectedText)
                                     };
                                 }
+                                // Lenient fallback: even without a chat row, show menu for any hover
+                                // target that has a user-like element nearby (live chat use case)
+                                if (!payload) {
+                                    const hoverUser = extractUserFromNode(event.target);
+                                    if (hoverUser) {
+                                        payload = { user: hoverUser, text: selectedText || '', type: 'chat', _noRow: true };
+                                    }
+                                }
                                 if (!payload) return;
+                                // Prevent TikTok's own contextmenu handlers from running and
+                                // blocking the Electron console-message relay we rely on.
+                                event.stopImmediatePropagation();
                                 event.preventDefault();
                                 console.log('__ETHERX_TKAI_CTX__' + JSON.stringify({
                                     ...payload,
@@ -1500,6 +1527,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     document.getElementById('btnTkaiToolsOpenPanel')?.addEventListener('click', () => {
         document.getElementById('settingsPanel')?.classList.remove('open');
         openPanel('tiktokAIPanel');
+    });
+    document.getElementById('btnTkaiOpenUserDB')?.addEventListener('click', () => {
+        showTkaiUserDBModal(null);
+    });
+    document.getElementById('btnTkaiOpenUserDB2')?.addEventListener('click', () => {
+        showTkaiUserDBModal(null);
     });
     const openLiveDashboardSafely = () => {
         const openFn = (typeof openLiveDashboardPopout === 'function')
@@ -2513,6 +2546,57 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const mergeResult = document.getElementById('tkaiSessionMergeResult');
         if (mergeResult) mergeResult.style.display = 'none';
         renderTkaiSessionHistory();
+    });
+
+    // ── Import JSON sesije ───────────────────────────────────────────────────────
+    document.getElementById('btnTkaiSessionsImport')?.addEventListener('click', () => {
+        document.getElementById('tkaiSessionImportFile')?.click();
+    });
+    document.getElementById('tkaiSessionImportFile')?.addEventListener('change', function () {
+        const files = Array.from(this.files || []);
+        if (!files.length) return;
+        let imported = 0, skipped = 0;
+        let pending = files.length;
+        const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    // Support single session object OR array of sessions
+                    const items = Array.isArray(data) ? data : [data];
+                    items.forEach(item => {
+                        if (!item || typeof item !== 'object') { skipped++; return; }
+                        // Basic validation: must have messages or messageCount
+                        if (!item.messages && !item.messageCount) { skipped++; return; }
+                        // Deduplicate by savedAt
+                        const alreadyExists = sessions.some(s => s.savedAt && s.savedAt === item.savedAt);
+                        if (alreadyExists) { skipped++; return; }
+                        item.importedAt = new Date().toISOString();
+                        sessions.push(item);
+                        imported++;
+                    });
+                } catch (_) { skipped++; }
+                pending--;
+                if (pending === 0) {
+                    // Keep max 50 sessions
+                    if (sessions.length > 50) sessions.splice(0, sessions.length - 50);
+                    localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
+                    renderTkaiSessionHistory();
+                    const msg = imported
+                        ? '✅ Uvezeno ' + imported + ' sesija' + (skipped ? ', preskočeno ' + skipped : '')
+                        : '⚠️ Nije uvezena nijedna sesija' + (skipped ? ' (' + skipped + ' neispravnih)' : '');
+                    showToast(msg);
+                    const resultEl = document.getElementById('tkaiSessionMergeResult');
+                    if (resultEl && imported) {
+                        resultEl.style.display = '';
+                        resultEl.innerHTML = '<div style="font-weight:600">⬆️ ' + msg + '</div><div style="margin-top:4px;font-size:10px;color:var(--text3)">Uvezene sesije su vidljive u listi iznad.</div>';
+                    }
+                }
+            };
+            reader.readAsText(file);
+        });
+        this.value = ''; // reset input so isti file može biti uvezen opet
     });
 
     document.getElementById('btnTkaiSessionsMerge')?.addEventListener('click', () => {
@@ -4665,6 +4749,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const spikeAllBtn = document.getElementById('tkaiSpikeAll');
     const spikeViewersBtn = document.getElementById('tkaiSpikeViewers');
     const spikeGiftsBtn = document.getElementById('tkaiSpikeGifts');
+    const spikeJoinBtn = document.getElementById('tkaiSpikeJoin');
+    const spikeShareBtn = document.getElementById('tkaiSpikeShare');
+    const spikeChatBtn = document.getElementById('tkaiSpikeChat');
     const layoutFoldBtn = document.getElementById('tkaiLayoutFoldBtn');
     const layoutUnfoldBtn = document.getElementById('tkaiLayoutUnfoldBtn');
     const layoutLockBtn = document.getElementById('tkaiLayoutLockBtn');
@@ -5282,8 +5369,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         base.forEach((m) => {
             const user = String(m?.user || '').trim();
             if (!user) return;
-            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, likes: 0, lastTs: 0, coins: 0, texts: new Map(), giftTypes: new Map(), lastMessage: '' });
+            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, likes: 0, lastTs: 0, firstSeen: Number(m.ts || 0), coins: 0, texts: new Map(), giftTypes: new Map(), lastMessage: '', appearances: [] });
             const row = map.get(user);
+            const mTs = Number(m.ts || 0);
+            if (mTs && (row.firstSeen === 0 || mTs < row.firstSeen)) row.firstSeen = mTs;
+            if (mTs) row.appearances.push(mTs);
             row.total += 1;
             if (m.type === 'gift' || m.type === 'subscriber') {
                 const meta = resolveGiftMetaFromMessage(m);
@@ -5314,6 +5404,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 joins: r.joins,
                 likes: r.likes,
                 lastTs: r.lastTs,
+                firstSeen: r.firstSeen,
+                appearances: r.appearances.length,
                 coins: r.coins,
                 repeatMax: Math.max(0, ...Array.from(r.texts.values())),
                 giftTypes: Array.from(r.giftTypes.entries()).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)).slice(0, 4),
@@ -5424,6 +5516,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
+            '<button type="button" data-act="gift-gallery" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fb923c;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎁 Darovi korisnika (sesija)</button>' +
+            '<button type="button" data-act="user-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a3e635;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">👤 Profil korisnika (baza)</button>' +
+            '<button type="button" data-act="open-tiktok-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#34d399;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔗 Otvori TikTok profil</button>' +
             '<button type="button" data-act="region-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔎 TikTok scan regije</button>';
         document.body.appendChild(tkaiMsgCtxEl);
 
@@ -5496,6 +5591,30 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             closeTkaiMsgContextMenu();
         });
 
+        tkaiMsgCtxEl.querySelector('[data-act="gift-gallery"]')?.addEventListener('click', () => {
+            const m = tkaiMsgCtxTarget;
+            const user = String(m?.user || '').trim().replace(/^@+/, '');
+            closeTkaiMsgContextMenu();
+            if (!user) { showToast('⚠️ Nema korisnika za skeniranje'); return; }
+            showTkaiUserGiftsModal(user);
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="user-profile"]')?.addEventListener('click', () => {
+            const m = tkaiMsgCtxTarget;
+            const user = String(m?.user || '').trim().replace(/^@+/, '');
+            closeTkaiMsgContextMenu();
+            if (!user) { showToast('⚠️ Nema korisnika'); return; }
+            showTkaiUserDBModal(user);
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="open-tiktok-profile"]')?.addEventListener('click', () => {
+            const m = tkaiMsgCtxTarget;
+            const user = String(m?.user || '').trim().replace(/^@+/, '');
+            closeTkaiMsgContextMenu();
+            if (!user) { showToast('⚠️ Nema korisnika'); return; }
+            createTab('https://www.tiktok.com/@' + encodeURIComponent(user), '@' + user, true);
+        });
+
         tkaiMsgCtxEl.querySelector('[data-act="region-scan"]')?.addEventListener('click', () => {
             closeTkaiMsgContextMenu();
             setTimeout(triggerTikTokRegionScanFromUi, 30);
@@ -5508,6 +5627,213 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         document.addEventListener('scroll', () => closeTkaiMsgContextMenu(), true);
         return tkaiMsgCtxEl;
     }
+    // ── Persistent TikTok live user database ───────────────────────────────
+    function getTkaiUserDB() {
+        try { return JSON.parse(localStorage.getItem('tkai_live_users') || '{}'); } catch (_) { return {}; }
+    }
+    function saveTkaiUserDB(db) {
+        try { localStorage.setItem('tkai_live_users', JSON.stringify(db)); } catch (_) { }
+    }
+    function updateTkaiUserDBFromStats(stats) {
+        if (!Array.isArray(stats) || !stats.length) return;
+        const db = getTkaiUserDB();
+        const now = Date.now();
+        stats.forEach((u) => {
+            const key = String(u.user || '').trim().toLowerCase();
+            if (!key) return;
+            const existing = db[key] || { user: u.user, firstSeen: now, sessions: 0, totalChat: 0, totalGifts: 0, totalCoins: 0, lastSeen: 0, giftTypes: {}, note: '' };
+            existing.user = u.user;
+            existing.lastSeen = now;
+            existing.sessions = (existing.sessions || 0) + 1;
+            existing.totalChat = (existing.totalChat || 0) + (u.chat || 0);
+            existing.totalGifts = (existing.totalGifts || 0) + (u.gifts || 0);
+            existing.totalCoins = (existing.totalCoins || 0) + (u.coins || 0);
+            existing.lastMessage = u.lastMessage || existing.lastMessage || '';
+            if (!existing.firstSeen || now < existing.firstSeen) existing.firstSeen = now;
+            if (Array.isArray(u.giftTypes)) {
+                u.giftTypes.forEach(([name, qty]) => {
+                    existing.giftTypes[name] = (existing.giftTypes[name] || 0) + qty;
+                });
+            }
+            db[key] = existing;
+        });
+        saveTkaiUserDB(db);
+    }
+
+    function showTkaiUserGiftsModal(username) {
+        const clean = String(username || '').trim().replace(/^@+/, '');
+        if (!clean) return;
+        // Scan current session collectedMessages for this user's gifts
+        const userMsgs = (Array.isArray(collectedMessages) ? collectedMessages : [])
+            .filter((m) => String(m?.user || '').trim().toLowerCase() === clean.toLowerCase());
+        const giftMsgs = userMsgs.filter((m) => m.type === 'gift' || m.type === 'subscriber');
+        const giftMap = new Map();
+        let totalCoins = 0;
+        giftMsgs.forEach((m) => {
+            const name = String(m.giftName || m.text || 'Gift').trim().slice(0, 60);
+            const qty = Math.max(1, Number(m.quantity || 1));
+            const coins = Math.max(0, Number(m.coins || 0));
+            totalCoins += coins;
+            const row = giftMap.get(name) || { name, qty: 0, coins: 0, events: 0 };
+            row.qty += qty;
+            row.coins += coins;
+            row.events += 1;
+            giftMap.set(name, row);
+        });
+        const sorted = Array.from(giftMap.values()).sort((a, b) => b.coins - a.coins || b.qty - a.qty);
+        // Also get DB data
+        const db = getTkaiUserDB();
+        const dbEntry = db[clean.toLowerCase()];
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:16px';
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;min-width:340px;max-width:520px;max-height:80vh;overflow-y:auto;color:#e5e7eb;font-size:13px';
+        let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">`;
+        html += `<div><div style="font-size:16px;font-weight:700;color:#fb923c">🎁 Darovi: @${escHtml(clean)}</div>`;
+        html += `<div style="font-size:11px;color:var(--text3,#6b7280);margin-top:2px">${formatNum(giftMsgs.length)} gift event(a) • ${formatNum(totalCoins)} 🪙 ova sesija</div></div>`;
+        html += `<button id="tkaiGiftModalClose" style="background:transparent;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:4px 8px">✕</button></div>`;
+        if (sorted.length) {
+            html += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
+            html += `<thead><tr style="color:#9ca3af;border-bottom:1px solid rgba(255,255,255,.08)"><th style="text-align:left;padding:4px 6px">Gift</th><th style="text-align:right;padding:4px 6px">Qty</th><th style="text-align:right;padding:4px 6px">🪙</th><th style="text-align:right;padding:4px 6px">Puta</th></tr></thead><tbody>`;
+            sorted.forEach((row, i) => {
+                html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04)"><td style="padding:4px 6px;color:#fcd34d">#${i + 1} ${escHtml(row.name)}</td><td style="text-align:right;padding:4px 6px">${formatNum(row.qty)}</td><td style="text-align:right;padding:4px 6px;color:#fb923c">${formatNum(row.coins)}</td><td style="text-align:right;padding:4px 6px">${formatNum(row.events)}</td></tr>`;
+            });
+            html += `</tbody></table>`;
+        } else {
+            html += `<div style="color:#6b7280;padding:12px 0">Nema gift podataka za ovog korisnika u ovoj sesiji.</div>`;
+        }
+        if (dbEntry) {
+            html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)">`;
+            html += `<div style="font-size:11px;font-weight:600;color:#a3e635;margin-bottom:6px">📊 Baza (sve sesije)</div>`;
+            html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#9ca3af">`;
+            html += `<div>Chat poruke: <b style="color:#e5e7eb">${formatNum(dbEntry.totalChat || 0)}</b></div>`;
+            html += `<div>Ukupno giftova: <b style="color:#fb923c">${formatNum(dbEntry.totalGifts || 0)}</b></div>`;
+            html += `<div>Ukupno 🪙: <b style="color:#fcd34d">${formatNum(dbEntry.totalCoins || 0)}</b></div>`;
+            html += `<div>Sesija: <b style="color:#e5e7eb">${formatNum(dbEntry.sessions || 0)}</b></div>`;
+            if (dbEntry.firstSeen) html += `<div style="grid-column:1/-1">Prva pojava: ${new Date(dbEntry.firstSeen).toLocaleDateString('hr-HR')}</div>`;
+            html += `</div>`;
+            if (dbEntry.note) html += `<div style="margin-top:6px;color:#a3e635;font-size:11px">📝 ${escHtml(dbEntry.note)}</div>`;
+            html += `</div>`;
+        }
+        html += `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">`;
+        html += `<button id="tkaiGiftModalOpenProfile" style="background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#34d399;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer">🔗 Otvori profil</button>`;
+        html += `<button id="tkaiGiftModalCopyUser" style="background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.4);color:#818cf8;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer">📋 Kopiraj @</button>`;
+        html += `</div>`;
+        card.innerHTML = html;
+        modal.appendChild(card);
+        document.body.appendChild(modal);
+        card.querySelector('#tkaiGiftModalClose')?.addEventListener('click', () => modal.remove());
+        card.querySelector('#tkaiGiftModalOpenProfile')?.addEventListener('click', () => {
+            createTab('https://www.tiktok.com/@' + encodeURIComponent(clean), '@' + clean, true);
+            modal.remove();
+        });
+        card.querySelector('#tkaiGiftModalCopyUser')?.addEventListener('click', () => {
+            navigator.clipboard.writeText('@' + clean).then(() => showToast('📋 Kopirano @' + clean)).catch(() => { });
+        });
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+    }
+
+    function showTkaiUserDBModal(username) {
+        const db = getTkaiUserDB();
+        const allUsers = Object.values(db).sort((a, b) => (b.totalCoins || 0) - (a.totalCoins || 0) || (b.totalChat || 0) - (a.totalChat || 0));
+        const targetUser = username ? String(username).trim().replace(/^@+/, '') : null;
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;width:min(600px,96vw);max-height:85vh;overflow-y:auto;color:#e5e7eb;font-size:13px';
+        const renderUser = (u) => {
+            const topGifts = Object.entries(u.giftTypes || {}).sort((a, b) => b[1] - a[1]).slice(0, 4);
+            let html = `<div style="padding:12px;background:rgba(255,255,255,.04);border-radius:8px;margin-bottom:8px">`;
+            html += `<div style="display:flex;justify-content:space-between;align-items:flex-start">`;
+            html += `<div><span style="color:${getUserColor(u.user)};font-weight:600;font-size:14px">@${escHtml(u.user)}</span>`;
+            if (u.lastMessage) html += `<div style="font-size:11px;color:#9ca3af;margin-top:2px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(u.lastMessage)}</div>`;
+            html += `</div>`;
+            html += `<div style="display:flex;gap:6px;flex-shrink:0">`;
+            html += `<button data-open-profile="${escHtml(u.user)}" style="background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#34d399;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">🔗</button>`;
+            html += `</div></div>`;
+            html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;font-size:11px;color:#9ca3af">`;
+            html += `<div>Chat: <b style="color:#e5e7eb">${formatNum(u.totalChat || 0)}</b></div>`;
+            html += `<div>Giftovi: <b style="color:#fb923c">${formatNum(u.totalGifts || 0)}</b></div>`;
+            html += `<div>🪙: <b style="color:#fcd34d">${formatNum(u.totalCoins || 0)}</b></div>`;
+            html += `<div>Sesija: <b style="color:#e5e7eb">${formatNum(u.sessions || 0)}</b></div>`;
+            html += `</div>`;
+            if (topGifts.length) {
+                html += `<div style="font-size:10px;color:#6b7280;margin-top:4px">Giftovi: ${topGifts.map(([n, q]) => `${escHtml(n)} x${q}`).join(' • ')}</div>`;
+            }
+            if (u.firstSeen) html += `<div style="font-size:10px;color:#6b7280;margin-top:2px">Prva pojava: ${new Date(u.firstSeen).toLocaleDateString('hr-HR')} • Zadnja: ${new Date(u.lastSeen || u.firstSeen).toLocaleDateString('hr-HR')}</div>`;
+            // Note field
+            html += `<div style="margin-top:6px;display:flex;gap:6px;align-items:center">`;
+            html += `<input data-note-user="${escHtml(u.user)}" type="text" value="${escHtml(u.note || '')}" placeholder="📝 Bilješka..." style="flex:1;background:#1f2937;border:1px solid rgba(255,255,255,.1);border-radius:5px;padding:4px 8px;color:#e5e7eb;font-size:10px">`;
+            html += `<button data-save-note="${escHtml(u.user)}" style="background:rgba(102,126,234,.2);border:1px solid rgba(102,126,234,.4);color:#818cf8;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">💾</button>`;
+            html += `</div>`;
+            html += `</div>`;
+            return html;
+        };
+        const focusUser = targetUser ? allUsers.find((u) => String(u.user || '').toLowerCase() === targetUser.toLowerCase()) : null;
+        let bodyHtml = '';
+        if (focusUser) {
+            bodyHtml = renderUser(focusUser);
+            const others = allUsers.filter((u) => String(u.user || '').toLowerCase() !== targetUser.toLowerCase());
+            if (others.length) {
+                bodyHtml += `<div style="margin:12px 0 8px;font-size:11px;color:#6b7280;font-weight:600">── Ostali korisnici (${formatNum(others.length)}) ──</div>`;
+                others.forEach((u) => { bodyHtml += renderUser(u); });
+            }
+        } else {
+            if (!allUsers.length) {
+                bodyHtml = '<div style="color:#6b7280;padding:16px 0;text-align:center">Baza korisnika je prazna. Podaci se prikupljaju automatski za svaku sesiju.</div>';
+            } else {
+                allUsers.forEach((u) => { bodyHtml += renderUser(u); });
+            }
+        }
+        card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                <div>
+                    <div style="font-size:16px;font-weight:700;color:#a3e635">👥 Baza korisnika</div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:2px">${formatNum(allUsers.length)} korisnika ukupno</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input id="tkaiUserDBSearch" type="text" placeholder="🔍 Pretraži..." style="background:#1f2937;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:5px 10px;color:#e5e7eb;font-size:12px;width:160px">
+                    <button id="tkaiUserDBClose" style="background:transparent;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:4px 8px">✕</button>
+                </div>
+            </div>
+            <div id="tkaiUserDBList">${bodyHtml}</div>`;
+        modal.appendChild(card);
+        document.body.appendChild(modal);
+        card.querySelector('#tkaiUserDBClose')?.addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+        // Search
+        card.querySelector('#tkaiUserDBSearch')?.addEventListener('input', (ev) => {
+            const q = String(ev.target.value || '').trim().toLowerCase();
+            const listEl = card.querySelector('#tkaiUserDBList');
+            if (!listEl) return;
+            const filtered = q ? allUsers.filter((u) => String(u.user || '').toLowerCase().includes(q)) : allUsers;
+            listEl.innerHTML = filtered.length ? filtered.map(renderUser).join('') : '<div style="color:#6b7280;padding:8px">Nema rezultata.</div>';
+            bindUserDBActions(listEl);
+        });
+        // Profile open buttons & note save
+        function bindUserDBActions(container) {
+            container.querySelectorAll('[data-open-profile]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const user = btn.dataset.openProfile;
+                    createTab('https://www.tiktok.com/@' + encodeURIComponent(user), '@' + user, true);
+                    modal.remove();
+                });
+            });
+            container.querySelectorAll('[data-save-note]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const user = btn.dataset.saveNote;
+                    const input = container.querySelector(`[data-note-user="${CSS.escape(user)}"]`);
+                    if (!input) return;
+                    const db2 = getTkaiUserDB();
+                    const key = String(user).toLowerCase();
+                    if (db2[key]) { db2[key].note = String(input.value || '').slice(0, 200); saveTkaiUserDB(db2); }
+                    showToast('💾 Bilješka spremljena za @' + user);
+                });
+            });
+        }
+        bindUserDBActions(card.querySelector('#tkaiUserDBList'));
+    }
+
     function openTkaiMsgContextMenu(x, y, message) {
         const el = ensureTkaiMsgContextMenu();
         tkaiMsgCtxTarget = message || null;
@@ -6374,6 +6700,30 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
         }
 
+        // Join spike detection
+        {
+            const joinWindowMs = spikeCfg.giftWindowMs;
+            const joinMsgs = messages.filter((m) => normalizeTkaiMessageType(m) === 'join');
+            const nowJoins = joinMsgs.filter((m) => now - Number(m.ts || now) <= joinWindowMs).length;
+            const prevJoins = joinMsgs.filter((m) => { const ts = Number(m.ts || now); return now - ts > joinWindowMs && now - ts <= 2 * joinWindowMs; }).length;
+            const joinMin = spikeSensitivity === 'high' ? 3 : spikeSensitivity === 'low' ? 8 : 5;
+            if (nowJoins >= joinMin && (prevJoins === 0 || nowJoins >= prevJoins + 3)) {
+                spikes.push({ type: 'join', delta: nowJoins - prevJoins, ts: now });
+            }
+        }
+
+        // Share spike detection
+        {
+            const shareWindowMs = spikeCfg.giftWindowMs;
+            const shareMsgs = messages.filter((m) => normalizeTkaiMessageType(m) === 'share');
+            const nowShares = shareMsgs.filter((m) => now - Number(m.ts || now) <= shareWindowMs).length;
+            const prevShares = shareMsgs.filter((m) => { const ts = Number(m.ts || now); return now - ts > shareWindowMs && now - ts <= 2 * shareWindowMs; }).length;
+            const shareMin = spikeSensitivity === 'high' ? 2 : spikeSensitivity === 'low' ? 5 : 3;
+            if (nowShares >= shareMin && (prevShares === 0 || nowShares >= prevShares + 2)) {
+                spikes.push({ type: 'share', delta: nowShares - prevShares, ts: now });
+            }
+        }
+
         const isShareLikeMessage = (m) => {
             if (!m) return false;
             return normalizeTkaiMessageType(m) === 'share';
@@ -6427,12 +6777,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .slice(-120)
             .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
 
+        const _giftScanLimit = Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 400) || 400);
         const giftScanBase = (Array.isArray(source) ? source : messages)
             .filter((m) => {
                 const type = normalizeTkaiMessageType(m);
                 return type === 'gift' || type === 'subscriber';
             })
-            .slice(-400);
+            .slice(-_giftScanLimit);
         const giftTypeMap = new Map();
         const giftUserMap = new Map();
         let giftEventsTotal = 0;
@@ -6456,12 +6807,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             userRow.coins += coins;
             giftUserMap.set(user, userRow);
         });
+        const _pieTopN = Math.max(12, Math.min(1000, Number(DB.getSettings().tkaiPieTopN || 50) || 50));
         const giftDetails = {
             totalEvents: giftEventsTotal,
             totalCoins: giftCoinsTotal,
             uniqueGiftTypes: giftTypeMap.size,
-            topGiftTypes: Array.from(giftTypeMap.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events).slice(0, 12),
-            topGifters: Array.from(giftUserMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events).slice(0, 12)
+            topGiftTypes: Array.from(giftTypeMap.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events).slice(0, _pieTopN),
+            topGifters: Array.from(giftUserMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events).slice(0, _pieTopN)
         };
 
         const isJoinLikeMessage = (m) => {
@@ -6843,7 +7195,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '</div>' +
             '<div style="max-height:220px;overflow:auto">' +
             '<table style="width:100%;border-collapse:collapse;font-size:10px">' +
-            '<thead><tr style="color:var(--text3);text-align:left"><th style="padding:3px 4px">User</th><th style="padding:3px 4px">Total</th><th style="padding:3px 4px">Coins</th><th style="padding:3px 4px">Gifts</th><th style="padding:3px 4px">Likes</th><th style="padding:3px 4px">Top gifts</th><th style="padding:3px 4px">Last poruka</th></tr></thead>' +
+            '<thead><tr style="color:var(--text3);text-align:left"><th style="padding:3px 4px">#</th><th style="padding:3px 4px">User</th><th style="padding:3px 4px">Total</th><th style="padding:3px 4px">Coins</th><th style="padding:3px 4px">Gifts</th><th style="padding:3px 4px">Likes</th><th style="padding:3px 4px">Top gifts</th><th style="padding:3px 4px">First seen</th><th style="padding:3px 4px">Pojav.</th><th style="padding:3px 4px">Last poruka</th></tr></thead>' +
             '<tbody id="tkaiTopUsersRows"></tbody>' +
             '</table></div></div>';
         root.appendChild(usersRow);
@@ -6901,15 +7253,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const key = dashboardUserSort || 'total';
         rows.sort((a, b) => Number(b[key] || 0) - Number(a[key] || 0) || Number(b.total || 0) - Number(a.total || 0));
         body.innerHTML = '';
-        rows.slice(0, 180).forEach((u) => {
+        rows.slice(0, 180).forEach((u, rowIdx) => {
             const tr = document.createElement('tr');
             const topGiftStr = (u.giftTypes || []).slice(0, 3).map((entry) => `${entry[0]} x${entry[1]}`).join(', ');
-            tr.innerHTML = '<td style="padding:3px 4px;color:' + getUserColor(u.user) + '">@' + escHtml(u.user) + '</td>' +
+            const firstSeenStr = u.firstSeen ? new Date(u.firstSeen).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+            tr.innerHTML = '<td style="padding:3px 4px;color:var(--text3);font-weight:700">' + (rowIdx + 1) + '</td>' +
+                '<td style="padding:3px 4px;color:' + getUserColor(u.user) + '">@' + escHtml(u.user) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.total) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.coins) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.gifts) + '</td>' +
                 '<td style="padding:3px 4px">' + formatNum(u.likes) + '</td>' +
                 '<td style="padding:3px 4px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(topGiftStr || '-') + '">' + escHtml(topGiftStr || '-') + '</td>' +
+                '<td style="padding:3px 4px;white-space:nowrap" title="First seen">' + escHtml(firstSeenStr) + '</td>' +
+                '<td style="padding:3px 4px;text-align:right" title="Ukupno pojavljivanja u sesiji">' + formatNum(u.appearances || u.total) + '</td>' +
                 '<td style="padding:3px 4px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(u.lastMessage || '-') + '">' + escHtml(u.lastMessage || '-') + '</td>';
             tr.title = 'Klik za copy @' + u.user;
             tr.style.cursor = 'pointer';
@@ -6977,6 +7333,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         let filteredSpikes = insights.spikes;
         if (spikeFilter === 'viewers') filteredSpikes = insights.spikes.filter((s) => s.type === 'viewers');
         if (spikeFilter === 'gifts') filteredSpikes = insights.spikes.filter((s) => s.type === 'gifts');
+        if (spikeFilter === 'join') filteredSpikes = insights.spikes.filter((s) => s.type === 'join');
+        if (spikeFilter === 'share') filteredSpikes = insights.spikes.filter((s) => s.type === 'share');
+        if (spikeFilter === 'chat') filteredSpikes = insights.spikes.filter((s) => s.type === 'chat');
         if (filteredSpikes.length === 0) {
             const li = document.createElement('li');
             li.textContent = 'Nema spikeova.';
@@ -6989,6 +7348,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     li.textContent = `Viewer spike ${s.delta > 0 ? '+' : ''}${s.delta} @ ${time}`;
                 } else if (s.type === 'gifts') {
                     li.textContent = `Gift spike +${s.delta} @ ${time}`;
+                } else if (s.type === 'join') {
+                    li.textContent = `Join spike +${s.delta} @ ${time}`;
+                } else if (s.type === 'share') {
+                    li.textContent = `Share spike +${s.delta} @ ${time}`;
                 } else if (s.type === 'chat') {
                     li.textContent = `Chat spike ${s.delta > 0 ? '+' : ''}${s.delta} @ ${time}`;
                 } else {
@@ -7131,7 +7494,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 li.textContent = 'Nema gift statistike u trenutnom rasponu.';
                 giftStatsListEl.appendChild(li);
             } else {
-                topGiftTypes.slice(0, 6).forEach((row, idx) => {
+                const _displayTopN = Math.max(6, Math.min(1000, Number(DB.getSettings().tkaiPieTopN || 50) || 50));
+                topGiftTypes.slice(0, _displayTopN).forEach((row, idx) => {
                     const li = document.createElement('li');
                     li.innerHTML = `<span style="color:#fcd34d">#${idx + 1} ${escHtml(row.giftName || 'Gift')}</span> • ${formatNum(row.coins || 0)} 🪙 • qty ${formatNum(row.quantity || 0)} • evt ${formatNum(row.events || 0)}`;
                     giftStatsListEl.appendChild(li);
@@ -7140,9 +7504,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     const divider = document.createElement('li');
                     divider.style.marginTop = '4px';
                     divider.style.color = 'var(--text3)';
-                    divider.textContent = 'Top gifteri:';
+                    divider.textContent = `Top gifteri (${formatNum(topGifters.length)}):`;
                     giftStatsListEl.appendChild(divider);
-                    topGifters.slice(0, 4).forEach((row) => {
+                    topGifters.slice(0, _displayTopN).forEach((row) => {
                         const li = document.createElement('li');
                         li.innerHTML = `<span style="color:${getUserColor(row.user)}">@${escHtml(row.user || 'unknown')}</span> • ${formatNum(row.coins || 0)} 🪙 • evt ${formatNum(row.events || 0)}`;
                         giftStatsListEl.appendChild(li);
@@ -7199,6 +7563,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         syncById('tkaiSpikeAll', spikeFilter === 'all');
         syncById('tkaiSpikeViewers', spikeFilter === 'viewers');
         syncById('tkaiSpikeGifts', spikeFilter === 'gifts');
+        syncById('tkaiSpikeJoin', spikeFilter === 'join');
+        syncById('tkaiSpikeShare', spikeFilter === 'share');
+        syncById('tkaiSpikeChat', spikeFilter === 'chat');
     }
     function syncRecommendationsPopout(recommendations) {
         if (!recommendationsPopoutBodyEl) return;
@@ -7508,6 +7875,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     spikeAllBtn?.addEventListener('click', () => { spikeFilter = 'all'; updateSpikeFilterButtons(); updateInsightsUI(); });
     spikeViewersBtn?.addEventListener('click', () => { spikeFilter = 'viewers'; updateSpikeFilterButtons(); updateInsightsUI(); });
     spikeGiftsBtn?.addEventListener('click', () => { spikeFilter = 'gifts'; updateSpikeFilterButtons(); updateInsightsUI(); });
+    spikeJoinBtn?.addEventListener('click', () => { spikeFilter = 'join'; updateSpikeFilterButtons(); updateInsightsUI(); });
+    spikeShareBtn?.addEventListener('click', () => { spikeFilter = 'share'; updateSpikeFilterButtons(); updateInsightsUI(); });
+    spikeChatBtn?.addEventListener('click', () => { spikeFilter = 'chat'; updateSpikeFilterButtons(); updateInsightsUI(); });
 
     // ── Chat pop-out floating window ─────────────────────────────────────
     const expandChatBtn = document.getElementById('tkaiExpandChatBtn');
@@ -7779,8 +8149,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
                     return;
                 }
-                if (button.id === 'tkaiSpikeAll' || button.id === 'tkaiSpikeViewers' || button.id === 'tkaiSpikeGifts') {
-                    spikeFilter = button.id === 'tkaiSpikeViewers' ? 'viewers' : button.id === 'tkaiSpikeGifts' ? 'gifts' : 'all';
+                if (button.id === 'tkaiSpikeAll' || button.id === 'tkaiSpikeViewers' || button.id === 'tkaiSpikeGifts' || button.id === 'tkaiSpikeJoin' || button.id === 'tkaiSpikeShare' || button.id === 'tkaiSpikeChat') {
+                    spikeFilter = button.id === 'tkaiSpikeViewers' ? 'viewers' : button.id === 'tkaiSpikeGifts' ? 'gifts' : button.id === 'tkaiSpikeJoin' ? 'join' : button.id === 'tkaiSpikeShare' ? 'share' : button.id === 'tkaiSpikeChat' ? 'chat' : 'all';
                     updateSpikeFilterButtons();
                     updateInsightsUI();
                     syncLiveDashboardPopout();
@@ -8101,6 +8471,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const questionCountEl = document.getElementById('tkaiQuestionCount');
         if (questionCountEl) questionCountEl.textContent = formatNum(collectedQuestions.length);
         lastShadowbanUserStats = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
+        // Persist to user DB (throttled - update every ~20 renders to avoid localStorage spam)
+        if (!window._tkaiUserDBUpdateCounter) window._tkaiUserDBUpdateCounter = 0;
+        window._tkaiUserDBUpdateCounter++;
+        if (window._tkaiUserDBUpdateCounter % 20 === 1) {
+            updateTkaiUserDBFromStats(lastShadowbanUserStats);
+        }
         refreshShadowbanUserFilterOptions();
         renderShadowbanUserStats();
         renderUserSummary();
@@ -10370,6 +10746,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const on = s[settingKey] !== undefined ? s[settingKey] !== false && s[settingKey] !== 'false' : def;
             el.style.display = on ? '' : 'none';
         };
+        // Apply custom gift gallery header title
+        const giftHeaderTitle = document.getElementById('tkaiGiftGalleryHeaderTitle');
+        if (giftHeaderTitle) {
+            const customTitle = String(s.tkaiGiftGalleryTitle || '').trim();
+            giftHeaderTitle.textContent = customTitle || '🎁 Gift Galerija';
+        }
         vis('tkaiStatsStrip', 'tkaiShowStats');
         vis('tkaiInsights', 'tkaiShowInsights');
         vis('tkaiGiftGallery', 'tkaiShowGiftGallery');
@@ -10467,6 +10849,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         if (t.dataset.setting === 'tkaiAutosaveSeconds') {
             setTimeout(initTkaiAutosave, 10);
+        }
+        if (t.dataset.setting === 'tkaiGiftGalleryTitle') {
+            const el = document.getElementById('tkaiGiftGalleryHeaderTitle');
+            if (el) el.textContent = t.value.trim() || '🎁 Gift Galerija';
         }
     });
     applyTkaiFeatureToggles();
@@ -12292,13 +12678,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     function renderAppTab(type) {
         const c = document.getElementById('appContent'); if (!c) return;
         if (type === 'localstorage') {
-            const keys = Object.keys(localStorage);
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k != null) keys.push(k); }
             if (!keys.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No local storage data.</p>'; return; }
+            keys.sort();
             c.innerHTML = '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
                 keys.map(k => { let v = localStorage.getItem(k) || ''; if (v.length > 120) v = v.slice(0, 120) + '…'; return `<tr><td>${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`; }).join('') + '</tbody></table>';
         } else if (type === 'sessionstorage') {
-            const keys = Object.keys(sessionStorage);
-            if (!keys.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No session storage data.</p>'; return; }
+            const keys = [];
+            for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k != null) keys.push(k); }
+            if (!keys.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">Session storage je prazan.<br><small style="color:#444">EtherX koristi localStorage bridge (renderer-storage.json) za trajne podatke. Provjeri <strong>Local Storage</strong> tab.</small></p>'; return; }
             c.innerHTML = '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
                 keys.map(k => `<tr><td>${escHtml(k)}</td><td>${escHtml(sessionStorage.getItem(k) || '')}</td></tr>`).join('') + '</tbody></table>';
         } else if (type === 'cookies') {
@@ -13595,10 +13984,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
 
     // User Agent
-    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) EtherXBrowser/3.0.0 Chrome/138.0.7204.251 Electron/37.10.3 Safari/537.36';
+    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
     const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
     const UA_PRESETS = { 'default': ETHERX_DEFAULT_UA, 'Chrome 131 V8': CHROME_131_UA, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
     let activeUA = localStorage.getItem('ex_ua') || ETHERX_DEFAULT_UA;
+    // Persist default so it's always visible in storage inspector
+    if (!localStorage.getItem('ex_ua')) localStorage.setItem('ex_ua', activeUA);
     document.addEventListener('DOMContentLoaded', () => {
         const uaCurrent = document.getElementById('uaCurrent');
         if (uaCurrent) uaCurrent.textContent = activeUA;
@@ -15104,7 +15495,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     function showTikTokRegionScanResults(rows, region, options = {}) {
-        const old = document.getElementById('tkaiRegionScanModal');
+        const old = document.querySelector('#tkaiRegionScanModal');
         if (old) old.remove();
         const modal = document.createElement('div');
         modal.id = 'tkaiRegionScanModal';
@@ -19112,6 +19503,93 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 showToast(enabled ? '🔒 DNS over HTTPS enabled (restart may be needed)' : '🔓 DNS over HTTPS disabled');
             });
         }
+    })();
+
+    // ── Tor SOCKS5 proxy: toggle wiring ───────────────────────────────────────────────
+    (function () {
+        const torToggle = document.getElementById('settingTorEnabled');
+        const torHostEl = document.getElementById('settingTorHost');
+        const torPortEl = document.getElementById('settingTorPort');
+        const torAdvEl = document.getElementById('torAdvanced');
+        const torBadge = document.getElementById('torStatusBadge');
+
+        function applyTorStatus(enabled, error) {
+            if (!torBadge) return;
+            torBadge.style.display = '';
+            if (error) {
+                torBadge.style.background = 'rgba(239,68,68,.15)';
+                torBadge.style.borderColor = 'rgba(239,68,68,.35)';
+                torBadge.style.color = '#fca5a5';
+                torBadge.textContent = '❌ Tor proxy greška: ' + error;
+            } else if (enabled) {
+                torBadge.style.background = 'rgba(16,185,129,.15)';
+                torBadge.style.borderColor = 'rgba(16,185,129,.35)';
+                torBadge.style.color = '#6ee7b7';
+                torBadge.textContent = '✅ Promet se rutira kroz Tor (' + (torHostEl?.value || '127.0.0.1') + ':' + (torPortEl?.value || '9050') + ')';
+            } else {
+                torBadge.style.background = 'rgba(100,116,139,.1)';
+                torBadge.style.borderColor = 'rgba(100,116,139,.3)';
+                torBadge.style.color = 'var(--text3)';
+                torBadge.textContent = '⚪ Tor proxy isključen — direktna veza';
+            }
+        }
+
+        // Restore saved state on privacy tab open
+        document.querySelector('[data-stab="privacy"]')?.addEventListener('click', () => {
+            const s = DB.getSettings();
+            if (torToggle) torToggle.checked = !!s.torEnabled;
+            if (torHostEl) torHostEl.value = s.torHost || '127.0.0.1';
+            if (torPortEl) torPortEl.value = s.torPort || 9050;
+            if (torAdvEl) torAdvEl.style.display = s.torEnabled ? '' : 'none';
+            if (s.torEnabled) applyTorStatus(true);
+        });
+
+        if (!torToggle) return;
+
+        // Init from saved settings
+        const s0 = DB.getSettings();
+        torToggle.checked = !!s0.torEnabled;
+        if (torHostEl) torHostEl.value = s0.torHost || '127.0.0.1';
+        if (torPortEl) torPortEl.value = s0.torPort || 9050;
+        if (torAdvEl) torAdvEl.style.display = s0.torEnabled ? '' : 'none';
+
+        async function _applyTor(enabled) {
+            const host = torHostEl?.value.trim() || '127.0.0.1';
+            const port = parseInt(torPortEl?.value, 10) || 9050;
+            if (torBadge) { torBadge.style.display = ''; torBadge.textContent = '⏳ Primjena proxy postavki…'; }
+            let res = { ok: true };
+            try {
+                if (window.etherx?.settings?.applyTorProxy) {
+                    res = await window.etherx.settings.applyTorProxy(enabled, host, port);
+                } else if (window.electronAPI?.invoke) {
+                    res = await window.electronAPI.invoke('settings:applyTorProxy', enabled, host, port);
+                }
+            } catch (e) {
+                res = { ok: false, error: e.message };
+            }
+            DB.saveSetting('torEnabled', enabled);
+            DB.saveSetting('torHost', host);
+            DB.saveSetting('torPort', port);
+            applyTorStatus(enabled, res.ok ? null : res.error);
+            showToast(enabled ? '🧅 Tor aktivan — sav promet ide kroz Tor' : '⚪ Tor isključen');
+        }
+
+        torToggle.addEventListener('change', () => {
+            const enabled = torToggle.checked;
+            if (torAdvEl) torAdvEl.style.display = enabled ? '' : 'none';
+            _applyTor(enabled);
+        });
+
+        // Re-apply on host/port change while enabled
+        [torHostEl, torPortEl].forEach(el => {
+            if (!el) return;
+            el.addEventListener('change', () => {
+                if (torToggle.checked) _applyTor(true);
+            });
+        });
+
+        // Re-apply on startup if Tor was left enabled
+        if (s0.torEnabled) _applyTor(true);
     })();
 
     // ── Bookmark toolbar: auto-restore on load + settings toggle sync ─────────

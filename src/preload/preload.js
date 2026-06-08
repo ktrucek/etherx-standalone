@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('etherx', {
     get: () => ipcRenderer.invoke('db:getSettings'),
     save: (s) => ipcRenderer.invoke('db:saveSettings', s),
     applyDoH: (enabled) => ipcRenderer.invoke('settings:applyDoH', enabled),
+    applyTorProxy: (enabled, host, port) => ipcRenderer.invoke('settings:applyTorProxy', enabled, host, port),
   },
 
   // ── Network Monitoring ───────────────────────────────────────────────────────
