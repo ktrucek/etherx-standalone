@@ -267,7 +267,8 @@ After pushing to GitHub:
   - ZIP archive
 
 - 🍎 **macOS**
-  - .dmg installer (x64)
+  - .zip archive (x64)
+  - .zip archive (arm64 - M1/M2)
   - .dmg installer (arm64 - M1/M2)
 
 **Artifacts location:**

@@ -163,7 +163,8 @@ sync_github_main_before_deploy() {
 
 validate_etherx_download_links() {
   local page_url="https://etherx.io/browser.html"
-  local release_api="https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest"
+  local release_api="https://api.github.com/repos/ktrucek/etherx-standalone/releases/tags/v${NEW_VERSION}"
+  local release_api_fallback="https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest"
   local page_html=""
   local release_json=""
   local latest_tag=""
@@ -219,7 +220,11 @@ PY
 
   release_json="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: etherx-deploy-script' "$release_api" 2>/dev/null || true)"
   if [[ -z "$release_json" ]]; then
-    warn "Could not fetch latest GitHub release metadata — skipping expected-link comparison"
+    warn "Release metadata for v$NEW_VERSION not found yet — trying latest release metadata"
+    release_json="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: etherx-deploy-script' "$release_api_fallback" 2>/dev/null || true)"
+  fi
+  if [[ -z "$release_json" ]]; then
+    warn "Could not fetch GitHub release metadata — skipping expected-link comparison"
     return 0
   fi
 
@@ -256,8 +261,31 @@ PY
 
   if [[ $legacy_pattern_hits -gt 0 ]]; then
     warn "Detected $legacy_pattern_hits legacy filename pattern(s) on live page (e.g. .dmg, old .deb/.exe naming)."
-    warn "Current release naming is: -linux.AppImage, -linux.deb, -mac-arm64.zip, -mac-x64.zip, -win.exe, -win.zip"
+    warn "Current release naming is: -linux.AppImage, -linux.deb, -mac-arm64.dmg, -mac-arm64.zip, -mac-x64.zip, -win.exe, -win.zip"
   fi
+}
+
+print_release_urls_for_tag() {
+  local tag="$1"
+  local release_api="https://api.github.com/repos/ktrucek/etherx-standalone/releases/tags/${tag}"
+  local release_json=""
+  local -a asset_urls=()
+
+  release_json="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: etherx-deploy-script' "$release_api" 2>/dev/null || true)"
+  if [[ -z "$release_json" ]]; then
+    return 1
+  fi
+
+  mapfile -t asset_urls < <(printf '%s' "$release_json" | python3 -c "import sys, json; d=json.load(sys.stdin); [print(a.get('browser_download_url','')) for a in d.get('assets',[]) if a.get('browser_download_url')]" 2>/dev/null || true)
+  if [[ ${#asset_urls[@]} -eq 0 ]]; then
+    return 1
+  fi
+
+  echo -e "  📥 Download URLs (GitHub release assets):"
+  for url in "${asset_urls[@]}"; do
+    echo -e "     ${CYAN}${url}${NC}"
+  done
+  return 0
 }
 
 _load_env_file() {
@@ -652,13 +680,17 @@ echo -e "  🔖 Git tag:   ${CYAN}${TAG_NAME}${NC}"
 echo -e "  🐙 GitHub:    ${CYAN}https://github.com/ktrucek/etherx-standalone${NC}"
 echo -e "  🌐 EtherX.io: ${CYAN}https://etherx.io/browser.html${NC}"
 echo ""
-echo -e "  📥 Download URLs (after Actions build completes):"
-echo -e "     🍎 macOS arm64 ZIP: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-arm64.zip${NC}"
-echo -e "     🍎 macOS x64 ZIP:   ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-x64.zip${NC}"
-echo -e "     🪟 Windows EXE:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.exe${NC}"
-echo -e "     🪟 Windows ZIP:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.zip${NC}"
-echo -e "     🐧 Linux AppImage:  ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.AppImage${NC}"
-echo -e "     🐧 Linux DEB:       ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.deb${NC}"
+if ! print_release_urls_for_tag "v${NEW_VERSION}"; then
+  echo -e "  📥 Download URLs (predicted, čekaju da Actions dovrši build):"
+  echo -e "     🍎 macOS arm64 DMG: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-arm64.dmg${NC}"
+  echo -e "     🍎 macOS arm64 ZIP: ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-arm64.zip${NC}"
+  echo -e "     🍎 macOS x64 ZIP:   ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-mac-x64.zip${NC}"
+  echo -e "     🪟 Windows EXE:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.exe${NC}"
+  echo -e "     🪟 Windows ZIP:     ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-win.zip${NC}"
+  echo -e "     🐧 Linux AppImage:  ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.AppImage${NC}"
+  echo -e "     🐧 Linux DEB:       ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/download/v${NEW_VERSION}/EtherX.Browser-${NEW_VERSION}-linux.deb${NC}"
+fi
+echo -e "  🏷️ Ostale verzije:      ${CYAN}https://github.com/ktrucek/etherx-standalone/releases/tag/vX.Y.Z${NC}"
 echo ""
 if [[ "$NO_PUSH" == false ]]; then
   echo -e "  ${YELLOW}🚀 GitHub Actions će buildati Linux + Windows + macOS...${NC}"

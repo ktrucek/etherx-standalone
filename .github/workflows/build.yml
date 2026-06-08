@@ -206,6 +206,7 @@ jobs:
           retention-days: 7
           path: |
             dist/*.zip
+            dist/*.dmg
 
   # ─── GitHub Release ───────────────────────────────────────────────────────────
   release:
@@ -255,7 +256,8 @@ jobs:
           | 🐧 **Linux** | `.deb` | Ubuntu / Debian installer |
           | 🪟 **Windows** | `.exe` | Portable, no install needed |
           | 🪟 **Windows** | `.zip` | ZIP archive |
-          | 🍎 **macOS** | `.zip` | macOS archive |
+          | 🍎 **macOS** | `.zip` | x64 + arm64 archive |
+          | 🍎 **macOS** | `.dmg` | arm64 installer |
 
           ### ⚙️ Install Notes
 
@@ -272,7 +274,7 @@ jobs:
 
           **Windows:** Double-click `.exe` — no installation required.
 
-          **macOS:** Open `.dmg`, drag to Applications. If macOS says the app is "damaged and can't be opened. You should move it to the Bin", open Terminal and run this command to remove the quarantine flag:
+          **macOS:** Use the `.dmg` (arm64) or unzip the `.zip` build, then move the app to Applications. If macOS says the app is "damaged and can't be opened. You should move it to the Bin", open Terminal and run this command to remove the quarantine flag:
           ```bash
           xattr -cr "/Applications/EtherX Browser.app"
           ```
