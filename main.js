@@ -802,23 +802,82 @@ function setupDownloadTracking(ses) {
   });
 }
 
-function resolvePythonCandidates() {
+function resolveProjectRoots() {
+  const roots = [];
+  const pushIf = (value) => {
+    if (!value || roots.includes(value)) return;
+    if (!fs.existsSync(value)) return;
+    try {
+      if (!fs.statSync(value).isDirectory()) return;
+    } catch (_) {
+      return;
+    }
+    roots.push(value);
+  };
+
+  pushIf(process.cwd());
+  pushIf(app.getAppPath());
+  pushIf(__dirname);
+  pushIf(path.resolve(__dirname, ".."));
+  pushIf(path.resolve(__dirname, "..", ".."));
+
+  if (process.resourcesPath) {
+    pushIf(process.resourcesPath);
+    pushIf(path.join(process.resourcesPath, "app"));
+    pushIf(path.join(process.resourcesPath, "app.asar.unpacked"));
+  }
+
+  // Nested mirror layout support (repo + etherx-standalone subfolder)
+  const extras = roots.slice();
+  extras.forEach((root) => {
+    pushIf(path.join(root, "etherx-standalone"));
+    pushIf(path.join(root, "standalone-browser"));
+  });
+
+  return roots;
+}
+
+function resolveRequirementsPath() {
+  const roots = resolveProjectRoots();
   const candidates = [];
-  const cwd = process.cwd();
-  const appPath = app.getAppPath();
   const pushIf = (value) => {
     if (!value || candidates.includes(value)) return;
     candidates.push(value);
   };
 
+  roots.forEach((root) => {
+    pushIf(path.join(root, "requirements.txt"));
+    pushIf(path.join(root, "src", "main", "requirements.txt"));
+  });
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return { path: candidate, tried: candidates };
+  }
+  return { path: "", tried: candidates };
+}
+
+function resolvePythonCandidates(preferredRoot = "") {
+  const candidates = [];
+  const pushIf = (value) => {
+    if (!value || candidates.includes(value)) return;
+    candidates.push(value);
+  };
+
+  const roots = resolveProjectRoots();
+  if (preferredRoot && fs.existsSync(preferredRoot)) {
+    roots.unshift(preferredRoot);
+  }
+
   if (process.platform === "win32") {
-    pushIf(path.join(cwd, ".venv", "Scripts", "python.exe"));
-    pushIf(path.join(appPath, ".venv", "Scripts", "python.exe"));
+    roots.forEach((root) => {
+      pushIf(path.join(root, ".venv", "Scripts", "python.exe"));
+    });
     pushIf("python");
     pushIf("py");
   } else {
-    pushIf(path.join(cwd, ".venv", "bin", "python"));
-    pushIf(path.join(appPath, ".venv", "bin", "python"));
+    roots.forEach((root) => {
+      pushIf(path.join(root, ".venv", "bin", "python"));
+    });
     pushIf("python3");
     pushIf("python");
   }
@@ -2119,20 +2178,12 @@ function setupIPC() {
     };
 
     try {
-      const requirementsCandidates = [
-        path.join(process.cwd(), "requirements.txt"),
-        path.join(app.getAppPath(), "requirements.txt"),
-      ];
-      const requirementsPath = requirementsCandidates.find((p) => fs.existsSync(p));
-      if (!requirementsPath) {
-        return {
-          ok: false,
-          error: "requirements.txt nije pronađen.",
-          tried: requirementsCandidates,
-        };
-      }
-
-      const projectRoot = path.dirname(requirementsPath);
+      const reqLookup = resolveRequirementsPath();
+      const requirementsPath = reqLookup.path;
+      const fallbackPackages = ["torch", "transformers", "gliclass"];
+      const projectRoot = requirementsPath
+        ? path.dirname(requirementsPath)
+        : (resolveProjectRoots()[0] || process.cwd());
       const venvDir = path.join(projectRoot, ".venv");
       const venvPython =
         process.platform === "win32"
@@ -2142,7 +2193,7 @@ function setupIPC() {
       let createdVenv = false;
       let venvCreateError = "";
       if (!fs.existsSync(venvPython)) {
-        const bootCandidates = resolvePythonCandidates();
+        const bootCandidates = resolvePythonCandidates(projectRoot);
         for (const py of bootCandidates) {
           if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
           const mk = await execFileText(py, ["-m", "venv", venvDir], 300000, { cwd: projectRoot });
@@ -2174,7 +2225,9 @@ function setupIPC() {
 
       const install = await execFileText(
         venvPython,
-        ["-m", "pip", "install", "-r", requirementsPath],
+        requirementsPath
+          ? ["-m", "pip", "install", "-r", requirementsPath]
+          : ["-m", "pip", "install", ...fallbackPackages],
         900000,
         { cwd: projectRoot },
       );
@@ -2184,22 +2237,26 @@ function setupIPC() {
           ok: false,
           error: trimOut(install.stderr || install.stdout || install.error?.message || "pip install nije uspio"),
           createdVenv,
-          requirementsPath,
+          requirementsPath: requirementsPath || "",
+          requirementsFallback: !requirementsPath,
           python: venvPython,
           pipUpgrade: pipUpgrade.ok,
           stdout: trimOut(install.stdout),
           stderr: trimOut(install.stderr),
+          tried: reqLookup.tried,
         };
       }
 
       return {
         ok: true,
         createdVenv,
-        requirementsPath,
+        requirementsPath: requirementsPath || "",
+        requirementsFallback: !requirementsPath,
         python: venvPython,
         pipUpgrade: pipUpgrade.ok,
         stdout: trimOut(install.stdout),
         stderr: trimOut(install.stderr),
+        tried: reqLookup.tried,
       };
     } catch (err) {
       return { ok: false, error: String(err?.message || err) };
@@ -2900,7 +2957,8 @@ function setupIPC() {
       if (!input.items.length) return { ok: true, results: [] };
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
-      const candidates = resolvePythonCandidates();
+      const prefReq = resolveRequirementsPath().path;
+      const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
       logPythonBridgeDebug("qwen3guard", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
@@ -2951,7 +3009,8 @@ function setupIPC() {
       if (!input.items.length) return { ok: true, results: [] };
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
-      const candidates = resolvePythonCandidates();
+      const prefReq = resolveRequirementsPath().path;
+      const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
       logPythonBridgeDebug("opir", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
@@ -3004,7 +3063,8 @@ function setupIPC() {
       if (!input.items.length) return { ok: true, results: [] };
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
-      const candidates = resolvePythonCandidates();
+      const prefReq = resolveRequirementsPath().path;
+      const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
       logPythonBridgeDebug("nllb", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
