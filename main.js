@@ -942,6 +942,99 @@ function materializePythonScriptForExec(scriptPath, fileName) {
   }
 }
 
+function trimPythonInstallOutput(value, maxLen = 12000) {
+  const text = String(value || "").trim();
+  if (text.length <= maxLen) return text;
+  return text.slice(-maxLen);
+}
+
+async function installPythonBridgeDeps() {
+  try {
+    const reqLookup = resolveRequirementsPath();
+    const requirementsPath = reqLookup.path;
+    const fallbackPackages = ["torch", "transformers", "gliclass"];
+    const projectRoot = requirementsPath
+      ? path.dirname(requirementsPath)
+      : (resolveProjectRoots()[0] || process.cwd());
+    const venvDir = path.join(projectRoot, ".venv");
+    const venvPython =
+      process.platform === "win32"
+        ? path.join(venvDir, "Scripts", "python.exe")
+        : path.join(venvDir, "bin", "python");
+
+    let createdVenv = false;
+    let venvCreateError = "";
+    if (!fs.existsSync(venvPython)) {
+      const bootCandidates = resolvePythonCandidates(projectRoot);
+      for (const py of bootCandidates) {
+        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+        const mk = await execFileText(py, ["-m", "venv", venvDir], 300000, { cwd: projectRoot });
+        if (mk.ok) {
+          createdVenv = true;
+          venvCreateError = "";
+          break;
+        }
+        if (mk.error?.code === "ENOENT") continue;
+        venvCreateError = trimPythonInstallOutput(mk.stderr || mk.stdout || mk.error?.message || "Neuspješno kreiranje .venv");
+      }
+    }
+
+    if (!fs.existsSync(venvPython)) {
+      return {
+        ok: false,
+        error: venvCreateError || "Ne mogu pronaći ili kreirati Python virtual environment (.venv).",
+        requirementsPath,
+        venvDir,
+      };
+    }
+
+    const pipUpgrade = await execFileText(
+      venvPython,
+      ["-m", "pip", "install", "--upgrade", "pip"],
+      420000,
+      { cwd: projectRoot },
+    );
+
+    const install = await execFileText(
+      venvPython,
+      requirementsPath
+        ? ["-m", "pip", "install", "-r", requirementsPath]
+        : ["-m", "pip", "install", ...fallbackPackages],
+      900000,
+      { cwd: projectRoot },
+    );
+
+    if (!install.ok) {
+      return {
+        ok: false,
+        error: trimPythonInstallOutput(install.stderr || install.stdout || install.error?.message || "pip install nije uspio"),
+        createdVenv,
+        requirementsPath: requirementsPath || "",
+        requirementsFallback: !requirementsPath,
+        python: venvPython,
+        pipUpgrade: pipUpgrade.ok,
+        stdout: trimPythonInstallOutput(install.stdout),
+        stderr: trimPythonInstallOutput(install.stderr),
+        tried: reqLookup.tried,
+      };
+    }
+
+    return {
+      ok: true,
+      createdVenv,
+      requirementsPath: requirementsPath || "",
+      requirementsFallback: !requirementsPath,
+      python: venvPython,
+      pipUpgrade: pipUpgrade.ok,
+      stdout: trimPythonInstallOutput(install.stdout),
+      stderr: trimPythonInstallOutput(install.stderr),
+      tried: reqLookup.tried,
+    };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 function logPythonBridgeDebug(scope, message, extra = undefined) {
   try {
     if (extra === undefined) {
@@ -2188,96 +2281,7 @@ function setupIPC() {
   });
 
   ipcMain.handle("ai:installPythonDeps", async () => {
-    const trimOut = (value, maxLen = 12000) => {
-      const text = String(value || "").trim();
-      if (text.length <= maxLen) return text;
-      return text.slice(-maxLen);
-    };
-
-    try {
-      const reqLookup = resolveRequirementsPath();
-      const requirementsPath = reqLookup.path;
-      const fallbackPackages = ["torch", "transformers", "gliclass"];
-      const projectRoot = requirementsPath
-        ? path.dirname(requirementsPath)
-        : (resolveProjectRoots()[0] || process.cwd());
-      const venvDir = path.join(projectRoot, ".venv");
-      const venvPython =
-        process.platform === "win32"
-          ? path.join(venvDir, "Scripts", "python.exe")
-          : path.join(venvDir, "bin", "python");
-
-      let createdVenv = false;
-      let venvCreateError = "";
-      if (!fs.existsSync(venvPython)) {
-        const bootCandidates = resolvePythonCandidates(projectRoot);
-        for (const py of bootCandidates) {
-          if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
-          const mk = await execFileText(py, ["-m", "venv", venvDir], 300000, { cwd: projectRoot });
-          if (mk.ok) {
-            createdVenv = true;
-            venvCreateError = "";
-            break;
-          }
-          if (mk.error?.code === "ENOENT") continue;
-          venvCreateError = trimOut(mk.stderr || mk.stdout || mk.error?.message || "Neuspješno kreiranje .venv");
-        }
-      }
-
-      if (!fs.existsSync(venvPython)) {
-        return {
-          ok: false,
-          error: venvCreateError || "Ne mogu pronaći ili kreirati Python virtual environment (.venv).",
-          requirementsPath,
-          venvDir,
-        };
-      }
-
-      const pipUpgrade = await execFileText(
-        venvPython,
-        ["-m", "pip", "install", "--upgrade", "pip"],
-        420000,
-        { cwd: projectRoot },
-      );
-
-      const install = await execFileText(
-        venvPython,
-        requirementsPath
-          ? ["-m", "pip", "install", "-r", requirementsPath]
-          : ["-m", "pip", "install", ...fallbackPackages],
-        900000,
-        { cwd: projectRoot },
-      );
-
-      if (!install.ok) {
-        return {
-          ok: false,
-          error: trimOut(install.stderr || install.stdout || install.error?.message || "pip install nije uspio"),
-          createdVenv,
-          requirementsPath: requirementsPath || "",
-          requirementsFallback: !requirementsPath,
-          python: venvPython,
-          pipUpgrade: pipUpgrade.ok,
-          stdout: trimOut(install.stdout),
-          stderr: trimOut(install.stderr),
-          tried: reqLookup.tried,
-        };
-      }
-
-      return {
-        ok: true,
-        createdVenv,
-        requirementsPath: requirementsPath || "",
-        requirementsFallback: !requirementsPath,
-        python: venvPython,
-        pipUpgrade: pipUpgrade.ok,
-        stdout: trimOut(install.stdout),
-        stderr: trimOut(install.stderr),
-        tried: reqLookup.tried,
-      };
-    } catch (err) {
-      return { ok: false, error: String(err?.message || err) };
-    }
+    return installPythonBridgeDeps();
   });
 
   // ── Ad Blocker ─────────────────────────────────────────────────────────────
@@ -2976,30 +2980,50 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const prefReq = resolveRequirementsPath().path;
-      const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
-      logPythonBridgeDebug("qwen3guard", "Python candidates", candidates);
-      let lastErr = "Python runtime not found";
-      let hadRuntimeError = false;
+      const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
+      const tryRunScan = async () => {
+        const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
+        logPythonBridgeDebug("qwen3guard", "Python candidates", candidates);
+        let lastErr = "Python runtime not found";
+        let hadRuntimeError = false;
 
-      for (const py of candidates) {
-        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
-        logPythonBridgeDebug("qwen3guard", "Trying python runtime", py);
-        const run = await execFileJson(py, [scriptPath, encoded], 300000);
-        if (!run.ok) {
-          if (run.error?.code === "ENOENT") {
-            if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
+        for (const py of candidates) {
+          if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+          logPythonBridgeDebug("qwen3guard", "Trying python runtime", py);
+          const run = await execFileJson(py, [scriptPath, encoded], 300000);
+          if (!run.ok) {
+            if (run.error?.code === "ENOENT") {
+              if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
+              continue;
+            }
+            hadRuntimeError = true;
+            lastErr = String(run.stderr || run.stdout || run.error?.message || "Qwen3Guard failed").trim();
             continue;
           }
-          hadRuntimeError = true;
-          lastErr = String(run.stderr || run.stdout || run.error?.message || "Qwen3Guard failed").trim();
-          continue;
+          const out = run.data || {};
+          if (out.ok) {
+            logPythonBridgeDebug("qwen3guard", "Scan finished successfully via", py);
+            return { ok: true, out, lastErr: "" };
+          }
+          lastErr = String(out.error || "Qwen3Guard scanner returned error").trim();
         }
-        const out = run.data || {};
-        if (out.ok) {
-          logPythonBridgeDebug("qwen3guard", "Scan finished successfully via", py);
-          return out;
+        return { ok: false, out: null, lastErr };
+      };
+
+      let scan = await tryRunScan();
+      if (scan.ok && scan.out) return scan.out;
+      let lastErr = String(scan.lastErr || "Qwen3Guard execution failed").trim();
+
+      if (missingDepRe.test(lastErr)) {
+        logPythonBridgeDebug("qwen3guard", "Missing python module detected, attempting dependency install");
+        const installRes = await installPythonBridgeDeps();
+        if (installRes?.ok) {
+          scan = await tryRunScan();
+          if (scan.ok && scan.out) return scan.out;
+          lastErr = String(scan.lastErr || lastErr).trim();
+        } else {
+          lastErr = `${lastErr} | Python deps install failed: ${String(installRes?.error || "unknown")}`;
         }
-        lastErr = String(out.error || "Qwen3Guard scanner returned error").trim();
       }
 
       logPythonBridgeDebug("qwen3guard", "Scan failed", lastErr);
