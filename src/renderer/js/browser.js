@@ -5139,6 +5139,52 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return '';
         }
     };
+    function normalizeTikTokProfileHandle(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const fromUrl = parseTikTokOwnerFromUrl(raw);
+        const base = String(fromUrl || raw).trim().replace(/^@+/, '');
+        if (!base) return '';
+        const strict = base.match(/^([a-z0-9._]{2,40})$/i);
+        if (strict && strict[1]) return strict[1].toLowerCase();
+        const fromMention = base.match(/@([a-z0-9._]{2,40})/i);
+        if (fromMention && fromMention[1]) return fromMention[1].toLowerCase();
+        const fallback = base
+            .toLowerCase()
+            .replace(/[^a-z0-9._\s-]+/g, ' ')
+            .trim()
+            .replace(/[\s-]+/g, '.')
+            .replace(/\.{2,}/g, '.')
+            .replace(/^\.+|\.+$/g, '');
+        return /^[a-z0-9._]{2,40}$/.test(fallback) ? fallback : '';
+    }
+    function resolveTikTokProfileHandle(user, message = null) {
+        const direct = normalizeTikTokProfileHandle(
+            message?.userHandle
+            || message?.profileHandle
+            || user
+            || ''
+        );
+        if (direct) return direct;
+        const targetUser = String(user || '').trim().toLowerCase();
+        if (!targetUser) return '';
+        for (let i = collectedMessages.length - 1; i >= 0; i -= 1) {
+            const row = collectedMessages[i];
+            if (!row) continue;
+            if (String(row.user || '').trim().toLowerCase() !== targetUser) continue;
+            const handle = normalizeTikTokProfileHandle(row.userHandle || row.profileHandle || '');
+            if (handle) return handle;
+        }
+        return normalizeTikTokProfileHandle(user);
+    }
+    function openTikTokProfileTab(user, message = null) {
+        const handle = resolveTikTokProfileHandle(user, message);
+        if (!handle) {
+            showToast('⚠️ TikTok handle nije pronađen');
+            return;
+        }
+        createTab('https://www.tiktok.com/@' + encodeURIComponent(handle), '@' + handle, true);
+    }
     function updateTkaiStreamOwner(owner, sourceUrl) {
         if (!streamOwnerEl) return;
         const fromOwner = String(owner || '').trim().replace(/^@+/, '');
@@ -5369,13 +5415,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         base.forEach((m) => {
             const user = String(m?.user || '').trim();
             if (!user) return;
-            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, likes: 0, lastTs: 0, firstSeen: Number(m.ts || 0), coins: 0, texts: new Map(), giftTypes: new Map(), lastMessage: '', appearances: [] });
+            if (!map.has(user)) map.set(user, { user, total: 0, chat: 0, gifts: 0, joins: 0, likes: 0, shares: 0, lastTs: 0, firstSeen: Number(m.ts || 0), coins: 0, texts: new Map(), giftTypes: new Map(), lastMessage: '', appearances: [] });
             const row = map.get(user);
             const mTs = Number(m.ts || 0);
             if (mTs && (row.firstSeen === 0 || mTs < row.firstSeen)) row.firstSeen = mTs;
             if (mTs) row.appearances.push(mTs);
             row.total += 1;
-            if (m.type === 'gift' || m.type === 'subscriber') {
+            const type = normalizeTkaiMessageType(m);
+            if (type === 'gift' || type === 'subscriber') {
                 const meta = resolveGiftMetaFromMessage(m);
                 const quantity = Math.max(1, Number(m.quantity || meta?.quantity || 1));
                 const giftName = String(m.giftName || '').trim() || String(meta?.giftName || '').trim() || String(m.text || '').trim() || 'gift';
@@ -5384,8 +5431,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 row.coins += coins;
                 row.giftTypes.set(giftName, (row.giftTypes.get(giftName) || 0) + quantity);
             }
-            else if (m.type === 'join') row.joins += 1;
-            else if (m.type === 'like') row.likes += Math.max(1, Number(m.quantity || 1));
+            else if (type === 'join') row.joins += 1;
+            else if (type === 'like') row.likes += Math.max(1, Number(m.quantity || 1));
+            else if (type === 'share') row.shares += 1;
             else row.chat += 1;
             const rawText = String(m.text || '').trim();
             const txt = rawText.toLowerCase();
@@ -5403,6 +5451,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 gifts: r.gifts,
                 joins: r.joins,
                 likes: r.likes,
+                shares: r.shares,
                 lastTs: r.lastTs,
                 firstSeen: r.firstSeen,
                 appearances: r.appearances.length,
@@ -5627,7 +5676,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const user = String(m?.user || '').trim().replace(/^@+/, '');
             closeTkaiMsgContextMenu();
             if (!user) { showToast('⚠️ Nema korisnika'); return; }
-            createTab('https://www.tiktok.com/@' + encodeURIComponent(user), '@' + user, true);
+            openTikTokProfileTab(user, m);
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="region-scan"]')?.addEventListener('click', () => {
@@ -5799,7 +5848,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         document.body.appendChild(modal);
         card.querySelector('#tkaiMsgModalClose')?.addEventListener('click', () => modal.remove());
         card.querySelector('#tkaiMsgModalProfile')?.addEventListener('click', () => {
-            createTab('https://www.tiktok.com/@' + encodeURIComponent(clean), '@' + clean, true);
+            openTikTokProfileTab(clean);
             modal.remove();
         });
         card.querySelector('#tkaiMsgModalGifts')?.addEventListener('click', () => {
@@ -5914,7 +5963,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             showTkaiUserMessagesModal(clean);
         });
         card.querySelector('#tkaiGiftModalOpenProfile')?.addEventListener('click', () => {
-            createTab('https://www.tiktok.com/@' + encodeURIComponent(clean), '@' + clean, true);
+            openTikTokProfileTab(clean);
             modal.remove();
         });
         card.querySelector('#tkaiGiftModalCopyUser')?.addEventListener('click', () => {
@@ -6017,7 +6066,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             container.querySelectorAll('[data-open-profile]').forEach((btn) => {
                 btn.addEventListener('click', () => {
                     const user = btn.dataset.openProfile;
-                    createTab('https://www.tiktok.com/@' + encodeURIComponent(user), '@' + user, true);
+                    openTikTokProfileTab(user);
                     modal.remove();
                 });
             });
@@ -9843,7 +9892,18 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             + '[class*="comment-text"],'
             + 'p, span'
           ));
-          const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
+                    const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
+                    const extractHandleFromHref = (hrefValue) => {
+                        const href = String(hrefValue || '').trim();
+                        if (!href) return '';
+                        const m = href.match(/\/@([^\/?#]+)/i);
+                        if (!m || !m[1]) return '';
+                        try {
+                            return decodeURIComponent(m[1]).replace(/^@+/, '').toLowerCase();
+                        } catch (_) {
+                            return String(m[1]).replace(/^@+/, '').toLowerCase();
+                        }
+                    };
           const derivedUser = (() => {
             // 1) Explicit userEl text
                         const direct = normalizeChatUserName(userEl ? userEl.textContent.trim() : '');
@@ -9873,6 +9933,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         if (sentMatch && sentMatch[1]) return normalizeChatUserName(sentMatch[1]);
             return '';
           })();
+                    const userHandle = (() => {
+                        const directHref = extractHandleFromHref(userEl?.getAttribute?.('href'));
+                        if (directHref) return directHref;
+                        const links = Array.from(el.querySelectorAll('a[href*="/@"]'));
+                        for (const link of links) {
+                            const handle = extractHandleFromHref(link.getAttribute('href'));
+                            if (handle) return handle;
+                        }
+                        return '';
+                    })();
           let user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
           const textBase = textEl ? textEl.textContent.trim() : '';
           const candidateParts = collectCandidateTextParts(el, user);
@@ -9961,6 +10031,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
                         results.push({
               user: user || 'unknown',
+                            userHandle,
               text,
               mid,
                                                         type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : (isLike ? 'like' : 'chat')))),
@@ -10209,6 +10280,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         type,
                         id,
                         ts: nowTs,
+                        userHandle: normalizeTikTokProfileHandle(message.userHandle || message.profileHandle || ''),
                         coins: isGiftType ? Number(message.coins || giftMeta?.coins || parseCoinsFromText(message.text)) : 0,
                         giftName: isGiftType ? (message.giftName || giftMeta?.giftName || message.text) : '',
                         quantity: isGiftType ? (message.quantity || giftMeta?.quantity || 1) : 1,
