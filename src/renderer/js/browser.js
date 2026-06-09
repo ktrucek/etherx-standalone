@@ -6095,18 +6095,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const meta = getTkaiGiftMeta(text);
         if (Number(meta.coins || 0) > 0) return Number(meta.coins || 0);
         const t = String(text || '');
+        const quantity = parseGiftQuantityFromText(t);
         const compact = t.match(/(\d+(?:[.,]\d+)?)\s*([km])\s*(coins?|coin|coina|kovanica|diamonds?)/i);
         if (compact) {
             const base = parseFloat(String(compact[1]).replace(',', '.'));
             if (Number.isFinite(base)) {
                 const mul = String(compact[2]).toLowerCase() === 'm' ? 1000000 : 1000;
-                return Math.round(base * mul);
+                const total = Math.round(base * mul);
+                return quantity > 1 ? Math.round(total / quantity) * quantity : total;
             }
         }
         const direct = t.match(/(\d[\d.,\s]*)\s*(coins?|coin|coina|kovanica|diamonds?)/i);
         if (direct) {
             const n = parseInt(String(direct[1]).replace(/[^\d]/g, ''), 10);
-            if (Number.isFinite(n)) return n;
+            if (Number.isFinite(n)) return quantity > 1 ? Math.round(n / quantity) * quantity : n;
         }
         return 0;
     }
@@ -6202,7 +6204,31 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const quantity = Math.max(1, Number(qtyRaw || 1));
             return { name: cleaned, quantity };
         }
+        const leadQty = text.match(/(?:^|\b)(\d{1,4})\s*(?:x|×)\s*(.+)$/i);
+        if (leadQty) {
+            const cleaned = sanitizeGiftCandidateName(leadQty[2]);
+            const quantity = Math.max(1, Number(leadQty[1] || 1));
+            if (cleaned) return { name: cleaned, quantity };
+        }
         return { name: sanitizeGiftCandidateName(text), quantity: 1 };
+    }
+
+    function parseGiftQuantityFromText(text) {
+        const src = String(text || '').trim();
+        if (!src) return 1;
+        const patterns = [
+            /(?:^|\b)(\d{1,4})\s*(?:x|×)\b/i,
+            /(?:^|\b)(?:x|×)\s*(\d{1,4})\b/i,
+            /(?:^|\b)(\d{1,4})\s*(?:gifts?|gifted|combo|times?)\b/i,
+            /(?:^|\b)(?:combo|gift(?:ed)?|sent|gave|donated|poklon(?:io|ila)?|darovao|donirao)\s*(\d{1,4})\b/i,
+            /(?:^|\b)(?:gift|poklon|rose|ruza|ruža|diamond|coins?)\s*(?:x|×)?\s*(\d{1,4})\b/i
+        ];
+        for (const pattern of patterns) {
+            const m = src.match(pattern);
+            const n = Number(m?.[1] || 0);
+            if (Number.isFinite(n) && n > 0) return Math.min(9999, Math.max(1, Math.round(n)));
+        }
+        return 1;
     }
 
     function detectGiftMetaFromText(text) {
@@ -6221,8 +6247,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 break;
             }
         }
-        const qtyMatch = src.match(/(?:\b(?:x|×)\s*(\d{1,4})\b|(?:sent|gave)(?=\S)\s*\D*?(\d{1,4})\b)/i);
-        const quantity = Math.max(1, Number(extractedQty || qtyMatch?.[1] || 1));
+        const quantity = Math.max(1, Number(extractedQty || parseGiftQuantityFromText(src) || 1));
         let unitCoins = found ? Number(found.coins || 0) : 0;
         if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
         const coins = unitCoins * quantity;
@@ -15765,7 +15790,118 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         modal.querySelector('#tkaiRegionScanClose')?.addEventListener('click', close);
         modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
     }
-    function startTikTokRegionScan() {
+    const TKAI_REGION_SCAN_PREFS_KEY = 'ex_tkai_region_scan_region_v1';
+
+    function loadTikTokSavedScanRegion() {
+        try {
+            const raw = localStorage.getItem(TKAI_REGION_SCAN_PREFS_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            if (!parsed || typeof parsed !== 'object') return null;
+            const x = Number(parsed.x);
+            const y = Number(parsed.y);
+            const width = Number(parsed.width);
+            const height = Number(parsed.height);
+            if (![x, y, width, height].every(Number.isFinite)) return null;
+            if (width <= 0 || height <= 0) return null;
+            return {
+                x: Math.min(0.98, Math.max(0, x)),
+                y: Math.min(0.98, Math.max(0, y)),
+                width: Math.min(1, Math.max(0.02, width)),
+                height: Math.min(1, Math.max(0.02, height)),
+                savedAt: Number(parsed.savedAt || Date.now())
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function saveTikTokScanRegionFromPixels(regionPx, webviewRect) {
+        try {
+            const baseW = Math.max(1, Number(webviewRect?.width || 1));
+            const baseH = Math.max(1, Number(webviewRect?.height || 1));
+            const x = Math.min(0.98, Math.max(0, Number(regionPx?.x || 0) / baseW));
+            const y = Math.min(0.98, Math.max(0, Number(regionPx?.y || 0) / baseH));
+            const width = Math.min(1, Math.max(0.02, Number(regionPx?.width || 1) / baseW));
+            const height = Math.min(1, Math.max(0.02, Number(regionPx?.height || 1) / baseH));
+            localStorage.setItem(TKAI_REGION_SCAN_PREFS_KEY, JSON.stringify({ x, y, width, height, savedAt: Date.now() }));
+        } catch (_) { }
+    }
+
+    function resolveTikTokSavedRegionPx(savedRegion, webviewRect) {
+        if (!savedRegion || !webviewRect) return null;
+        const baseW = Math.max(1, Number(webviewRect.width || 1));
+        const baseH = Math.max(1, Number(webviewRect.height || 1));
+        const x = Math.round(Math.min(baseW - 1, Math.max(0, savedRegion.x * baseW)));
+        const y = Math.round(Math.min(baseH - 1, Math.max(0, savedRegion.y * baseH)));
+        const width = Math.round(Math.max(8, Math.min(baseW - x, savedRegion.width * baseW)));
+        const height = Math.round(Math.max(8, Math.min(baseH - y, savedRegion.height * baseH)));
+        return {
+            clamped: { x, y, width, height },
+            screenRect: {
+                x: Math.max(0, Math.round(webviewRect.left + x)),
+                y: Math.max(0, Math.round(webviewRect.top + y)),
+                width,
+                height
+            }
+        };
+    }
+
+    async function runTikTokRegionScanForRegion(clamped, regionScreenRect) {
+        showToast('🔎 Skeniram označenu regiju...');
+        try {
+            const domRows = normalizeRegionScanRows(await executeTikTokRegionScan(clamped), 'dom');
+            const domIngest = ingestTikTokRegionRows(domRows, { source: 'region-dom' });
+
+            let ocrRows = [];
+            let ocrIngested = 0;
+            if (domRows.length < 2) {
+                showToast('🧠 DOM redovi su slabi, pokrecem OCR fallback...');
+                try {
+                    ocrRows = normalizeRegionScanRows(await executeTikTokRegionScanOcr(regionScreenRect), 'ocr');
+                    const rs = ingestTikTokRegionRows(ocrRows, { source: 'region-ocr' });
+                    ocrIngested = Number(rs.added || 0);
+                } catch (ocrErr) {
+                    showToast('⚠️ OCR fallback nije uspio: ' + String(ocrErr?.message || ocrErr));
+                }
+            }
+
+            const mergedRows = [...domRows, ...ocrRows];
+            let guardedRows = mergedRows;
+            const guardCfg = readTkaiGuardSettings();
+            try {
+                if (mergedRows.length) {
+                    const modeLabel = guardCfg.mode === 'qwen'
+                        ? 'Qwen3Guard'
+                        : (guardCfg.mode === 'opir' ? 'Opir' : 'Qwen3Guard + Opir');
+                    showToast('🛡️ ' + modeLabel + ' safety scan...');
+                    const moderation = await moderateRegionRows(mergedRows, guardCfg);
+                    guardedRows = moderation.rows;
+                    if (Array.isArray(moderation.warnings) && moderation.warnings.length) {
+                        showToast('⚠️ ' + moderation.warnings.join(' | '));
+                    }
+                }
+            } catch (guardErr) {
+                showToast('⚠️ Safety guard nije dostupan: ' + String(guardErr?.message || guardErr));
+            }
+            const totalIngested = Number(domIngest.added || 0) + ocrIngested;
+            if (totalIngested > 0) {
+                showToast('✅ Region scan ubacio ' + totalIngested + ' redova u live feed');
+            } else {
+                showToast('ℹ️ Region scan nije nasao novih redova za feed');
+            }
+            showTikTokRegionScanResults(guardedRows, clamped, {
+                guardCfg,
+                ingested: totalIngested,
+                domRows: domRows.length,
+                ocrRows: ocrRows.length
+            });
+        } catch (err) {
+            showToast('❌ Region scan greška: ' + String(err?.message || err));
+        }
+    }
+
+    function startTikTokRegionScan(options = {}) {
+        const forceSelect = !!options.forceSelect;
         const tab = getActiveTab();
         if (!tab?.url || !tab.url.includes('tiktok.com')) {
             showToast('⚠️ Ova opcija radi na TikTok stranici');
@@ -15781,21 +15917,54 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             showToast('⚠️ TikTok prozor nije vidljiv za scan');
             return;
         }
+
+        try { window.focus(); } catch (_) { }
+        try { webview.focus(); } catch (_) { }
+
+        const savedRegion = loadTikTokSavedScanRegion();
+        const savedRegionPx = resolveTikTokSavedRegionPx(savedRegion, rect);
+        if (!forceSelect && savedRegionPx) {
+            showToast('🔁 Koristim zadnju scan regiju (Shift + klik za novi odabir)');
+            runTikTokRegionScanForRegion(savedRegionPx.clamped, savedRegionPx.screenRect);
+            return;
+        }
+
         const overlay = document.createElement('div');
         overlay.id = 'tkaiRegionScanOverlay';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(2,6,23,.22);cursor:crosshair';
         const info = document.createElement('div');
         info.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.92);border:1px solid rgba(148,163,184,.4);color:#e2e8f0;padding:6px 10px;border-radius:999px;font-size:11px';
-        info.textContent = 'Označi regiju za scan (Esc za odustani)';
+        info.textContent = savedRegionPx
+            ? 'Označi regiju za scan (Esc odustani, Enter koristi zadnju regiju)'
+            : 'Označi regiju za scan (Esc za odustani)';
         const box = document.createElement('div');
         box.style.cssText = 'position:fixed;border:2px dashed #38bdf8;background:rgba(56,189,248,.14);display:none;pointer-events:none';
+        const webviewHint = document.createElement('div');
+        webviewHint.style.cssText = 'position:fixed;left:' + Math.round(rect.left) + 'px;top:' + Math.round(rect.top) + 'px;width:' + Math.round(rect.width) + 'px;height:' + Math.round(rect.height) + 'px;border:1px solid rgba(56,189,248,.35);background:rgba(56,189,248,.03);pointer-events:none';
+
+        let savedPreview = null;
+        if (savedRegionPx) {
+            savedPreview = document.createElement('div');
+            savedPreview.style.cssText = 'position:fixed;border:2px solid rgba(34,197,94,.9);background:rgba(34,197,94,.15);pointer-events:none';
+            savedPreview.style.left = (rect.left + savedRegionPx.clamped.x) + 'px';
+            savedPreview.style.top = (rect.top + savedRegionPx.clamped.y) + 'px';
+            savedPreview.style.width = savedRegionPx.clamped.width + 'px';
+            savedPreview.style.height = savedRegionPx.clamped.height + 'px';
+        }
+
         overlay.appendChild(info);
+        overlay.appendChild(webviewHint);
+        if (savedPreview) overlay.appendChild(savedPreview);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
         let active = false;
         let sx = 0;
         let sy = 0;
+        const clampToWebview = (cx, cy) => ({
+            x: Math.max(rect.left, Math.min(rect.right, cx)),
+            y: Math.max(rect.top, Math.min(rect.bottom, cy))
+        });
         const cleanup = () => {
             window.removeEventListener('keydown', onKey, true);
             overlay.removeEventListener('pointerdown', onDown, true);
@@ -15804,15 +15973,26 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             overlay.remove();
         };
         const onKey = (event) => {
-            if (event.key !== 'Escape') return;
-            event.preventDefault();
-            cleanup();
-            showToast('❎ Region scan otkazan');
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                cleanup();
+                showToast('❎ Region scan otkazan');
+                return;
+            }
+            if (event.key === 'Enter' && savedRegionPx) {
+                event.preventDefault();
+                cleanup();
+                runTikTokRegionScanForRegion(savedRegionPx.clamped, savedRegionPx.screenRect);
+            }
         };
         const onDown = (event) => {
             if (event.button !== 0) return;
-            sx = event.clientX;
-            sy = event.clientY;
+            if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+                return;
+            }
+            const p = clampToWebview(event.clientX, event.clientY);
+            sx = p.x;
+            sy = p.y;
             active = true;
             box.style.display = 'block';
             box.style.left = sx + 'px';
@@ -15823,10 +16003,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         };
         const onMove = (event) => {
             if (!active) return;
-            const x = Math.min(sx, event.clientX);
-            const y = Math.min(sy, event.clientY);
-            const w = Math.abs(event.clientX - sx);
-            const h = Math.abs(event.clientY - sy);
+            const p = clampToWebview(event.clientX, event.clientY);
+            const x = Math.min(sx, p.x);
+            const y = Math.min(sy, p.y);
+            const w = Math.abs(p.x - sx);
+            const h = Math.abs(p.y - sy);
             box.style.left = x + 'px';
             box.style.top = y + 'px';
             box.style.width = w + 'px';
@@ -15835,12 +16016,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const onUp = async (event) => {
             if (!active) return;
             active = false;
-            const x = Math.min(sx, event.clientX);
-            const y = Math.min(sy, event.clientY);
-            const w = Math.abs(event.clientX - sx);
-            const h = Math.abs(event.clientY - sy);
+            const p = clampToWebview(event.clientX, event.clientY);
+            const x = Math.min(sx, p.x);
+            const y = Math.min(sy, p.y);
+            const w = Math.abs(p.x - sx);
+            const h = Math.abs(p.y - sy);
             cleanup();
-            if (w < 20 || h < 20) {
+            if (w < 8 || h < 8) {
                 showToast('⚠️ Regija je premala');
                 return;
             }
@@ -15856,57 +16038,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 width: Math.max(1, Math.round(Math.min(w, rect.width))),
                 height: Math.max(1, Math.round(Math.min(h, rect.height)))
             };
-            showToast('🔎 Skeniram označenu regiju...');
-            try {
-                const domRows = normalizeRegionScanRows(await executeTikTokRegionScan(clamped), 'dom');
-                const domIngest = ingestTikTokRegionRows(domRows, { source: 'region-dom' });
-
-                let ocrRows = [];
-                let ocrIngested = 0;
-                if (domRows.length < 2) {
-                    showToast('🧠 DOM redovi su slabi, pokrecem OCR fallback...');
-                    try {
-                        ocrRows = normalizeRegionScanRows(await executeTikTokRegionScanOcr(regionScreenRect), 'ocr');
-                        const rs = ingestTikTokRegionRows(ocrRows, { source: 'region-ocr' });
-                        ocrIngested = Number(rs.added || 0);
-                    } catch (ocrErr) {
-                        showToast('⚠️ OCR fallback nije uspio: ' + String(ocrErr?.message || ocrErr));
-                    }
-                }
-
-                const mergedRows = [...domRows, ...ocrRows];
-                let guardedRows = mergedRows;
-                const guardCfg = readTkaiGuardSettings();
-                try {
-                    if (mergedRows.length) {
-                        const modeLabel = guardCfg.mode === 'qwen'
-                            ? 'Qwen3Guard'
-                            : (guardCfg.mode === 'opir' ? 'Opir' : 'Qwen3Guard + Opir');
-                        showToast('🛡️ ' + modeLabel + ' safety scan...');
-                        const moderation = await moderateRegionRows(mergedRows, guardCfg);
-                        guardedRows = moderation.rows;
-                        if (Array.isArray(moderation.warnings) && moderation.warnings.length) {
-                            showToast('⚠️ ' + moderation.warnings.join(' | '));
-                        }
-                    }
-                } catch (guardErr) {
-                    showToast('⚠️ Safety guard nije dostupan: ' + String(guardErr?.message || guardErr));
-                }
-                const totalIngested = Number(domIngest.added || 0) + ocrIngested;
-                if (totalIngested > 0) {
-                    showToast('✅ Region scan ubacio ' + totalIngested + ' redova u live feed');
-                } else {
-                    showToast('ℹ️ Region scan nije nasao novih redova za feed');
-                }
-                showTikTokRegionScanResults(guardedRows, clamped, {
-                    guardCfg,
-                    ingested: totalIngested,
-                    domRows: domRows.length,
-                    ocrRows: ocrRows.length
-                });
-            } catch (err) {
-                showToast('❌ Region scan greška: ' + String(err?.message || err));
-            }
+            saveTikTokScanRegionFromPixels(clamped, rect);
+            runTikTokRegionScanForRegion(clamped, regionScreenRect);
         };
         window.addEventListener('keydown', onKey, true);
         overlay.addEventListener('pointerdown', onDown, true);
@@ -15915,7 +16048,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
     window.startTikTokRegionScan = startTikTokRegionScan;
 
-    function triggerTikTokRegionScanFromUi() {
+    function triggerTikTokRegionScanFromUi(options = {}) {
         try {
             const run = (typeof startTikTokRegionScan === 'function')
                 ? startTikTokRegionScan
@@ -15924,7 +16057,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 showToast('⚠️ Region scan nije dostupan. Osvjezi aplikaciju.');
                 return;
             }
-            run();
+            run(options);
         } catch (err) {
             showToast('❌ Region scan nije pokrenut: ' + String(err?.message || err));
             console.warn('[TikTokAI] region scan trigger error:', err);
@@ -15959,10 +16092,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         await startTikTokScanFromSelection(sel);
         closeCtxMenu();
     });
-    document.getElementById('ctx-tiktok-region-scan')?.addEventListener('click', () => {
+    document.getElementById('ctx-tiktok-region-scan')?.addEventListener('click', (event) => {
         closeCtxMenu();
         // Delay avoids menu teardown stealing first pointer event from overlay.
-        setTimeout(triggerTikTokRegionScanFromUi, 30);
+        setTimeout(() => {
+            try {
+                triggerTikTokRegionScanFromUi({ forceSelect: !!event?.shiftKey });
+            } catch (_) {
+                triggerTikTokRegionScanFromUi();
+            }
+        }, 30);
     });
     document.getElementById('ctx-shadowban-check')?.addEventListener('click', () => {
         const tab = getActiveTab();
