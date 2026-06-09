@@ -9740,9 +9740,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 function isLikelyNoiseChatText(text, user, messageType) {
                     const t = String(text || '').replace(/\s+/g, ' ').trim();
                     if (!t) return true;
-                    const letterCount = (t.match(/[a-zA-Z\u00C0-\u024F\u0400-\u04FF]/g) || []).length;
+                    const letterCount = (t.match(/\p{L}/gu) || []).length;
                     const digitCount = (t.match(/\d/g) || []).length;
                     const emojiCount = (t.match(/[\u{1F300}-\u{1FAFF}]/gu) || []).length;
+                    const symbolCount = (t.match(/[\p{S}\p{P}]/gu) || []).length;
                     const looksCounter = /^(?:\d[\d.,\s]*[km]?)(?:\+)?(?:\s*(?:viewers?|gledatelja|watching|coins?|diamonds?))?$/i.test(t);
                     const onlyNumericOrPunct = /^[\d\s.,:+\-x×/%|()[\]#*]+$/.test(t);
                     const sameAsUser = !!user && t.toLowerCase() === String(user).trim().toLowerCase();
@@ -9750,7 +9751,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
                     if (sameAsUser || looksCounter) return true;
                     if (onlyNumericOrPunct && !maybeStandaloneChatNumber) return true;
-                    if (messageType === 'chat' && letterCount === 0 && emojiCount === 0) return true;
+                    if (messageType === 'chat' && letterCount === 0 && emojiCount === 0 && symbolCount <= 2) return true;
                     if (messageType === 'chat' && digitCount > 0 && letterCount === 0 && t.length < 28 && !maybeStandaloneChatNumber) return true;
                     return false;
                 }
