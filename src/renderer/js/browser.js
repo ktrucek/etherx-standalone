@@ -9792,7 +9792,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                         return false;
                                 }
 
-                items.slice(-45).forEach((el, index) => {
+                items.slice(-140).forEach((el, index) => {
           const userEl = el.querySelector(
             '[data-e2e="chat-message-user-name"],'
             + '[data-e2e="user-name"],'
