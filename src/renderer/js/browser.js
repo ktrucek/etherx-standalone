@@ -5462,14 +5462,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         userSummaryMetaEl.textContent = `${formatNum(users.length)} korisnika • scan ${formatNum(limit)} poruka`;
         userSummaryListEl.innerHTML = '';
         users.slice(0, 18).forEach((u) => {
+            const userMsgs = collectedMessages.filter((m) => String(m?.user || '').trim().toLowerCase() === String(u.user || '').trim().toLowerCase());
+            const sentiment = computeUserSentiment(userMsgs);
             const pill = document.createElement('button');
             pill.type = 'button';
             pill.className = 'tkai-user-pill';
             pill.style.borderColor = getUserColor(u.user);
             pill.style.color = getUserColor(u.user);
-            pill.textContent = `@${u.user} (${u.total})`;
-            pill.title = 'Klik za copy @mention';
+            pill.textContent = `${sentiment.emoji} @${u.user} (${u.total})`;
+            pill.title = `Klik: otvori poruke | Desni klik: kopiraj @mention\nSentiment: ${sentiment.label} (${sentiment.pos}+ / ${sentiment.neg}-)`;
             pill.addEventListener('click', () => {
+                showTkaiUserMessagesModal(u.user);
+            });
+            pill.addEventListener('contextmenu', (ev) => {
+                ev.preventDefault();
                 navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { });
             });
             userSummaryListEl.appendChild(pill);
@@ -5516,6 +5522,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
+            '<button type="button" data-act="show-messages" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#60a5fa;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">💬 Poruke korisnika + sentiment</button>' +
             '<button type="button" data-act="gift-gallery" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fb923c;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎁 Darovi korisnika (sesija)</button>' +
             '<button type="button" data-act="user-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a3e635;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">👤 Profil korisnika (baza)</button>' +
             '<button type="button" data-act="open-tiktok-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#34d399;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔗 Otvori TikTok profil</button>' +
@@ -5599,6 +5606,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             showTkaiUserGiftsModal(user);
         });
 
+        tkaiMsgCtxEl.querySelector('[data-act="show-messages"]')?.addEventListener('click', () => {
+            const m = tkaiMsgCtxTarget;
+            const user = String(m?.user || '').trim().replace(/^@+/, '');
+            closeTkaiMsgContextMenu();
+            if (!user) { showToast('⚠️ Nema korisnika'); return; }
+            showTkaiUserMessagesModal(user);
+        });
+
         tkaiMsgCtxEl.querySelector('[data-act="user-profile"]')?.addEventListener('click', () => {
             const m = tkaiMsgCtxTarget;
             const user = String(m?.user || '').trim().replace(/^@+/, '');
@@ -5627,6 +5642,173 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         document.addEventListener('scroll', () => closeTkaiMsgContextMenu(), true);
         return tkaiMsgCtxEl;
     }
+    // ── Per-user sentiment helper ──────────────────────────────────────────
+    const _SENTIMENT_POS = new Set([
+        // Croatian/Bosnian/Serbian
+        'super', 'top', 'bravo', 'odlicno', 'odlično', 'svida', 'sviđa', 'lijepo', 'predivno',
+        'fantasticno', 'fantastično', 'genijalno', 'genijalac', 'odusevljen', 'oduševljen',
+        'volim', 'uzivam', 'uživam', 'hvala', 'zahvalan', 'zahvalna', 'ljubi', 'srce',
+        'podrska', 'podrška', 'chapeau',
+        // English
+        'love', 'great', 'cool', 'legend', 'wow', 'fire', 'amazing', 'awesome', 'brilliant',
+        'perfect', 'nice', 'excellent', 'fantastic', 'wonderful', 'beautiful', 'outstanding',
+        'superb', 'incredible', 'stunning', 'fabulous', 'magnificent', 'marvelous', 'terrific',
+        'lovely', 'adorable', 'gorgeous', 'phenomenal', 'spectacular', 'exceptional', 'impressive',
+        'remarkable', 'delightful', 'charming', 'pleasant', 'enjoyable', 'splendid', 'exquisite',
+        'lol', 'haha', 'hehe', 'rofl', 'lmao', 'thanks', 'thank', 'thankyou', 'appreciate',
+        'grateful', 'blessed', 'happy', 'joy', 'excited', 'thrilled', 'glad', 'pleased',
+        'satisfied', 'proud', 'inspired', 'motivated', 'energized', 'pumped', 'stoked',
+        'best', 'fab', 'dope', 'lit', 'epic', 'legendary', 'elite', 'pro', 'skilled',
+        'talented', 'gifted', 'genius', 'smart', 'clever', 'wise', 'brilliant',
+        'respect', 'support', 'heart', 'hearts', 'clap', 'claps', 'applause', 'cheers',
+        'goat', 'king', 'queen', 'boss', 'legend', 'hero', 'star', 'champion', 'winner',
+        'pog', 'poggers', 'pogchamp', 'hype', 'hyped', 'lets', 'letsgoo', 'goo', 'gooo',
+        'yes', 'yess', 'yesss', 'yeah', 'yay', 'yasss', 'yup', 'absolutely', 'definitely',
+        'totally', 'indeed', 'agreed', 'true', 'facts', 'real', 'valid', 'correct', 'right',
+        // Indonesian
+        'bagus', 'mantap', 'keren', 'hebat', 'luar', 'biasa', 'sempurna', 'terbaik',
+        'indah', 'cantik', 'suka', 'cinta', 'senang', 'gembira', 'terima', 'kasih',
+        'makasih', 'oke', 'asik', 'seru', 'jos', 'josss', 'kece', 'keceh', 'sukses', 'dahsyat',
+        'gokil', 'juara', 'puas', 'bahagia', 'favorit', 'sip', 'asyik', 'menarik',
+        'sangar', 'ciamik', 'istimewa', 'menakjubkan', 'solid', 'gaul', 'maksimal',
+        'gaspoll', 'gaskeun', 'otw', 'siap', 'salut', 'hormat', 'semangat', 'rajin',
+        'pintar', 'lucu', 'menghibur', 'unik', 'brilian', 'cemerlang', 'gemilang',
+        'lanjut', 'lanjutkan', 'terus', 'amin', 'amiin', 'syukur', 'alhamdulillah',
+        'subhanallah', 'masya', 'allah', 'wow', 'wah', 'gilak', 'anjay', 'cakep',
+        'ganteng', 'adem', 'enak', 'nikmat', 'lancar', 'jaya', 'berkah', 'rezeki'
+    ]);
+    const _SENTIMENT_NEG = new Set([
+        // Croatian/Bosnian/Serbian
+        'lose', 'los', 'losa', 'loše', 'nevalja', 'smeta', 'dosadno', 'mrzim', 'glupo',
+        'bezveze', 'bezvezno', 'uzasno', 'užasno', 'nervira', 'dosadan', 'dosadna', 'laz',
+        // English
+        'bad', 'worst', 'terrible', 'awful', 'horrible', 'disgusting', 'pathetic', 'useless',
+        'worthless', 'disappointing', 'disappointed', 'poor', 'weak', 'lame', 'dumb', 'stupid',
+        'idiotic', 'foolish', 'ridiculous', 'absurd', 'nonsense', 'garbage', 'rubbish', 'trash',
+        'junk', 'crap', 'shit', 'bull', 'bullshit', 'fake', 'fraud', 'scam', 'lie', 'lying',
+        'boring', 'bored', 'dull', 'tedious', 'tiresome', 'monotonous', 'uninteresting',
+        'hate', 'hated', 'hating', 'hater', 'dislike', 'despise', 'loathe', 'detest',
+        'angry', 'mad', 'furious', 'rage', 'pissed', 'annoyed', 'annoying', 'irritating',
+        'frustrating', 'frustrated', 'upset', 'bothered', 'disturbed',
+        'sad', 'unhappy', 'depressed', 'miserable', 'gloomy', 'sorry', 'regret',
+        'sucks', 'sucked', 'sucking', 'gross', 'nasty', 'disgusting', 'repulsive', 'revolting',
+        'ugly', 'hideous', 'unattractive', 'unpleasant',
+        'fail', 'failed', 'failure', 'loser', 'losing', 'lost', 'defeat', 'beaten',
+        'wrong', 'incorrect', 'false', 'untrue', 'invalid', 'inaccurate',
+        'cringe', 'cringy', 'awkward', 'embarrassing', 'shameful', 'humiliating',
+        'weird', 'strange', 'odd', 'bizarre', 'creepy', 'sketchy', 'sus', 'suspicious',
+        'quit', 'quitting', 'leave', 'leaving', 'gone', 'stop', 'stopped', 'end', 'over',
+        'done', 'finished', 'bye', 'goodbye', 'later', 'peace', 'out',
+        'ugh', 'eww', 'yuck', 'boo', 'meh', 'nope', 'nah', 'never', 'no', 'noo', 'nooo',
+        'waste', 'wasted', 'wasting', 'pointless', 'meaningless', 'hopeless',
+        // Indonesian
+        'buruk', 'jelek', 'bodoh', 'bosan', 'membosankan', 'menyebalkan', 'gila',
+        'benci', 'menyesal', 'payah', 'gagal', 'najis', 'sampah', 'tolol', 'kampret',
+        'anjing', 'bangsat', 'sialan', 'parah', 'rusak', 'kacau', 'aneh', 'norak',
+        'males', 'malas', 'ngebosenin', 'nyebelin', 'zonk', 'skip',
+        'hancur', 'berantakan', 'celaka', 'sial', 'konyol', 'memalukan', 'menjijikkan',
+        'mengerikan', 'menyedihkan', 'mengecewakan', 'ngawur', 'garing', 'hambar',
+        'cupu', 'alay', 'ancur', 'lemah', 'ngaco', 'bohong', 'palsu', 'penipu',
+        'tipu', 'jahat', 'kasar', 'kesal', 'jijik', 'muak', 'sebal', 'dongkol',
+        'kesel', 'sebel', 'ganggu', 'mengganggu', 'brengsek', 'rese', 'sinting',
+        'autis', 'geblek', 'goblok', 'ngeselin', 'nyebelin', 'tai', 'kontol'
+    ]);
+    function computeUserSentiment(messages) {
+        let pos = 0, neg = 0;
+        messages.forEach((m) => {
+            const tokens = String(m.text || '').toLowerCase().replace(/[^a-z0-9čćđšž\s]/gi, ' ').split(/\s+/);
+            tokens.forEach((t) => {
+                if (_SENTIMENT_POS.has(t)) pos++;
+                if (_SENTIMENT_NEG.has(t)) neg++;
+            });
+        });
+        const total = pos + neg;
+        if (total === 0) return { label: 'neutral', emoji: '😐', pos, neg, total, color: '#9ca3af' };
+        const ratio = pos / total;
+        if (ratio >= 0.7) return { label: 'pozitivan', emoji: '😊', pos, neg, total, color: '#4ade80' };
+        if (ratio >= 0.45) return { label: 'neutralan', emoji: '😐', pos, neg, total, color: '#9ca3af' };
+        return { label: 'negativan', emoji: '😠', pos, neg, total, color: '#f87171' };
+    }
+
+    function showTkaiUserMessagesModal(username) {
+        const clean = String(username || '').trim().replace(/^@+/, '');
+        if (!clean) return;
+        const userMsgs = (Array.isArray(collectedMessages) ? collectedMessages : [])
+            .filter((m) => String(m?.user || '').trim().toLowerCase() === clean.toLowerCase())
+            .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+        const chatMsgs = userMsgs.filter((m) => m.type !== 'join' && m.type !== 'like');
+        const sentiment = computeUserSentiment(chatMsgs);
+        const db = getTkaiUserDB();
+        const dbEntry = db[clean.toLowerCase()];
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;width:min(580px,96vw);max-height:88vh;overflow-y:auto;color:#e5e7eb;font-size:13px;display:flex;flex-direction:column;gap:0';
+        // Header
+        let html = `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">`;
+        html += `<div>`;
+        html += `<div style="font-size:17px;font-weight:700;color:${getUserColor(clean)}">@${escHtml(clean)}</div>`;
+        html += `<div style="font-size:11px;color:#6b7280;margin-top:2px">${formatNum(userMsgs.length)} poruka u sesiji</div>`;
+        html += `</div>`;
+        html += `<div style="display:flex;gap:6px;align-items:center">`;
+        html += `<button id="tkaiMsgModalGifts" style="background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.4);color:#fb923c;border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer">🎁 Darovi</button>`;
+        html += `<button id="tkaiMsgModalProfile" style="background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#34d399;border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer">🔗 Profil</button>`;
+        html += `<button id="tkaiMsgModalClose" style="background:transparent;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:4px 8px">✕</button>`;
+        html += `</div></div>`;
+        // Sentiment row
+        html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">`;
+        html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:18px">${sentiment.emoji}</div><div style="font-size:10px;color:${sentiment.color};font-weight:600;margin-top:2px">${escHtml(sentiment.label)}</div></div>`;
+        // Stats grid
+        const chatCount = userMsgs.filter((m) => !['gift', 'subscriber', 'join', 'like'].includes(m.type)).length;
+        const giftCount = userMsgs.filter((m) => m.type === 'gift' || m.type === 'subscriber').length;
+        const totalCoins = userMsgs.reduce((s, m) => s + Number(m.coins || 0), 0);
+        html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#60a5fa">${formatNum(chatCount)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">chat</div></div>`;
+        html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#fb923c">${formatNum(giftCount)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">giftovi</div></div>`;
+        html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#fcd34d">${formatNum(totalCoins)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">🪙</div></div>`;
+        html += `</div>`;
+        // DB note
+        if (dbEntry?.note) {
+            html += `<div style="margin-bottom:10px;padding:8px 10px;background:rgba(163,230,53,.08);border:1px solid rgba(163,230,53,.2);border-radius:7px;font-size:11px;color:#a3e635">📝 ${escHtml(dbEntry.note)}</div>`;
+        }
+        // Messages list
+        html += `<div style="border-top:1px solid rgba(255,255,255,.08);padding-top:10px">`;
+        html += `<div style="font-size:11px;font-weight:600;color:#9ca3af;margin-bottom:8px">💬 Sve poruke (${formatNum(chatMsgs.length)})</div>`;
+        if (chatMsgs.length) {
+            html += `<div style="display:flex;flex-direction:column;gap:4px">`;
+            chatMsgs.slice(-200).forEach((m) => {
+                const time = new Date(Number(m.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const typeIcon = m.type === 'gift' || m.type === 'subscriber' ? '🎁' : m.type === 'share' ? '↗' : m.type === 'join' ? '👋' : '💬';
+                const textColor = m.type === 'gift' || m.type === 'subscriber' ? '#fb923c' : '#e5e7eb';
+                const displayText = (m.translatedText && m.translatedText !== m.text)
+                    ? `${escHtml(m.text)} <span style="color:#818cf8;font-size:10px">[${escHtml(m.translatedText)}]</span>`
+                    : escHtml(m.text || '');
+                html += `<div style="background:rgba(255,255,255,.03);border-radius:5px;padding:5px 8px;font-size:11px">`;
+                html += `<span style="color:#4b5563;font-size:10px;margin-right:6px">${time}</span>`;
+                html += `<span style="margin-right:4px">${typeIcon}</span>`;
+                html += `<span style="color:${textColor}">${displayText}</span>`;
+                if (Number(m.coins || 0) > 0) html += ` <span style="color:#fcd34d;font-size:10px">+${formatNum(m.coins)}🪙</span>`;
+                html += `</div>`;
+            });
+            html += `</div>`;
+        } else {
+            html += `<div style="color:#6b7280;padding:8px 0">Nema chat poruka u ovoj sesiji.</div>`;
+        }
+        html += `</div>`;
+        card.innerHTML = html;
+        modal.appendChild(card);
+        document.body.appendChild(modal);
+        card.querySelector('#tkaiMsgModalClose')?.addEventListener('click', () => modal.remove());
+        card.querySelector('#tkaiMsgModalProfile')?.addEventListener('click', () => {
+            createTab('https://www.tiktok.com/@' + encodeURIComponent(clean), '@' + clean, true);
+            modal.remove();
+        });
+        card.querySelector('#tkaiMsgModalGifts')?.addEventListener('click', () => {
+            modal.remove();
+            showTkaiUserGiftsModal(clean);
+        });
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+    }
+
     // ── Persistent TikTok live user database ───────────────────────────────
     function getTkaiUserDB() {
         try { return JSON.parse(localStorage.getItem('tkai_live_users') || '{}'); } catch (_) { return {}; }
@@ -5684,14 +5866,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         // Also get DB data
         const db = getTkaiUserDB();
         const dbEntry = db[clean.toLowerCase()];
+        const sentiment = computeUserSentiment(userMsgs);
         const modal = document.createElement('div');
         modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:16px';
         const card = document.createElement('div');
         card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;min-width:340px;max-width:520px;max-height:80vh;overflow-y:auto;color:#e5e7eb;font-size:13px';
         let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">`;
         html += `<div><div style="font-size:16px;font-weight:700;color:#fb923c">🎁 Darovi: @${escHtml(clean)}</div>`;
-        html += `<div style="font-size:11px;color:var(--text3,#6b7280);margin-top:2px">${formatNum(giftMsgs.length)} gift event(a) • ${formatNum(totalCoins)} 🪙 ova sesija</div></div>`;
-        html += `<button id="tkaiGiftModalClose" style="background:transparent;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:4px 8px">✕</button></div>`;
+        html += `<div style="font-size:11px;color:var(--text3,#6b7280);margin-top:2px">${formatNum(giftMsgs.length)} gift event(a) • ${formatNum(totalCoins)} 🪙 ova sesija`;
+        html += ` • <span style="color:${sentiment.color}">${sentiment.emoji} ${escHtml(sentiment.label)}</span></div></div>`;
+        html += `<div style="display:flex;gap:6px;align-items:center">`;
+        html += `<button id="tkaiGiftModalMessages" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.4);color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">💬 Poruke</button>`;
+        html += `<button id="tkaiGiftModalClose" style="background:transparent;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:4px 8px">✕</button></div></div>`;
         if (sorted.length) {
             html += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
             html += `<thead><tr style="color:#9ca3af;border-bottom:1px solid rgba(255,255,255,.08)"><th style="text-align:left;padding:4px 6px">Gift</th><th style="text-align:right;padding:4px 6px">Qty</th><th style="text-align:right;padding:4px 6px">🪙</th><th style="text-align:right;padding:4px 6px">Puta</th></tr></thead><tbody>`;
@@ -5723,6 +5909,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         modal.appendChild(card);
         document.body.appendChild(modal);
         card.querySelector('#tkaiGiftModalClose')?.addEventListener('click', () => modal.remove());
+        card.querySelector('#tkaiGiftModalMessages')?.addEventListener('click', () => {
+            modal.remove();
+            showTkaiUserMessagesModal(clean);
+        });
         card.querySelector('#tkaiGiftModalOpenProfile')?.addEventListener('click', () => {
             createTab('https://www.tiktok.com/@' + encodeURIComponent(clean), '@' + clean, true);
             modal.remove();
@@ -5743,12 +5933,17 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;width:min(600px,96vw);max-height:85vh;overflow-y:auto;color:#e5e7eb;font-size:13px';
         const renderUser = (u) => {
             const topGifts = Object.entries(u.giftTypes || {}).sort((a, b) => b[1] - a[1]).slice(0, 4);
+            // Compute live-session sentiment for this user
+            const liveMsgs = (Array.isArray(collectedMessages) ? collectedMessages : []).filter((m) => String(m?.user || '').toLowerCase() === String(u.user || '').toLowerCase());
+            const sent = liveMsgs.length ? computeUserSentiment(liveMsgs) : null;
             let html = `<div style="padding:12px;background:rgba(255,255,255,.04);border-radius:8px;margin-bottom:8px">`;
             html += `<div style="display:flex;justify-content:space-between;align-items:flex-start">`;
             html += `<div><span style="color:${getUserColor(u.user)};font-weight:600;font-size:14px">@${escHtml(u.user)}</span>`;
+            if (sent) html += ` <span style="color:${sent.color};font-size:12px" title="Sentiment u ovoj sesiji">${sent.emoji} ${escHtml(sent.label)}</span>`;
             if (u.lastMessage) html += `<div style="font-size:11px;color:#9ca3af;margin-top:2px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(u.lastMessage)}</div>`;
             html += `</div>`;
             html += `<div style="display:flex;gap:6px;flex-shrink:0">`;
+            html += `<button data-show-msgs="${escHtml(u.user)}" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.4);color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">💬</button>`;
             html += `<button data-open-profile="${escHtml(u.user)}" style="background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#34d399;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">🔗</button>`;
             html += `</div></div>`;
             html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;font-size:11px;color:#9ca3af">`;
@@ -5812,6 +6007,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         });
         // Profile open buttons & note save
         function bindUserDBActions(container) {
+            container.querySelectorAll('[data-show-msgs]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const user = btn.dataset.showMsgs;
+                    modal.remove();
+                    showTkaiUserMessagesModal(user);
+                });
+            });
             container.querySelectorAll('[data-open-profile]').forEach((btn) => {
                 btn.addEventListener('click', () => {
                     const user = btn.dataset.openProfile;
@@ -6100,6 +6302,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 /^(come|perché|quando|dove|chi|quale|puoi|può|c'è|ci sono|sai)\b/.test(lower) ||
                 // Portuguese
                 /^(como|por que|quando|onde|quem|qual|pode|você sabe|há|tem como)\b/.test(lower) ||
+                // Indonesian
+                /^(apa|kenapa|mengapa|kapan|dimana|di mana|siapa|bagaimana|berapa|bisakah|bisa kah|apakah|mana|gimana|emang|emangnya|kenapa sih|kok bisa)\b/.test(lower) ||
                 // Turkish
                 /^(nasıl|neden|ne zaman|nerede|kim|hangi|yapabilir misin|var mı|bilir misin)\b/.test(lower) ||
                 // Russian
@@ -7539,8 +7743,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     mention.className = 'tkai-join-mention';
                     mention.textContent = '@' + String(j.user || '').replace(/^@+/, '');
                     mention.style.color = getUserColor(j.user);
-                    mention.title = 'Klikni za copy @mention';
+                    mention.title = 'Klik: poruke korisnika | Desni klik: kopiraj @mention';
                     mention.addEventListener('click', (ev) => {
+                        ev.preventDefault();
+                        showTkaiUserMessagesModal(String(j.user || '').replace(/^@+/, ''));
+                    });
+                    mention.addEventListener('contextmenu', (ev) => {
                         ev.preventDefault();
                         const value = '@' + String(j.user || '').replace(/^@+/, '') + ' ';
                         navigator.clipboard.writeText(value).then(() => showToast('📋 Kopirano: ' + value.trim())).catch(() => { });
