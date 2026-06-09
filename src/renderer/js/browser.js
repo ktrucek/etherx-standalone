@@ -4978,10 +4978,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         ccReadBtn.style.boxShadow = on ? '0 0 0 1px rgba(125,211,252,.45) inset' : 'none';
     }
 
-    function speakCaptionText(text, langCode) {
+    function speakCaptionText(text, langCode, options = {}) {
         const clean = String(text || '').trim();
         if (!isTkaiAudioEnabled()) return;
         if (!clean || !('speechSynthesis' in window) || !window.speechSynthesis) return;
+        const interrupt = options && options.interrupt !== false;
         const langTag = mapLangForSpeech(langCode || getCcTargetLang());
         const key = `${langTag}::${clean}`;
         const now = Date.now();
@@ -4996,7 +4997,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const voices = speechSynthesis.getVoices();
         const voice = voices.find(v => String(v.lang || '').toLowerCase().startsWith(langTag.slice(0, 2).toLowerCase()));
         if (voice) utterance.voice = voice;
-        speechSynthesis.cancel();
+        if (interrupt) speechSynthesis.cancel();
         speechSynthesis.speak(utterance);
     }
 
@@ -5008,7 +5009,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             message.translatedText = translated;
             message.translatedLang = targetLang;
         }
-        speakCaptionText(message.translatedText || message.text, targetLang);
+        speakCaptionText(message.translatedText || message.text, targetLang, { interrupt: true });
     }
 
     async function handleIncomingChatForCcRead(message) {
@@ -5021,7 +5022,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             message.translatedText = translated;
             message.translatedLang = targetLang;
         }
-        speakCaptionText(message.translatedText || raw, targetLang);
+        speakCaptionText(message.translatedText || raw, targetLang, { interrupt: false });
     }
 
     function loadCfg() {
@@ -6214,6 +6215,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
+    function countGiftCatalogMatches(text) {
+        const normalized = normalizeGiftKey(text);
+        if (!normalized) return 0;
+        const entries = getGiftCatalogEntries();
+        let count = 0;
+        for (const [key] of entries) {
+            if (!key || key.length < 3) continue;
+            if (!normalized.includes(String(key || ''))) continue;
+            count += 1;
+            if (count >= 4) break;
+        }
+        return count;
+    }
+
     function sanitizeGiftCandidateName(rawValue) {
         let value = String(rawValue || '')
             .replace(/[🎁🌹🪙❤️✨⭐🔥🎉]+/g, ' ')
@@ -6645,7 +6660,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!text) return false;
         const meta = getTkaiGiftMeta(text);
         const parsedCoins = Number(meta?.coins || 0) || Number(parseCoinsFromText(text) || 0);
-        return parsedCoins > 0 || /(?:sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted|slika)/i.test(text);
+        const catalogHits = countGiftCatalogMatches(text);
+        return parsedCoins > 0 || catalogHits >= 1 || /(?:sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted|slika)/i.test(text);
     }
     function getTkaiGiftEventsForStats() {
         return (Array.isArray(collectedMessages) ? collectedMessages : []).filter(isTkaiGiftLikeMessage);
@@ -6679,7 +6695,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function normalizeTkaiMessageType(message) {
         const known = new Set(['chat', 'gift', 'subscriber', 'caption', 'song', 'join', 'share', 'like']);
         const explicit = String(message?.type || '').trim().toLowerCase();
-        if (known.has(explicit)) return explicit;
+        // Allow explicit chat rows to be reclassified by heuristics (gift/share/join signals).
+        if (known.has(explicit) && explicit !== 'chat') return explicit;
         const text = String(message?.text || message?.giftRawText || '').toLowerCase();
         if (!text) return explicit || 'chat';
         if (/\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|shared|share|podijelio|podijelila|dijelio\s+live|dijelila\s+live)\b/i.test(text)) return 'share';
@@ -6689,6 +6706,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (/\b(now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\b/i.test(text)) return 'song';
         const parsedCoins = Number(parseCoinsFromText(text) || 0);
         if (parsedCoins > 0 || /\b(sent|gift|gifted|rose|donut|diamond|coins?|gave|poklon|darovao|donirao)\b/i.test(text)) return 'gift';
+        const catalogHits = countGiftCatalogMatches(text);
+        if (catalogHits >= 2) return 'gift';
+        if (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text)) return 'gift';
         return explicit || 'chat';
     }
     function updateTopSupportersUI(list, supportersCount) {
@@ -10245,6 +10265,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
             const giftDedupWindowMs = Math.max(1200, Number(DB.getSettings().tkaiGiftDedupWindowMs || 2500) || 2500);
             filteredMessages.forEach((message) => {
+                const sourceType = String(message?.type || '').trim().toLowerCase();
                 const type = normalizeTkaiMessageType(message);
                 const isGiftType = type === 'gift' || type === 'subscriber';
                 const giftMeta = isGiftType ? getTkaiGiftMeta(message.giftName || message.text || '') : null;
@@ -10277,6 +10298,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (!existing.has(id)) {
                     const normalizedMessage = {
                         ...message,
+                        sourceType,
                         type,
                         id,
                         ts: nowTs,
@@ -10297,7 +10319,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     }
                     added += 1;
                     if (type === 'caption') incomingCaptions.push(collectedMessages[collectedMessages.length - 1]);
-                    if (type === 'chat') incomingChatsForCcRead.push(collectedMessages[collectedMessages.length - 1]);
+                    if (sourceType === 'chat' && type !== 'join' && type !== 'share' && type !== 'like') incomingChatsForCcRead.push(collectedMessages[collectedMessages.length - 1]);
                 }
             });
             if (lastAddedGiftMessage) updateTkaiLastGiftDebug(lastAddedGiftMessage);

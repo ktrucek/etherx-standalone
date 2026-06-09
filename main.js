@@ -1590,6 +1590,27 @@ function createWindow() {
     }
   }
 
+  function isSecurityHeaderRelaxationTarget(rawUrl) {
+    try {
+      const host = new URL(rawUrl).hostname.toLowerCase();
+      return [
+        "openrouter.ai",
+        "clerk.openrouter.ai",
+        "accounts.openrouter.ai",
+        "clerk.accounts.dev",
+        "clerk.com",
+        "auth0.com",
+        "okta.com",
+        "huggingface.co",
+        "openai.com",
+        "anthropic.com",
+        "github.com",
+      ].some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+    } catch (_) {
+      return false;
+    }
+  }
+
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ["*://*/*"] },
     (details, callback) => {
@@ -1667,6 +1688,12 @@ function createWindow() {
       // Keep video/CDN responses untouched. Rewriting CORS/CSP headers globally
       // can break MSE/segment playback on TikTok/YouTube and similar platforms.
       if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
+
+      // Apply header relaxation only on known auth/API targets.
+      if (!isSecurityHeaderRelaxationTarget(details.url)) {
         callback({ responseHeaders: headers });
         return;
       }
@@ -1800,6 +1827,12 @@ function createWindow() {
 
       // Keep video/CDN responses untouched for webviews as well.
       if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
+
+      // Apply header relaxation only on known auth/API targets.
+      if (!isSecurityHeaderRelaxationTarget(details.url)) {
         callback({ responseHeaders: headers });
         return;
       }
