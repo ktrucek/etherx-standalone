@@ -1300,7 +1300,7 @@ const DB = {
         const arr = this.getSessions();
         const item = { id: Date.now(), ts: Date.now(), count: tabs.length, tabs: tabs.map(t => ({ url: t.url, title: t.title })) };
         arr.unshift(item);
-        localStorage.setItem('ex_sessions', JSON.stringify(arr.slice(0, 20)));
+        localStorage.setItem('ex_sessions', JSON.stringify(arr.slice(0, 2000)));
         // Sync to SQLite
         if (window.etherx?.sessions?.save) {
             window.etherx.sessions.save({ name: 'Manual Save', tabsJson: JSON.stringify(tabs), activeTab: STATE.activeTabId }).catch(() => { });
@@ -1816,7 +1816,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function getRecentTkaiSessions() {
         try {
             const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-            return Array.isArray(sessions) ? sessions.slice(-10).reverse() : [];
+            return Array.isArray(sessions) ? sessions.slice(-2000).reverse() : [];
         } catch (_) {
             return [];
         }
@@ -2171,7 +2171,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             };
             const list = getTkaiStatsStorage();
             list.push(rec);
-            if (list.length > 80) list.splice(0, list.length - 80);
+            if (list.length > 2000) list.splice(0, list.length - 2000);
             saveTkaiStatsStorage(list);
             return rec;
         } catch (_) {
@@ -2579,8 +2579,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 } catch (_) { skipped++; }
                 pending--;
                 if (pending === 0) {
-                    // Keep max 50 sessions
-                    if (sessions.length > 50) sessions.splice(0, sessions.length - 50);
+                    // Keep max 2000 sessions
+                    if (sessions.length > 2000) sessions.splice(0, sessions.length - 2000);
                     localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
                     renderTkaiSessionHistory();
                     const msg = imported
@@ -2606,7 +2606,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         if (checked.length < 2) { showToast('Odaberi najmanje 2 sesije za spajanje'); return; }
         try {
             const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-            const recent = sessions.slice(-10).reverse();
+            const recent = sessions.slice(-2000).reverse();
             const selected = checked.map(i => recent[i]).filter(Boolean);
             // Merge messages, deduplicate by timestamp+user+text
             const seen = new Set();
@@ -2629,7 +2629,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 totalCoins, peakViewers, sessionMinutes: totalMinutes
             };
             sessions.push(mergedSession);
-            if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
+            if (sessions.length > 2000) sessions.splice(0, sessions.length - 2000);
             localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
             saveTkaiStatsSnapshot(mergedSession, 'Merged ' + selected.length + ' sessions');
 
@@ -4938,6 +4938,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return isTkaiAudioEnabled() && DB.getSettings().tkaiCcReadEnabled === true;
     }
 
+    function isCcReadChatAiTranslateEnabled() {
+        return DB.getSettings().tkaiCcReadChatAiTranslate === true;
+    }
+
     function updateTkaiAudioButton() {
         if (!audioToggleBtn) return;
         const on = isTkaiAudioEnabled();
@@ -5017,12 +5021,24 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const raw = String(message.translatedText || message.text || '').replace(/\s+/g, ' ').trim();
         if (!raw) return;
         const targetLang = getCcTargetLang();
-        if (!message.translatedText || message.translatedLang !== targetLang) {
-            const translated = await translateViaGoogle(raw, targetLang);
-            message.translatedText = translated;
-            message.translatedLang = targetLang;
+        const useAiTranslate = isCcReadChatAiTranslateEnabled();
+        if (useAiTranslate) {
+            if (!message.translatedText || message.translatedLang !== targetLang) {
+                const translated = await translateViaGoogle(raw, targetLang);
+                message.translatedText = translated;
+                message.translatedLang = targetLang;
+            }
+            speakCaptionText(message.translatedText || raw, targetLang, { interrupt: false });
+            return;
         }
-        speakCaptionText(message.translatedText || raw, targetLang, { interrupt: false });
+        speakCaptionText(raw, targetLang, { interrupt: false });
+    }
+
+    function ensureTkaiCcReadDefaults() {
+        const cfg = DB.getSettings() || {};
+        if (cfg.tkaiCcReadChatAiTranslate === undefined) {
+            DB.saveSetting('tkaiCcReadChatAiTranslate', false);
+        }
     }
 
     function loadCfg() {
@@ -10818,6 +10834,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     ensureTkaiTranslatePresetDefaults();
+    ensureTkaiCcReadDefaults();
     loadCfg();
     restoreTkaiAutosaveIfAny();
     initTkaiAutosave();
