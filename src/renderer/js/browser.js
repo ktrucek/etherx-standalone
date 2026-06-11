@@ -982,25 +982,33 @@ if (window.electronWebview) {
 })();
 
 function resetBlockingOverlays() {
-    const ids = [
+    const classDrivenIds = [
         'settingsBackdrop',
-        'sipBackdrop',
         'blockedOverlay',
         'iconPickerOverlay',
         'customToolbarOverlay',
-        'shareSheet',
         'qrSyncOverlay',
-        'bmManagerModal',
-        'tkaiPanelLockOverlay',
         'pwdModal'
     ];
 
-    ids.forEach((id) => {
+    const inlineDrivenIds = [
+        'sipBackdrop',
+        'shareSheet',
+        'bmManagerModal',
+        'tkaiPanelLockOverlay',
+    ];
+
+    [...classDrivenIds, ...inlineDrivenIds].forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.classList.remove('show', 'open', 'active');
-        el.style.display = 'none';
+        if (classDrivenIds.includes(id)) {
+            el.style.removeProperty('display');
+        } else {
+            el.style.display = 'none';
+        }
     });
+
 }
 
 document.addEventListener('DOMContentLoaded', () => {
