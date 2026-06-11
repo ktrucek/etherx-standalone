@@ -2476,7 +2476,6 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const listEl = document.getElementById('tkaiSessionHistoryList');
         if (!listEl) return;
         try {
-            normalizeStoredTkaiSessionsInPlace();
             const recent = getRecentTkaiSessions();
             if (!recent.length) {
                 listEl.innerHTML = '<div style="color:var(--text3);padding:8px 0">Nema spremljenih sesija.<br>Sesije se automatski spremi nakon zaustavljanja skeniranja.</div>';
@@ -2484,12 +2483,13 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             }
             // Compute per-session stats
             listEl.innerHTML = recent.map((s, i) => {
+                const messages = Array.isArray(s?.messages) ? s.messages : [];
                 const date = new Date(s.savedAt || s.exportedAt || Date.now()).toLocaleString('hr-HR');
-                const count = s.messageCount || (s.messages && s.messages.length) || 0;
+                const count = s.messageCount || messages.length || 0;
                 const dur = s.sessionMinutes ? s.sessionMinutes + ' min' : '—';
                 const coins = s.totalCoins || 0;
                 const viewers = s.peakViewers || s.viewerCount || 0;
-                const gifts = (s.messages || []).filter(m => m.type === 'gift').length;
+                const gifts = messages.filter(m => String(m?.type || '').toLowerCase() === 'gift' || String(m?.type || '').toLowerCase() === 'subscriber').length;
                 return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
                     + '<div style="display:flex;align-items:center;gap:6px">'
                     + '<input type="checkbox" class="tkai-session-chk" data-si="' + i + '" style="accent-color:#667eea;cursor:pointer">'
@@ -2516,7 +2516,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 if (statsBtn) {
                     const s = getRecentTkaiSessions()[+statsBtn.dataset.si];
                     if (!s) return;
-                    openTkaiSessionStatsPage(s, Number(statsBtn.dataset.si) + 1);
+                    openTkaiSessionStatsPage(prepareTkaiSessionForStats(s), Number(statsBtn.dataset.si) + 1);
                     return;
                 }
                 const dlBtn = event.target.closest('.tkai-btn-sess-dl');
@@ -2648,6 +2648,14 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const normalized = sessions.map(normalizeImportedTkaiSession);
         localStorage.setItem('ex_tkai_sessions', JSON.stringify(normalized));
         window.__tkaiSessionsNormalizedOnce = true;
+    }
+
+    function prepareTkaiSessionForStats(session) {
+        if (!session || typeof session !== 'object') {
+            return { messages: [], messageCount: 0, totalCoins: 0, savedAt: new Date().toISOString() };
+        }
+        if (Number(session._normalizedVersion || 0) >= 2) return session;
+        return normalizeImportedTkaiSession(session);
     }
 
     document.getElementById('tkaiSessionImportFile')?.addEventListener('change', function () {
