@@ -704,7 +704,6 @@ if (window.electronWebview) {
                             const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
                             const rowSelectors = [
                                 '[data-e2e*="chat-message" i]',
-                                '[data-e2e*="comment-level" i]',
                                 '[data-e2e*="comment-item" i]',
                                 '[data-e2e*="message-item" i]',
                                 '[data-e2e*="chat-item" i]',
@@ -850,7 +849,8 @@ if (window.electronWebview) {
                 try {
                     const payload = JSON.parse(msg.slice('__ETHERX_TKAI_CTX__'.length));
                     const rect = wv.getBoundingClientRect();
-                    _suppressNextWebviewContextMenuUntil = Date.now() + 1200;
+                    // allow quick re-open but avoid immediate suppression; keep short
+                    _suppressNextWebviewContextMenuUntil = Date.now() + 600;
                     ctxMenu.classList.remove('show');
                     hideAutofillBox();
                     openTkaiMsgContextMenu(
@@ -2323,7 +2323,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             acc.push(`${row.color} ${a}% ${b}%`);
             return acc;
         }, []).join(', ')})`;
-        const topUsersHtml = analytics.usersByMessages.slice(0, 25).map((u, idx) => {
+        // Show all users (no arbitrary slice) so the user can click and inspect every participant
+        const topUsersHtml = analytics.usersByMessages.map((u, idx) => {
             const detailRows = (Array.isArray(u.giftDetails) ? u.giftDetails : []).slice(0, 18);
             const details = detailRows.length
                 ? detailRows.map((g) =>
@@ -6701,14 +6702,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!text) return explicit || 'chat';
         if (/\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|shared|share|podijelio|podijelila|dijelio\s+live|dijelila\s+live)\b/i.test(text)) return 'share';
         if (/\b(joined\s+(?:the\s+)?live|joined\s+this\s+live|joined|join|entered\s+the\s+live|entered|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text)) return 'join';
+        const parsedCoins = Number(parseCoinsFromText(text) || 0);
+        const catalogHits = countGiftCatalogMatches(text);
+        // Detect gifts early to avoid misclassifying gift-related phrases like "Heart" as likes
+        if (parsedCoins > 0 || /\b(sent|gift|gifted|rose|donut|diamond|coins?|gave|poklon|darovao|donirao)\b/i.test(text)) return 'gift';
+        if (catalogHits >= 2) return 'gift';
+        if (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text)) return 'gift';
         if (/\b(subscribed|subscriber|subscribed\s+to\s+you|pretplatio|pretplatila|member)\b/i.test(text)) return 'subscriber';
         if (/\b(likes?|liked|heart(?:ed|s)?)\b/i.test(text)) return 'like';
         if (/\b(now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\b/i.test(text)) return 'song';
-        const parsedCoins = Number(parseCoinsFromText(text) || 0);
-        if (parsedCoins > 0 || /\b(sent|gift|gifted|rose|donut|diamond|coins?|gave|poklon|darovao|donirao)\b/i.test(text)) return 'gift';
-        const catalogHits = countGiftCatalogMatches(text);
-        if (catalogHits >= 2) return 'gift';
-        if (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text)) return 'gift';
         return explicit || 'chat';
     }
     function updateTopSupportersUI(list, supportersCount) {
@@ -10323,7 +10325,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }
             });
             if (lastAddedGiftMessage) updateTkaiLastGiftDebug(lastAddedGiftMessage);
-            const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 300;
+            const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 2000;
             if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
             if (!sessionStartedAt) sessionStartedAt = Date.now();
             if (added > 0) extractAndTrackQuestions(collectedMessages.slice(-added));
@@ -15237,7 +15239,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
                 const rowSelectors = [
                     '[data-e2e*="chat-message" i]',
-                    '[data-e2e*="comment-level" i]',
                     '[data-e2e*="comment-item" i]',
                     '[data-e2e*="message-item" i]',
                     '[data-e2e*="chat-item" i]',
@@ -15412,7 +15413,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         });
 
         if (!added) return { added: 0, acceptedRows: [] };
-        const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 300;
+        const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 2000;
         if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
         if (!sessionStartedAt) sessionStartedAt = Date.now();
         extractAndTrackQuestions(collectedMessages.slice(-added));
