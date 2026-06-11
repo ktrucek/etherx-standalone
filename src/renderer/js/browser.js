@@ -2966,7 +2966,7 @@ function saveSessionTabs(force = false) {
         localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
         // Also persist to SQLite when running inside Electron
         if (window.electronAPI) {
-            try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
+            try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabsJson: JSON.stringify(session), activeTab: String(STATE.activeTabId || '') || null }); } catch (e) { }
         }
         _saveSessionTimeout = null;
     };
@@ -3016,7 +3016,7 @@ function _oldSaveSessionTabs(force = false) {
         localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
         // Also persist to SQLite when running inside Electron
         if (window.electronAPI) {
-            try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
+            try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabsJson: JSON.stringify(session), activeTab: String(STATE.activeTabId || '') || null }); } catch (e) { }
         }
         _saveSessionTimeout = null;
     };

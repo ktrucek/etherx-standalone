@@ -226,6 +226,8 @@ let _ipcSetupDone = false; // guard: prevents duplicate IPC handler registration
 const _downloadTrackedSessions = new Set();
 let _envBootstrapDone = false;
 const RENDERER_STORAGE_FILE = "renderer-storage.json";
+const RENDERER_STORAGE_BACKUP_FILE = "renderer-storage.json.bak";
+const RENDERER_STORAGE_TMP_FILE = "renderer-storage.json.tmp";
 let rendererStorageCache = null;
 
 const SECRET_SETTING_KEYS = new Set([
@@ -297,26 +299,50 @@ function _getRendererStorageFilePath() {
   return path.join(app.getPath("userData"), RENDERER_STORAGE_FILE);
 }
 
+function _getRendererStorageBackupPath() {
+  return path.join(app.getPath("userData"), RENDERER_STORAGE_BACKUP_FILE);
+}
+
+function _getRendererStorageTmpPath() {
+  return path.join(app.getPath("userData"), RENDERER_STORAGE_TMP_FILE);
+}
+
+function _normalizeRendererStorage(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, value]) => [String(key), String(value ?? "")]),
+  );
+}
+
+function _readRendererStorageFromFile(filePath) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const parsed = JSON.parse(raw);
+  return _normalizeRendererStorage(parsed);
+}
+
 function _loadRendererStorage() {
   if (rendererStorageCache) return rendererStorageCache;
 
   try {
     const storagePath = _getRendererStorageFilePath();
+    const backupPath = _getRendererStorageBackupPath();
     if (!fs.existsSync(storagePath)) {
       rendererStorageCache = {};
       return rendererStorageCache;
     }
 
-    const parsed = JSON.parse(fs.readFileSync(storagePath, "utf8"));
-    rendererStorageCache =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? Object.fromEntries(
-          Object.entries(parsed).map(([key, value]) => [
-            String(key),
-            String(value ?? ""),
-          ]),
-        )
-        : {};
+    try {
+      rendererStorageCache = _readRendererStorageFromFile(storagePath);
+    } catch (parseError) {
+      console.warn("Renderer storage parse failed, trying backup:", parseError.message);
+      if (fs.existsSync(backupPath)) {
+        rendererStorageCache = _readRendererStorageFromFile(backupPath);
+        // Auto-heal primary file from known-good backup.
+        _persistRendererStorage();
+      } else {
+        rendererStorageCache = {};
+      }
+    }
   } catch (error) {
     console.error("Renderer storage load failed:", error.message);
     rendererStorageCache = {};
@@ -328,12 +354,23 @@ function _loadRendererStorage() {
 function _persistRendererStorage() {
   try {
     const storagePath = _getRendererStorageFilePath();
+    const backupPath = _getRendererStorageBackupPath();
+    const tmpPath = _getRendererStorageTmpPath();
+    const payload = JSON.stringify(rendererStorageCache || {}, null, 2);
+
     fs.mkdirSync(path.dirname(storagePath), { recursive: true });
-    fs.writeFileSync(
-      storagePath,
-      JSON.stringify(rendererStorageCache || {}, null, 2),
-      "utf8",
-    );
+
+    // Atomic write: tmp -> (optional backup) -> replace main.
+    fs.writeFileSync(tmpPath, payload, "utf8");
+    if (fs.existsSync(storagePath)) {
+      try {
+        fs.copyFileSync(storagePath, backupPath);
+      } catch (_) {
+        // Backup failure should not block main save path.
+      }
+    }
+    fs.renameSync(tmpPath, storagePath);
+
     return { ok: true };
   } catch (error) {
     console.error("Renderer storage save failed:", error.message);
