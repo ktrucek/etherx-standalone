@@ -1468,7 +1468,126 @@
         }
 
         function renderError() {
-            document.getElementById('app').innerHTML = '<div class="error"><div class="error-card"><div class="meta">Session Dashboard</div><h1 style="margin:8px 0 12px">Podaci za statistiku nisu dostupni</h1><p style="color:var(--muted)">Otvori dashboard ponovno iz AI Live Chat panela preko gumba Statistika. Ako si osvjezio ovu stranicu nakon dugo vremena, privremeni payload vise ne postoji.</p><div style="margin-top:16px"><button class="btn" onclick="window.close()">Zatvori</button></div></div></div>';
+            document.getElementById('app').innerHTML = '<div class="error"><div class="error-card"><div class="meta">Session Dashboard</div><h1 style="margin:8px 0 12px">Podaci za statistiku nisu dostupni</h1><p style="color:var(--muted)">Otvori dashboard ponovno iz AI Live Chat panela preko gumba Statistika. Ako si osvjezio ovu stranicu nakon dugo vremena, privremeni payload vise ne postoji.</p><div style="margin-top:16px;display:flex;gap:8px"><button class="btn" onclick="window.close()">Zatvori</button><button class="btn" id="pasteSessionBtn">Zalijepi JSON sesije</button></div><div style="margin-top:12px;color:var(--muted);font-size:12px">Ako imaš raw TikTok chat JSON (npr. tiktok_chat.md), zalijepi ga koristeći gumb Zalijepi JSON sesije i aplikacija će pokušati izgraditi minimalni pregled.</div></div></div>';
+            document.getElementById('pasteSessionBtn').addEventListener('click', function () {
+                showPasteModal();
+            });
+        }
+
+        function showPasteModal() {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = '<div class="modal-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><div style="font-size:16px;font-weight:700">Zalijepi JSON sesije</div><div class="meta">Zalijepi ovdje raw JSON ili prethodno exportani dashboard JSON</div></div><button id="pasteClose" class="btn">Zatvori</button></div><div><textarea id="pasteJsonArea" style="width:100%;height:260px;border-radius:8px;padding:8px;background:rgba(255,255,255,0.03);color:var(--text);border:1px solid rgba(148,163,184,.06);resize:vertical"></textarea></div><div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button id="pasteLoadBtn" class="btn">Učitaj i prikaži</button></div></div>';
+            modal.querySelector('#pasteClose').addEventListener('click', function () { modal.remove(); });
+            modal.addEventListener('click', function (ev) { if (ev.target === modal) modal.remove(); });
+            document.body.appendChild(modal);
+            modal.querySelector('#pasteLoadBtn').addEventListener('click', function () {
+                const txt = modal.querySelector('#pasteJsonArea').value || '';
+                try {
+                    const parsed = JSON.parse(txt);
+                    const summary = buildSummaryFromPossibleRaw(parsed);
+                    if (summary) {
+                        modal.remove();
+                        render(summary);
+                        return;
+                    }
+                    alert('Nije moguće konvertirati zalijepljeni JSON u summary. Provjeri strukturu i pokušaj ponovno.');
+                } catch (err) {
+                    alert('Neispravan JSON: ' + String(err.message || err));
+                }
+            });
+        }
+
+        function buildSummaryFromPossibleRaw(obj) {
+            // If obj already looks like a dashboard summary, return it
+            if (!obj) return null;
+            if (obj.typeCounts || obj.usersAll || obj.topGiftsOverall) return obj;
+            // If obj has a payload wrapper
+            if (obj.payload) return buildSummaryFromPossibleRaw(obj.payload);
+            // If obj looks like a raw session with messages
+            if (Array.isArray(obj.messages) || Array.isArray(obj.data)) {
+                const messages = Array.isArray(obj.messages) ? obj.messages : (Array.isArray(obj.data) ? obj.data : []);
+                return buildMinimalSummaryFromMessages(messages, obj.savedAt || new Date().toISOString());
+            }
+            return null;
+        }
+
+        function buildMinimalSummaryFromMessages(messages, savedAt) {
+            const list = Array.isArray(messages) ? messages.slice() : [];
+            const now = Date.now();
+            const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, like: 0, other: 0 };
+            const usersMap = new Map();
+            const giftsMap = new Map();
+            const questions = [];
+            const answers = [];
+            const songs = [];
+            const timeline = [];
+            function detectType(text) {
+                const low = String(text || '').toLowerCase();
+                if (!low) return 'chat';
+                if (/\b(joined|join|entered|pridru|ulaz)\b/i.test(low)) return 'join';
+                if (/\b(shared|share|podijel)\b/i.test(low)) return 'share';
+                if (/\b(subscribed|subscriber|member)\b/i.test(low)) return 'subscriber';
+                if (/\b(now\s*playing|song|track|pjesma)\b/i.test(low)) return 'song';
+                if (/\b(sent|gift|gifted|rose|diamond|coins?|gave|poklon|darovao|donirao|×\s*\d+|x\s*\d+)\b/i.test(low)) return 'gift';
+                if (/\b(like|likes|liked|heart)\b/i.test(low)) return 'like';
+                return 'chat';
+            }
+            function extractGift(text, msg) {
+                // try message.giftName first
+                if (msg && msg.giftName) return { giftName: String(msg.giftName).trim(), quantity: Number(msg.quantity || 1) || 1, coins: Number(msg.coins || 0) || 0 };
+                const t = String(text || '');
+                const m = t.match(/(?:sent|gave|gifted)\s+([^x\n\r]+?)\s*(?:x|×)?\s*(\d{1,4})?\b/i);
+                if (m) return { giftName: m[1].trim(), quantity: Number(m[2] || 1) || 1, coins: Number(msg && msg.coins || 0) || 0 };
+                const m2 = t.match(/([^\n]{2,60})\s*(?:x|×)\s*(\d{1,4})/i);
+                if (m2) return { giftName: m2[1].trim(), quantity: Number(m2[2] || 1) || 1, coins: Number(msg && msg.coins || 0) || 0 };
+                return null;
+            }
+            list.forEach(function (m) {
+                const text = String(m.text || m.message || m.msg || '').replace(/\s+/g, ' ').trim();
+                const user = String(m.user || m.userName || m.username || m.userHandle || 'Unknown').trim();
+                const type = detectType(text);
+                typeCounts[type] = (typeCounts[type] || 0) + 1;
+                const key = String(user).toLowerCase();
+                if (!usersMap.has(key)) usersMap.set(key, { user: user, total: 0, chat: 0, gifts: 0, giftDetails: [], coins: 0, joins: 0, lastMessage: '' });
+                const row = usersMap.get(key);
+                row.total += 1;
+                row.lastMessage = text.slice(0, 160);
+                if (type === 'gift') {
+                    const g = extractGift(text, m) || { giftName: String(m.giftName || m.text || 'gift').slice(0, 80), quantity: Number(m.quantity || 1) || 1, coins: Number(m.coins || 0) || 0 };
+                    row.gifts += Number(g.quantity || 1) || 1;
+                    row.giftDetails.push({ name: String(g.giftName || 'gift'), quantity: Number(g.quantity || 1) || 1, events: 1, coins: Number(g.coins || 0) || 0, unitCoins: Number(g.coins || 0) || 0 });
+                    row.coins += Number(g.coins || 0) || 0;
+                    giftsMap.set(String(g.giftName || 'gift').toLowerCase(), (giftsMap.get(String(g.giftName || 'gift').toLowerCase()) || 0) + Number(g.quantity || 1) || 1);
+                } else if (type === 'join') {
+                    row.joins += 1;
+                } else if (type === 'like') {
+                    row.chat += 1;
+                } else {
+                    row.chat += 1;
+                }
+            });
+            const usersAll = Array.from(usersMap.values()).sort(function (a, b) { return b.total - a.total; });
+            const topGiftsOverall = Array.from(giftsMap.entries()).map(function (kv) { return { name: kv[0], quantity: kv[1], events: kv[1], coins: 0, unitCoins: 0, userCount: 0 }; }).sort(function (a, b) { return b.quantity - a.quantity; });
+            return {
+                savedAt: savedAt || new Date().toISOString(),
+                messageCount: list.length,
+                durationMinutes: Math.max(1, Math.round((Date.now() - (list[0] && list[0].ts ? Number(list[0].ts) : Date.now())) / 60000)),
+                peakViewers: 0,
+                totalCoins: usersAll.reduce(function (s, u) { return s + Number(u.coins || 0); }, 0),
+                uniqueUsers: usersAll.length,
+                joins: usersAll.reduce(function (s, u) { return s + Number(u.joins || 0); }, 0),
+                typeCounts: typeCounts,
+                usersAll: usersAll,
+                topGiftsOverall: topGiftsOverall,
+                topGiftsByUser: usersAll.map(function (u) { return { user: u.user, gifts: u.giftDetails || [], totalCoins: u.coins || 0 }; }),
+                questions: questions,
+                answers: answers,
+                songs: songs,
+                songPerformance: [],
+                timeline: [{ ts: Date.now(), count: list.length }],
+                indexLabel: 'pasted',
+            };
         }
 
         (function init() {
