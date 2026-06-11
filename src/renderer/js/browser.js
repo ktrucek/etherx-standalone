@@ -17296,8 +17296,21 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 });
             });
         }
-        function openPwdModal() { modal.classList.add('open'); authInput.value = ''; listContainer.style.display = 'none'; unlocked = false; authInput.style.display = ''; unlockBtn.style.display = ''; authInput.focus(); }
-        function closePwdModal() { modal.classList.remove('open'); }
+        function openPwdModal() {
+            modal.style.display = 'flex';
+            modal.classList.add('open');
+            authInput.value = '';
+            listContainer.style.display = 'none';
+            unlocked = false;
+            authInput.style.display = '';
+            unlockBtn.style.display = '';
+            // Focus after repaint so the field is reliably typeable on macOS.
+            requestAnimationFrame(() => authInput.focus());
+        }
+        function closePwdModal() {
+            modal.classList.remove('open');
+            modal.style.display = 'none';
+        }
         function unlock(viaBiometric = false) {
             if (!viaBiometric && !authInput.value) { showToast('Please enter a password'); return; }
             unlocked = true; listContainer.style.display = 'block'; authInput.parentElement.querySelector('.pwd-subtitle')?.remove();
