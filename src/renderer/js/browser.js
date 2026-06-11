@@ -1893,6 +1893,27 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             quantity
         };
     }
+    function resolveGiftMetaSafeFromMessage(message) {
+        if (typeof resolveGiftMetaFromMessage === 'function') {
+            return resolveGiftMetaFromMessage(message);
+        }
+        const rawText = String(message?.giftName || message?.text || '').trim();
+        const fallbackMeta = getTkaiGiftMeta(rawText);
+        const quantity = Math.max(1, Number(message?.quantity || fallbackMeta?.quantity || 1));
+        const unitCoins = Math.max(0, Number(message?.unitCoins || fallbackMeta?.unitCoins || 0));
+        const explicitCoins = Math.max(
+            0,
+            Number(message?.coins || 0),
+            Number(parseCoinsFromText(rawText) || 0)
+        );
+        const coins = Math.max(explicitCoins, Number(fallbackMeta?.coins || 0), unitCoins * quantity);
+        return {
+            giftName: rawText || String(fallbackMeta?.giftName || 'Unknown gift'),
+            quantity,
+            unitCoins,
+            coins: Math.max(0, Number(coins || 0))
+        };
+    }
     function normalizeTkaiGiftKeySafe(value) {
         if (typeof normalizeGiftKey === 'function') return normalizeGiftKey(value);
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -1928,7 +1949,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
             const user = String(m?.user || '').trim() || 'Unknown';
             const userKey = user.toLowerCase();
-            const resolvedGift = (type === 'gift' || type === 'subscriber') ? resolveGiftMetaFromMessage(m) : null;
+            const resolvedGift = (type === 'gift' || type === 'subscriber') ? resolveGiftMetaSafeFromMessage(m) : null;
             const quantity = resolvedGift ? Math.max(1, Number(resolvedGift.quantity || 1)) : 0;
             const unitCoins = resolvedGift ? Math.max(0, Number(resolvedGift.unitCoins || 0)) : 0;
             const coins = resolvedGift ? Math.max(0, Number(resolvedGift.coins || 0)) : Math.max(0, Number(m?.coins || 0));
@@ -2455,6 +2476,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const listEl = document.getElementById('tkaiSessionHistoryList');
         if (!listEl) return;
         try {
+            normalizeStoredTkaiSessionsInPlace();
             const recent = getRecentTkaiSessions();
             if (!recent.length) {
                 listEl.innerHTML = '<div style="color:var(--text3);padding:8px 0">Nema spremljenih sesija.<br>Sesije se automatski spremi nakon zaustavljanja skeniranja.</div>';
@@ -2552,6 +2574,82 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     document.getElementById('btnTkaiSessionsImport')?.addEventListener('click', () => {
         document.getElementById('tkaiSessionImportFile')?.click();
     });
+
+    function normalizeImportedTkaiMessage(message) {
+        const src = (message && typeof message === 'object') ? message : {};
+        const normalized = { ...src };
+        normalized.user = String(src.user || '').trim();
+        normalized.text = String(src.text || '');
+        normalized.translatedText = String(src.translatedText || '');
+        normalized.translatedLang = String(src.translatedLang || '');
+        normalized.ts = Number(src.ts || src.timestamp || src.time || Date.now()) || Date.now();
+        normalized.timestamp = normalized.ts;
+
+        const rawType = String(src.type || src.sourceType || '').trim().toLowerCase();
+        normalized.type = rawType || 'chat';
+        normalized.sourceType = String(src.sourceType || rawType || '').trim().toLowerCase();
+
+        const quantity = Math.max(1, Number(src.quantity || 1) || 1);
+        const unitCoins = Math.max(0, Number(src.unitCoins || 0) || 0);
+        const directCoins = Math.max(0, Number(src.coins || 0) || 0);
+        const isGiftType = normalized.type === 'gift' || normalized.type === 'subscriber';
+        const hasGiftValues = directCoins > 0 || unitCoins > 0 || String(src.giftName || '').trim().length > 0;
+
+        if (isGiftType || hasGiftValues) {
+            const resolved = resolveGiftMetaSafeFromMessage({
+                ...normalized,
+                quantity,
+                unitCoins,
+                coins: directCoins
+            });
+            normalized.type = isGiftType ? normalized.type : 'gift';
+            normalized.giftName = String(resolved?.giftName || src.giftName || src.text || '').trim();
+            normalized.quantity = Math.max(1, Number(resolved?.quantity || quantity || 1) || 1);
+            normalized.unitCoins = Math.max(0, Number(resolved?.unitCoins || unitCoins || 0) || 0);
+            normalized.coins = Math.max(0, Number(resolved?.coins || directCoins || 0) || 0);
+            normalized.giftRawText = String(src.giftRawText || src.text || '').trim();
+            normalized.giftDetectedFromCatalog = resolved?.unitCoins > 0 || src.giftDetectedFromCatalog === true;
+        } else {
+            normalized.quantity = quantity;
+            normalized.unitCoins = unitCoins;
+            normalized.coins = directCoins;
+            normalized.giftName = String(src.giftName || '').trim();
+            normalized.giftRawText = String(src.giftRawText || '').trim();
+            normalized.giftDetectedFromCatalog = src.giftDetectedFromCatalog === true;
+        }
+
+        return normalized;
+    }
+
+    function normalizeImportedTkaiSession(item) {
+        const session = (item && typeof item === 'object') ? { ...item } : {};
+        const rawMessages = Array.isArray(item?.messages) ? item.messages : [];
+        const messages = rawMessages.map(normalizeImportedTkaiMessage);
+        const totalCoinsFromMessages = messages
+            .filter((m) => String(m.type || '').toLowerCase() === 'gift' || String(m.type || '').toLowerCase() === 'subscriber')
+            .reduce((sum, m) => sum + Math.max(0, Number(m.coins || 0) || 0), 0);
+
+        session.messages = messages;
+        session.messageCount = messages.length;
+        session.totalCoins = totalCoinsFromMessages;
+        session.savedAt = String(session.savedAt || session.exportedAt || new Date().toISOString());
+        session._normalizedAt = new Date().toISOString();
+        session._normalizedVersion = 2;
+        return session;
+    }
+
+    function normalizeStoredTkaiSessionsInPlace() {
+        if (window.__tkaiSessionsNormalizedOnce) return;
+        const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+        if (!Array.isArray(sessions) || !sessions.length) {
+            window.__tkaiSessionsNormalizedOnce = true;
+            return;
+        }
+        const normalized = sessions.map(normalizeImportedTkaiSession);
+        localStorage.setItem('ex_tkai_sessions', JSON.stringify(normalized));
+        window.__tkaiSessionsNormalizedOnce = true;
+    }
+
     document.getElementById('tkaiSessionImportFile')?.addEventListener('change', function () {
         const files = Array.from(this.files || []);
         if (!files.length) return;
@@ -2569,11 +2667,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                         if (!item || typeof item !== 'object') { skipped++; return; }
                         // Basic validation: must have messages or messageCount
                         if (!item.messages && !item.messageCount) { skipped++; return; }
+                        const normalizedItem = normalizeImportedTkaiSession(item);
                         // Deduplicate by savedAt
-                        const alreadyExists = sessions.some(s => s.savedAt && s.savedAt === item.savedAt);
+                        const alreadyExists = sessions.some(s => s.savedAt && s.savedAt === normalizedItem.savedAt);
                         if (alreadyExists) { skipped++; return; }
-                        item.importedAt = new Date().toISOString();
-                        sessions.push(item);
+                        normalizedItem.importedAt = new Date().toISOString();
+                        sessions.push(normalizedItem);
                         imported++;
                     });
                 } catch (_) { skipped++; }
@@ -5440,7 +5539,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             row.total += 1;
             const type = normalizeTkaiMessageType(m);
             if (type === 'gift' || type === 'subscriber') {
-                const meta = resolveGiftMetaFromMessage(m);
+                const meta = resolveGiftMetaSafeFromMessage(m);
                 const quantity = Math.max(1, Number(m.quantity || meta?.quantity || 1));
                 const giftName = String(m.giftName || '').trim() || String(meta?.giftName || '').trim() || String(m.text || '').trim() || 'gift';
                 const coins = Math.max(0, Number(m.coins || meta?.coins || parseCoinsFromText(String(m.text || '')) || 0));
@@ -6687,7 +6786,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         let totalCoins = 0;
         const byUser = new Map();
         gifts.forEach((message) => {
-            const resolved = resolveGiftMetaFromMessage(message);
+            const resolved = resolveGiftMetaSafeFromMessage(message);
             const coins = Math.max(0, Number(
                 message.coins
                 || resolved?.coins
@@ -7103,7 +7202,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         let giftEventsTotal = 0;
         let giftCoinsTotal = 0;
         giftScanBase.forEach((m) => {
-            const resolvedGift = resolveGiftMetaFromMessage(m);
+            const resolvedGift = resolveGiftMetaSafeFromMessage(m);
             const giftName = String(m.giftName || getTkaiGiftMeta(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
             const user = String(m.user || 'unknown').trim().slice(0, 40) || 'unknown';
             const quantity = Math.max(1, Number(m.quantity || resolvedGift?.quantity || 1));
@@ -7494,7 +7593,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         usersRow.id = 'tkaiDashUsersRow';
         usersRow.innerHTML =
             '<div class="tkai-insights-card" style="flex:1" id="tkaiTopUsersCard">' +
-            '<div class="tkai-insights-title" title="Detaljna tablica korisnika">Top users detail<span>📊</span></div>' +
+            '<div id="tkaiTopUsersTitle" class="tkai-insights-title" title="Detaljna tablica korisnika">Top users detail<span>📊</span></div>' +
             '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">' +
             '<input id="tkaiTopUsersSearch" type="text" placeholder="Pretraga @user" class="tkai-cfg-input" style="max-width:180px;font-size:10px;padding:2px 6px">' +
             '<select id="tkaiTopUsersSort" class="tkai-cfg-select" style="font-size:10px;padding:2px 6px;max-width:130px">' +
@@ -7553,6 +7652,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             downloadTextFile('tkai-detailed-users-' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv', lines.join('\n'), 'text/csv;charset=utf-8');
             showToast('⬇️ Detailed dashboard CSV skinut.');
         });
+        document.getElementById('tkaiTopUsersTitle')?.addEventListener('click', () => {
+            showTkaiUserDBModal(null);
+        });
 
         dashboardControlsInit = true;
     }
@@ -7567,8 +7669,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const key = dashboardUserSort || 'total';
         rows.sort((a, b) => Number(b[key] || 0) - Number(a[key] || 0) || Number(b.total || 0) - Number(a.total || 0));
         body.innerHTML = '';
-        rows.slice(0, 180).forEach((u, rowIdx) => {
+        rows.forEach((u, rowIdx) => {
             const tr = document.createElement('tr');
+            const cleanUser = String(u.user || '').replace(/^@+/, '').trim();
             const topGiftStr = (u.giftTypes || []).slice(0, 3).map((entry) => `${entry[0]} x${entry[1]}`).join(', ');
             const firstSeenStr = u.firstSeen ? new Date(u.firstSeen).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
             tr.innerHTML = '<td style="padding:3px 4px;color:var(--text3);font-weight:700">' + (rowIdx + 1) + '</td>' +
@@ -7581,9 +7684,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 '<td style="padding:3px 4px;white-space:nowrap" title="First seen">' + escHtml(firstSeenStr) + '</td>' +
                 '<td style="padding:3px 4px;text-align:right" title="Ukupno pojavljivanja u sesiji">' + formatNum(u.appearances || u.total) + '</td>' +
                 '<td style="padding:3px 4px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(u.lastMessage || '-') + '">' + escHtml(u.lastMessage || '-') + '</td>';
-            tr.title = 'Klik za copy @' + u.user;
+            tr.title = 'Klik: otvori korisnika • Desni klik: kopiraj @' + u.user;
             tr.style.cursor = 'pointer';
-            tr.addEventListener('click', () => { navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { }); });
+            tr.addEventListener('click', () => {
+                if (!cleanUser) return;
+                showTkaiUserMessagesModal(cleanUser);
+            });
+            tr.addEventListener('contextmenu', (ev) => {
+                ev.preventDefault();
+                navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { });
+            });
             body.appendChild(tr);
         });
         meta.textContent = formatNum(rows.length) + ' users • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
@@ -8954,7 +9064,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 div.classList.add('targeted');
             }
             const isGiftLike = message.type === 'gift' || message.type === 'subscriber';
-            const giftMeta = isGiftLike ? resolveGiftMetaFromMessage(message) : null;
+            const giftMeta = isGiftLike ? resolveGiftMetaSafeFromMessage(message) : null;
             const typeBadge = message.type === 'gift'
                 ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,195,74,.25);color:#ffd278;border:1px solid rgba(255,210,120,.35)">🎁 gift</span>'
                 : (message.type === 'subscriber'
@@ -10260,7 +10370,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 existingRecent.set(k, Number(message.ts || 0));
                 const msgType = String(message.type || '');
                 if (msgType === 'gift' || msgType === 'subscriber') {
-                    const giftMeta = resolveGiftMetaFromMessage(message);
+                    const giftMeta = resolveGiftMetaSafeFromMessage(message);
                     const giftNameNorm = String(giftMeta?.giftName || message.giftName || message.text || '')
                         .toLowerCase()
                         .replace(/[^a-z0-9]+/g, ' ')
