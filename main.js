@@ -3692,12 +3692,16 @@ function setupIPC() {
       try {
         await execFileAsync("/usr/bin/ditto", [appBundle, destApp]);
         await execFileAsync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destApp]).catch(() => ({ stdout: "", stderr: "" }));
+        // Re-sign with ad-hoc identity so macOS Gatekeeper accepts the app
+        // without a valid Apple Developer certificate / notarization.
+        await execFileAsync("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", destApp]).catch(() => ({ stdout: "", stderr: "" }));
       } catch (error) {
         if (!["EACCES", "EPERM"].includes(error.code)) throw error;
         const copyScript = [
           `/bin/rm -rf ${shellQuote(destApp)}`,
           `/usr/bin/ditto ${shellQuote(appBundle)} ${shellQuote(destApp)}`,
           `/usr/bin/xattr -dr com.apple.quarantine ${shellQuote(destApp)} || true`,
+          `/usr/bin/codesign --force --deep --sign - ${shellQuote(destApp)} || true`,
         ].join(" && ");
         await execFileAsync("/usr/bin/osascript", [
           "-e",

@@ -1388,6 +1388,25 @@ function syncLocalToSqlite() {
 // ── Settings panel: init toggles from saved settings ──
 let PENDING_SETTINGS = {};
 
+// Normalise a stored setting value to the canonical option value used in <select> elements.
+// Handles old translated text stored before value="" attributes were added to <option> elements.
+function normalizeSelectSettingValue(key, rawValue) {
+    const v = String(rawValue || '').trim().toLowerCase();
+    if (!v) return rawValue;
+    if (key === 'opensWith') {
+        if (v === 'last-session' || v === 'all windows from last session' || v === 'svim prozorima iz zadnje sesije' || v === 'svi prozori iz zadnje sesije') return 'last-session';
+        if (v === 'new-window' || v === 'a new window' || v === 'novim prozorom' || v === 'novi prozor') return 'new-window';
+        if (v === 'new-private-window' || v === 'a new private window' || v === 'novim privatnim prozorom' || v === 'novi privatni prozor') return 'new-private-window';
+    }
+    if (key === 'newWindowWith' || key === 'newTabWith') {
+        if (v === 'start-page' || v === 'start page' || v === 'početnom stranicom' || v === 'početna stranica (etherx)') return 'start-page';
+        if (v === 'homepage' || v === 'početnom stranicom (adresa)' || v === 'početna stranica') return 'homepage';
+        if (v === 'empty-page' || v === 'empty page' || v === 'praznom stranicom' || v === 'prazna stranica') return 'empty-page';
+        if (v === 'same-page' || v === 'same page' || v === 'istom stranicom') return 'same-page';
+    }
+    return rawValue;
+}
+
 // Osvježi vizualno stanje svih togglea iz baze (poziva se pri svakom otvaranju panela)
 function _refreshSettingsToggles() {
     const s = DB.getSettings();
@@ -1400,7 +1419,7 @@ function _refreshSettingsToggles() {
             if (saved === true) el.classList.add('on');
             else if (saved === false) el.classList.remove('on');
         } else if (el.tagName === 'SELECT') {
-            if (s[k] !== undefined) el.value = s[k];
+            if (s[k] !== undefined) el.value = normalizeSelectSettingValue(k, s[k]);
         } else if (el.tagName === 'INPUT') {
             if (el.type === 'checkbox') {
                 if (s[k] !== undefined) el.checked = s[k];
@@ -1434,7 +1453,15 @@ function initSettingsPanel() {
                 showSettingsAutoSaveIndicator();
             });
         } else if (el.tagName === 'SELECT') {
-            if (PENDING_SETTINGS[k] !== undefined) el.value = PENDING_SETTINGS[k];
+            if (PENDING_SETTINGS[k] !== undefined) {
+                const norm = normalizeSelectSettingValue(k, PENDING_SETTINGS[k]);
+                el.value = norm;
+                // If the normalized value was different from raw, persist the canonical value
+                if (norm !== PENDING_SETTINGS[k]) {
+                    PENDING_SETTINGS[k] = norm;
+                    DB.saveSetting(k, norm);
+                }
+            }
             el.addEventListener('change', () => {
                 PENDING_SETTINGS[k] = el.value;
                 DB.saveSetting(k, el.value); // auto-save immediately
@@ -19168,12 +19195,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const v = String(value || '').trim().toLowerCase();
             if (!v) return '';
             if (kind === 'opensWith') {
-                if (v === 'last-session' || v === 'all windows from last session' || v === 'svi prozori iz zadnje sesije') return 'last-session';
-                if (v === 'new-window' || v === 'a new window' || v === 'novi prozor') return 'new-window';
-                if (v === 'new-private-window' || v === 'a new private window' || v === 'novi privatni prozor') return 'new-private-window';
+                if (v === 'last-session' || v === 'all windows from last session' || v === 'svi prozori iz zadnje sesije' || v === 'svim prozorima iz zadnje sesije') return 'last-session';
+                if (v === 'new-window' || v === 'a new window' || v === 'novi prozor' || v === 'novim prozorom') return 'new-window';
+                if (v === 'new-private-window' || v === 'a new private window' || v === 'novi privatni prozor' || v === 'novim privatnim prozorom') return 'new-private-window';
             }
             if (kind === 'newWindowWith' || kind === 'newTabWith') {
-                if (v === 'start-page' || v === 'start page' || v === 'početna stranica (etherx)') return 'start-page';
+                if (v === 'start-page' || v === 'start page' || v === 'početna stranica (etherx)' || v === 'početnom stranicom') return 'start-page';
                 if (v === 'homepage' || v === 'početnom stranicom (adresa)' || v === 'početna stranica') return 'homepage';
                 if (v === 'empty-page' || v === 'empty page' || v === 'praznom stranicom' || v === 'prazna stranica') return 'empty-page';
                 if (v === 'same-page' || v === 'same page' || v === 'istom stranicom') return 'same-page';
