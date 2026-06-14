@@ -19266,13 +19266,32 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         // localStorage was empty (e.g. after app update clears renderer origin).
         // Fall back to the SQLite autosave that was written by saveSessionTabs().
         if (window.electronAPI) {
+            // Create a blank tab immediately so the UI is interactive while we await SQLite.
+            const placeholderTab = createTab('', 'New Tab', true);
+            renderQuickLinks();
             window.electronAPI.invoke('db:getSessions', 50).then(function (sessions) {
-                if (!Array.isArray(sessions)) return _startFresh();
+                if (!Array.isArray(sessions)) {
+                    const url = getInitialUrl();
+                    if (url) navigateTo(url, placeholderTab.id);
+                    consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+                    return;
+                }
                 const autosave = sessions.find(s => s && (s.name === '__autosave_' + windowId || s.name === '__autosave_main'));
-                if (!autosave) return _startFresh();
+                if (!autosave) {
+                    const url = getInitialUrl();
+                    if (url) navigateTo(url, placeholderTab.id);
+                    consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+                    return;
+                }
                 const tabs = Array.isArray(autosave.tabs) ? autosave.tabs : [];
-                if (!tabs.length) return _startFresh();
-                // Restore from SQLite backup and write back to localStorage so next restart is instant
+                if (!tabs.length) {
+                    const url = getInitialUrl();
+                    if (url) navigateTo(url, placeholderTab.id);
+                    consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+                    return;
+                }
+                // Remove placeholder tab, restore saved tabs
+                closeTab(placeholderTab.id);
                 localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(tabs));
                 if (autosave.activeTab !== undefined) localStorage.setItem('ex_session_active_' + windowId, autosave.activeTab);
                 const idMap = {};
@@ -19291,8 +19310,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 renderQuickLinks();
                 consoleLog('info', '🚀 EtherX Browser initialized – restored ' + tabs.length + ' tab(s) from SQLite backup');
                 consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
-            }).catch(function () { _startFresh(); });
-            return; // async path — do not call _startFresh() synchronously
+            }).catch(function () {
+                const url = getInitialUrl();
+                if (url) navigateTo(url, placeholderTab.id);
+                consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+            });
+            return;
         }
 
         _startFresh();
