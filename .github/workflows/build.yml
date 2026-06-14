@@ -186,7 +186,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      - name: 📤 Upload macOS x64 artifacts
+      - name: � Ad-hoc codesign macOS x64 app (prevents "damaged" Gatekeeper error)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Find all .app bundles inside the x64 ZIP and re-sign them ad-hoc.
+          # This prevents macOS Gatekeeper from showing "app is damaged" when
+          # there is no Apple Developer notarization certificate.
+          for zip in dist/*-mac-x64.zip dist/*x64*.zip; do
+            [[ -f "$zip" ]] || continue
+            echo "Processing $zip"
+            tmpdir=$(mktemp -d)
+            ditto -x -k "$zip" "$tmpdir"
+            find "$tmpdir" -name '*.app' -maxdepth 3 | while read -r appbundle; do
+              echo "  Signing: $appbundle"
+              codesign --force --deep --sign - "$appbundle" || true
+              xattr -dr com.apple.quarantine "$appbundle" || true
+            done
+            rm -f "$zip"
+            ditto -c -k --keepParent "$tmpdir"/*.app "$zip"
+            rm -rf "$tmpdir"
+            echo "  ✓ Repackaged: $zip"
+          done
+
+      - name: �📤 Upload macOS x64 artifacts
         uses: actions/upload-artifact@v5
         with:
           name: macos-x64-builds
@@ -231,6 +254,50 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 🔏 Ad-hoc codesign macOS arm64 app (prevents "damaged" Gatekeeper error)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Re-sign the .app inside the ZIP ad-hoc so Gatekeeper accepts it
+          # without a paid Apple Developer notarization certificate.
+          for zip in dist/*-mac-arm64.zip dist/*arm64*.zip; do
+            [[ -f "$zip" ]] || continue
+            echo "Processing $zip"
+            tmpdir=$(mktemp -d)
+            ditto -x -k "$zip" "$tmpdir"
+            find "$tmpdir" -name '*.app' -maxdepth 3 | while read -r appbundle; do
+              echo "  Signing: $appbundle"
+              codesign --force --deep --sign - "$appbundle" || true
+              xattr -dr com.apple.quarantine "$appbundle" || true
+            done
+            rm -f "$zip"
+            ditto -c -k --keepParent "$tmpdir"/*.app "$zip"
+            rm -rf "$tmpdir"
+            echo "  ✓ Repackaged: $zip"
+          done
+          # Sign the .app inside the DMG as well
+          for dmg in dist/*.dmg; do
+            [[ -f "$dmg" ]] || continue
+            echo "Processing DMG: $dmg"
+            tmpdir=$(mktemp -d)
+            hdiutil attach "$dmg" -mountpoint "$tmpdir/mnt" -nobrowse -quiet || continue
+            app=$(find "$tmpdir/mnt" -name '*.app' -maxdepth 2 | head -1)
+            if [[ -n "$app" ]]; then
+              appname=$(basename "$app")
+              ditto "$app" "$tmpdir/$appname"
+              hdiutil detach "$tmpdir/mnt" -quiet || true
+              codesign --force --deep --sign - "$tmpdir/$appname" || true
+              xattr -dr com.apple.quarantine "$tmpdir/$appname" || true
+              # Recreate DMG with signed app
+              rm -f "$dmg"
+              hdiutil create -volname "EtherX Browser" -srcfolder "$tmpdir/$appname" -ov -format UDZO "$dmg" || true
+              echo "  ✓ Repackaged DMG: $dmg"
+            else
+              hdiutil detach "$tmpdir/mnt" -quiet || true
+            fi
+            rm -rf "$tmpdir"
+          done
 
       - name: 📤 Upload macOS arm64 artifacts
         uses: actions/upload-artifact@v5
