@@ -19240,24 +19240,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 if (Array.isArray(tabs) && tabs.length) {
                     const idMap = {};
                     tabs.forEach((t, i) => {
-                        // Lazy load: create tab with no URL so only the active tab loads on startup.
-                        // Background tabs store the URL in tab.url — switchTab() will load lazily
-                        // when the user first activates them (checks !wv.src || wv.src==='about:blank').
-                        // This prevents simultaneous renderer process spawning for all saved tabs.
                         const tab = createTab('', t.title || 'New Tab', false);
-                        tab.url = t.url || ''; // store for lazy load without triggering navigateTo
+                        tab.url = t.url || '';
                         if (t.pinned) tab.pinned = true;
                         if (t.faviconUrl) tab.faviconUrl = t.faviconUrl;
                         updateTabEl(tab);
                         idMap[i] = tab.id;
                     });
-                    // Try to activate the tab that matches the saved index / id
-                    const targetId = idMap[Object.keys(idMap).length - 1]; // fallback last
-                    const firstId = idMap[0];
-                    // Pick the tab whose original index matches savedActiveIdx if possible
-                    let activateId = firstId;
+                    let activateId = idMap[0];
                     Object.keys(idMap).forEach(k => { if (parseInt(k) === savedActiveIdx || idMap[k] === savedActiveIdx) activateId = idMap[k]; });
-                    switchTab(activateId || firstId);
+                    switchTab(activateId || idMap[0]);
                     renderQuickLinks();
                     consoleLog('info', '🚀 EtherX Browser initialized – restored ' + tabs.length + ' tab(s)');
                     consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
@@ -19270,9 +19262,45 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 } catch (_) { }
             }
         }
-        const url = getInitialUrl();
-        createTab(url); renderQuickLinks();
-        consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+
+        // localStorage was empty (e.g. after app update clears renderer origin).
+        // Fall back to the SQLite autosave that was written by saveSessionTabs().
+        if (window.electronAPI) {
+            window.electronAPI.invoke('db:getSessions', 50).then(function (sessions) {
+                if (!Array.isArray(sessions)) return _startFresh();
+                const autosave = sessions.find(s => s && (s.name === '__autosave_' + windowId || s.name === '__autosave_main'));
+                if (!autosave) return _startFresh();
+                const tabs = Array.isArray(autosave.tabs) ? autosave.tabs : [];
+                if (!tabs.length) return _startFresh();
+                // Restore from SQLite backup and write back to localStorage so next restart is instant
+                localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(tabs));
+                if (autosave.activeTab !== undefined) localStorage.setItem('ex_session_active_' + windowId, autosave.activeTab);
+                const idMap = {};
+                tabs.forEach(function (t, i) {
+                    const tab = createTab('', t.title || 'New Tab', false);
+                    tab.url = t.url || '';
+                    if (t.pinned) tab.pinned = true;
+                    if (t.faviconUrl) tab.faviconUrl = t.faviconUrl;
+                    updateTabEl(tab);
+                    idMap[i] = tab.id;
+                });
+                const savedIdx = parseInt(autosave.activeTab || '0', 10);
+                let activateId = idMap[0];
+                Object.keys(idMap).forEach(function (k) { if (parseInt(k) === savedIdx) activateId = idMap[k]; });
+                switchTab(activateId || idMap[0]);
+                renderQuickLinks();
+                consoleLog('info', '🚀 EtherX Browser initialized – restored ' + tabs.length + ' tab(s) from SQLite backup');
+                consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+            }).catch(function () { _startFresh(); });
+            return; // async path — do not call _startFresh() synchronously
+        }
+
+        _startFresh();
+        function _startFresh() {
+            const url = getInitialUrl();
+            createTab(url); renderQuickLinks();
+            consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');
+        }
     })();
 
     // ── Share Sheet ──────────────────────────────────────────────────────────
