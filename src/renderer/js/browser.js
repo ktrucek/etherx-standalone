@@ -1918,7 +1918,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             }))
             .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')));
         const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
-        const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, like: 0, other: 0 };
+        const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, share: 0, like: 0, other: 0 };
         const userStatsMap = new Map();
         const giftTypeMap = new Map();
         const questions = [];
@@ -1940,7 +1940,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             const coins = resolvedGift ? Math.max(0, Number(resolvedGift.coins || 0)) : Math.max(0, Number(m?.coins || 0));
             if (coins > 0 && (type === 'gift' || type === 'subscriber')) derivedCoinsTotal += coins;
             if (!userStatsMap.has(userKey)) {
-                userStatsMap.set(userKey, { user, total: 0, chat: 0, likes: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map(), lastMessage: '' });
+                userStatsMap.set(userKey, { user, total: 0, chat: 0, likes: 0, shares: 0, gifts: 0, giftEvents: 0, joins: 0, coins: 0, giftTypes: new Map(), lastMessage: '' });
             }
             const row = userStatsMap.get(userKey);
             row.total += 1;
@@ -1971,6 +1971,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 if (user && user !== 'Unknown') overallGiftRow.users.add(user);
                 giftTypeMap.set(giftKey, overallGiftRow);
             } else if (type === 'join') row.joins += 1;
+            else if (type === 'share') row.shares += 1;
             else if (type === 'like') row.likes += Math.max(1, Number(m.quantity || 1));
             else row.chat += 1;
             row.coins += Math.max(0, coins);
@@ -1984,6 +1985,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             user: row.user,
             total: row.total,
             chat: row.chat,
+            shares: row.shares,
             gifts: row.gifts,
             giftEvents: row.giftEvents,
             joins: row.joins,
@@ -2734,7 +2736,9 @@ function createTab(url = '', title = 'New Tab', active = true) {
     if (url) { navigateTo(url, id); }
     else {
         const cfg = DB.getSettings();
-        if (cfg.newTabWith === 'Homepage' && cfg.homepage) { navigateTo(cfg.homepage, id); }
+        const newTabWith = String(cfg.newTabWith || '').trim().toLowerCase();
+        const tabWantsHomepage = newTabWith === 'homepage' || newTabWith === 'početnom stranicom (adresa)' || newTabWith === 'početna stranica';
+        if (tabWantsHomepage && cfg.homepage) { navigateTo(cfg.homepage, id); }
         else if (active) {
             setTimeout(() => { const inp = document.getElementById('urlInput'); if (inp) { inp.focus(); inp.select(); } }, 80);
         }
@@ -5507,7 +5511,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 giftTypes: Array.from(r.giftTypes.entries()).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)).slice(0, 4),
                 lastMessage: r.lastMessage
             }))
-            .sort((a, b) => b.total - a.total || b.lastTs - a.lastTs);
+            .sort((a, b) => b.coins - a.coins || b.gifts - a.gifts || b.total - a.total || b.lastTs - a.lastTs);
     }
     function buildDailyStats(messages, limit) {
         const scanLimit = Math.max(30, Math.min(2000, Number(limit || 200)));
@@ -6741,18 +6745,26 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function normalizeTkaiMessageType(message) {
         const known = new Set(['chat', 'gift', 'subscriber', 'caption', 'song', 'join', 'share', 'like']);
         const explicit = String(message?.type || '').trim().toLowerCase();
-        // Allow explicit chat rows to be reclassified by heuristics (gift/share/join signals).
-        if (known.has(explicit) && explicit !== 'chat') return explicit;
         const text = String(message?.text || message?.giftRawText || '').toLowerCase();
-        if (!text) return explicit || 'chat';
-        if (/\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|shared|share|podijelio|podijelila|dijelio\s+live|dijelila\s+live)\b/i.test(text)) return 'share';
-        if (/\b(joined\s+(?:the\s+)?live|joined\s+this\s+live|joined|join|entered\s+the\s+live|entered|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text)) return 'join';
+        if (!text) return (known.has(explicit) ? explicit : '') || 'chat';
+        const hasShare = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|shared|share|podijelio|podijelila|dijelio\s+live|dijelila\s+live)\b/i.test(text);
+        const hasJoin = /\b(joined\s+(?:the\s+)?live|joined\s+this\s+live|joined|join|entered\s+the\s+live|entered|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text);
         const parsedCoins = Number(parseCoinsFromText(text) || 0);
         const catalogHits = countGiftCatalogMatches(text);
-        // Detect gifts early to avoid misclassifying gift-related phrases like "Heart" as likes
-        if (parsedCoins > 0 || /\b(sent|gift|gifted|rose|donut|diamond|coins?|gave|poklon|darovao|donirao)\b/i.test(text)) return 'gift';
-        if (catalogHits >= 2) return 'gift';
-        if (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text)) return 'gift';
+        const hasGiftVerb = /\b(sent|gift|gifted|rose|donut|diamond|coins?|gave|poklon|darovao|donirao)\b/i.test(text);
+        const hasGiftSignal = parsedCoins > 0
+            || hasGiftVerb
+            || catalogHits >= 2
+            || (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text));
+        if (hasShare && !hasGiftSignal) return 'share';
+        if (hasJoin) return 'join';
+
+        if (known.has(explicit) && explicit !== 'chat') {
+            if ((explicit === 'gift' || explicit === 'subscriber') && hasShare && !hasGiftSignal) return 'share';
+            return explicit;
+        }
+
+        if (hasGiftSignal) return 'gift';
         if (/\b(subscribed|subscriber|subscribed\s+to\s+you|pretplatio|pretplatila|member)\b/i.test(text)) return 'subscriber';
         if (/\b(likes?|liked|heart(?:ed|s)?)\b/i.test(text)) return 'like';
         if (/\b(now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\b/i.test(text)) return 'song';
@@ -9793,14 +9805,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           '[data-e2e="gift-message"]',
           '[data-e2e="chat-gift-item"]',
           '[class*="GiftItem"]',
-          '[class*="gift-item"]',
           '[class*="GiftMessage"]',
-          '[class*="gift-message"]',
           '[class*="PanelGift"]',
-          '[class*="panel-gift"]',
           '[class*="GiftPanel"]',
-          '[class*="GiftEntry"]',
-          '[class*="gift-entry"]'
+                    '[class*="GiftEntry"]'
         ];
         const giftItemSet = new Set(items);
         for (const gsel of giftItemSelectors) {
@@ -9808,17 +9816,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             document.querySelectorAll(gsel).forEach(function(g) { giftItemSet.add(g); });
           } catch(_) {}
         }
-        // Scan plain chat text for "sent" pattern in existing items' siblings/parents
-        // (TikTok puts gift rows directly in the same list as chat rows)
-        try {
-          const allChatRows = document.querySelectorAll(
-            '[class*="MessageItem"],[class*="ChatRow"],[class*="ChatItem"],[class*="chatItem"],[class*="comment-item"]'
-          );
-          allChatRows.forEach(function(row) {
-            const txt = (row.textContent || '').toLowerCase();
-            if (/\bsent\b/.test(txt)) giftItemSet.add(row);
-          });
-        } catch(_) {}
         if (giftItemSet.size > items.length) items = Array.from(giftItemSet);
 
         // --- Captions / DJ CC / Song detection ---
@@ -10023,16 +10020,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
           
           // Hvati nagrade, emotikone, specijalne znakove
-          const giftEls = el.querySelectorAll('img[alt*="gift"], img[alt*="Gift"], img[alt*="rose"], img[alt*="Rose"], [class*="GiftIcon"], [class*="gift"], [class*="Gift"]');
+                    const giftEls = el.querySelectorAll(
+                        '[data-e2e*="gift" i],'
+                        + 'img[alt*="gift" i],'
+                        + 'img[title*="gift" i],'
+                        + 'img[alt*="rose" i],'
+                        + 'img[title*="rose" i],'
+                        + '[class*="GiftIcon"],'
+                        + '[class*="GiftBadge"]'
+                    );
           const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
-          giftEls.forEach(g => {
-            const gAlt = g.alt || g.title || '🎁';
-            if (gAlt && !rawText.includes(gAlt)) rawText += ' ' + gAlt;
-          });
-          emoteEls.forEach(em => {
-            const eAlt = em.alt || em.title || '';
-            if (eAlt && !rawText.includes(eAlt) && eAlt.length < 30) rawText += ' ' + eAlt;
-          });
           
           const cleaned = cleanChatText(rawText, user);
                     const text = cleaned.slice(0, 900);
@@ -10044,11 +10041,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const hasLikeWord = /\blikes?\b|\bliked\b|\bheart(?:ed|s)?\b|\bthumbs\s*up\b|\bupvot(?:e|ed)\b|\blajk(?:ao|ala|ali|ale)?\b/i.test(low);
             const isLike = hasLikeWord && !hasSent && giftEls.length === 0 && !hasGiftWord;
                         const isShare = isStrictShareEvent(text, rawText, user, el);
-                        const isGift = !isLike && (
-                            giftEls.length > 0
-                            || /\b(?:gifted|poklon(?:io|ila)?|darovao|donirao)\b/i.test(low)
-                            || (hasSent && !isShare)
-                        );
+                        const hasGiftVerb = /\b(?:gifted|poklon(?:io|ila)?|darovao|donirao)\b/i.test(low);
+                        const hasStrongGiftSignal = giftEls.length > 0 || hasGiftVerb || (hasSent && hasGiftWord);
+                        const isGift = !isLike && !isShare && hasStrongGiftSignal;
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
                         if ((!user || String(user).toLowerCase() === 'unknown') && (isGift || isJoin || isShare)) {
@@ -10064,7 +10059,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               }
             }
             const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
-                        const messageType = isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isShare ? 'share' : (isLike ? 'like' : 'chat'))));
+                        const messageType = isShare ? 'share' : (isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isLike ? 'like' : 'chat'))));
                         if (TKAI_PARSER_DEBUG) {
                             const likelyMention = /^\s*@/.test(text) || /(^|\s)@[a-z0-9._]{2,40}\b/i.test(text);
                             const hasJoinWord = /\b(joined|join|entered|ulazi|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
@@ -10101,7 +10096,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             userHandle,
               text,
               mid,
-                                                        type: isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isShare ? 'share' : (isLike ? 'like' : 'chat')))),
+                                                                                                                type: isShare ? 'share' : (isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isLike ? 'like' : 'chat')))),
               level: levelHint
             });
           }
@@ -10701,7 +10696,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const translateLang = getTranslateTargetLang();
         const replyLang = replyLangEl?.value || 'hr';
         const giftStats = computeGiftStats();
-        const userLimit = Number(DB.getSettings().tkaiUserScanLimit || 200);
+        const userLimit = Math.max(200, collectedMessages.length);
         const detailedInsights = computeInsightsSnapshot(collectedMessages);
         const payload = {
             exportedAt: new Date().toISOString(),
@@ -19169,16 +19164,34 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
 
         const cfg = DB.getSettings();
+        const normalizeMode = (value, kind) => {
+            const v = String(value || '').trim().toLowerCase();
+            if (!v) return '';
+            if (kind === 'opensWith') {
+                if (v === 'last-session' || v === 'all windows from last session' || v === 'svi prozori iz zadnje sesije') return 'last-session';
+                if (v === 'new-window' || v === 'a new window' || v === 'novi prozor') return 'new-window';
+                if (v === 'new-private-window' || v === 'a new private window' || v === 'novi privatni prozor') return 'new-private-window';
+            }
+            if (kind === 'newWindowWith' || kind === 'newTabWith') {
+                if (v === 'start-page' || v === 'start page' || v === 'početna stranica (etherx)') return 'start-page';
+                if (v === 'homepage' || v === 'početnom stranicom (adresa)' || v === 'početna stranica') return 'homepage';
+                if (v === 'empty-page' || v === 'empty page' || v === 'praznom stranicom' || v === 'prazna stranica') return 'empty-page';
+                if (v === 'same-page' || v === 'same page' || v === 'istom stranicom') return 'same-page';
+            }
+            return v;
+        };
 
         // Determine initial URL based on "New Window" settings
         const getInitialUrl = () => {
-            if (cfg.newWindowWith === 'Homepage' && cfg.homepage) return cfg.homepage;
-            if (cfg.newWindowWith === 'Empty Page') return 'about:blank';
+            const winMode = normalizeMode(cfg.newWindowWith, 'newWindowWith');
+            if (winMode === 'homepage' && cfg.homepage) return cfg.homepage;
+            if (winMode === 'empty-page') return 'about:blank';
             return ''; // Default to Start Page (NTP)
         };
 
         // If user set "opensWith" to something other than "All windows from last session", skip restore
-        if (cfg.opensWith && cfg.opensWith !== 'All windows from last session') {
+        const opensWithMode = normalizeMode(cfg.opensWith, 'opensWith');
+        if (cfg.opensWith && opensWithMode !== 'last-session') {
             const url = getInitialUrl();
             createTab(url); renderQuickLinks();
             consoleLog('info', '🚀 EtherX Browser initialized'); consoleLog('success', '⬡ Web3 provider: window.ethereum injected');

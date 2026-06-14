@@ -825,9 +825,11 @@
                                     <div class="s-row-label" data-i18n="labelOpensWith">EtherX opens with</div>
                                 </div>
                                 <select class="s-select" data-setting="opensWith">
-                                    <option data-i18n="optNewWindow">A new window</option>
-                                    <option data-i18n="optNewPrivateWindow">A new private window</option>
-                                    <option data-i18n="optAllLastSession">All windows from last session</option>
+                                    <option value="new-window" data-i18n="optNewWindow">A new window</option>
+                                    <option value="new-private-window" data-i18n="optNewPrivateWindow">A new private
+                                        window</option>
+                                    <option value="last-session" data-i18n="optAllLastSession">All windows from last
+                                        session</option>
                                 </select>
                             </div>
                             <div class="s-row">
@@ -835,10 +837,10 @@
                                     <div class="s-row-label" data-i18n="labelNewWindowWith">New windows open with</div>
                                 </div>
                                 <select class="s-select" data-setting="newWindowWith">
-                                    <option data-i18n="optStartPage">Start Page</option>
-                                    <option data-i18n="optHomepage">Homepage</option>
-                                    <option data-i18n="optEmptyPage">Empty Page</option>
-                                    <option data-i18n="optSamePage">Same Page</option>
+                                    <option value="start-page" data-i18n="optStartPage">Start Page</option>
+                                    <option value="homepage" data-i18n="optHomepage">Homepage</option>
+                                    <option value="empty-page" data-i18n="optEmptyPage">Empty Page</option>
+                                    <option value="same-page" data-i18n="optSamePage">Same Page</option>
                                 </select>
                             </div>
                             <div class="s-row">
@@ -846,9 +848,9 @@
                                     <div class="s-row-label" data-i18n="labelNewTabWith">New tabs open with</div>
                                 </div>
                                 <select class="s-select" data-setting="newTabWith">
-                                    <option data-i18n="optStartPage">Start Page</option>
-                                    <option data-i18n="optHomepage">Homepage</option>
-                                    <option data-i18n="optEmptyPage">Empty Page</option>
+                                    <option value="start-page" data-i18n="optStartPage">Start Page</option>
+                                    <option value="homepage" data-i18n="optHomepage">Homepage</option>
+                                    <option value="empty-page" data-i18n="optEmptyPage">Empty Page</option>
                                 </select>
                             </div>
                             <div class="s-row">
@@ -3186,7 +3188,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.71</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.72</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -4865,7 +4867,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.71</span></div>
+                                    v<span id="helpVersionNum2">3.0.72</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
