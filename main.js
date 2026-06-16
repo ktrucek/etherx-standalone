@@ -3736,8 +3736,37 @@ function setupIPC() {
         if (ext === ".appimage") {
           fs.chmodSync(filePath, 0o755);
           const { spawn } = require("child_process");
-          spawn(filePath, [], { detached: true, stdio: "ignore" }).unref();
-          setTimeout(() => app.quit(), 1000);
+          const currentAppImage = process.env.APPIMAGE || "";
+          const currentExec = process.execPath || "";
+          const replaceTarget = currentAppImage || currentExec;
+          const looksLikeAppImage = /\.appimage$/i.test(replaceTarget);
+
+          if (looksLikeAppImage) {
+            const updateScript = [
+              "set -e",
+              `cp -f ${shellQuote(filePath)} ${shellQuote(replaceTarget)}`,
+              `chmod +x ${shellQuote(replaceTarget)}`,
+              `nohup ${shellQuote(replaceTarget)} >/dev/null 2>&1 &`,
+            ].join("; ");
+
+            spawn("/bin/bash", ["-lc", updateScript], {
+              detached: true,
+              stdio: "ignore",
+            }).unref();
+            setTimeout(() => app.quit(), 700);
+          } else {
+            // Fallback: when app is not running from an AppImage path,
+            // open downloaded file and let user replace launcher manually.
+            await shell.openPath(filePath);
+            dialog.showMessageBox(mainWindow, {
+              type: "info",
+              title: "EtherX Update",
+              message: "AppImage je preuzet i pokrenut.",
+              detail:
+                "Ako se nakon restarta i dalje otvara stara verzija, zamijeni ručno postojeći EtherX AppImage ovim preuzetim fileom.",
+              buttons: ["OK"],
+            });
+          }
         } else if (ext === ".deb") {
           // Show in folder — user may need sudo
           shell.showItemInFolder(filePath);
