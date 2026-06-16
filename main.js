@@ -3679,7 +3679,22 @@ function setupIPC() {
       }
 
       const appName = path.basename(appBundle);
-      const destApp = path.join("/Applications", appName);
+
+      // Detect where the app is currently installed
+      let destApp = path.join("/Applications", appName);
+
+      // If process.execPath exists, try to find current installation location
+      if (process.execPath) {
+        const userAppsMatch = process.execPath.match(/^(.*\.app)\//);
+        if (userAppsMatch) {
+          const currentAppPath = userAppsMatch[1];
+          const currentDir = path.dirname(currentAppPath);
+          destApp = path.join(currentDir, appName);
+          console.log(`[macOS install] Auto-detected installation dir: ${currentDir}`);
+        }
+      }
+
+      console.log(`[macOS install] Will install to: ${destApp}`);
 
       // Disable Electron's ASAR interceptor so rmSync can unlink app.asar as a file
       const _noAsar = process.noAsar;
@@ -3727,11 +3742,18 @@ function setupIPC() {
 
       if (process.platform === "darwin") {
         if (ext === ".zip") {
-          await installMacZipUpdate(filePath);
+          try {
+            const result = await installMacZipUpdate(filePath);
+            console.log(`[update:install] macOS install successful:`, result);
+          } catch (err) {
+            console.error(`[update:install] macOS install failed:`, err.message);
+            throw err;
+          }
         } else {
           await shell.openPath(filePath);
         }
-        setTimeout(() => app.quit(), 1500);
+        // Wait a bit for the new app to launch before quitting old one
+        setTimeout(() => app.quit(), 2500);
       } else if (process.platform === "linux") {
         if (ext === ".appimage") {
           fs.chmodSync(filePath, 0o755);
