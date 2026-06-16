@@ -156,7 +156,6 @@ class DatabaseManager {
           status       TEXT    NOT NULL DEFAULT 'completed',
           created_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
         );
-        CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
 
         -- ── Sessions ──────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS sessions (
@@ -205,6 +204,30 @@ class DatabaseManager {
 
         INSERT OR REPLACE INTO schema_version (version) VALUES (3);
       `);
+    }
+
+    // ── Safety migration: ensure downloads.status exists for legacy DBs ─────
+    // Some users have schema_version >= 3 but an older downloads table layout.
+    // In that case, add the missing column lazily instead of failing DB init.
+    this._ensureDownloadsStatusColumn();
+  }
+
+  _ensureDownloadsStatusColumn() {
+    try {
+      const hasDownloads = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='downloads'")
+        .get();
+      if (!hasDownloads) return;
+
+      const columns = this.db.prepare("PRAGMA table_info(downloads)").all();
+      const hasStatus = columns.some((c) => c && c.name === 'status');
+      if (!hasStatus) {
+        this.db.exec("ALTER TABLE downloads ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';");
+      }
+
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);");
+    } catch (error) {
+      console.warn('[DB] downloads.status safety migration failed:', error?.message || error);
     }
   }
 

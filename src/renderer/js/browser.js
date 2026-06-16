@@ -137,6 +137,19 @@ function escHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function safeResolveGiftMetaFromMessage(message) {
+    if (typeof resolveGiftMetaFromMessage === 'function') return resolveGiftMetaFromMessage(message);
+    if (typeof detectGiftMetaFromText === 'function') {
+        return detectGiftMetaFromText(String(message?.giftName || message?.text || ''));
+    }
+    return {
+        giftName: String(message?.giftName || message?.text || '').trim().slice(0, 80),
+        quantity: Number(message?.quantity || 1) || 1,
+        unitCoins: Number(message?.unitCoins || 0) || 0,
+        coins: Number(message?.coins || 0) || 0,
+    };
+}
+
 function logNetworkEntry(url, type, status, size, time) {
     const buffer = Array.isArray(globalThis.__etherxNetBuffer)
         ? globalThis.__etherxNetBuffer
@@ -1936,12 +1949,6 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function normalizeTkaiGiftKeySafe(value) {
         if (typeof normalizeGiftKey === 'function') return normalizeGiftKey(value);
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    }
-    function safeResolveGiftMetaFromMessage(message) {
-        if (typeof resolveGiftMetaFromMessage === 'function') return resolveGiftMetaFromMessage(message);
-        // fallback: try to detect from giftName or text
-        if (typeof detectGiftMetaFromText === 'function') return detectGiftMetaFromText(String(message?.giftName || message?.text || ''));
-        return { giftName: String(message?.giftName || message?.text || '').trim().slice(0, 80), quantity: Number(message?.quantity || 1) || 1, unitCoins: Number(message?.unitCoins || 0) || 0, coins: Number(message?.coins || 0) || 0 };
     }
     function buildTkaiSessionAnalytics(session) {
         const nowTs = Date.now();
@@ -16344,7 +16351,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     document.addEventListener('click', () => document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')));
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
-    let toastTimer;
+    // Use var to avoid TDZ when showToast is called before this section fully initializes.
+    var toastTimer;
     function showToast(msg, duration) {
         const t = document.getElementById('toast');
         if (!t) return;
