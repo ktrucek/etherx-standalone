@@ -3679,22 +3679,7 @@ function setupIPC() {
       }
 
       const appName = path.basename(appBundle);
-
-      // Detect where the app is currently installed
-      let destApp = path.join("/Applications", appName);
-
-      // If process.execPath exists, try to find current installation location
-      if (process.execPath) {
-        const userAppsMatch = process.execPath.match(/^(.*\.app)\//);
-        if (userAppsMatch) {
-          const currentAppPath = userAppsMatch[1];
-          const currentDir = path.dirname(currentAppPath);
-          destApp = path.join(currentDir, appName);
-          console.log(`[macOS install] Auto-detected installation dir: ${currentDir}`);
-        }
-      }
-
-      console.log(`[macOS install] Will install to: ${destApp}`);
+      const destApp = path.join("/Applications", appName);
 
       // Disable Electron's ASAR interceptor so rmSync can unlink app.asar as a file
       const _noAsar = process.noAsar;
@@ -3707,16 +3692,12 @@ function setupIPC() {
       try {
         await execFileAsync("/usr/bin/ditto", [appBundle, destApp]);
         await execFileAsync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destApp]).catch(() => ({ stdout: "", stderr: "" }));
-        // Re-sign with ad-hoc identity so macOS Gatekeeper accepts the app
-        // without a valid Apple Developer certificate / notarization.
-        await execFileAsync("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", destApp]).catch(() => ({ stdout: "", stderr: "" }));
       } catch (error) {
         if (!["EACCES", "EPERM"].includes(error.code)) throw error;
         const copyScript = [
           `/bin/rm -rf ${shellQuote(destApp)}`,
           `/usr/bin/ditto ${shellQuote(appBundle)} ${shellQuote(destApp)}`,
           `/usr/bin/xattr -dr com.apple.quarantine ${shellQuote(destApp)} || true`,
-          `/usr/bin/codesign --force --deep --sign - ${shellQuote(destApp)} || true`,
         ].join(" && ");
         await execFileAsync("/usr/bin/osascript", [
           "-e",
@@ -3742,53 +3723,17 @@ function setupIPC() {
 
       if (process.platform === "darwin") {
         if (ext === ".zip") {
-          try {
-            const result = await installMacZipUpdate(filePath);
-            console.log(`[update:install] macOS install successful:`, result);
-          } catch (err) {
-            console.error(`[update:install] macOS install failed:`, err.message);
-            throw err;
-          }
+          await installMacZipUpdate(filePath);
         } else {
           await shell.openPath(filePath);
         }
-        // Wait a bit for the new app to launch before quitting old one
-        setTimeout(() => app.quit(), 2500);
+        setTimeout(() => app.quit(), 1500);
       } else if (process.platform === "linux") {
         if (ext === ".appimage") {
           fs.chmodSync(filePath, 0o755);
           const { spawn } = require("child_process");
-          const currentAppImage = process.env.APPIMAGE || "";
-          const currentExec = process.execPath || "";
-          const replaceTarget = currentAppImage || currentExec;
-          const looksLikeAppImage = /\.appimage$/i.test(replaceTarget);
-
-          if (looksLikeAppImage) {
-            const updateScript = [
-              "set -e",
-              `cp -f ${shellQuote(filePath)} ${shellQuote(replaceTarget)}`,
-              `chmod +x ${shellQuote(replaceTarget)}`,
-              `nohup ${shellQuote(replaceTarget)} >/dev/null 2>&1 &`,
-            ].join("; ");
-
-            spawn("/bin/bash", ["-lc", updateScript], {
-              detached: true,
-              stdio: "ignore",
-            }).unref();
-            setTimeout(() => app.quit(), 700);
-          } else {
-            // Fallback: when app is not running from an AppImage path,
-            // open downloaded file and let user replace launcher manually.
-            await shell.openPath(filePath);
-            dialog.showMessageBox(mainWindow, {
-              type: "info",
-              title: "EtherX Update",
-              message: "AppImage je preuzet i pokrenut.",
-              detail:
-                "Ako se nakon restarta i dalje otvara stara verzija, zamijeni ručno postojeći EtherX AppImage ovim preuzetim fileom.",
-              buttons: ["OK"],
-            });
-          }
+          spawn(filePath, [], { detached: true, stdio: "ignore" }).unref();
+          setTimeout(() => app.quit(), 1000);
         } else if (ext === ".deb") {
           // Show in folder — user may need sudo
           shell.showItemInFolder(filePath);

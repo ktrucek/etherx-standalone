@@ -13,8 +13,19 @@
 })();
 
 // ── Electron webview detection ──
-// Some builds expose only window.etherx from preload.
-window.electronWebview = (typeof window.electronAPI !== 'undefined') || (typeof window.etherx !== 'undefined');
+// Enter Electron mode only when the full EtherX preload bridge is present.
+// A partial bridge (or failed preload) can otherwise leave the UI in a broken state.
+const hasEtherxBridge = !!(
+    window.etherx &&
+    window.etherx.storage?.getSnapshot &&
+    window.etherx.tabs?.getAll &&
+    window.etherx.settings?.get
+);
+window.electronWebview = hasEtherxBridge;
+
+if (!hasEtherxBridge && (typeof window.electronAPI !== 'undefined' || typeof window.etherx !== 'undefined')) {
+    console.error('EtherX preload bridge is incomplete. Falling back to web-safe mode.');
+}
 // In web mode (Safari/Chrome): hide <webview> (unsupported), show <iframe> instead
 if (!window.electronWebview) {
     const wv = document.getElementById('browseFrame');
