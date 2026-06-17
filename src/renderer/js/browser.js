@@ -1008,20 +1008,35 @@ if (window.electronWebview) {
 })();
 
 function resetBlockingOverlays() {
-    const ids = [
+    // Elements that use CSS classes (.show / .open) to toggle visibility.
+    // For these, we must remove the inline style so the CSS rule can take over —
+    // an inline style="display:none" beats any CSS selector without !important.
+    const classDrivenIds = [
         'settingsBackdrop',
-        'sipBackdrop',
         'blockedOverlay',
         'iconPickerOverlay',
         'customToolbarOverlay',
-        'shareSheet',
         'qrSyncOverlay',
-        'bmManagerModal',
-        'tkaiPanelLockOverlay',
-        'pwdModal'
     ];
 
-    ids.forEach((id) => {
+    // Elements that are shown/hidden exclusively via inline style changes in JS.
+    const inlineDrivenIds = [
+        'sipBackdrop',
+        'shareSheet',
+        'windowSwitcher',
+        'bmManagerModal',
+        'tkaiPanelLockOverlay',
+        'pwdModal',
+    ];
+
+    classDrivenIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('show', 'open', 'active');
+        el.style.removeProperty('display');
+    });
+
+    inlineDrivenIds.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.classList.remove('show', 'open', 'active');
@@ -1130,6 +1145,8 @@ function shouldCreateMissingFallback(id) {
     if (!id || typeof id !== 'string') return false;
     // Never fake browser frame nodes; those must stay real.
     if (id === 'browseFrame' || id === 'browseFrameWeb' || id.startsWith('browseFrame_')) return false;
+    // Webviews were previously (incorrectly) addressed as 'wv-<id>' — never fake those.
+    if (id.startsWith('wv-')) return false;
     // Optional settings/menu controls are often feature-flagged or removed.
     // Returning null keeps optional chaining effective and avoids phantom nodes.
     if (
@@ -3746,8 +3763,8 @@ document.addEventListener('mousedown', e => {
     const inPanel = e.target.closest('.panel, .nav-btn, .toolbar, #tabBar, #ctxMenu, .dropdown-menu, .modal, [id$="Panel"]');
     if (!inPanel) closeAllPanels();
 }, true);
-document.getElementById('btnBookmarks').addEventListener('click', () => { renderBookmarksPanel(); togglePanel('bmPanel'); });
-document.getElementById('btnHistory').addEventListener('click', () => { renderHistoryPanel(); togglePanel('histPanel'); });
+document.getElementById('btnBookmarks').addEventListener('click', () => { window.renderBookmarksPanel?.(); togglePanel('bmPanel'); });
+document.getElementById('btnHistory').addEventListener('click', () => { window.renderHistoryPanel?.(); togglePanel('histPanel'); });
 function openSettingsTab(stab) {
     const panel = document.getElementById('settingsPanel');
     if (!panel) return;
@@ -11573,6 +11590,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             });
         });
     }
+    // Expose panel renderers globally so callers outside this IIFE can access them
+    window.renderBookmarksPanel = renderBookmarksPanel;
+    window.renderHistoryPanel = renderHistoryPanel;
     document.getElementById('clearHistBtn').addEventListener('click', () => { DB.clearHistory(); renderHistoryPanel(); showToast('History cleared'); });
 
     // ── Downloads Panel Renderer ──────────────────────────────────────────────
@@ -16745,7 +16765,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (m.includes('osvježi') || m.includes('refresh') || m.includes('reload')) {
                 const t = getActiveTab();
                 if (t) {
-                    const wv = document.getElementById('wv-' + t.id);
+                    const wv = origGetElementById.call(document, 'browseFrame_' + t.id);
                     if (wv) wv.reload();
                     return 'Stranica se osvježava...';
                 }
@@ -18249,15 +18269,22 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             showToast('🗑 Povijest testova obrisana');
         });
 
+        // Visual init only — initSettingsPanel() already registers the click handler for
+        // these data-setting toggles. Adding another addEventListener here causes a
+        // double-toggle bug where each click fires twice and the state never changes.
         ['toggleAiSummarize', 'toggleAiPhishing', 'toggleAiSearch'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             const key = el.dataset.setting;
             if (cfg[key] === false) el.classList.remove('on');
+            // Toast feedback piggybacks on the existing click flow via a one-time read,
+            // without adding a second toggle-state mutation.
             el.addEventListener('click', () => {
-                el.classList.toggle('on');
-                DB.saveSetting(key, el.classList.contains('on'));
-                showToast(el.classList.contains('on') ? '✓ Uključeno' : '✗ Isključeno');
+                // Read the final class state AFTER initSettingsPanel's handler has already
+                // toggled it (handlers fire in registration order, initSettingsPanel runs first).
+                requestAnimationFrame(() => {
+                    showToast(el.classList.contains('on') ? '✓ Uključeno' : '✗ Isključeno');
+                });
             });
         });
     })();
@@ -21797,7 +21824,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     const inactiveDuration = now - tab.lastActive;
                     if (inactiveDuration > timeout && !suspendedTabs.has(id)) {
                         // Suspend this tab
-                        const webview = document.getElementById('wv-' + id);
+                        const webview = origGetElementById.call(document, 'browseFrame_' + id);
                         if (webview && webview.src && webview.src !== 'about:blank') {
                             suspendedTabs.set(id, { originalSrc: webview.src, html: tab.htmlContent });
                             if (window.electronWebview && webview.tagName === 'WEBVIEW') {

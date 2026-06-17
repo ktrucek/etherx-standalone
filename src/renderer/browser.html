@@ -68,47 +68,47 @@
         </div>
     </div>
 
+    <!-- Share Sheet — standalone outside iconPickerOverlay so it can show independently -->
+    <div id="shareSheet"
+        style="display:none;position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);align-items:flex-end;justify-content:center">
+        <div id="shareBox"
+            style="background:var(--bg2);border:1px solid var(--border2);border-radius:18px 18px 0 0;padding:22px 20px 28px;width:min(520px,100vw);box-shadow:0 -16px 50px rgba(0,0,0,.7);animation:slideUp .22s ease">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                <span style="font-size:14px;font-weight:700;color:var(--text)">Share</span>
+                <button id="shareClose"
+                    style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
+            </div>
+            <div id="shareUrl" style="font-size:11px;color:var(--text3);margin-bottom:16px;word-break:break-all">
+            </div>
+            <div id="shareActions"
+                style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:12px">
+            </div>
+        </div>
+    </div>
+
+    <!-- Window Switcher — standalone outside iconPickerOverlay -->
+    <div id="windowSwitcher"
+        style="display:none;position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
+        <div id="wswBox"
+            style="background:var(--bg2);border:1px solid var(--border2);border-radius:18px;padding:22px 24px;width:min(680px,95vw);box-shadow:0 24px 70px rgba(0,0,0,.85)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                <span style="font-size:14px;font-weight:700;color:var(--text)">⧉ Open Windows &amp; Tabs</span>
+                <button id="wswClose"
+                    style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
+            </div>
+            <div id="wswTabs"
+                style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;max-height:60vh;overflow-y:auto">
+            </div>
+            <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end">
+                <button id="wswNewTab"
+                    style="padding:8px 18px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">+
+                    New Tab</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Icon Picker Modal -->
     <div id="iconPickerOverlay">
-
-        <!-- Share Sheet -->
-        <div id="shareSheet"
-            style="display:none;position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);align-items:flex-end;justify-content:center">
-            <div id="shareBox"
-                style="background:var(--bg2);border:1px solid var(--border2);border-radius:18px 18px 0 0;padding:22px 20px 28px;width:min(520px,100vw);box-shadow:0 -16px 50px rgba(0,0,0,.7);animation:slideUp .22s ease">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                    <span style="font-size:14px;font-weight:700;color:var(--text)">Share</span>
-                    <button id="shareClose"
-                        style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
-                </div>
-                <div id="shareUrl" style="font-size:11px;color:var(--text3);margin-bottom:16px;word-break:break-all">
-                </div>
-                <div id="shareActions"
-                    style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:12px">
-                </div>
-            </div>
-        </div>
-
-        <!-- Window Switcher -->
-        <div id="windowSwitcher"
-            style="display:none;position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
-            <div id="wswBox"
-                style="background:var(--bg2);border:1px solid var(--border2);border-radius:18px;padding:22px 24px;width:min(680px,95vw);box-shadow:0 24px 70px rgba(0,0,0,.85)">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                    <span style="font-size:14px;font-weight:700;color:var(--text)">⧉ Open Windows &amp; Tabs</span>
-                    <button id="wswClose"
-                        style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px">✕</button>
-                </div>
-                <div id="wswTabs"
-                    style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;max-height:60vh;overflow-y:auto">
-                </div>
-                <div style="margin-top:14px;display:flex;gap:10px;justify-content:flex-end">
-                    <button id="wswNewTab"
-                        style="padding:8px 18px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">+
-                        New Tab</button>
-                </div>
-            </div>
-        </div>
         <div id="iconPickerBox">
             <h3 id="iconPickerTitle">Promijeni ikonu</h3>
             <input type="text" id="iconPickerInput" maxlength="4" placeholder="📌">
