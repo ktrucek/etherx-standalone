@@ -5784,9 +5784,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
-            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi i pošalji u TikTok</button>' +
+            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi</button>' +
             '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
-            '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda i pošalji</button>' +
+            '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
@@ -5845,9 +5845,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 return;
             }
 
-            const ok = await sendTextToActiveTikTokChat(text, { submit: true });
+            m.translatedText = text;
+            m.translatedLang = targetLang || 'en';
+            renderMessages();
             closeTkaiMsgContextMenu();
-            showToast(ok ? '🌐 Prevedena poruka poslana u TikTok chat' : '⚠️ TikTok chat input nije pronađen');
+            showToast('🌐 Poruka prevedena');
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="send-target-translated"]')?.addEventListener('click', async () => {
@@ -5888,9 +5890,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     closeTkaiMsgContextMenu();
                     return;
                 }
-                const ok = await sendTextToActiveTikTokChat(text, { submit: true });
+                if (typeof window.pushTextToTikTokAI === 'function') {
+                    await window.pushTextToTikTokAI(text, 'Clipboard');
+                }
                 closeTkaiMsgContextMenu();
-                showToast(ok ? '📋 Zalijepljeno i poslano u TikTok chat' : '⚠️ TikTok chat input nije pronađen');
+                showToast('📋 Zalijepljeno iz clipboarda');
             } catch (_) {
                 closeTkaiMsgContextMenu();
                 showToast('⚠️ Dozvoli pristup clipboardu za ovu opciju');
