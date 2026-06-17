@@ -732,6 +732,8 @@ if (window.electronWebview) {
                                 '[data-e2e*="chat-message" i]',
                                 '[data-e2e*="comment-item" i]',
                                 '[data-e2e*="message-item" i]',
+                                '[data-e2e*="webcast-chatroom-message" i]',
+                                '[data-e2e*="chatroom-message-item" i]',
                                 '[data-e2e*="chat-item" i]',
                                 '[data-e2e*="chatroom-message" i]',
                                 '[data-e2e*="live-chat" i]',
@@ -756,25 +758,53 @@ if (window.electronWebview) {
                             const textSelectors = [
                                 '[data-e2e*="comment-content" i]',
                                 '[data-e2e*="message-text" i]',
+                                '[data-e2e*="message-content" i]',
                                 '[data-e2e*="chat-message-text" i]',
                                 '[class*="CommentText" i]',
                                 '[class*="MessageText" i]',
-                                '[class*="ChatText" i]'
+                                '[class*="ChatText" i]',
+                                '[class*="MessageBody" i]',
+                                '[class*="ChatMessageText" i]',
+                                'span[dir="auto"]'
                             ].join(',');
                             const userSelectors = [
                                 'a[href^="/@"]',
                                 '[data-e2e*="comment-username" i]',
                                 '[data-e2e*="user-name" i]',
+                                '[data-e2e*="nickname" i]',
                                 '[class*="Username" i]',
                                 '[class*="UserName" i]',
+                                '[class*="NickName" i]',
+                                '[class*="AuthorName" i]',
                                 'strong',
                                 'b'
                             ].join(',');
+                            const chatContainerSelectors = [
+                                '[data-e2e*="chat-room" i]',
+                                '[data-e2e*="chatroom" i]',
+                                '[data-e2e*="live-chat" i]',
+                                '.webcast-chatroom',
+                                '[class*="webcast-chatroom" i]',
+                                '[class*="LiveChat" i]',
+                                '[class*="ChatRoom" i]'
+                            ].join(',');
+                            const isShareOnlyText = (value) => {
+                                const raw = clean(value);
+                                if (!raw) return false;
+                                const shareLooseRe = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|podijelio\s+(?:je\s+)?live|podijelila\s+(?:je\s+)?live|dijelio\s+live|dijelila\s+live)\b/i;
+                                if (!shareLooseRe.test(raw)) return false;
+                                const reduced = raw
+                                    .replace(shareLooseRe, ' ')
+                                    .replace(/[.!?,:;()\[\]{}"'_*+=|\\/-]+/g, ' ')
+                                    .replace(/\s+/g, ' ')
+                                    .trim();
+                                return reduced.length === 0;
+                            };
                             const detectType = (text) => {
                                 const lower = clean(text).toLowerCase();
                                 if (!lower) return 'chat';
                                 if (/(sent|gift|rose|donut|diamond|coin|coins|gave|poklon|gifted)/i.test(lower)) return 'gift';
-                                if (/(shared|share|podijelio|podijelila)/i.test(lower)) return 'share';
+                                if (isShareOnlyText(lower)) return 'share';
                                 if (/(joined|join|joined the live|ušao|usla|joined room)/i.test(lower)) return 'join';
                                 if (/(subscribed|subscriber|pretplatio|pretplatila)/i.test(lower)) return 'subscriber';
                                 return 'chat';
@@ -785,8 +815,21 @@ if (window.electronWebview) {
                                 const textEl = row.querySelector(textSelectors);
                                 const rowText = clean(row.innerText || row.textContent || '');
                                 const user = clean(userEl?.textContent || userEl?.getAttribute('href')?.split('/@')[1] || '').replace(/^@+/, '').replace(/[,:;].*$/, '');
-                                let text = clean(textEl?.innerText || textEl?.textContent || '');
-                                if (!text) text = rowText;
+                                const candidates = [];
+                                const pushCandidate = (value) => {
+                                    const cleaned = clean(value);
+                                    if (!cleaned) return;
+                                    if (candidates.includes(cleaned)) return;
+                                    candidates.push(cleaned);
+                                };
+                                pushCandidate(textEl?.innerText || textEl?.textContent || '');
+                                try {
+                                    row.querySelectorAll(textSelectors).forEach((node) => pushCandidate(node?.innerText || node?.textContent || ''));
+                                } catch (_) { }
+                                pushCandidate(rowText);
+                                let text = candidates.find((candidate) => !isShareOnlyText(candidate) && (!user || candidate.toLowerCase() !== user.toLowerCase()))
+                                    || candidates[0]
+                                    || '';
                                 if (user && text.toLowerCase().startsWith(user.toLowerCase())) text = clean(text.slice(user.length));
                                 if (!text) return null;
                                 return { user, text, type: detectType(text) };
@@ -824,17 +867,56 @@ if (window.electronWebview) {
                                 }
                                 return '';
                             }
+                            function findRowFromComposedPath(event) {
+                                const path = Array.isArray(event?.composedPath?.()) ? event.composedPath() : [];
+                                for (const node of path) {
+                                    if (!node || typeof node !== 'object' || !node.matches) continue;
+                                    try {
+                                        if (node.matches(rowSelectors)) return node;
+                                    } catch (_) { }
+                                }
+                                return null;
+                            }
+                            function isInChatContainer(event) {
+                                const target = event?.target;
+                                try {
+                                    if (target?.closest && target.closest(chatContainerSelectors)) return true;
+                                } catch (_) { }
+                                const path = Array.isArray(event?.composedPath?.()) ? event.composedPath() : [];
+                                for (const node of path) {
+                                    if (!node || typeof node !== 'object' || !node.matches) continue;
+                                    try {
+                                        if (node.matches(chatContainerSelectors)) return true;
+                                    } catch (_) { }
+                                }
+                                return false;
+                            }
                             document.addEventListener('contextmenu', (event) => {
                                 const selectedText = String(window.getSelection?.()?.toString?.() || '').trim();
                                 let row = event.target && event.target.closest ? event.target.closest(rowSelectors) : null;
+                                if (!row) row = findRowFromComposedPath(event);
                                 // Structural fallback: if no selector matched, walk up DOM
                                 if (!row) row = findChatRowStructural(event.target);
                                 let payload = extractPayload(row);
+                                if (payload && selectedText && isShareOnlyText(payload.text) && !isShareOnlyText(selectedText)) {
+                                    payload.text = selectedText;
+                                    payload.type = detectType(selectedText);
+                                }
                                 if (!payload && selectedText) {
                                     payload = {
                                         user: extractUserFromNode(row || event.target),
                                         text: selectedText,
                                         type: detectType(selectedText)
+                                    };
+                                }
+                                // Fallback for real chat container: if we're inside chat and have text,
+                                // keep the menu available even when TikTok changes row class names.
+                                if (!payload && isInChatContainer(event) && selectedText) {
+                                    payload = {
+                                        user: extractUserFromNode(event.target),
+                                        text: selectedText,
+                                        type: detectType(selectedText),
+                                        _chatContainerFallback: true
                                     };
                                 }
                                 // Lenient fallback: even without a chat row, show menu for any hover
@@ -874,6 +956,20 @@ if (window.electronWebview) {
             if (msg.startsWith('__ETHERX_TKAI_CTX__')) {
                 try {
                     const payload = JSON.parse(msg.slice('__ETHERX_TKAI_CTX__'.length));
+                    const now = Date.now();
+                    const signature = [
+                        String(payload.user || '').trim().toLowerCase(),
+                        String(payload.text || '').trim().toLowerCase(),
+                        String(payload.type || 'chat').trim().toLowerCase(),
+                        Math.round(Number(payload.x || 0) / 8),
+                        Math.round(Number(payload.y || 0) / 8),
+                        String(payload.href || '').split('?')[0]
+                    ].join('|');
+                    if (signature && signature === tkaiMsgCtxLastSig && (now - tkaiMsgCtxLastOpenAt) < 750) {
+                        return;
+                    }
+                    tkaiMsgCtxLastSig = signature;
+                    tkaiMsgCtxLastOpenAt = now;
                     const rect = wv.getBoundingClientRect();
                     // allow quick re-open but avoid immediate suppression; keep short
                     _suppressNextWebviewContextMenuUntil = Date.now() + 600;
@@ -4522,6 +4618,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let targetedChatUser = '';
     let tkaiMsgCtxEl = null;
     let tkaiMsgCtxTarget = null;
+    let tkaiMsgCtxLastSig = '';
+    let tkaiMsgCtxLastOpenAt = 0;
     let isGenerating = false;
     let isTranslating = false;
     let holdLActive = false;
@@ -5684,6 +5782,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI + scan od ove poruke</button>' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
+            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi i pošalji u TikTok</button>' +
+            '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
+            '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda i pošalji</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
             '<button type="button" data-act="show-messages" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#60a5fa;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">💬 Poruke korisnika + sentiment</button>' +
@@ -5714,6 +5815,82 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const ok = await sendTextToActiveTikTokChat(text, { submit: true });
             closeTkaiMsgContextMenu();
             showToast(ok ? '📨 Poruka poslana u TikTok chat' : '⚠️ TikTok chat input nije pronađen');
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="send-translated"]')?.addEventListener('click', async () => {
+            const m = tkaiMsgCtxTarget;
+            if (!m) return;
+            const original = String(m.text || '').replace(/\s+/g, ' ').trim();
+            const fallback = String(m.translatedText || '').replace(/\s+/g, ' ').trim();
+            const sourceText = original || fallback;
+            if (!sourceText) {
+                showToast('⚠️ Poruka je prazna');
+                closeTkaiMsgContextMenu();
+                return;
+            }
+
+            const targetLang = getManualTranslateTargetLang();
+            let translated = fallback;
+            if (!translated || (targetLang && targetLang !== 'auto' && String(m.translatedLang || '') !== targetLang)) {
+                translated = await translateViaGoogle(sourceText, targetLang || 'en');
+            }
+            const text = String(translated || sourceText).replace(/\s+/g, ' ').trim();
+            if (!text) {
+                showToast('⚠️ Prijevod je prazan');
+                closeTkaiMsgContextMenu();
+                return;
+            }
+
+            const ok = await sendTextToActiveTikTokChat(text, { submit: true });
+            closeTkaiMsgContextMenu();
+            showToast(ok ? '🌐 Prevedena poruka poslana u TikTok chat' : '⚠️ TikTok chat input nije pronađen');
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="send-target-translated"]')?.addEventListener('click', async () => {
+            const m = tkaiMsgCtxTarget;
+            if (!m) return;
+            const user = String(m.user || '').trim().replace(/^@+/, '');
+            const original = String(m.text || '').replace(/\s+/g, ' ').trim();
+            const fallback = String(m.translatedText || '').replace(/\s+/g, ' ').trim();
+            const sourceText = original || fallback;
+            if (!sourceText) {
+                showToast('⚠️ Poruka je prazna');
+                closeTkaiMsgContextMenu();
+                return;
+            }
+            const targetLang = getManualTranslateTargetLang();
+            let translated = fallback;
+            if (!translated || (targetLang && targetLang !== 'auto' && String(m.translatedLang || '') !== targetLang)) {
+                translated = await translateViaGoogle(sourceText, targetLang || 'en');
+            }
+            const body = String(translated || sourceText).replace(/\s+/g, ' ').trim();
+            const text = user ? (`@${user} ${body}`).trim() : body;
+            if (!text) {
+                showToast('⚠️ Prijevod je prazan');
+                closeTkaiMsgContextMenu();
+                return;
+            }
+            const ok = await sendTextToActiveTikTokChat(text, { submit: true });
+            closeTkaiMsgContextMenu();
+            showToast(ok ? '🌐 @korisnik + prijevod poslan u TikTok chat' : '⚠️ TikTok chat input nije pronađen');
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="paste-send"]')?.addEventListener('click', async () => {
+            try {
+                const clip = await navigator.clipboard.readText();
+                const text = String(clip || '').replace(/\s+/g, ' ').trim().slice(0, 380);
+                if (!text) {
+                    showToast('⚠️ Clipboard je prazan');
+                    closeTkaiMsgContextMenu();
+                    return;
+                }
+                const ok = await sendTextToActiveTikTokChat(text, { submit: true });
+                closeTkaiMsgContextMenu();
+                showToast(ok ? '📋 Zalijepljeno i poslano u TikTok chat' : '⚠️ TikTok chat input nije pronađen');
+            } catch (_) {
+                closeTkaiMsgContextMenu();
+                showToast('⚠️ Dozvoli pristup clipboardu za ovu opciju');
+            }
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="send-target-full"]')?.addEventListener('click', async () => {
@@ -9963,7 +10140,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                             const hasMention = /(^|\s)@[a-z0-9._]{2,40}\b/i.test(normalized);
                                             if (shareExactRe.test(normalized) && !hasMention) return true;
                                             if (!withoutShare && !hasMention && hasExplicitShareMarker && /\blive\b/i.test(normalized)) return true;
-                                            if (!hasMention && /\blive\b/i.test(normalized)) return true;
                                         }
 
                                         return false;
