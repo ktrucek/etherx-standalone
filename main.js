@@ -3591,6 +3591,57 @@ function setupIPC() {
     return `'${String(value).replace(/'/g, `'\\''`)}'`;
   }
 
+  function resolveCurrentMacAppBundlePath() {
+    try {
+      let current = path.resolve(process.execPath || "");
+      while (current && current !== path.dirname(current)) {
+        if (current.toLowerCase().endsWith(".app")) return current;
+        current = path.dirname(current);
+      }
+    } catch (_) {
+      // ignore
+    }
+    return "";
+  }
+
+  function resolveMacUpdateDestination(appName) {
+    const currentBundle = resolveCurrentMacAppBundlePath();
+    if (currentBundle && path.basename(currentBundle) === appName) {
+      return currentBundle;
+    }
+    return path.join("/Applications", appName);
+  }
+
+  async function installMacAppBundleToDestination(appBundle, destApp) {
+    // Disable Electron's ASAR interceptor so rmSync can unlink app.asar as a file
+    const _noAsar = process.noAsar;
+    process.noAsar = true;
+    try {
+      fs.rmSync(destApp, { recursive: true, force: true });
+    } finally {
+      process.noAsar = _noAsar;
+    }
+
+    try {
+      await execFileAsync("/usr/bin/ditto", [appBundle, destApp]);
+      await execFileAsync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destApp]).catch(() => ({ stdout: "", stderr: "" }));
+    } catch (error) {
+      if (!["EACCES", "EPERM"].includes(error.code)) throw error;
+      const copyScript = [
+        `/bin/rm -rf ${shellQuote(destApp)}`,
+        `/usr/bin/ditto ${shellQuote(appBundle)} ${shellQuote(destApp)}`,
+        `/usr/bin/xattr -dr com.apple.quarantine ${shellQuote(destApp)} || true`,
+      ].join(" && ");
+      await execFileAsync("/usr/bin/osascript", [
+        "-e",
+        `do shell script ${JSON.stringify(copyScript)} with administrator privileges`,
+      ]);
+    }
+
+    await execFileAsync("/usr/bin/open", ["-n", destApp]);
+    return { appPath: destApp };
+  }
+
   async function installMacZipUpdate(zipPath) {
     const os = require("os");
     const tempRoot = fs.mkdtempSync(
@@ -3607,38 +3658,66 @@ function setupIPC() {
       }
 
       const appName = path.basename(appBundle);
-      const destApp = path.join("/Applications", appName);
-
-      // Disable Electron's ASAR interceptor so rmSync can unlink app.asar as a file
-      const _noAsar = process.noAsar;
-      process.noAsar = true;
-      try {
-        fs.rmSync(destApp, { recursive: true, force: true });
-      } finally {
-        process.noAsar = _noAsar;
-      }
-      try {
-        await execFileAsync("/usr/bin/ditto", [appBundle, destApp]);
-        await execFileAsync("/usr/bin/xattr", ["-dr", "com.apple.quarantine", destApp]).catch(() => ({ stdout: "", stderr: "" }));
-      } catch (error) {
-        if (!["EACCES", "EPERM"].includes(error.code)) throw error;
-        const copyScript = [
-          `/bin/rm -rf ${shellQuote(destApp)}`,
-          `/usr/bin/ditto ${shellQuote(appBundle)} ${shellQuote(destApp)}`,
-          `/usr/bin/xattr -dr com.apple.quarantine ${shellQuote(destApp)} || true`,
-        ].join(" && ");
-        await execFileAsync("/usr/bin/osascript", [
-          "-e",
-          `do shell script ${JSON.stringify(copyScript)} with administrator privileges`,
-        ]);
-      }
-
-      await execFileAsync("/usr/bin/open", ["-n", destApp]);
-      return { appPath: destApp };
+      const destApp = resolveMacUpdateDestination(appName);
+      return await installMacAppBundleToDestination(appBundle, destApp);
     } finally {
       const _noAsar2 = process.noAsar;
       process.noAsar = true;
       try { fs.rmSync(tempRoot, { recursive: true, force: true }); } finally { process.noAsar = _noAsar2; }
+    }
+  }
+
+  async function installMacDmgUpdate(dmgPath) {
+    const os = require("os");
+    const tempRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "etherx-update-dmg-"),
+    );
+    const mountPoint = path.join(tempRoot, "mount");
+    fs.mkdirSync(mountPoint, { recursive: true });
+
+    let mounted = false;
+    try {
+      await execFileAsync("/usr/bin/hdiutil", [
+        "attach",
+        dmgPath,
+        "-nobrowse",
+        "-readonly",
+        "-mountpoint",
+        mountPoint,
+      ]);
+      mounted = true;
+
+      const appBundle = findFirstAppBundle(mountPoint);
+      if (!appBundle) {
+        throw new Error("DMG ne sadrži .app bundle za instalaciju");
+      }
+
+      const appName = path.basename(appBundle);
+      const destApp = resolveMacUpdateDestination(appName);
+      return await installMacAppBundleToDestination(appBundle, destApp);
+    } finally {
+      if (mounted) {
+        try {
+          await execFileAsync("/usr/bin/hdiutil", ["detach", mountPoint, "-force"]);
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      const _noAsar2 = process.noAsar;
+      process.noAsar = true;
+      try { fs.rmSync(tempRoot, { recursive: true, force: true }); } finally { process.noAsar = _noAsar2; }
+    }
+  }
+
+  async function tryCleanupUpdateFile(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    const _noAsar = process.noAsar;
+    process.noAsar = true;
+    try {
+      fs.rmSync(filePath, { force: true });
+    } finally {
+      process.noAsar = _noAsar;
     }
   }
 
@@ -3650,10 +3729,20 @@ function setupIPC() {
       const ext = path.extname(filePath).toLowerCase();
 
       if (process.platform === "darwin") {
+        let shouldCleanupArchive = false;
         if (ext === ".zip") {
           await installMacZipUpdate(filePath);
+          shouldCleanupArchive = true;
+        } else if (ext === ".dmg") {
+          await installMacDmgUpdate(filePath);
+          shouldCleanupArchive = true;
         } else {
           await shell.openPath(filePath);
+        }
+        if (shouldCleanupArchive) {
+          await tryCleanupUpdateFile(filePath).catch((err) => {
+            console.warn("[update] archive cleanup failed:", err?.message || err);
+          });
         }
         setTimeout(() => app.quit(), 1500);
       } else if (process.platform === "linux") {

@@ -5848,8 +5848,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             m.translatedText = text;
             m.translatedLang = targetLang || 'en';
             renderMessages();
-            closeTkaiMsgContextMenu();
-            showToast('🌐 Poruka prevedena');
+
+            // Keep context menu open for rapid multi-translate workflow and
+            // mirror the translation into our TikTok Chat AI feed/popout.
+            if (typeof window.pushTextToTikTokAI === 'function') {
+                const sourceUser = String(m.user || '').trim() || 'TikTok user';
+                await window.pushTextToTikTokAI(text, sourceUser, { skipAutoTranslate: true });
+            }
+            showToast('🌐 Poruka prevedena i dodana u prošireni TikTok chat');
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="send-target-translated"]')?.addEventListener('click', async () => {
@@ -9092,9 +9098,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         renderUserSummary();
         renderQuestionsUI();
         const sentimentBadgeEl = document.getElementById('tkaiSentimentBadge');
+        const sentimentMiniGraphEl = document.getElementById('tkaiSentimentMiniGraph');
         if (sentimentBadgeEl) {
             // Prefer Cardiff NLP result (async); fall back to keyword scoring
-            const sentLabel = _cardiffSentiment ? _cardiffSentiment.label : computeInsightsSnapshot().sentiment;
+            const sentimentSnapshot = computeInsightsSnapshot();
+            const sentLabel = _cardiffSentiment ? _cardiffSentiment.label : sentimentSnapshot.sentiment;
             const isCardiff = !!_cardiffSentiment;
             const scoreStr = isCardiff ? ' ' + Math.round(_cardiffSentiment.score * 100) + '%' : '';
             const indicator = isCardiff ? ' 🤗' : '';
@@ -9107,6 +9115,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             } else {
                 sentimentBadgeEl.textContent = '😐 ~' + scoreStr + indicator;
                 sentimentBadgeEl.style.color = '';
+            }
+
+            if (sentimentMiniGraphEl) {
+                const sc = sentimentSnapshot.sentimentCounts || {};
+                const blocks = 10;
+                const posPct = Math.max(0, Math.min(100, Number(sc.positivePct || 0)));
+                const negPct = Math.max(0, Math.min(100, Number(sc.negativePct || 0)));
+                let posBlocks = Math.round((posPct / 100) * blocks);
+                let negBlocks = Math.round((negPct / 100) * blocks);
+                if (posBlocks + negBlocks > blocks) {
+                    const overflow = posBlocks + negBlocks - blocks;
+                    if (posBlocks >= negBlocks) posBlocks = Math.max(0, posBlocks - overflow);
+                    else negBlocks = Math.max(0, negBlocks - overflow);
+                }
+                const neutralBlocks = Math.max(0, blocks - posBlocks - negBlocks);
+                const cubes = [];
+                for (let i = 0; i < posBlocks; i++) cubes.push('<span class="tkai-sentiment-cube pos" aria-hidden="true"></span>');
+                for (let i = 0; i < negBlocks; i++) cubes.push('<span class="tkai-sentiment-cube neg" aria-hidden="true"></span>');
+                for (let i = 0; i < neutralBlocks; i++) cubes.push('<span class="tkai-sentiment-cube" aria-hidden="true"></span>');
+                sentimentMiniGraphEl.innerHTML = cubes.join('');
+                sentimentMiniGraphEl.title = `Pozitivno ${Math.round(posPct)}% • Negativno ${Math.round(negPct)}%`;
             }
         }
         // ────────────────────────────────────────────────────────────────
@@ -9442,9 +9471,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
         const forceTranslate = options && (options.forceTranslate === true || options.forceTranslate === 'true');
+        const skipAutoTranslate = options && (options.skipAutoTranslate === true || options.skipAutoTranslate === 'true');
         const preferredLang = getTranslateTargetLang();
         const targetLang = preferredLang !== 'auto' ? preferredLang : (forceTranslate ? getManualTranslateTargetLang() : 'auto');
-        if (targetLang !== 'auto') {
+        if (!skipAutoTranslate && targetLang !== 'auto') {
             const translated = await translateViaGoogle(text, targetLang);
             const latest = collectedMessages[collectedMessages.length - 1];
             if (latest) {
