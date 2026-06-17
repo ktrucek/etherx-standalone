@@ -3406,12 +3406,19 @@ function setupIPC() {
         "release-assets.githubusercontent.com",
         "github-releases.githubusercontent.com",
       ]);
+      const allowedUpdateHostSuffixes = [
+        ".githubusercontent.com",
+        ".github-releases.githubusercontent.com",
+      ];
       const isAllowedUpdateHost = (host) => {
         const h = String(host || "").toLowerCase();
         if (!h) return false;
         if (allowedUpdateHosts.has(h)) return true;
-        // GitHub release assets can be served from githubusercontent subdomains.
-        if (h.endsWith(".githubusercontent.com")) return true;
+        for (const suffix of allowedUpdateHostSuffixes) {
+          if (h.endsWith(suffix)) return true;
+        }
+        // Legacy GitHub release redirects can point to signed S3 asset hosts.
+        if (/^github-production-release-asset-[a-z0-9-]+\.s3\.amazonaws\.com$/.test(h)) return true;
         return false;
       };
       const normalizeUpdateUrl = (candidate, baseUrl = null) => {

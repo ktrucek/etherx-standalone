@@ -21686,6 +21686,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (!window._pendingUpdateAsset || !window.etherx?.update?.download) return;
             const btn = this;
             const redirectRetryCount = Number(btn.dataset.redirectRetryCount || '0');
+            const maxRedirectRetries = 3;
             const progressWrap = document.getElementById('updProgressWrap');
             const progressBar = document.getElementById('updProgressBar');
             const progressPct = document.getElementById('updProgressPct');
@@ -21756,24 +21757,24 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 btn.textContent = '✅ Gotovo — restartam...';
             } catch (err) {
                 if (isBenignUpdateRedirectError(err)) {
-                    if (redirectRetryCount < 1) {
+                    if (redirectRetryCount < maxRedirectRetries) {
                         btn.dataset.redirectRetryCount = String(redirectRetryCount + 1);
                         if (progressLabel) {
-                            progressLabel.textContent = 'ℹ️ Preusmjerenje update servera - ponovno pokušavam...';
+                            progressLabel.textContent = `ℹ️ Preusmjerenje update servera - pokušaj ${redirectRetryCount + 1}/${maxRedirectRetries}...`;
                             progressLabel.style.color = '#ffbd2e';
                         }
-                        showToast('ℹ️ Update server preusmjerenje, automatski retry...');
+                        showToast(`ℹ️ Update server preusmjerenje, automatski retry ${redirectRetryCount + 1}/${maxRedirectRetries}...`);
                         setTimeout(() => {
                             btn.disabled = false;
                             btn.click();
-                        }, 1200);
+                        }, 1200 + (redirectRetryCount * 500));
                         return;
                     }
                     btn.dataset.redirectRetryCount = '0';
                     btn.disabled = false;
                     btn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
                     if (progressLabel) {
-                        progressLabel.textContent = 'ℹ️ Preusmjerenje update servera - pokušaj ponovno';
+                        progressLabel.textContent = 'ℹ️ Preusmjerenje update servera se predugo ponavlja - pokušaj ponovno';
                         progressLabel.style.color = '#ffbd2e';
                     }
                     showToast('ℹ️ Update preusmjerenje je privremeno prekinulo zahtjev. Probaj ponovno.');
