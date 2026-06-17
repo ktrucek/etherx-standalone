@@ -4620,6 +4620,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiMsgCtxTarget = null;
     let tkaiMsgCtxLastSig = '';
     let tkaiMsgCtxLastOpenAt = 0;
+    let _tkaiForceScrollBottom = false;
     let isGenerating = false;
     let isTranslating = false;
     let holdLActive = false;
@@ -5781,17 +5782,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiMsgCtxEl.innerHTML =
             '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI + scan od ove poruke</button>' +
+            '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
             '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi i pošalji u TikTok</button>' +
             '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
             '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda i pošalji</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
+            '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="show-messages" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#60a5fa;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">💬 Poruke korisnika + sentiment</button>' +
             '<button type="button" data-act="gift-gallery" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fb923c;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎁 Darovi korisnika (sesija)</button>' +
             '<button type="button" data-act="user-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a3e635;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">👤 Profil korisnika (baza)</button>' +
             '<button type="button" data-act="open-tiktok-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#34d399;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔗 Otvori TikTok profil</button>' +
-            '<button type="button" data-act="region-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔎 TikTok scan regije</button>';
+            '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
+            '<button type="button" data-act="region-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#94a3b8;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:11px">🔎 TikTok scan regije</button>';
         document.body.appendChild(tkaiMsgCtxEl);
 
         tkaiMsgCtxEl.querySelector('[data-act="ai"]')?.addEventListener('click', () => {
@@ -9223,7 +9227,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         const prevTop = messagesEl.scrollTop;
         const prevHeight = messagesEl.scrollHeight;
-        const nearBottom = prevTop + messagesEl.clientHeight >= prevHeight - 36;
+        const nearBottom = _tkaiForceScrollBottom || (prevTop + messagesEl.clientHeight >= prevHeight - 36);
+        _tkaiForceScrollBottom = false;
         const giftPrevTop = giftFeedEl ? giftFeedEl.scrollTop : 0;
         const giftPrevHeight = giftFeedEl ? giftFeedEl.scrollHeight : 0;
         const giftNearBottom = giftFeedEl ? (giftPrevTop + giftFeedEl.clientHeight >= giftPrevHeight - 36) : true;
@@ -9407,6 +9412,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
         }
         if (panel && !panel.classList.contains('open')) panel.classList.add('open');
+        _tkaiForceScrollBottom = true;
         renderMessages();
         showToast('🎵 Tekst poslan u TikTok Chat AI');
         return true;
@@ -9529,6 +9535,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
+    function getTkaiContextWindowCount(fallback = 10) {
+        const raw = Number.parseInt(String(contextEl?.value || fallback), 10);
+        if (!Number.isFinite(raw)) return fallback;
+        return Math.max(1, Math.min(50, raw));
+    }
+
     function buildPrompt(messages) {
         const tone = toneEl?.value || 'friendly';
         const replyLangRaw = replyLangEl?.value || 'en_auto';
@@ -9538,7 +9550,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (replyLangRaw === 'en_auto') replyLang = 'en';
         else if (replyLangRaw === 'read') replyLang = readLang !== 'auto' ? readLang : 'en';
         const count = parseInt(countEl?.value || '3', 10);
-        const context = contextEl?.value?.trim() || '';
+        const contextWindow = getTkaiContextWindowCount(10);
         const custom = customPromptEl?.value?.trim() || '';
         const specificPrompts = {
             chat: String(DB.getSettings().tkaiPromptChat || '').trim(),
@@ -9579,10 +9591,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }).join('\n');
         return `Ti si TikTok streamer AI asistent. Tvoj zadatak je generirati kratke, prirodne odgovore za TikTok chat.
 
-KONTEKST STREAMERA: ${context || 'TikTok streamer koji želi angažirati svoju publiku'}
+KONTEKST STREAMERA: TikTok streamer koji želi angažirati svoju publiku
 TON: ${toneMap[tone] || toneMap.friendly}
 JEZIK: Odgovaraj ${langMap[replyLang] || langMap.hr}
 BROJ PRIJEDLOGA: Generiraj točno ${count} različita prijedloga odgovora.
+CONTEXT WINDOW: Fokusiraj se na zadnjih ${messages.length} poruka (postavka: ${contextWindow}).
 
 PORUKE IZ CHATA:
 ${chatLines}
@@ -10634,7 +10647,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     newMsgsSinceAutoGen = 0;
                     const badge = document.getElementById('tkaiAutoSuggestBadge');
                     if (badge) { badge.textContent = '⚡ Auto'; badge.style.display = ''; }
-                    generateReplies(collectedMessages.slice(-10));
+                    generateReplies(collectedMessages.slice(-getTkaiContextWindowCount(10)));
                 }
             }
             return added;
@@ -11317,10 +11330,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     genBtn?.addEventListener('click', () => {
         const selected = selectedMsgIds.size
             ? collectedMessages.filter(message => selectedMsgIds.has(message.id))
-            : collectedMessages.slice(-10);
+            : collectedMessages.slice(-getTkaiContextWindowCount(10));
         generateReplies(selected);
     });
-    genAllBtn?.addEventListener('click', () => generateReplies(collectedMessages.slice(-15)));
+    genAllBtn?.addEventListener('click', () => generateReplies(collectedMessages.slice(-getTkaiContextWindowCount(15))));
     holdLBtn?.addEventListener('click', async () => {
         if (holdLActive) {
             await stopHoldL();
