@@ -9244,6 +9244,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
             const isGiftLike = message.type === 'gift' || message.type === 'subscriber';
             const giftMeta = isGiftLike ? safeResolveGiftMetaFromMessage(message) : null;
+            // Resolve display username — replace 'unknown/Unknown' with stream owner
+            const resolvedUser = (() => {
+                const u = String(message.user || '').trim();
+                if (u && u.toLowerCase() !== 'unknown') return u;
+                const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
+                return owner || u || 'unknown';
+            })();
             const typeBadge = message.type === 'gift'
                 ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,195,74,.25);color:#ffd278;border:1px solid rgba(255,210,120,.35)">🎁 gift</span>'
                 : (message.type === 'subscriber'
@@ -9268,12 +9275,42 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showNllbIdHrTranslation) && message.translatedText
                 ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">HR:</span> ' + escHtml(message.translatedText) + nllbBadge + '</div>'
                 : '';
-            const giftSummary = giftMeta
-                ? '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#ffd278">'
-                + escHtml(giftMeta.giftName || message.giftName || message.text)
-                + ' × ' + formatNum(Math.max(1, Number(giftMeta.quantity || message.quantity || 1)))
-                + ' • ' + formatNum(Math.max(0, Number(giftMeta.coins || message.coins || 0))) + ' 🪙</div>'
-                : '';
+            const giftSummary = (() => {
+                if (!giftMeta) return '';
+                const gName = String(giftMeta.giftName || message.giftName || message.text || '').trim();
+                const gLower = gName.toLowerCase();
+                const giftEmojiMap = [
+                    [/\bheart\b/i, '❤️'],
+                    [/\bhand\s*heart\b/i, '🫶'],
+                    [/\bfinger\s*heart\b/i, '🤞❤️'],
+                    [/\brose\b/i, '🌹'],
+                    [/\bsubmarine\b/i, '🚢'],
+                    [/\bdiamond\b/i, '💎'],
+                    [/\buniverse\b/i, '🌌'],
+                    [/\bgalaxy\b/i, '🌠'],
+                    [/\bcastle\b/i, '🏰'],
+                    [/\brocket\b/i, '🚀'],
+                    [/\blion\b/i, '🦁'],
+                    [/\bdonut\b/i, '🍩'],
+                    [/\bicecream\b|\bice\s*cream\b/i, '🍦'],
+                    [/\bcake\b/i, '🎂'],
+                    [/\bbear\b/i, '🐻'],
+                    [/\bpanda\b/i, '🐼'],
+                    [/\bcrown\b/i, '👑'],
+                    [/\btrophy\b/i, '🏆'],
+                    [/\bfootball\b|\bsoccer\b/i, '⚽'],
+                    [/\bgem\b/i, '💎'],
+                    [/\bphone\b/i, '📱'],
+                    [/\bmic\b|\bmicrophone\b/i, '🎤'],
+                    [/\bmusic\b/i, '🎵'],
+                ];
+                const matched = giftEmojiMap.find(([re]) => re.test(gLower));
+                const giftEmoji = matched ? matched[1] : '🎁';
+                return '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#ffd278">'
+                    + giftEmoji + ' ' + escHtml(gName)
+                    + ' × ' + formatNum(Math.max(1, Number(giftMeta.quantity || message.quantity || 1)))
+                    + ' • ' + formatNum(Math.max(0, Number(giftMeta.coins || message.coins || 0))) + ' 🪙</div>';
+            })();
             const likeSummary = message.type === 'like' && Math.max(1, Number(message.quantity || 1)) > 1
                 ? '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#fda4af">'
                 + 'Likes × ' + formatNum(Math.max(1, Number(message.quantity || 1))) + '</div>'
@@ -9282,10 +9319,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const original = translated
                 ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65"><span style="font-size:10px;opacity:.7">' + originalLabel + '</span> ' + escHtml(message.text) + '</div>'
                 : '<div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
-            const userColor = getUserColor(message.user);
+            const userColor = getUserColor(resolvedUser);
             const userRow = typeBadge
-                ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(message.user) + '</span>' + typeBadge + '</div>'
-                : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(message.user) + '</div>';
+                ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(resolvedUser) + '</span>' + typeBadge + '</div>'
+                : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(resolvedUser) + '</div>';
             div.innerHTML = userRow + original + giftSummary + likeSummary + translated;
             div.title = 'Klikni za odabir/deodabir';
             div.addEventListener('click', () => {
@@ -10115,8 +10152,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     const onlyNumericOrPunct = /^[\d\s.,:+\-x×/%|()[\]#*]+$/.test(t);
                     const sameAsUser = !!user && t.toLowerCase() === String(user).trim().toLowerCase();
                     const maybeStandaloneChatNumber = messageType === 'chat' && !!user && /^\d{1,6}$/.test(t.replace(/\s+/g, ''));
+                    // Leaderboard/rank rows: "#1 Rafał G. 20 🪙" or "No. 1 User 500 coins"
+                    const looksLeaderboard = /^#\s*\d{1,3}\s+.{2,40}\s+\d/.test(t)
+                        || /^(?:no\.?|rank|top)\s*\d{1,3}\s+.{2,}\d/.test(t)
+                        || (/^.{2,40}\s+\d{1,7}\s*(?:🪙|coins?|diamonds?)$/i.test(t) && /^[^a-z]*\d{1,3}[^a-z]/i.test(t));
 
                     if (sameAsUser || looksCounter) return true;
+                    if (looksLeaderboard) return true;
                     if (onlyNumericOrPunct && !maybeStandaloneChatNumber) return true;
                     if (messageType === 'chat' && letterCount === 0 && emojiCount === 0 && symbolCount <= 2) return true;
                     if (messageType === 'chat' && digitCount > 0 && letterCount === 0 && t.length < 28 && !maybeStandaloneChatNumber) return true;
