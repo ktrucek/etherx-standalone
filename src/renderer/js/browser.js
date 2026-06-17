@@ -5781,7 +5781,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiMsgCtxEl.style.cssText = 'position:fixed;z-index:2147483646;display:none;min-width:190px;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;box-shadow:0 12px 26px rgba(0,0,0,.45);padding:4px;';
         tkaiMsgCtxEl.innerHTML =
             '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
-            '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI + scan od ove poruke</button>' +
+            '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
             '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi i pošalji u TikTok</button>' +
@@ -5939,8 +5939,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (typeof window.pushTextToTikTokAI === 'function') {
                 await window.pushTextToTikTokAI(text, String(m.user || '').trim() || 'TikTok user', { forceTranslate: true });
             }
-            await startTikTokScanFromSelection(text);
             closeTkaiMsgContextMenu();
+            showToast('🎵 Poruka poslana u TikTok Chat AI');
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="gift-gallery"]')?.addEventListener('click', () => {
