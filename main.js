@@ -3435,135 +3435,56 @@ function setupIPC() {
       const safeUrl = normalizeUpdateUrl(url);
       if (!safeUrl) return { ok: false, error: "Invalid update URL" };
 
-      await new Promise((resolve, reject) => {
-        const headers = {
-          "User-Agent": "EtherX-Browser",
-          Accept: "application/octet-stream",
-        };
-        if (token) headers["Authorization"] = "Bearer " + token;
-        const maxRedirects = 8;
-        const maxTransientRetries = 2;
-        let settled = false;
-        const finishResolve = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
-        const finishReject = (err) => {
-          if (settled) return;
-          settled = true;
-          reject(err);
-        };
-        const isBenignRedirectAbort = (error) => {
-          const raw = String(error?.message || error || "").toLowerCase();
-          const code = Number(error?.code || 0);
-          return (
-            code === -3 ||
-            raw.includes("err_aborted") ||
-            raw.includes("redirect was cancelled")
-          );
-        };
+      // Use net.fetch with redirect:'follow' — Electron handles GitHub's multi-hop
+      // CDN redirects transparently, eliminating ERR_ABORTED (-3) race conditions
+      // that occur when using net.request with redirect:'manual'.
+      const fetchHeaders = {
+        "User-Agent": "EtherX-Browser",
+        "Accept": "application/octet-stream",
+      };
+      if (token) fetchHeaders["Authorization"] = "Bearer " + token;
 
-        const requestWithRedirects = (
-          currentUrl,
-          redirectCount = 0,
-          transientRetryCount = 0,
-        ) => {
-          let redirectHopStarted = false;
-          const req = net.request({
-            method: "GET",
-            url: currentUrl,
-            headers,
-            redirect: "manual",
-          });
-
-          req.on("response", (res) => {
-            const status = Number(res.statusCode || 0);
-            const hasLocation = !!res.headers.location;
-            if (
-              [301, 302, 303, 307, 308].includes(status) &&
-              hasLocation
-            ) {
-              redirectHopStarted = true;
-              try {
-                // Drain redirect response so Electron does not surface abort races.
-                res.resume();
-              } catch (_) { }
-              if (redirectCount >= maxRedirects) {
-                finishReject(new Error("Too many update redirects"));
-                return;
-              }
-              const rUrl = Array.isArray(res.headers.location)
-                ? res.headers.location[0]
-                : res.headers.location;
-              const safeRedirectUrl = normalizeUpdateUrl(rUrl, currentUrl);
-              if (!safeRedirectUrl) {
-                finishReject(new Error("Blocked unsafe update redirect"));
-                return;
-              }
-              requestWithRedirects(safeRedirectUrl, redirectCount + 1);
-              return;
-            }
-            handleResponse(res);
-          });
-
-          req.on("error", (err) => {
-            if (settled) return;
-            if (redirectHopStarted && isBenignRedirectAbort(err)) {
-              return;
-            }
-            if (
-              isBenignRedirectAbort(err) &&
-              transientRetryCount < maxTransientRetries
-            ) {
-              requestWithRedirects(
-                currentUrl,
-                redirectCount,
-                transientRetryCount + 1,
-              );
-              return;
-            }
-            finishReject(err);
-          });
-          req.end();
-        };
-
-        requestWithRedirects(safeUrl, 0);
-
-        function handleResponse(res) {
-          if (res.statusCode !== 200) {
-            finishReject(new Error("HTTP " + res.statusCode));
-            return;
-          }
-          const total = parseInt(res.headers["content-length"] || "0", 10);
-          let received = 0;
-          const ws = fs.createWriteStream(dest);
-          let lastProgress = 0;
-          res.on("data", (chunk) => {
-            ws.write(chunk);
-            received += chunk.length;
-            const pct = total > 0 ? Math.round((received / total) * 100) : -1;
-            if (pct !== lastProgress) {
-              lastProgress = pct;
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send("update:progress", {
-                  percent: pct,
-                  received,
-                  total,
-                  filename,
-                });
-              }
-            }
-          });
-          res.on("end", () => {
-            ws.end(() => finishResolve());
-          });
-          res.on("error", (err) => {
-            ws.destroy();
-            finishReject(err);
-          });
-        }
+      const response = await net.fetch(safeUrl, {
+        method: "GET",
+        headers: fetchHeaders,
+        redirect: "follow",
       });
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const total = parseInt(response.headers.get("content-length") || "0", 10);
+      let received = 0;
+      let lastProgress = -1;
+      const ws = fs.createWriteStream(dest);
+      const reader = response.body.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = Buffer.from(value);
+          await new Promise((res, rej) => ws.write(chunk, (err) => err ? rej(err) : res()));
+          received += chunk.length;
+          const pct = total > 0 ? Math.round((received / total) * 100) : -1;
+          if (pct !== lastProgress) {
+            lastProgress = pct;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("update:progress", {
+                percent: pct,
+                received,
+                total,
+                filename,
+              });
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      await new Promise((res, rej) => ws.end((err) => err ? rej(err) : res()));
 
       return { ok: true, filePath: dest, filename };
     } catch (e) {
