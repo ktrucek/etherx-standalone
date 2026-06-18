@@ -23197,11 +23197,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
             if (enabled) _bpmStart();
 
+            // NOTE: General [data-setting] handler already toggles .on class and
+            // calls DB.saveSetting. We only need to react to the new state here.
             toggle?.addEventListener('click', () => {
-                const next = !toggle.classList.contains('on');
-                if (next) toggle.classList.add('on'); else toggle.classList.remove('on');
-                DB.saveSetting('bpmDetectEnabled', next);
-                if (next) _bpmStart(); else _bpmStop();
+                // Read AFTER the general handler has already toggled the class
+                const isNowOn = toggle.classList.contains('on');
+                if (isNowOn) _bpmStart(); else _bpmStop();
             });
 
             intervalSel?.addEventListener('change', () => {
@@ -23223,18 +23224,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const openTikTokBtn = document.getElementById('tkaiOpenTikTokBtn');
 
             const _updateIsolatedUI = () => {
-                const isOn = DB.getSettings().tkaiTikTokIsolated === true;
-                if (isolatedToggle) { if (isOn) isolatedToggle.classList.add('on'); else isolatedToggle.classList.remove('on'); }
+                const isOn = isolatedToggle ? isolatedToggle.classList.contains('on') : DB.getSettings().tkaiTikTokIsolated === true;
                 if (isolatedInfoRow) isolatedInfoRow.style.display = isOn ? 'flex' : 'none';
             };
             _updateIsolatedUI();
 
+            // General handler already toggles .on and saves — just update UI
             isolatedToggle?.addEventListener('click', () => {
-                const next = !isolatedToggle.classList.contains('on');
-                if (next) isolatedToggle.classList.add('on'); else isolatedToggle.classList.remove('on');
-                DB.saveSetting('tkaiTikTokIsolated', next);
-                if (isolatedInfoRow) isolatedInfoRow.style.display = next ? 'flex' : 'none';
-                if (next) {
+                const isNowOn = isolatedToggle.classList.contains('on');
+                if (isolatedInfoRow) isolatedInfoRow.style.display = isNowOn ? 'flex' : 'none';
+                if (isNowOn) {
                     if (typeof showToast === 'function') showToast('✅ TikTok Izolirani Mod aktivan — novi TikTok tabovi koriste zasebnu sesiju');
                 } else {
                     if (typeof showToast === 'function') showToast('TikTok Izolirani Mod isključen');
