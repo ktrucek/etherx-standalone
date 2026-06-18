@@ -2884,7 +2884,11 @@ function createTab(url = '', title = 'New Tab', active = true) {
             wv.dataset.tabId = id;
             wv.setAttribute('allowpopups', '');
             wv.setAttribute('allowfullscreen', '');
-            wv.setAttribute('partition', 'persist:etherx');
+            // TikTok Isolated Mode: use separate partition so TikTok cannot
+            // cross-kick an active mobile live session on another device.
+            const _isTikTokUrl = /tiktok\.com/i.test(url || '');
+            const _tkIsolated = DB.getSettings().tkaiTikTokIsolated === true;
+            wv.setAttribute('partition', (_isTikTokUrl && _tkIsolated) ? 'persist:tiktok-watcher' : 'persist:etherx');
             const navua = navigator.userAgent.replace(/EtherX.*?\s/, '');
             wv.setAttribute('useragent', navua);
             parent.appendChild(wv);
@@ -23211,6 +23215,35 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     return;
                 }
                 _bpmDetectOnce();
+            });
+
+            // ── TikTok Isolated Mode toggle ───────────────────────────
+            const isolatedToggle = document.getElementById('tkaiTikTokIsolatedToggle');
+            const isolatedInfoRow = document.getElementById('tkaiIsolatedInfoRow');
+            const openTikTokBtn = document.getElementById('tkaiOpenTikTokBtn');
+
+            const _updateIsolatedUI = () => {
+                const isOn = DB.getSettings().tkaiTikTokIsolated === true;
+                if (isolatedToggle) { if (isOn) isolatedToggle.classList.add('on'); else isolatedToggle.classList.remove('on'); }
+                if (isolatedInfoRow) isolatedInfoRow.style.display = isOn ? 'flex' : 'none';
+            };
+            _updateIsolatedUI();
+
+            isolatedToggle?.addEventListener('click', () => {
+                const next = !isolatedToggle.classList.contains('on');
+                if (next) isolatedToggle.classList.add('on'); else isolatedToggle.classList.remove('on');
+                DB.saveSetting('tkaiTikTokIsolated', next);
+                if (isolatedInfoRow) isolatedInfoRow.style.display = next ? 'flex' : 'none';
+                if (next) {
+                    if (typeof showToast === 'function') showToast('✅ TikTok Izolirani Mod aktivan — novi TikTok tabovi koriste zasebnu sesiju');
+                } else {
+                    if (typeof showToast === 'function') showToast('TikTok Izolirani Mod isključen');
+                }
+            });
+
+            openTikTokBtn?.addEventListener('click', () => {
+                if (typeof createTab === 'function') createTab('https://www.tiktok.com/', 'TikTok', true);
+                document.getElementById('btnSettings')?.click(); // close settings
             });
         }
 

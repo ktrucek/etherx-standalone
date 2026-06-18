@@ -3188,7 +3188,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.95</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.96</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -4798,6 +4798,65 @@
                                 </div>
                             </div>
                         </div><!-- /#tkaiSettingsContent -->
+
+                        <!-- ── BPM DETECTION SETTINGS ─────────────────── -->
+                        <div class="s-group" style="margin-top:16px">
+                            <div class="s-group-title">🎵 BPM Auto-Detekcija</div>
+                            <div class="s-row">
+                                <div class="s-row-left">
+                                    <div class="s-row-label">BPM detekcija uključena</div>
+                                    <div class="s-row-desc">Prepoznaje žanr i BPM glazbe putem mikrofona i prikazuje u
+                                        zaglavlju TikTok Chat AI panela</div>
+                                </div>
+                                <div class="toggle" id="bpmDetectToggle" data-setting="bpmDetectEnabled"></div>
+                            </div>
+                            <div class="s-row" id="bpmIntervalRow" style="display:none">
+                                <div class="s-row-left">
+                                    <div class="s-row-label">Interval mjerenja</div>
+                                    <div class="s-row-desc">Koliko često se mjeri BPM</div>
+                                </div>
+                                <select class="s-select" id="bpmDetectIntervalSel" data-setting="bpmDetectIntervalSec"
+                                    style="font-size:11px;padding:4px 8px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);cursor:pointer">
+                                    <option value="30">30 sekundi</option>
+                                    <option value="60">1 minuta</option>
+                                    <option value="120">2 minute</option>
+                                    <option value="180">3 minute</option>
+                                    <option value="300">5 minuta</option>
+                                </select>
+                            </div>
+                            <div class="s-row" id="bpmStatusRow" style="display:none">
+                                <div class="s-row-left">
+                                    <div class="s-row-label">Status detekcije</div>
+                                    <div class="s-row-desc" id="bpmDetectStatus" style="color:var(--text3)">Isključeno
+                                    </div>
+                                </div>
+                                <button class="s-btn-sm" id="bpmDetectNowBtn" style="font-size:11px">🎵 Mjeri
+                                    sada</button>
+                            </div>
+                        </div>
+
+                        <!-- ── TIKTOK ISOLATED MODE ────────────────────── -->
+                        <div class="s-group" style="margin-top:16px">
+                            <div class="s-group-title">📱 TikTok Multi-Uređaj</div>
+                            <div class="s-row">
+                                <div class="s-row-left">
+                                    <div class="s-row-label">TikTok Izolirani Mod</div>
+                                    <div class="s-row-desc">Otvara TikTok u zasebnoj sesiji da NE ugasi tvoj live na
+                                        mobitelu/tabletu. Moraš se ponovo prijaviti u TikTok unutar browsera.</div>
+                                </div>
+                                <div class="toggle" id="tkaiTikTokIsolatedToggle" data-setting="tkaiTikTokIsolated">
+                                </div>
+                            </div>
+                            <div class="s-row" id="tkaiIsolatedInfoRow" style="display:none">
+                                <div class="s-row-left">
+                                    <div class="s-row-desc" style="color:#ffd54f;font-size:11px">⚠️ Aktivan: novi TikTok
+                                        tabovi koriste <b>odvojenu sesiju</b>. Tablet live ostaje netaknut.</div>
+                                </div>
+                                <button class="s-btn-sm" id="tkaiOpenTikTokBtn"
+                                    style="font-size:11px;background:rgba(255,0,80,.15);border-color:rgba(255,0,80,.4)">📱
+                                    Otvori TikTok</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- ── History ─────────────────────────────────────────── -->
@@ -4867,7 +4926,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.95</span></div>
+                                    v<span id="helpVersionNum2">3.0.96</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -5095,10 +5154,14 @@
                 🔑 Enter Activation Code
             </button>
         </div>
-        <div class="panel-header" id="tiktokAIPanelHeader" style="padding:8px 12px">
-            <span class="panel-title">🎵 TikTok Chat AI <span class="tkai-drag-hint"
+        <div class="panel-header" id="tiktokAIPanelHeader"
+            style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between">
+            <span class="panel-title" style="flex:0 0 auto">🎵 TikTok Chat AI <span class="tkai-drag-hint"
                     title="Povuci za premještanje">⠿</span></span>
-            <div style="display:flex;align-items:center;gap:6px">
+            <div id="tkaiBpmDisplay" onclick="window.openBpmGuide&&window.openBpmGuide()"
+                style="display:none;flex:1 1 auto;text-align:center;font-size:10px;font-weight:700;padding:2px 10px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);white-space:nowrap;cursor:pointer;letter-spacing:.5px;margin:0 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;transition:all .3s"
+                title="BPM & žanr detekcija — klikni za BPM vodič"></div>
+            <div style="display:flex;align-items:center;gap:6px;flex:0 0 auto">
                 <span id="tkaiStreamOwner"
                     style="font-size:10px;color:#bfdbfe;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@-</span>
                 <span id="tkaiScanStatus" style="font-size:10px;color:#ffe0ea"></span>
@@ -6273,6 +6336,7 @@
         <div class="ctx-item" id="ctx-reading-list">📖 Add to Reading List</div>
         <div class="ctx-sep"></div>
         <!-- Clipboard -->
+        <div class="ctx-item" id="ctx-bpm-guide">🎵 BPM Reference Guide</div>
         <div class="ctx-item" id="ctx-copy-text">📋 Kopiraj</div>
         <div class="ctx-item" id="ctx-send-tiktok-ai" style="display:none">🎵 Pošalji u TikTok Chat AI</div>
         <div class="ctx-item" id="ctx-tiktok-region-scan" style="display:none">🔎 TikTok scan regije</div>
@@ -6538,6 +6602,30 @@
                 Private</span><span id="sbTime"></span></div>
     </div>
     <script src="renderer/js/browser.js"></script>
+
+    <!-- ── BPM REFERENCE GUIDE MODAL ──────────────────────────────────────── -->
+    <div id="bpmGuideModal"
+        style="display:none;position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);overflow-y:auto;padding:20px 10px">
+        <div
+            style="max-width:740px;margin:0 auto;background:#0d0d18;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:0 0 20px;box-shadow:0 24px 80px rgba(0,0,0,.8)">
+            <div
+                style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid rgba(255,255,255,.08)">
+                <div>
+                    <div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:1px">🎵 BPM REFERENCE GUIDE
+                    </div>
+                    <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px">Žanrovi &bull; BPM Rasponi
+                        &bull; Opis stila</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <input id="bpmGuideSearch" type="text" placeholder="Pretraži žanr..."
+                        style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;outline:none;width:160px">
+                    <button onclick="document.getElementById('bpmGuideModal').style.display='none'"
+                        style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:16px;cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center">×</button>
+                </div>
+            </div>
+            <div id="bpmGuideContent" style="padding:16px 22px"></div>
+        </div>
+    </div>
 </body>
 
 </html>
