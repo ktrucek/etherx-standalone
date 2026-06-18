@@ -5188,7 +5188,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
 
     function isCcReadEnabled() {
-        return isTkaiAudioEnabled() && DB.getSettings().tkaiCcReadEnabled === true;
+        // CC Read is independent of AI Audio — each can be toggled separately
+        return DB.getSettings().tkaiCcReadEnabled === true;
     }
 
     function updateTkaiAudioButton() {
@@ -5233,7 +5234,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     function speakCaptionText(text, langCode, options = {}) {
         const clean = String(text || '').trim();
-        if (!isTkaiAudioEnabled()) return;
+        // Respect whichever feature triggered the call — CC Read has its own flag
+        if (!isTkaiAudioEnabled() && !isCcReadEnabled()) return;
         if (!clean || !('speechSynthesis' in window) || !window.speechSynthesis) return;
         const interrupt = options && options.interrupt !== false;
         const langTag = mapLangForSpeech(langCode || getCcTargetLang());
@@ -11419,9 +11421,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
     ccReadBtn?.addEventListener('click', () => {
         const next = !isCcReadEnabled();
-        if (!isTkaiAudioEnabled() && next) {
-            DB.saveSetting('tkaiAudioEnabled', true);
-        }
         DB.saveSetting('tkaiCcReadEnabled', next);
         updateTkaiAudioButton();
         updateCcReadButton();
