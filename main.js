@@ -1273,6 +1273,42 @@ app.whenReady().then(async () => {
     console.warn("[Permissions] persist:etherx setup failed:", e.message);
   }
 
+  // ── Permissions for the main renderer window (defaultSession) ────────────
+  // Required for BPM auto-detection (getUserMedia microphone) and any other
+  // feature in the main UI that needs media access.
+  try {
+    const ALLOWED_MAIN = ["media", "audioCapture", "videoCapture", "camera",
+      "fullscreen", "clipboard-read", "clipboard-sanitized-write", "notifications"];
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+      callback(ALLOWED_MAIN.includes(permission));
+    });
+    session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+      return ALLOWED_MAIN.includes(permission);
+    });
+  } catch (e) {
+    console.warn("[Permissions] defaultSession setup failed:", e.message);
+  }
+
+  // ── Permissions + preload for persist:tiktok-watcher (TikTok Isolated Mode) ──
+  try {
+    const tikWatcherSess = session.fromPartition("persist:tiktok-watcher");
+    const ALLOWED_TW = ["media", "audioCapture", "videoCapture", "camera",
+      "fullscreen", "pointerLock", "openExternal", "clipboard-read",
+      "clipboard-sanitized-write", "notifications", "geolocation"];
+    tikWatcherSess.setPermissionRequestHandler((_wc, permission, callback) => {
+      callback(ALLOWED_TW.includes(permission));
+    });
+    tikWatcherSess.setPermissionCheckHandler((_wc, permission) => {
+      return ALLOWED_TW.includes(permission);
+    });
+    const wvPreloadPath = path.join(__dirname, "src", "webview-preload.js");
+    if (fs.existsSync(wvPreloadPath)) {
+      tikWatcherSess.setPreloads([wvPreloadPath]);
+    }
+  } catch (e) {
+    console.warn("[Permissions] persist:tiktok-watcher setup failed:", e.message);
+  }
+
   // Auto-load bundled Reveye Reverse Image Search extension
   try {
     const reveyePath = path.join(__dirname, "reveye", "src");

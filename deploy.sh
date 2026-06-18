@@ -620,26 +620,43 @@ if [[ "$NO_PUSH" == false ]]; then
     success "Pushed to GitHub → GitHub Actions će buildati"
     
     # ── Update EtherX.io download page ─────────────────────────────────────────
-    # ETHERX_API_URL and ETHERX_API_KEY must be provided via secrets file or env vars.
-    if [[ -z "${ETHERX_API_URL:-}" || -z "${ETHERX_API_KEY:-}" ]]; then
-      warn "ETHERX_API_URL or ETHERX_API_KEY missing — skipping website update"
-      warn "Set them in $SECRETS_FILE or export env vars to enable auto-update:"
-      warn "  ETHERX_API_URL=\"https://etherx.io/api/update_version.php\""
-      warn "  ETHERX_API_KEY=\"your_secret_key\""
-    else
-      info "Updating EtherX.io download page with new version..."
-      sleep 3
-
+    # Primary: use ETHERX_API_URL + ETHERX_API_KEY if set (JSON API).
+    # Fallback: POST form directly to download_stats.php (no key required).
+    STATS_ENDPOINT="https://etherx.io/download_stats.php"
+    if [[ -n "${ETHERX_API_URL:-}" && -n "${ETHERX_API_KEY:-}" ]]; then
+      info "Updating EtherX.io via API endpoint..."
+      sleep 2
       UPDATE_RESPONSE=$(curl -s -X POST "$ETHERX_API_URL" \
         -H "Content-Type: application/json" \
         -d "{\"version\": \"$NEW_VERSION\", \"api_key\": \"$ETHERX_API_KEY\"}" \
         --max-time 30 || echo '{"success": false, "message": "Curl failed"}')
-
       if echo "$UPDATE_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('success') else 1)" 2>/dev/null; then
         success "EtherX.io download page updated to v$NEW_VERSION"
       else
-        warn "Failed to update EtherX.io page: $UPDATE_RESPONSE"
-        warn "You can manually update at: https://etherx.io/download_stats.php"
+        warn "API update failed ($UPDATE_RESPONSE) — trying fallback..."
+        UPDATE_RESPONSE=$(curl -s -X POST "$STATS_ENDPOINT" \
+          -H "Referer: $STATS_ENDPOINT" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d "action=update_version&new_version=$NEW_VERSION" \
+          --max-time 30 || echo "curl_error")
+        if echo "$UPDATE_RESPONSE" | grep -qi "success\|updated"; then
+          success "EtherX.io download page updated to v$NEW_VERSION (fallback)"
+        else
+          warn "Fallback update failed. Manual update: $STATS_ENDPOINT"
+        fi
+      fi
+    else
+      info "Updating EtherX.io download page (direct form POST)..."
+      sleep 2
+      UPDATE_RESPONSE=$(curl -s -X POST "$STATS_ENDPOINT" \
+        -H "Referer: $STATS_ENDPOINT" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "action=update_version&new_version=$NEW_VERSION" \
+        --max-time 30 || echo "curl_error")
+      if echo "$UPDATE_RESPONSE" | grep -qi "success\|updated"; then
+        success "EtherX.io download page updated to v$NEW_VERSION"
+      else
+        warn "Failed to update EtherX.io page. Manual update: $STATS_ENDPOINT"
       fi
     fi
 

@@ -23055,12 +23055,29 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             _bpmSetStatus('Pokrećem mikrofon...');
 
             try {
+                // Check mediaDevices availability
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    _bpmSetStatus('❌ Mikrofon nije dostupan — provjeri dozvole u postavkama Electrona');
+                    _bpmDetecting = false;
+                    return;
+                }
+
                 // Request microphone
                 if (!_bpmStream || !_bpmStream.active) {
-                    _bpmStream = await navigator.mediaDevices.getUserMedia({
-                        audio: { noiseSuppression: false, echoCancellation: false, autoGainControl: false },
-                        video: false
-                    });
+                    try {
+                        _bpmStream = await navigator.mediaDevices.getUserMedia({
+                            audio: { noiseSuppression: false, echoCancellation: false, autoGainControl: false },
+                            video: false
+                        });
+                    } catch (permErr) {
+                        const msg = permErr.name === 'NotAllowedError' ? '❌ Dozvola za mikrofon odbijena — odobri u OS postavkama'
+                            : permErr.name === 'NotFoundError' ? '❌ Mikrofon nije pronađen — priključi mikrofon'
+                                : '❌ Mikrofon: ' + (permErr.message || permErr.name);
+                        _bpmSetStatus(msg);
+                        if (typeof showToast === 'function') showToast(msg);
+                        _bpmDetecting = false;
+                        return;
+                    }
                 }
                 if (!_bpmAudioCtx || _bpmAudioCtx.state === 'closed') {
                     _bpmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
