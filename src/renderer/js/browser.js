@@ -22857,6 +22857,374 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     })();
     // ══ End Bookmark Manager ═══════════════════════════════════════════════
 
+    // ══ BPM Reference Guide & Auto-Detection ═══════════════════════════════
+    (function () {
+        // ── BPM data ──────────────────────────────────────────────────────
+        const BPM_GUIDE_DATA = [
+            {
+                category: '🌙 CHILL & SLOW', color: '#4fc3f7',
+                genres: [
+                    { name: 'AMBIENT', bpm: '60–80', desc: 'Atmospheric, timeless', dot: '#4fc3f7' },
+                    { name: 'DOWNTEMPO', bpm: '70–100', desc: 'Relaxed, meditative', dot: '#81d4fa' },
+                    { name: 'CHILLOUT', bpm: '80–110', desc: 'Lounge, easy groove', dot: '#4fc3f7' },
+                    { name: 'LO-FI HIP HOP', bpm: '70–90', desc: 'Vintage, study room mood', dot: '#80cbc4' },
+                    { name: 'REGGAE / DUB', bpm: '60–90', desc: 'Jamaica, offbeat emphasis', dot: '#66bb6a' },
+                ]
+            },
+            {
+                category: '🔥 HIP HOP & URBAN', color: '#ffd54f',
+                genres: [
+                    { name: 'HIP HOP', bpm: '80–115', desc: 'Classic rap, boom bap', dot: '#ffd54f' },
+                    { name: 'TRAP', bpm: '130–170', desc: '808, hi-hat rolls', dot: '#ff7043' },
+                    { name: 'R&B / NEO SOUL', bpm: '60–120', desc: 'Groove, feeling, soul', dot: '#ce93d8' },
+                    { name: 'REGGAETON', bpm: '90–110', desc: 'Dembow rhythm, Latino', dot: '#ffd54f' },
+                    { name: 'FUNK / DISCO', bpm: '100–130', desc: 'Groove bass, 70s–80s feel', dot: '#ff8a65' },
+                    { name: 'POP', bpm: '100–130', desc: 'Radio-friendly, broad audience', dot: '#f48fb1' },
+                ]
+            },
+            {
+                category: '🏠 HOUSE', color: '#ff7043',
+                genres: [
+                    { name: 'HOUSE', bpm: '120–130', desc: 'Classic Chicago soul', dot: '#ff7043' },
+                    { name: 'DEEP HOUSE', bpm: '120–126', desc: 'Soulful with basslines, jazzy', dot: '#ff8a65' },
+                    { name: 'TECH HOUSE', bpm: '124–132', desc: 'Minimal driving feeling + house', dot: '#ff5722' },
+                    { name: 'PROGRESSIVE HOUSE', bpm: '125–135', desc: 'Melodic, builds, big emotion', dot: '#ffab40' },
+                    { name: 'ELECTRO HOUSE', bpm: '128–140', desc: 'Heavy basslines, synth-heavy', dot: '#ff6f00' },
+                    { name: 'AFRO HOUSE', bpm: '120–126', desc: 'African percussion, organic feel', dot: '#a5d6a7' },
+                    { name: 'TRIBAL HOUSE', bpm: '124–130', desc: 'Tribal percussion, ritual energy', dot: '#80cbc4' },
+                    { name: 'UK GARAGE', bpm: '130–135', desc: 'Syncopated rhythm, London', dot: '#ce93d8' },
+                    { name: 'FUTURE HOUSE', bpm: '120–128', desc: 'Futuristic crisp, modern lines', dot: '#80deea' },
+                ]
+            },
+            {
+                category: '💃 DANCE & EDM', color: '#ff4081',
+                genres: [
+                    { name: 'DANCE / EDM', bpm: '128–135', desc: 'Festival energy, vibe', dot: '#ff4081' },
+                    { name: 'BIG ROOM', bpm: '128–138', desc: 'Festival drop, arena sound', dot: '#ff6d00' },
+                    { name: 'BREAKBEAT', bpm: '115–140', desc: 'Breakin\' rhythm, funky', dot: '#ffab40' },
+                    { name: 'EURODANCE', bpm: '135–145', desc: '90s energy, anthemic, synths', dot: '#ff4081' },
+                    { name: 'TRANCE', bpm: '128–145', desc: 'Euphoric, melodic builds', dot: '#7c4dff' },
+                    { name: 'PSYTRANCE', bpm: '145–150', desc: 'Hypnotic, full-on psychedelia', dot: '#00e5ff' },
+                ]
+            },
+            {
+                category: '⚡ TECHNO & INDUSTRIAL', color: '#b0bec5',
+                genres: [
+                    { name: 'TECHNO', bpm: '130–150', desc: 'Berlin underground, mechanical', dot: '#b0bec5' },
+                    { name: 'HARD TECHNO', bpm: '140–160', desc: 'Distorted, industrial edge', dot: '#78909c' },
+                    { name: 'ACID TECHNO', bpm: '130–145', desc: 'TB-303 squelch, raw energy', dot: '#cfd8dc' },
+                    { name: 'INDUSTRIAL', bpm: '140–180', desc: 'Dark, harsh, mechanical', dot: '#546e7a' },
+                ]
+            },
+            {
+                category: '🌊 DRUM & BASS', color: '#00e5ff',
+                genres: [
+                    { name: 'DRUM & BASS', bpm: '160–180', desc: 'Breakbeats, heavy bass', dot: '#00e5ff' },
+                    { name: 'JUNGLE', bpm: '155–175', desc: 'Ragga influenced, sampled', dot: '#69f0ae' },
+                    { name: 'LIQUID DnB', bpm: '165–175', desc: 'Smooth, atmospheric, melodic', dot: '#40c4ff' },
+                    { name: 'NEUROFUNK', bpm: '170–180', desc: 'Complex sound design, sci-fi', dot: '#00b0ff' },
+                ]
+            },
+            {
+                category: '🎸 ROCK & METAL', color: '#ef5350',
+                genres: [
+                    { name: 'ROCK', bpm: '110–140', desc: 'Guitar-driven, energetic', dot: '#ef5350' },
+                    { name: 'PUNK ROCK', bpm: '150–200', desc: 'Fast, raw, rebellious', dot: '#ff7043' },
+                    { name: 'METAL', bpm: '100–200+', desc: 'Heavy, distorted, intense', dot: '#b71c1c' },
+                    { name: 'ALTERNATIVE', bpm: '100–140', desc: 'Indie, grunge influenced', dot: '#e57373' },
+                ]
+            },
+            {
+                category: '🎷 JAZZ & SOUL', color: '#ce93d8',
+                genres: [
+                    { name: 'JAZZ', bpm: '80–250', desc: 'Improvisation, complex harmony', dot: '#ce93d8' },
+                    { name: 'SOUL', bpm: '60–100', desc: 'Emotional, vocal-driven', dot: '#f48fb1' },
+                    { name: 'GOSPEL', bpm: '80–120', desc: 'Spiritual, choir-based', dot: '#ffcc80' },
+                    { name: 'BLUES', bpm: '60–100', desc: '12-bar, expressive bends', dot: '#80cbc4' },
+                ]
+            },
+        ];
+
+        // ── Genre from BPM ─────────────────────────────────────────────────
+        function genreFromBPM(bpm) {
+            if (bpm < 65) return { genre: 'Ambient', color: '#4fc3f7' };
+            if (bpm < 85) return { genre: 'Chill / Lo-Fi', color: '#81d4fa' };
+            if (bpm < 100) return { genre: 'Hip Hop / Reggae', color: '#ffd54f' };
+            if (bpm < 115) return { genre: 'Pop / Funk', color: '#ff8a65' };
+            if (bpm < 123) return { genre: 'Breakbeat / House', color: '#ff7043' };
+            if (bpm < 128) return { genre: 'Deep House', color: '#ff8a65' };
+            if (bpm < 133) return { genre: 'House / Tech House', color: '#ff5722' };
+            if (bpm < 138) return { genre: 'Progressive / Big Room', color: '#ff4081' };
+            if (bpm < 143) return { genre: 'Trance / Hard House', color: '#7c4dff' };
+            if (bpm < 148) return { genre: 'Techno / Psytrance', color: '#00e5ff' };
+            if (bpm < 155) return { genre: 'Hard Techno', color: '#b0bec5' };
+            if (bpm < 165) return { genre: 'Drum & Bass', color: '#00e5ff' };
+            if (bpm < 180) return { genre: 'Fast DnB / Jungle', color: '#69f0ae' };
+            return { genre: 'Extreme Tempo', color: '#ef5350' };
+        }
+
+        // ── Render BPM Guide ──────────────────────────────────────────────
+        function renderBpmGuide(filter) {
+            const container = document.getElementById('bpmGuideContent');
+            if (!container) return;
+            const q = (filter || '').toLowerCase().trim();
+            let html = '';
+            BPM_GUIDE_DATA.forEach(section => {
+                const matchedGenres = q ? section.genres.filter(g =>
+                    g.name.toLowerCase().includes(q) ||
+                    g.desc.toLowerCase().includes(q) ||
+                    g.bpm.includes(q)
+                ) : section.genres;
+                if (!matchedGenres.length) return;
+                html += `<div style="margin-bottom:18px">
+                    <div style="font-size:11px;font-weight:700;color:${section.color};letter-spacing:1.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,.07)">${section.category}</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+                    ${matchedGenres.map(g => `
+                        <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:8px 10px;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='rgba(255,255,255,.04)'">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${g.dot};flex-shrink:0;margin-top:3px"></span>
+                            <div style="min-width:0">
+                                <div style="font-size:10px;font-weight:700;color:#fff;letter-spacing:.5px">${g.name}</div>
+                                <div style="font-size:13px;font-weight:800;color:${g.dot};margin:1px 0">${g.bpm} <span style="font-size:9px;font-weight:400;opacity:.6">BPM</span></div>
+                                <div style="font-size:9px;color:rgba(255,255,255,.4);line-height:1.3">${g.desc}</div>
+                            </div>
+                        </div>`).join('')}
+                    </div>
+                </div>`;
+            });
+            if (!html) html = '<div style="text-align:center;color:rgba(255,255,255,.3);padding:40px;font-size:13px">Nema rezultata za "' + filter + '"</div>';
+            container.innerHTML = html;
+        }
+
+        // ── Open / close modal ────────────────────────────────────────────
+        window.openBpmGuide = function () {
+            const modal = document.getElementById('bpmGuideModal');
+            if (!modal) return;
+            modal.style.display = 'block';
+            renderBpmGuide('');
+            const searchEl = document.getElementById('bpmGuideSearch');
+            if (searchEl) { searchEl.value = ''; searchEl.focus(); }
+        };
+
+        document.getElementById('bpmGuideModal')?.addEventListener('click', function (e) {
+            if (e.target === this) this.style.display = 'none';
+        });
+        document.getElementById('bpmGuideSearch')?.addEventListener('input', function () {
+            renderBpmGuide(this.value);
+        });
+
+        // ── Context menu item ─────────────────────────────────────────────
+        document.getElementById('ctx-bpm-guide')?.addEventListener('click', () => {
+            document.getElementById('ctxMenu').style.display = 'none';
+            window.openBpmGuide();
+        });
+
+        // ── BPM Detection Engine ──────────────────────────────────────────
+        let _bpmAudioCtx = null;
+        let _bpmStream = null;
+        let _bpmIntervalId = null;
+        let _bpmDetecting = false;
+
+        function _bpmSetDisplay(bpm, genreInfo) {
+            const el = document.getElementById('tkaiBpmDisplay');
+            if (!el) return;
+            if (!bpm) {
+                el.style.display = 'none';
+                return;
+            }
+            const info = genreInfo || genreFromBPM(bpm);
+            el.style.display = 'block';
+            el.style.color = info.color;
+            el.style.borderColor = info.color + '40';
+            el.style.boxShadow = '0 0 8px ' + info.color + '33';
+            el.textContent = `🎵 ${info.genre} • ${bpm} BPM`;
+            el.title = `Detektirani BPM: ${bpm} — ${info.genre}\nKlikni za BPM Reference Guide`;
+        }
+
+        function _bpmSetStatus(text) {
+            const el = document.getElementById('bpmDetectStatus');
+            if (el) el.textContent = text;
+        }
+
+        async function _bpmDetectOnce() {
+            if (_bpmDetecting) return;
+            _bpmDetecting = true;
+            _bpmSetStatus('Pokrećem mikrofon...');
+
+            try {
+                // Request microphone
+                if (!_bpmStream || !_bpmStream.active) {
+                    _bpmStream = await navigator.mediaDevices.getUserMedia({
+                        audio: { noiseSuppression: false, echoCancellation: false, autoGainControl: false },
+                        video: false
+                    });
+                }
+                if (!_bpmAudioCtx || _bpmAudioCtx.state === 'closed') {
+                    _bpmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (_bpmAudioCtx.state === 'suspended') await _bpmAudioCtx.resume();
+
+                const source = _bpmAudioCtx.createMediaStreamSource(_bpmStream);
+                const analyser = _bpmAudioCtx.createAnalyser();
+                analyser.fftSize = 2048;
+                source.connect(analyser);
+
+                const bufLen = analyser.frequencyBinCount;
+                const freqData = new Uint8Array(bufLen);
+                const binSize = (_bpmAudioCtx.sampleRate / 2) / bufLen;
+                const bassStart = Math.max(0, Math.floor(60 / binSize));
+                const bassEnd = Math.min(bufLen - 1, Math.floor(250 / binSize));
+
+                const energySamples = [];
+                const collectMs = 8000; // 8 seconds of analysis
+                const startTs = Date.now();
+
+                _bpmSetStatus('Slušam glazbu... (8s)');
+
+                await new Promise(resolve => {
+                    const tick = () => {
+                        analyser.getByteFrequencyData(freqData);
+                        let bassE = 0;
+                        for (let i = bassStart; i <= bassEnd; i++) bassE += freqData[i];
+                        bassE /= (bassEnd - bassStart + 1);
+                        energySamples.push({ t: Date.now() - startTs, e: bassE });
+                        if (Date.now() - startTs < collectMs) requestAnimationFrame(tick);
+                        else resolve();
+                    };
+                    requestAnimationFrame(tick);
+                });
+
+                source.disconnect();
+
+                // Analyse samples for beats
+                const energies = energySamples.map(s => s.e);
+                const avg = energies.reduce((a, b) => a + b, 0) / energies.length;
+                const max = Math.max(...energies);
+                const threshold = avg + (max - avg) * 0.45;
+
+                const beats = [];
+                let inBeat = false;
+                for (let i = 0; i < energySamples.length; i++) {
+                    if (energySamples[i].e > threshold && !inBeat) {
+                        beats.push(energySamples[i].t);
+                        inBeat = true;
+                    } else if (energySamples[i].e <= threshold * 0.85) {
+                        inBeat = false;
+                    }
+                }
+
+                if (beats.length < 3) {
+                    _bpmSetStatus('Premalo udaraca – provjeri mikrofon');
+                    _bpmDetecting = false;
+                    return;
+                }
+
+                const intervals = [];
+                for (let i = 1; i < beats.length; i++) intervals.push(beats[i] - beats[i - 1]);
+                intervals.sort((a, b) => a - b);
+                const medianInterval = intervals[Math.floor(intervals.length / 2)];
+
+                if (medianInterval <= 0) {
+                    _bpmSetStatus('Greška izračuna BPM');
+                    _bpmDetecting = false;
+                    return;
+                }
+
+                let bpm = Math.round(60000 / medianInterval);
+                // Normalize to 60–200 range
+                while (bpm < 60) bpm *= 2;
+                while (bpm > 200) bpm = Math.round(bpm / 2);
+
+                const genreInfo = genreFromBPM(bpm);
+                _bpmSetDisplay(bpm, genreInfo);
+                _bpmSetStatus(`✅ ${genreInfo.genre} — ${bpm} BPM`);
+                if (typeof showToast === 'function') showToast(`🎵 ${genreInfo.genre} • ${bpm} BPM detektiran`);
+
+            } catch (err) {
+                _bpmSetStatus('Greška: ' + (err.message || err));
+                console.warn('[BPM] Detection error:', err);
+            }
+            _bpmDetecting = false;
+        }
+
+        function _bpmStop() {
+            if (_bpmIntervalId) { clearInterval(_bpmIntervalId); _bpmIntervalId = null; }
+            if (_bpmStream) { _bpmStream.getTracks().forEach(t => t.stop()); _bpmStream = null; }
+            if (_bpmAudioCtx && _bpmAudioCtx.state !== 'closed') {
+                _bpmAudioCtx.close().catch(() => { });
+                _bpmAudioCtx = null;
+            }
+            _bpmSetDisplay(0);
+            _bpmSetStatus('Isključeno');
+            const row = document.getElementById('bpmIntervalRow');
+            const statusRow = document.getElementById('bpmStatusRow');
+            if (row) row.style.display = 'none';
+            if (statusRow) statusRow.style.display = 'none';
+        }
+
+        function _bpmStart() {
+            _bpmStop(); // clean up first
+            const intervalSec = parseInt(DB.getSettings().bpmDetectIntervalSec || 120, 10);
+            const row = document.getElementById('bpmIntervalRow');
+            const statusRow = document.getElementById('bpmStatusRow');
+            if (row) row.style.display = 'flex';
+            if (statusRow) statusRow.style.display = 'flex';
+            _bpmDetectOnce();
+            _bpmIntervalId = setInterval(_bpmDetectOnce, intervalSec * 1000);
+        }
+
+        // ── Settings init / event handlers ───────────────────────────────
+        function _bpmInitSettings() {
+            const toggle = document.getElementById('bpmDetectToggle');
+            const intervalSel = document.getElementById('bpmDetectIntervalSel');
+            const nowBtn = document.getElementById('bpmDetectNowBtn');
+
+            const enabled = DB.getSettings().bpmDetectEnabled === true;
+            const intervalSec = String(DB.getSettings().bpmDetectIntervalSec || '120');
+
+            if (toggle) {
+                if (enabled) toggle.classList.add('on'); else toggle.classList.remove('on');
+            }
+            if (intervalSel) intervalSel.value = intervalSec;
+
+            const row = document.getElementById('bpmIntervalRow');
+            const statusRow = document.getElementById('bpmStatusRow');
+            if (row) row.style.display = enabled ? 'flex' : 'none';
+            if (statusRow) statusRow.style.display = enabled ? 'flex' : 'none';
+
+            if (enabled) _bpmStart();
+
+            toggle?.addEventListener('click', () => {
+                const next = !toggle.classList.contains('on');
+                if (next) toggle.classList.add('on'); else toggle.classList.remove('on');
+                DB.saveSetting('bpmDetectEnabled', next);
+                if (next) _bpmStart(); else _bpmStop();
+            });
+
+            intervalSel?.addEventListener('change', () => {
+                DB.saveSetting('bpmDetectIntervalSec', intervalSel.value);
+                if (DB.getSettings().bpmDetectEnabled === true) _bpmStart();
+            });
+
+            nowBtn?.addEventListener('click', () => {
+                if (!DB.getSettings().bpmDetectEnabled) {
+                    if (typeof showToast === 'function') showToast('Uključi BPM detekciju u postavkama.');
+                    return;
+                }
+                _bpmDetectOnce();
+            });
+        }
+
+        // Init after DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', _bpmInitSettings);
+        } else {
+            // Delay slightly so DB is ready
+            setTimeout(_bpmInitSettings, 1200);
+        }
+
+    })();
+    // ══ End BPM Module ═══════════════════════════════════════════════════
+
     // ── Service Worker Registration ────────────────────────────────────────
     // Only register in web mode (not Electron) and not on file:// protocol
     if ('serviceWorker' in navigator &&
