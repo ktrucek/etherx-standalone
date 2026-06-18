@@ -1278,11 +1278,24 @@ function getOrCreateMissingElement(id) {
     return el;
 }
 
+// Cache for the active browseFrame webview — invalidated whenever activeTabId changes.
+let _cachedBrowseFrameTabId = null;
+let _cachedBrowseFrameEl = null;
+
 document.getElementById = function (id) {
     if (id === 'browseFrame' && window.electronWebview) {
         if (STATE && STATE.activeTabId) {
+            // Use cached ref if activeTabId hasn't changed and element is still in DOM.
+            if (_cachedBrowseFrameTabId === STATE.activeTabId && _cachedBrowseFrameEl &&
+                _cachedBrowseFrameEl.isConnected) {
+                return _cachedBrowseFrameEl;
+            }
             const activeWv = origGetElementById.call(document, 'browseFrame_' + STATE.activeTabId);
-            if (activeWv) return activeWv;
+            if (activeWv) {
+                _cachedBrowseFrameTabId = STATE.activeTabId;
+                _cachedBrowseFrameEl = activeWv;
+                return activeWv;
+            }
         }
     }
 
@@ -4677,16 +4690,39 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     function isLikelyIndonesianText(text) {
         const value = String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        if (!value || value.length < 6) return false;
-        const samples = [
-            'yang', 'dan', 'untuk', 'dengan', 'tidak', 'bisa', 'sudah', 'belum', 'terima kasih',
-            'selamat', 'pagi', 'siang', 'malam', 'kamu', 'aku', 'saya', 'apa kabar', 'bagaimana',
-            'ini', 'itu', 'lagi', 'banget', 'dong', 'nih', 'kok', 'aja', 'nya', 'sih'
+        if (!value || value.length < 4) return false;
+
+        // Strong single-word indicators — one hit is enough
+        const strongTokens = [
+            'makasih', 'mantap', 'mantep', 'hahaha', 'wkwkwk', 'wkwk', 'anjir', 'anjing',
+            'gokil', 'keren', 'asik', 'asikk', 'ganteng', 'cantik', 'lucu', 'sayang',
+            'cakep', 'bagus', 'senang', 'semangat', 'sukses', 'maaf', 'permisi',
+            'gue', 'gw', 'lo', 'ente', 'bro', 'sis', 'aku', 'saya', 'kamu', 'dia',
+            'mereka', 'kami', 'kita', 'ini', 'itu', 'ada', 'tidak', 'nggak', 'ngga',
+            'enggak', 'belum', 'sudah', 'udah', 'habis', 'mau', 'bisa', 'harus',
+            'pake', 'pakai', 'sama', 'juga', 'tapi', 'kalau', 'kalo', 'karena', 'supaya',
+            'selamat', 'pagi', 'siang', 'sore', 'malam', 'halo', 'haloo', 'hai',
+            'terima kasih', 'apa kabar', 'gimana', 'gimana', 'bagaimana', 'kenapa',
+            'dimana', 'kapan', 'siapa', 'berapa', 'yang', 'dengan', 'untuk', 'dari',
+            'dong', 'nih', 'sih', 'kok', 'deh', 'kan', 'lah', 'ya', 'banget', 'bgt',
+            'woi', 'oi', 'wkwkwk', 'hehe', 'hehehe', 'xixi', 'ngakak', 'lucu banget',
+            'lagi', 'terus', 'nanti', 'tadi', 'kemarin', 'sekarang', 'besok',
+            'keren banget', 'mantap jiwa', 'gas', 'gass', 'gasss', 'yuk', 'yukk',
+            'gabung', 'follow', 'follo', 'subscribe', 'subrek', 'subrex',
+            'nyimak', 'nyimek', 'hadir', 'pak', 'bu', 'mas', 'mbak', 'bang', 'kak',
+            'om', 'tante', 'abang', 'kakak', 'adik', 'bapak', 'ibu',
         ];
+        for (const token of strongTokens) {
+            const re = new RegExp('(?:^|\\s)' + token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)');
+            if (re.test(value)) return true;
+        }
+
+        // Weaker tokens — need 2 hits
+        const weakTokens = ['dan', 'atau', 'ke', 'di', 'nya'];
         let hits = 0;
-        for (const token of samples) {
-            if (value.includes(token)) hits += 1;
-            if (hits >= 2) return true;
+        for (const token of weakTokens) {
+            const re = new RegExp('(?:^|\\s)' + token + '(?:\\s|$)');
+            if (re.test(value)) { hits++; if (hits >= 2) return true; }
         }
         return false;
     }
@@ -9588,22 +9624,65 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         try {
             const cfg = DB.getSettings() || {};
             const skipEnglish = shouldSkipEnglishAutoTranslate(cfg);
+            // tkaiChatTranslateProvider: 'google' (default), or any AI provider key
+            const chatTranslateProvider = String(cfg.tkaiChatTranslateProvider || 'google').trim();
+            const useAiTranslate = chatTranslateProvider !== 'google';
+            const chatTranslateModel = String(cfg.tkaiChatTranslateModel || '').trim();
             const candidates = messages
                 .filter(message => message && message.text)
                 .filter(message => isTkaiTypeTranslationEnabled(normalizeTkaiMessageType(message), cfg))
                 .filter(message => message.translatedLang !== targetLang)
                 .slice(-20);
+            const targetLangName = (() => {
+                const LANG_NAMES = {
+                    hr: 'Croatian', en: 'English', de: 'German', es: 'Spanish', fr: 'French',
+                    pt: 'Portuguese', it: 'Italian', tr: 'Turkish', ar: 'Arabic', id: 'Indonesian',
+                    sr: 'Serbian', bs: 'Bosnian', nl: 'Dutch', pl: 'Polish', ru: 'Russian', ja: 'Japanese',
+                    ko: 'Korean', zh: 'Chinese', th: 'Thai', vi: 'Vietnamese'
+                };
+                return LANG_NAMES[targetLang] || targetLang;
+            })();
             await Promise.all(candidates.map(async (message) => {
-                const detail = await translateViaGoogleDetailed(message.text, targetLang);
-                const detected = String(detail?.sourceLang || message.sourceLang || '').toLowerCase();
-                if (detected) message.sourceLang = detected;
-                if (skipEnglish && detected === 'en') {
-                    message.translatedText = message.text;
-                    message.translatedLang = targetLang;
-                    return;
+                try {
+                    if (useAiTranslate) {
+                        // Use AI provider for stronger translation
+                        if (skipEnglish) {
+                            // Lightweight lang-detect before sending to AI
+                            const detect = await translateViaGoogleDetailed(message.text, targetLang).catch(() => null);
+                            const detected = String(detect?.sourceLang || '').toLowerCase();
+                            if (detected) message.sourceLang = detected;
+                            if (detected === 'en') {
+                                message.translatedText = message.text;
+                                message.translatedLang = targetLang;
+                                return;
+                            }
+                        }
+                        const prompt = `Translate the following chat message to ${targetLangName} (${targetLang}). Return ONLY the translation, no explanation:\n\n${message.text}`;
+                        const translated = await runAiTextRequest(prompt, {
+                            provider: chatTranslateProvider,
+                            model: chatTranslateModel || undefined,
+                            maxOutputTokens: 300,
+                            systemPrompt: `You are a fast, precise chat message translator. Translate naturally and concisely.`
+                        });
+                        message.translatedText = String(translated || message.text).trim();
+                        message.translatedLang = targetLang;
+                        message.translatedByAi = chatTranslateProvider;
+                    } else {
+                        // Default: Google Translate
+                        const detail = await translateViaGoogleDetailed(message.text, targetLang);
+                        const detected = String(detail?.sourceLang || message.sourceLang || '').toLowerCase();
+                        if (detected) message.sourceLang = detected;
+                        if (skipEnglish && detected === 'en') {
+                            message.translatedText = message.text;
+                            message.translatedLang = targetLang;
+                            return;
+                        }
+                        message.translatedText = String(detail?.translated || message.text || '');
+                        message.translatedLang = targetLang;
+                    }
+                } catch (_) {
+                    // Keep original text on error
                 }
-                message.translatedText = String(detail?.translated || message.text || '');
-                message.translatedLang = targetLang;
             }));
         } finally {
             isTranslating = false;
@@ -12488,7 +12567,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }).catch(() => { });
             }
         }
-        setInterval(_pollStats, 8000);
+        setInterval(_pollStats, 15000);
 
         function _refreshShield() {
             const s = DB.getSettings();
@@ -16693,8 +16772,52 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             setTimeout(() => { input.focus(); input.select(); }, 10);
         });
     }
-    function updateClock() { const now = new Date(); const cfg = DB.getSettings(); const h12 = cfg.clockFormat === '12h'; const showSec = cfg.clockShowSeconds === true; const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 }; if (showSec) opts.second = '2-digit'; const t = now.toLocaleTimeString([], opts); const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' }); const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || ''; const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || ''; const clockEl = document.getElementById('titleClock'); clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t; const clockColor = cfg.clockColor || '#ffffff'; clockEl.style.color = clockColor; const clockSize = cfg.clockSize || 15; clockEl.style.fontSize = clockSize + 'px'; document.getElementById('sbTime').textContent = t; const de = document.getElementById('titleDate'); if (de) { de.textContent = (datePfx ? datePfx + ' ' : '') + d; const dateColor = cfg.dateColor || '#ffffff'; de.style.color = dateColor; const dateSize = cfg.dateSize || 12; de.style.fontSize = dateSize + 'px'; } }
-    updateClock(); setInterval(updateClock, 30000);
+    // Cache clock-related settings so DB.getSettings() is not called on every tick.
+    let _clockCfgCache = null;
+    let _clockIntervalId = null;
+    function _refreshClockCfgCache() { _clockCfgCache = DB.getSettings(); }
+    function updateClock() {
+        if (!_clockCfgCache) _refreshClockCfgCache();
+        const cfg = _clockCfgCache;
+        const now = new Date();
+        const h12 = cfg.clockFormat === '12h';
+        const showSec = cfg.clockShowSeconds === true;
+        const opts = { hour: '2-digit', minute: '2-digit', hour12: h12 };
+        if (showSec) opts.second = '2-digit';
+        const t = now.toLocaleTimeString([], opts);
+        const d = now.toLocaleDateString('hr-HR', { weekday: 'short', day: 'numeric', month: 'short' });
+        const clockPfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleClock']) || '';
+        const datePfx = (typeof _titlebarIcons !== 'undefined' && _titlebarIcons['titleDate']) || '';
+        const clockEl = document.getElementById('titleClock');
+        clockEl.textContent = (clockPfx ? clockPfx + ' ' : '') + t;
+        const clockColor = cfg.clockColor || '#ffffff';
+        clockEl.style.color = clockColor;
+        const clockSize = cfg.clockSize || 15;
+        clockEl.style.fontSize = clockSize + 'px';
+        document.getElementById('sbTime').textContent = t;
+        const de = document.getElementById('titleDate');
+        if (de) {
+            de.textContent = (datePfx ? datePfx + ' ' : '') + d;
+            de.style.color = cfg.dateColor || '#ffffff';
+            de.style.fontSize = (cfg.dateSize || 12) + 'px';
+        }
+    }
+    function _startClockInterval() {
+        if (_clockIntervalId) clearInterval(_clockIntervalId);
+        _refreshClockCfgCache();
+        const showSec = _clockCfgCache.clockShowSeconds === true;
+        // Update every second when seconds are visible; every 30 s otherwise.
+        _clockIntervalId = setInterval(updateClock, showSec ? 1000 : 30000);
+    }
+    updateClock(); _startClockInterval();
+    // Re-start clock after settings save so format/interval reflects new values.
+    if (typeof window !== 'undefined') {
+        const _origSaveSettings = window.saveSettings;
+        if (typeof _origSaveSettings === 'function') {
+            window._afterSaveSettingsHooks = window._afterSaveSettingsHooks || [];
+            window._afterSaveSettingsHooks.push(() => { _clockCfgCache = null; _startClockInterval(); });
+        }
+    }
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
     document.addEventListener('keydown', e => {
         const ctrl = e.ctrlKey || e.metaKey; const shift = e.shiftKey;
@@ -16715,6 +16838,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); setZoom(STATE.zoom + 10); }
         else if (ctrl && e.key === '-') { e.preventDefault(); setZoom(STATE.zoom - 10); }
         else if (ctrl && e.key === '0') { e.preventDefault(); setZoom(100); }
+        else if (ctrl && !shift && e.key === 'm') { e.preventDefault(); if (typeof window.openBpmGuide === 'function') window.openBpmGuide(); if (typeof window.startBpmDetection === 'function') window.startBpmDetection(); }
         else if (ctrl && shift && e.key === 'M') { e.preventDefault(); toggleRespMode(); }
         else if (ctrl && shift && e.key === '\\') { e.preventDefault(); toggleTabOverview(); }
         else if (ctrl && shift && e.key === 'D') { e.preventDefault(); const cur = DB.getSettings().pageDarkMode || false; applyPageDarkMode(!cur); }
@@ -18025,7 +18149,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         if (cfg.aiModel) modelSel.value = cfg.aiModel;
         if (cfg.translateAiProvider) { const el = document.getElementById('settingsTranslateProvider'); if (el) el.value = cfg.translateAiProvider; }
         if (cfg.translateAiModel) { const el = document.getElementById('settingsTranslateModel'); if (el) el.value = cfg.translateAiModel; }
-        const NLLB_ONLY_MODE = true;
+        const NLLB_ONLY_MODE = false;  // Model dropdown is user-controlled
         const FORCED_NLLB_MODEL = 'facebook/nllb-200-distilled-1.3B';
         {
             const nllbModel = String((NLLB_ONLY_MODE ? FORCED_NLLB_MODEL : (cfg.tkaiNllbModel || 'facebook/nllb-200-distilled-600M')));
@@ -18109,6 +18233,38 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 updateTranslateCapabilityBadges();
                 showToast('✅ NLLB model spremljen: ' + next.replace('facebook/', ''));
             });
+
+            // ── NLLB test button ──────────────────────────────────────────
+            const testBtn = document.getElementById('nllbTestBtn');
+            const testInput = document.getElementById('nllbTestInput');
+            const testResult = document.getElementById('nllbTestResult');
+            if (testBtn && testInput && testResult) {
+                testBtn.addEventListener('click', async () => {
+                    const text = testInput.value.trim();
+                    if (!text) { testResult.textContent = '⚠️ Unesi tekst za prijevod.'; return; }
+                    const model = String(nllbSel.value || DB.getSettings().tkaiNllbModel || 'facebook/nllb-200-distilled-1.3B').trim();
+                    testBtn.disabled = true;
+                    testBtn.textContent = '⏳ ...';
+                    testResult.textContent = '🔄 Prevođenje s ' + model.replace('facebook/', '') + '...';
+                    try {
+                        const translated = await translateIndonesianToCroatianViaNllb(text, model);
+                        const detected = isLikelyIndonesianText(text);
+                        testResult.innerHTML =
+                            '<b>Prijevod:</b> ' + escHtml(translated) +
+                            '<br><span style="font-size:10px;opacity:.7">Detekcija: ' +
+                            (detected ? '✅ prepoznat kao indonezijski' : '⚠️ nije prepoznat kao indonezijski') +
+                            ' · model: ' + escHtml(model.replace('facebook/', '')) + '</span>';
+                    } catch (err) {
+                        testResult.textContent = '❌ Greška: ' + (err.message || String(err));
+                    }
+                    testBtn.disabled = false;
+                    testBtn.textContent = '▶ Test';
+                });
+                // Also trigger on Ctrl+Enter inside textarea
+                testInput.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); testBtn.click(); }
+                });
+            }
         })();
         enforceNllbOnlyMode();
         (function syncTranslateKeyRow() {
@@ -21568,31 +21724,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         // Stored data for one-click update
         window._pendingUpdateAsset = null;
 
-
-        // ── Tab Discarding (Memory Saver) ──────────────────────────────────────────
-        setInterval(() => {
-            if (!window.electronWebview) return; // Only applicable for Electron
-            const DISCARD_TIME = 15 * 60 * 1000; // 15 minutes
-            const now = Date.now();
-            STATE.tabs.forEach(tab => {
-                if (tab.id === STATE.activeTabId || tab.discarded || !tab.url) return;
-                if (now - (tab.lastActive || now) > DISCARD_TIME) {
-                    const wv = origGetElementById.call(document, 'browseFrame_' + tab.id) || (tab.id === 1 ? origGetElementById.call(document, 'browseFrame') : null);
-                    if (wv && typeof wv.isCurrentlyAudible === 'function') {
-                        try {
-                            if (!wv.isCurrentlyAudible()) {
-                                consoleLog('info', `💤 Uspavljujem tab u pozadini radi štednje RAM-a: ${tab.title}`);
-                                // NOTE: do NOT set src='about:blank' before remove — triggers GUEST_VIEW_MANAGER_CALL ERR_FAILED (-2)
-                                try { wv.remove(); } catch (_) { }
-                                tab.discarded = true;
-                                const el = getTabEl(tab.id);
-                                if (el) el.style.opacity = '0.6'; // Visual cue
-                            }
-                        } catch (e) { }
-                    }
-                }
-            });
-        }, 60000); // Check every minute
+        // Tab Discarding (Memory Saver) — handled by the shared interval at the top of the file.
 
         function _applyUpdateResult(data, currentTag) {
             const badge = document.getElementById('updStatusBadge');
@@ -23096,10 +23228,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 const bassEnd = Math.min(bufLen - 1, Math.floor(250 / binSize));
 
                 const energySamples = [];
-                const collectMs = 8000; // 8 seconds of analysis
+                const collectMs = Math.max(3, Math.min(60, parseInt(DB.getSettings().bpmListenDurationSec || 8, 10))) * 1000;
                 const startTs = Date.now();
 
-                _bpmSetStatus('Slušam glazbu... (8s)');
+                _bpmSetStatus(`Slušam glazbu... (${collectMs / 1000}s)`);
 
                 await new Promise(resolve => {
                     const tick = () => {
@@ -23177,8 +23309,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             _bpmSetDisplay(0);
             _bpmSetStatus('Isključeno');
             const row = document.getElementById('bpmIntervalRow');
+            const durRow = document.getElementById('bpmListenDurRow');
             const statusRow = document.getElementById('bpmStatusRow');
             if (row) row.style.display = 'none';
+            if (durRow) durRow.style.display = 'none';
             if (statusRow) statusRow.style.display = 'none';
         }
 
@@ -23186,8 +23320,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             _bpmStop(); // clean up first
             const intervalSec = parseInt(DB.getSettings().bpmDetectIntervalSec || 120, 10);
             const row = document.getElementById('bpmIntervalRow');
+            const durRow = document.getElementById('bpmListenDurRow');
             const statusRow = document.getElementById('bpmStatusRow');
             if (row) row.style.display = 'flex';
+            if (durRow) durRow.style.display = 'flex';
             if (statusRow) statusRow.style.display = 'flex';
             _bpmDetectOnce();
             _bpmIntervalId = setInterval(_bpmDetectOnce, intervalSec * 1000);
@@ -23208,9 +23344,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (intervalSel) intervalSel.value = intervalSec;
 
             const row = document.getElementById('bpmIntervalRow');
+            const durRow = document.getElementById('bpmListenDurRow');
             const statusRow = document.getElementById('bpmStatusRow');
             if (row) row.style.display = enabled ? 'flex' : 'none';
+            if (durRow) durRow.style.display = enabled ? 'flex' : 'none';
             if (statusRow) statusRow.style.display = enabled ? 'flex' : 'none';
+
+            // Restore saved listen duration value
+            const listenDurInput = document.getElementById('bpmListenDurInput');
+            if (listenDurInput) {
+                const savedDur = parseInt(DB.getSettings().bpmListenDurationSec || 8, 10);
+                listenDurInput.value = Math.max(3, Math.min(60, savedDur));
+            }
 
             if (enabled) _bpmStart();
 
@@ -23262,6 +23407,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 document.getElementById('btnSettings')?.click(); // close settings
             });
         }
+
+        // Expose BPM start so the global keyboard shortcut can trigger it.
+        window.startBpmDetection = _bpmStart;
 
         // Init after DOM ready
         if (document.readyState === 'loading') {
