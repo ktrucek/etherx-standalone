@@ -1250,6 +1250,9 @@ function shouldCreateMissingFallback(id) {
         id.startsWith('setting') ||
         id.startsWith('btnClear') ||
         id.startsWith('save') ||
+        id === 'bpmListenDurRow' ||
+        id === 'bpmListenDurInput' ||
+        id === 'titleBpmStatus' ||
         id === 'tkaiStatsStorageSummary' ||
         id === 'dlBadge' ||
         id.startsWith('mi-') ||
@@ -4675,10 +4678,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let dashboardControlsInit = false;
     let lastCaptionSpeakKey = '';
     let lastCaptionSpeakAt = 0;
+    let lastCaptionMirrorKey = '';
+    let lastCaptionMirrorAt = 0;
     const translateCache = new Map();
     const nllbTranslateCache = new Map();
     const NLLB_CACHE_MAX = 500;
     let nllbTranslateInFlight = false;
+    const TKAI_FORCED_TRANSLATE_USERS_KEY = 'tkaiForcedTranslateUsers';
     const STORAGE_KEY = 'ex_tkai_cfg';
     const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
     const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
@@ -5280,6 +5286,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         speakCaptionText(message.translatedText || raw, targetLang, { interrupt: false });
     }
 
+    async function mirrorCaptionToTikTokAiFeed(message) {
+        if (!message || String(message.type || '').toLowerCase() !== 'caption') return;
+        if (typeof window.pushTextToTikTokAI !== 'function') return;
+        const text = String(message.translatedText || message.text || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const key = String(message.id || '') + '|' + text;
+        const now = Date.now();
+        if (key === lastCaptionMirrorKey && (now - lastCaptionMirrorAt) < 4000) return;
+        lastCaptionMirrorKey = key;
+        lastCaptionMirrorAt = now;
+        await window.pushTextToTikTokAI(text, 'HOST CC', { skipAutoTranslate: true });
+    }
+
     function loadCfg() {
         try {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -5453,6 +5472,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const n = Number(value || 0);
         if (!Number.isFinite(n)) return '0';
         return n.toLocaleString('hr-HR');
+    }
+    function formatDurationHoursMinutes(totalMs) {
+        const mins = Math.max(0, Math.floor(Number(totalMs || 0) / 60000));
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h}h ${m}m`;
     }
     function setSongToolStatus(text) {
         document.querySelectorAll('#tkaiSongToolsStatus, #tkaiSongRecStatus, #tkaiLiveSongToolsStatus').forEach((node) => {
@@ -5826,11 +5851,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
-            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi</button>' +
+            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi + pošalji u TikTok Chat AI</button>' +
             '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
             '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
+            '<button type="button" data-act="translate-user-session" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#22d3ee;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🧭 Uvijek prevedi ovog korisnika (sesija)</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="show-messages" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#60a5fa;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">💬 Poruke korisnika + sentiment</button>' +
             '<button type="button" data-act="gift-gallery" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fb923c;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎁 Darovi korisnika (sesija)</button>' +
@@ -5979,6 +6005,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             showToast('🎯 Označen korisnik: ' + targetedChatUser);
         });
 
+        tkaiMsgCtxEl.querySelector('[data-act="translate-user-session"]')?.addEventListener('click', () => {
+            const m = tkaiMsgCtxTarget;
+            const user = String(m?.user || '').trim().toLowerCase();
+            if (!user) {
+                closeTkaiMsgContextMenu();
+                showToast('⚠️ Nema korisnika za ovaj red');
+                return;
+            }
+            const set = getForcedTranslateUsersSet();
+            if (set.has(user)) {
+                set.delete(user);
+                saveForcedTranslateUsersSet(set);
+                showToast('🧭 Isključeno auto-prevođenje za @' + user);
+            } else {
+                set.add(user);
+                saveForcedTranslateUsersSet(set);
+                showToast('🧭 Uključeno auto-prevođenje za @' + user + ' (sesija)');
+            }
+            closeTkaiMsgContextMenu();
+        });
+
         tkaiMsgCtxEl.querySelector('[data-act="push-and-scan"]')?.addEventListener('click', async () => {
             const m = tkaiMsgCtxTarget;
             if (!m) return;
@@ -5991,8 +6038,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (typeof window.pushTextToTikTokAI === 'function') {
                 await window.pushTextToTikTokAI(text, String(m.user || '').trim() || 'TikTok user', { forceTranslate: true });
             }
+            setTimeout(() => {
+                if (typeof triggerTikTokRegionScanFromUi === 'function') triggerTikTokRegionScanFromUi();
+            }, 40);
             closeTkaiMsgContextMenu();
-            showToast('🎵 Poruka poslana u TikTok Chat AI');
+            showToast('🎵 Poruka poslana u TikTok Chat AI + scan regije');
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="gift-gallery"]')?.addEventListener('click', () => {
@@ -6220,15 +6270,52 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         stats.forEach((u) => {
             const key = String(u.user || '').trim().toLowerCase();
             if (!key) return;
-            const existing = db[key] || { user: u.user, firstSeen: now, sessions: 0, totalChat: 0, totalGifts: 0, totalCoins: 0, lastSeen: 0, giftTypes: {}, note: '' };
+            const existing = db[key] || {
+                user: u.user,
+                firstSeen: now,
+                sessions: 0,
+                totalMessages: 0,
+                totalChat: 0,
+                totalGifts: 0,
+                totalCoins: 0,
+                totalLikes: 0,
+                totalShares: 0,
+                totalJoins: 0,
+                totalActiveMs: 0,
+                lastSeen: 0,
+                giftTypes: {},
+                note: ''
+            };
             existing.user = u.user;
             existing.lastSeen = now;
-            existing.sessions = (existing.sessions || 0) + 1;
+            const sessionKey = String(sessionStartedAt || '').trim();
+            if (sessionKey && existing.lastSessionKey !== sessionKey) {
+                existing.sessions = (existing.sessions || 0) + 1;
+                existing.lastSessionKey = sessionKey;
+            } else if (!existing.sessions) {
+                existing.sessions = 1;
+            }
+            existing.totalMessages = (existing.totalMessages || 0) + (u.total || 0);
             existing.totalChat = (existing.totalChat || 0) + (u.chat || 0);
             existing.totalGifts = (existing.totalGifts || 0) + (u.gifts || 0);
             existing.totalCoins = (existing.totalCoins || 0) + (u.coins || 0);
+            existing.totalLikes = (existing.totalLikes || 0) + (u.likes || 0);
+            existing.totalShares = (existing.totalShares || 0) + (u.shares || 0);
+            existing.totalJoins = (existing.totalJoins || 0) + (u.joins || 0);
             existing.lastMessage = u.lastMessage || existing.lastMessage || '';
             if (!existing.firstSeen || now < existing.firstSeen) existing.firstSeen = now;
+
+            const firstTs = Math.max(0, Number(u.firstSeen || 0));
+            const lastTs = Math.max(0, Number(u.lastTs || 0));
+            const prevTrackedTs = Math.max(0, Number(existing.lastActiveFromTs || 0));
+            if (lastTs > 0 && firstTs > 0 && lastTs >= firstTs) {
+                const spanStart = prevTrackedTs > 0 ? Math.max(prevTrackedTs, firstTs) : firstTs;
+                const deltaMs = Math.max(0, lastTs - spanStart);
+                existing.totalActiveMs = (existing.totalActiveMs || 0) + deltaMs;
+                existing.lastActiveFromTs = Math.max(prevTrackedTs, lastTs);
+                existing.totalActiveMinutes = Math.floor((existing.totalActiveMs || 0) / 60000);
+            }
+
             if (Array.isArray(u.giftTypes)) {
                 u.giftTypes.forEach(([name, qty]) => {
                     existing.giftTypes[name] = (existing.giftTypes[name] || 0) + qty;
@@ -6289,9 +6376,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)">`;
             html += `<div style="font-size:11px;font-weight:600;color:#a3e635;margin-bottom:6px">📊 Baza (sve sesije)</div>`;
             html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#9ca3af">`;
+            html += `<div>Ukupno poruka: <b style="color:#e5e7eb">${formatNum(dbEntry.totalMessages || 0)}</b></div>`;
             html += `<div>Chat poruke: <b style="color:#e5e7eb">${formatNum(dbEntry.totalChat || 0)}</b></div>`;
             html += `<div>Ukupno giftova: <b style="color:#fb923c">${formatNum(dbEntry.totalGifts || 0)}</b></div>`;
             html += `<div>Ukupno 🪙: <b style="color:#fcd34d">${formatNum(dbEntry.totalCoins || 0)}</b></div>`;
+            html += `<div>Likeova: <b style="color:#e5e7eb">${formatNum(dbEntry.totalLikes || 0)}</b></div>`;
+            html += `<div>Shareova: <b style="color:#e5e7eb">${formatNum(dbEntry.totalShares || 0)}</b></div>`;
+            html += `<div>Joinova: <b style="color:#e5e7eb">${formatNum(dbEntry.totalJoins || 0)}</b></div>`;
+            html += `<div>Aktivan: <b style="color:#22d3ee">${formatDurationHoursMinutes(dbEntry.totalActiveMs || 0)}</b></div>`;
             html += `<div>Sesija: <b style="color:#e5e7eb">${formatNum(dbEntry.sessions || 0)}</b></div>`;
             if (dbEntry.firstSeen) html += `<div style="grid-column:1/-1">Prva pojava: ${new Date(dbEntry.firstSeen).toLocaleDateString('hr-HR')}</div>`;
             html += `</div>`;
@@ -6344,10 +6436,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             html += `<button data-open-profile="${escHtml(u.user)}" style="background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#34d399;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">🔗</button>`;
             html += `</div></div>`;
             html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;font-size:11px;color:#9ca3af">`;
+            html += `<div>Poruke: <b style="color:#e5e7eb">${formatNum(u.totalMessages || 0)}</b></div>`;
             html += `<div>Chat: <b style="color:#e5e7eb">${formatNum(u.totalChat || 0)}</b></div>`;
             html += `<div>Giftovi: <b style="color:#fb923c">${formatNum(u.totalGifts || 0)}</b></div>`;
             html += `<div>🪙: <b style="color:#fcd34d">${formatNum(u.totalCoins || 0)}</b></div>`;
+            html += `<div>Like: <b style="color:#e5e7eb">${formatNum(u.totalLikes || 0)}</b></div>`;
+            html += `<div>Share: <b style="color:#e5e7eb">${formatNum(u.totalShares || 0)}</b></div>`;
+            html += `<div>Join: <b style="color:#e5e7eb">${formatNum(u.totalJoins || 0)}</b></div>`;
             html += `<div>Sesija: <b style="color:#e5e7eb">${formatNum(u.sessions || 0)}</b></div>`;
+            html += `<div>Aktivan: <b style="color:#22d3ee">${formatDurationHoursMinutes(u.totalActiveMs || 0)}</b></div>`;
             html += `</div>`;
             if (topGifts.length) {
                 html += `<div style="font-size:10px;color:#6b7280;margin-top:4px">Giftovi: ${topGifts.map(([n, q]) => `${escHtml(n)} x${q}`).join(' • ')}</div>`;
@@ -6905,6 +7002,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (toggleBtn) {
             toggleBtn.textContent = '▶ Skeniranje ON';
             toggleBtn.className = 'tkai-scan-btn start';
+            toggleBtn.style.boxShadow = 'none';
+            toggleBtn.style.background = '';
+            toggleBtn.style.borderColor = '';
+            toggleBtn.style.color = '';
         }
         setStatus('');
         persistTkaiAutosave('scan-stop');
@@ -9619,6 +9720,37 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
+    function getForcedTranslateUsersSet() {
+        try {
+            const cfg = DB.getSettings() || {};
+            const raw = cfg[TKAI_FORCED_TRANSLATE_USERS_KEY];
+            const rows = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw || '[]') : []);
+            return new Set(rows.map((v) => String(v || '').trim().toLowerCase()).filter(Boolean));
+        } catch (_) {
+            return new Set();
+        }
+    }
+
+    function saveForcedTranslateUsersSet(set) {
+        const rows = Array.from(set || []).map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+        DB.saveSetting(TKAI_FORCED_TRANSLATE_USERS_KEY, rows);
+    }
+
+    async function translateForcedUsersInPlace(messages) {
+        if (!Array.isArray(messages) || !messages.length) return;
+        const forced = getForcedTranslateUsersSet();
+        if (!forced.size) return;
+        const targetLang = getManualTranslateTargetLang();
+        if (!targetLang || targetLang === 'auto') return;
+        const candidates = messages
+            .filter((message) => message && String(message.type || '').toLowerCase() === 'chat')
+            .filter((message) => forced.has(String(message.user || '').trim().toLowerCase()))
+            .filter((message) => !message.translatedText || message.translatedLang !== targetLang)
+            .slice(-20);
+        if (!candidates.length) return;
+        await translateMessagesInPlace(candidates, targetLang);
+    }
+
     async function translateMessagesInPlace(messages, targetLang) {
         if (!Array.isArray(messages) || !messages.length) return;
         if (!targetLang || targetLang === 'auto' || isTranslating) return;
@@ -10789,9 +10921,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
             if (incomingAddedMessages.length) {
                 await translateIndonesianMessagesInPlace(incomingAddedMessages);
+                await translateForcedUsersInPlace(incomingAddedMessages);
             }
             if (incomingCaptions.length && isCcReadEnabled()) {
                 await Promise.all(incomingCaptions.map((message) => handleIncomingCaption(message).catch(() => { })));
+            }
+            if (incomingCaptions.length) {
+                const latestCaption = incomingCaptions[incomingCaptions.length - 1];
+                await mirrorCaptionToTikTokAiFeed(latestCaption).catch(() => { });
             }
             if (incomingChatsForCcRead.length && isCcReadEnabled()) {
                 await Promise.all(incomingChatsForCcRead.map((message) => handleIncomingChatForCcRead(message).catch(() => { })));
@@ -11407,6 +11544,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (!sessionStartedAt) sessionStartedAt = Date.now();
         toggleBtn.textContent = '⏹ Skeniranje OFF';
         toggleBtn.className = 'tkai-scan-btn stop';
+        toggleBtn.style.background = 'linear-gradient(135deg,#16a34a,#22c55e)';
+        toggleBtn.style.borderColor = 'rgba(34,197,94,.65)';
+        toggleBtn.style.color = '#ffffff';
+        toggleBtn.style.boxShadow = '0 0 0 1px rgba(34,197,94,.45) inset, 0 0 10px rgba(34,197,94,.35)';
         setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
         showToast('▶ Skeniranje uključeno');
         runTkaiScanCycle();
@@ -11418,6 +11559,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }, 10000);
         updateSessionStatsUI();
     });
+
+    window.startTkaiScanShortcut = function () {
+        if (scanActive) {
+            showToast('🔎 Skeniranje je već uključeno');
+            return;
+        }
+        if (typeof toggleBtn?.click === 'function') toggleBtn.click();
+    };
 
     ccReadBtn?.addEventListener('click', () => {
         const next = !isCcReadEnabled();
@@ -11584,9 +11733,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
         const scanBtnEl = document.getElementById('tkaiBtnToggle');
         if (scanBtnEl) {
-            scanBtnEl.style.background = `linear-gradient(135deg, ${secondary}, ${primary})`;
-            scanBtnEl.style.borderColor = 'rgba(255,255,255,.2)';
-            scanBtnEl.style.color = '#fff';
+            if (scanActive) {
+                scanBtnEl.style.background = 'linear-gradient(135deg,#16a34a,#22c55e)';
+                scanBtnEl.style.borderColor = 'rgba(34,197,94,.65)';
+                scanBtnEl.style.color = '#fff';
+                scanBtnEl.style.boxShadow = '0 0 0 1px rgba(34,197,94,.45) inset, 0 0 10px rgba(34,197,94,.35)';
+            } else {
+                scanBtnEl.style.background = `linear-gradient(135deg, ${secondary}, ${primary})`;
+                scanBtnEl.style.borderColor = 'rgba(255,255,255,.2)';
+                scanBtnEl.style.color = '#fff';
+                scanBtnEl.style.boxShadow = 'none';
+            }
         }
 
         panel.querySelectorAll('.tkai-gen-btn').forEach(btn => {
@@ -14512,7 +14669,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const platform = (typeof process !== 'undefined' && process.platform) || navigator.platform || 'web';
         showToast(`EtherX Browser v${ver}${buildDateStr}\n💻 ${platform}\n🌐 Web3-Native Browser`);
     });
-    document.getElementById('mi-shortcuts').addEventListener('click', () => { alert('Ctrl+T: New Tab\nCtrl+W: Close Tab\nCtrl+R: Reload\nCtrl+F: Find in Page\nCtrl+D: Bookmark\nCtrl+H: History\nCtrl+B: Bookmarks\nCtrl+J: Downloads\nCtrl+L: Focus URL\nCtrl++/-/0: Zoom\nCtrl+Shift+A: AI Page Summary\nCtrl+Shift+D: Dark Mode on Page\nCtrl+Shift+M: Responsive Mode\nCtrl+Shift+S: Screenshot\nF12: DevTools\nF11: Fullscreen\nF5: Reload\nShift+F5: Hard Reload (clear cookies + reload)\nAlt+←/→: Back/Forward\nCtrl+Tab: Next Tab\nCtrl+Shift+Tab: Prev Tab'); });
+    document.getElementById('mi-shortcuts').addEventListener('click', () => { alert('Ctrl+T: New Tab\nCtrl+W: Close Tab\nCtrl+R: Reload\nCtrl+F: Find in Page\nCtrl+D: Bookmark\nCtrl+H: History\nCtrl+B: Bookmarks\nCtrl+J: Downloads\nCtrl+L: Focus URL\nCtrl++/-/0: Zoom\nCtrl+M / Cmd+M: Pokreni TikTok skeniranje\nCtrl+Shift+A: AI Page Summary\nCtrl+Shift+D: Dark Mode on Page\nCtrl+Shift+M: Responsive Mode\nCtrl+Shift+S: Screenshot\nF12: DevTools\nF11: Fullscreen\nF5: Reload\nShift+F5: Hard Reload (clear cookies + reload)\nAlt+←/→: Back/Forward\nCtrl+Tab: Next Tab\nCtrl+Shift+Tab: Prev Tab\n\nTikTok Chat Feed desni klik:\n- 🌐 Prevedi + pošalji u TikTok Chat AI\n- 🧭 Uvijek prevedi ovog korisnika (sesija)\n- 🔎 TikTok scan regije'); });
     function pinTab() { const t = getActiveTab(); if (!t) return; t.pinned = !t.pinned; updateTabEl(t); showToast(t.pinned ? '📌 Tab pinned' : '📌 Tab unpinned'); }
     function muteTab() { const t = getActiveTab(); if (!t) return; t.muted = !t.muted; updateTabEl(t); if (window.electronWebview && t.id === STATE.activeTabId) { try { frame.setAudioMuted(t.muted); } catch (e) { } } showToast(t.muted ? '🔇 Tab muted' : '🔊 Tab unmuted'); }
     function dupTab() { const t = getActiveTab(); if (!t) return; createTab(t.url, t.title + ' (copy)'); }
@@ -16837,7 +16994,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         else if (ctrl && (e.key === '=' || e.key === '+')) { e.preventDefault(); setZoom(STATE.zoom + 10); }
         else if (ctrl && e.key === '-') { e.preventDefault(); setZoom(STATE.zoom - 10); }
         else if (ctrl && e.key === '0') { e.preventDefault(); setZoom(100); }
-        else if (ctrl && !shift && e.key === 'm') { e.preventDefault(); if (typeof window.openBpmGuide === 'function') window.openBpmGuide(); if (typeof window.startBpmDetection === 'function') window.startBpmDetection(); }
+        else if (ctrl && !shift && e.key === 'm') { e.preventDefault(); if (typeof window.startTkaiScanShortcut === 'function') window.startTkaiScanShortcut(); }
         else if (ctrl && shift && e.key === 'M') { e.preventDefault(); toggleRespMode(); }
         else if (ctrl && shift && e.key === '\\') { e.preventDefault(); toggleTabOverview(); }
         else if (ctrl && shift && e.key === 'D') { e.preventDefault(); const cur = DB.getSettings().pageDarkMode || false; applyPageDarkMode(!cur); }
@@ -23161,9 +23318,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         function _bpmSetDisplay(bpm, genreInfo) {
             const el = document.getElementById('tkaiBpmDisplay');
+            const titleEl = document.getElementById('titleBpmStatus');
             if (!el) return;
             if (!bpm) {
                 el.style.display = 'none';
+                if (titleEl) {
+                    titleEl.textContent = '';
+                    titleEl.style.display = 'none';
+                }
                 return;
             }
             const info = genreInfo || genreFromBPM(bpm);
@@ -23173,11 +23335,18 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             el.style.boxShadow = '0 0 8px ' + info.color + '33';
             el.textContent = `🎵 ${info.genre} • ${bpm} BPM`;
             el.title = `Detektirani BPM: ${bpm} — ${info.genre}\nKlikni za BPM Reference Guide`;
+            if (titleEl) {
+                titleEl.style.display = '';
+                titleEl.style.color = info.color;
+                titleEl.textContent = `🎵 ${info.genre} ${bpm} BPM`;
+            }
         }
 
         function _bpmSetStatus(text) {
             const el = document.getElementById('bpmDetectStatus');
             if (el) el.textContent = text;
+            const titleEl = document.getElementById('titleBpmStatus');
+            if (titleEl && text) titleEl.title = String(text);
         }
 
         async function _bpmDetectOnce() {
@@ -23307,6 +23476,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             }
             _bpmSetDisplay(0);
             _bpmSetStatus('Isključeno');
+            const titleEl = document.getElementById('titleBpmStatus');
+            if (titleEl) {
+                titleEl.textContent = '';
+                titleEl.style.display = 'none';
+            }
             const row = document.getElementById('bpmIntervalRow');
             const durRow = document.getElementById('bpmListenDurRow');
             const statusRow = document.getElementById('bpmStatusRow');
