@@ -1116,7 +1116,7 @@ async function runOneClickLocalSetup() {
     if (app.isPackaged) {
       let scriptPath = process.execPath;
       if (process.platform !== "win32") {
-        scriptPath = scriptPath.replace(/ /g, "\\ ");
+        scriptPath = `"${scriptPath}"`;
       } else {
         scriptPath = scriptPath.replace(/\\/g, "/");
       }
@@ -1124,7 +1124,7 @@ async function runOneClickLocalSetup() {
   apps: [
     {
       name: "etherx-browser",
-      script: "${scriptPath}",
+      script: ${JSON.stringify(scriptPath)},
       args: "--no-sandbox",
       cwd: "${projectRoot.replace(/\\/g, "/")}",
       autorestart: true,
