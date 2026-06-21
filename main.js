@@ -961,7 +961,7 @@ function isWritableDir(dirPath) {
 
 function resolvePythonProjectRoot(reqLookup = undefined) {
   if (app.isPackaged) {
-    const fallbackRoot = path.join(app.getPath("userData"), "python_env");
+    const fallbackRoot = path.join(os.homedir(), ".etherx-browser-runtime");
     try {
       fs.mkdirSync(fallbackRoot, { recursive: true });
     } catch (_) { }
