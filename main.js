@@ -884,6 +884,17 @@ function resolvePythonCandidates(preferredRoot = "") {
   return candidates;
 }
 
+function preferExistingVenvPythonCandidates(candidates = []) {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const marker = `${path.sep}.venv${path.sep}`;
+  const venvExisting = list.filter((candidate) => {
+    if (!candidate || !path.isAbsolute(candidate)) return false;
+    if (!String(candidate).includes(marker)) return false;
+    return fs.existsSync(candidate);
+  });
+  return venvExisting.length ? venvExisting : list;
+}
+
 function _withAsarUnpacked(p) {
   if (!p) return p;
   return String(p).replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
@@ -946,6 +957,60 @@ function trimPythonInstallOutput(value, maxLen = 12000) {
   const text = String(value || "").trim();
   if (text.length <= maxLen) return text;
   return text.slice(-maxLen);
+}
+
+function parsePm2ProcessSnapshot(rawJson, processName) {
+  try {
+    const list = JSON.parse(String(rawJson || "[]"));
+    if (!Array.isArray(list)) return null;
+    const name = String(processName || "").trim();
+    if (!name) return null;
+    const item = list.find((entry) => String(entry?.name || "") === name);
+    if (!item) return null;
+
+    const pm2Env = item.pm2_env || {};
+    const execMode = String(pm2Env.exec_mode || "");
+    const state = String(pm2Env.status || item.status || "");
+    const nodeArgs = Array.isArray(pm2Env.node_args) ? pm2Env.node_args : [];
+    const args = Array.isArray(pm2Env.args)
+      ? pm2Env.args
+      : (pm2Env.args ? [String(pm2Env.args)] : []);
+
+    return {
+      name: String(item.name || name),
+      pid: Number(item.pid || 0) || 0,
+      state,
+      online: state === "online",
+      restarts: Number(pm2Env.restart_time || 0) || 0,
+      unstableRestarts: Number(pm2Env.unstable_restarts || 0) || 0,
+      execPath: String(pm2Env.pm_exec_path || ""),
+      cwd: String(pm2Env.pm_cwd || ""),
+      interpreter: String(pm2Env.exec_interpreter || ""),
+      execMode,
+      nodeArgs,
+      args,
+      outLogPath: String(pm2Env.pm_out_log_path || ""),
+      errLogPath: String(pm2Env.pm_err_log_path || ""),
+      createdAt: Number(pm2Env.created_at || 0) || 0,
+      pmId: Number(item.pm_id || -1),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+async function getPm2ProcessSnapshot(projectRoot, processName = "etherx-browser") {
+  const jlist = await execFileText("npx", ["pm2", "jlist"], 120000, { cwd: projectRoot });
+  if (!jlist.ok) {
+    return {
+      ok: false,
+      error: trimPythonInstallOutput(jlist.stderr || jlist.stdout || jlist.error?.message || "pm2 jlist failed"),
+      snapshot: null,
+    };
+  }
+
+  const snapshot = parsePm2ProcessSnapshot(jlist.stdout || "[]", processName);
+  return { ok: !!snapshot, error: snapshot ? "" : "PM2 process nije pronađen u jlist output-u.", snapshot };
 }
 
 function isWritableDir(dirPath) {
@@ -1112,31 +1177,26 @@ async function runOneClickLocalSetup() {
     const projectRoot = resolvePythonProjectRoot(reqLookup);
     const ecosystemPath = path.join(projectRoot, "ecosystem.config.cjs");
 
-    // Dynamically generate ecosystem.config.cjs and pm2-launcher.cjs for packaged production application
+    // Dynamically generate ecosystem.config.cjs for packaged production application
     if (app.isPackaged) {
-      const launcherPath = path.join(projectRoot, "pm2-launcher.cjs");
-      const launcherContent = `const { spawn } = require("child_process");
-const child = spawn(${JSON.stringify(process.execPath)}, ["--no-sandbox"], {
-  stdio: "inherit"
-});
-child.on("exit", (code) => {
-  process.exit(code || 0);
-});
-child.on("error", (err) => {
-  console.error("Launcher error:", err);
-  process.exit(1);
-});`;
+      const outLogPath = path.join(projectRoot, "pm2-out.log").replace(/\\/g, "/");
+      const errLogPath = path.join(projectRoot, "pm2-error.log").replace(/\\/g, "/");
+      const execPath = String(process.execPath || "").replace(/\\/g, "/");
 
       const configContent = `module.exports = {
   apps: [
     {
       name: "etherx-browser",
-      script: "./pm2-launcher.cjs",
+      script: ${JSON.stringify(execPath)},
+      args: ["--no-sandbox"],
+      interpreter: "none",
       cwd: "${projectRoot.replace(/\\/g, "/")}",
       autorestart: true,
       watch: false,
       max_restarts: 10,
       min_uptime: "10s",
+      out_file: ${JSON.stringify(outLogPath)},
+      error_file: ${JSON.stringify(errLogPath)},
       env: {
         NODE_ENV: "production",
       },
@@ -1144,7 +1204,6 @@ child.on("error", (err) => {
   ],
 };`;
       try {
-        fs.writeFileSync(launcherPath, launcherContent, "utf8");
         fs.writeFileSync(ecosystemPath, configContent, "utf8");
       } catch (_) { }
     }
@@ -1181,7 +1240,7 @@ child.on("error", (err) => {
 
     const pm2Run = await execFileText(
       "npx",
-      ["pm2", "start", ecosystemPath, "--update-env"],
+      ["pm2", "start", ecosystemPath, "--update-env", "--force"],
       300000,
       { cwd: projectRoot },
     );
@@ -1191,17 +1250,41 @@ child.on("error", (err) => {
     const pm2Status = await execFileText("npx", ["pm2", "status", "etherx-browser"], 120000, {
       cwd: projectRoot,
     });
+    const pm2SnapshotResult = await getPm2ProcessSnapshot(projectRoot, "etherx-browser");
+    const pm2Snapshot = pm2SnapshotResult.snapshot;
+    const pm2IsOnline = !!pm2Snapshot?.online;
+    const statusText = trimPythonInstallOutput(pm2Status.stdout || pm2Status.stderr || "");
+
+    let pm2Error = "";
+    if (!pm2Run.ok) {
+      pm2Error = trimPythonInstallOutput(pm2Run.stderr || pm2Run.stdout || pm2Run.error?.message || "PM2 start failed");
+    } else if (!pm2Save.ok) {
+      pm2Error = trimPythonInstallOutput(pm2Save.stderr || pm2Save.stdout || "PM2 save failed");
+    } else if (!pm2SnapshotResult.ok) {
+      pm2Error = trimPythonInstallOutput(pm2SnapshotResult.error || "PM2 snapshot nije dostupan.");
+    } else if (!pm2IsOnline) {
+      const stateLabel = String(pm2Snapshot?.state || "unknown");
+      const execPathLabel = String(pm2Snapshot?.execPath || "");
+      pm2Error = trimPythonInstallOutput(
+        `PM2 proces nije online (state=${stateLabel}).${execPathLabel ? ` Exec path: ${execPathLabel}` : ""}`,
+      );
+    }
 
     result.pm2 = {
-      ok: !!pm2Run.ok && !!pm2Save.ok,
+      ok: !!pm2Run.ok && !!pm2Save.ok && pm2IsOnline,
       step: pm2Step,
       saveOk: !!pm2Save.ok,
-      status: trimPythonInstallOutput(pm2Status.stdout || pm2Status.stderr || ""),
+      status: statusText,
+      state: String(pm2Snapshot?.state || ""),
+      execPath: String(pm2Snapshot?.execPath || ""),
+      cwd: String(pm2Snapshot?.cwd || ""),
+      args: Array.isArray(pm2Snapshot?.args) ? pm2Snapshot.args : [],
+      nodeArgs: Array.isArray(pm2Snapshot?.nodeArgs) ? pm2Snapshot.nodeArgs : [],
+      restarts: Number(pm2Snapshot?.restarts || 0) || 0,
+      unstableRestarts: Number(pm2Snapshot?.unstableRestarts || 0) || 0,
       stdout: trimPythonInstallOutput(pm2Run.stdout || ""),
       stderr: trimPythonInstallOutput(pm2Run.stderr || ""),
-      error: pm2Run.ok
-        ? (pm2Save.ok ? "" : (trimPythonInstallOutput(pm2Save.stderr || pm2Save.stdout || "PM2 save failed")))
-        : trimPythonInstallOutput(pm2Run.stderr || pm2Run.stdout || pm2Run.error?.message || "PM2 start failed"),
+      error: pm2Error,
     };
 
     result.ok = !!result.python?.ok && !!result.pm2?.ok;
@@ -2590,7 +2673,16 @@ function setupIPC() {
     try {
       const projectRoot = resolvePythonProjectRoot();
       const run = await execFileText("npx", ["pm2", "status", "etherx-browser"], 30000, { cwd: projectRoot });
-      return { ok: run.ok, output: run.stdout || run.stderr || "Nema PM2 statusa" };
+      const snap = await getPm2ProcessSnapshot(projectRoot, "etherx-browser");
+      return {
+        ok: run.ok && !!snap.snapshot,
+        output: run.stdout || run.stderr || "Nema PM2 statusa",
+        state: String(snap.snapshot?.state || ""),
+        execPath: String(snap.snapshot?.execPath || ""),
+        cwd: String(snap.snapshot?.cwd || ""),
+        args: Array.isArray(snap.snapshot?.args) ? snap.snapshot.args : [],
+        nodeArgs: Array.isArray(snap.snapshot?.nodeArgs) ? snap.snapshot.nodeArgs : [],
+      };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -3304,7 +3396,8 @@ function setupIPC() {
       const resolvedProjectRoot = resolvePythonProjectRoot();
       const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
       const tryRunScan = async () => {
-        const candidates = resolvePythonCandidates(resolvedProjectRoot);
+        const allCandidates = resolvePythonCandidates(resolvedProjectRoot);
+        const candidates = preferExistingVenvPythonCandidates(allCandidates);
         logPythonBridgeDebug("qwen3guard", "Python candidates", candidates);
         let lastErr = "Python runtime not found";
         let hadRuntimeError = false;
@@ -3374,30 +3467,51 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const resolvedProjectRoot = resolvePythonProjectRoot();
-      const candidates = resolvePythonCandidates(resolvedProjectRoot);
-      logPythonBridgeDebug("opir", "Python candidates", candidates);
-      let lastErr = "Python runtime not found";
-      let hadRuntimeError = false;
+      const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
+      const tryRunScan = async () => {
+        const allCandidates = resolvePythonCandidates(resolvedProjectRoot);
+        const candidates = preferExistingVenvPythonCandidates(allCandidates);
+        logPythonBridgeDebug("opir", "Python candidates", candidates);
+        let lastErr = "Python runtime not found";
+        let hadRuntimeError = false;
 
-      for (const py of candidates) {
-        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
-        logPythonBridgeDebug("opir", "Trying python runtime", py);
-        const run = await execFileJson(py, [scriptPath, encoded], 300000);
-        if (!run.ok) {
-          if (run.error?.code === "ENOENT") {
-            if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
+        for (const py of candidates) {
+          if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+          logPythonBridgeDebug("opir", "Trying python runtime", py);
+          const run = await execFileJson(py, [scriptPath, encoded], 300000);
+          if (!run.ok) {
+            if (run.error?.code === "ENOENT") {
+              if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
+              continue;
+            }
+            hadRuntimeError = true;
+            lastErr = String(run.stderr || run.stdout || run.error?.message || "Opir failed").trim();
             continue;
           }
-          hadRuntimeError = true;
-          lastErr = String(run.stderr || run.stdout || run.error?.message || "Opir failed").trim();
-          continue;
+          const out = run.data || {};
+          if (out.ok) {
+            logPythonBridgeDebug("opir", "Scan finished successfully via", py);
+            return { ok: true, out, lastErr: "" };
+          }
+          lastErr = String(out.error || "Opir scanner returned error").trim();
         }
-        const out = run.data || {};
-        if (out.ok) {
-          logPythonBridgeDebug("opir", "Scan finished successfully via", py);
-          return out;
+        return { ok: false, out: null, lastErr };
+      };
+
+      let scan = await tryRunScan();
+      if (scan.ok && scan.out) return scan.out;
+      let lastErr = String(scan.lastErr || "Opir execution failed").trim();
+
+      if (missingDepRe.test(lastErr)) {
+        logPythonBridgeDebug("opir", "Missing python module detected, attempting dependency install");
+        const installRes = await installPythonBridgeDeps();
+        if (installRes?.ok) {
+          scan = await tryRunScan();
+          if (scan.ok && scan.out) return scan.out;
+          lastErr = String(scan.lastErr || lastErr).trim();
+        } else {
+          lastErr = `${lastErr} | Python deps install failed: ${String(installRes?.error || "unknown")}`;
         }
-        lastErr = String(out.error || "Opir scanner returned error").trim();
       }
 
       logPythonBridgeDebug("opir", "Scan failed", lastErr);
@@ -3428,30 +3542,51 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const resolvedProjectRoot = resolvePythonProjectRoot();
-      const candidates = resolvePythonCandidates(resolvedProjectRoot);
-      logPythonBridgeDebug("nllb", "Python candidates", candidates);
-      let lastErr = "Python runtime not found";
-      let hadRuntimeError = false;
+      const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
+      const tryRunTranslate = async () => {
+        const allCandidates = resolvePythonCandidates(resolvedProjectRoot);
+        const candidates = preferExistingVenvPythonCandidates(allCandidates);
+        logPythonBridgeDebug("nllb", "Python candidates", candidates);
+        let lastErr = "Python runtime not found";
+        let hadRuntimeError = false;
 
-      for (const py of candidates) {
-        if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
-        logPythonBridgeDebug("nllb", "Trying python runtime", py);
-        const run = await execFileJson(py, [scriptPath, encoded], 300000);
-        if (!run.ok) {
-          if (run.error?.code === "ENOENT") {
-            if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
+        for (const py of candidates) {
+          if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+          logPythonBridgeDebug("nllb", "Trying python runtime", py);
+          const run = await execFileJson(py, [scriptPath, encoded], 300000);
+          if (!run.ok) {
+            if (run.error?.code === "ENOENT") {
+              if (!hadRuntimeError) lastErr = "Python runtime not found: " + py;
+              continue;
+            }
+            hadRuntimeError = true;
+            lastErr = String(run.stderr || run.stdout || run.error?.message || "NLLB translation failed").trim();
             continue;
           }
-          hadRuntimeError = true;
-          lastErr = String(run.stderr || run.stdout || run.error?.message || "NLLB translation failed").trim();
-          continue;
+          const out = run.data || {};
+          if (out.ok) {
+            logPythonBridgeDebug("nllb", "Translate finished successfully via", py);
+            return { ok: true, out, lastErr: "" };
+          }
+          lastErr = String(out.error || "NLLB translator returned error").trim();
         }
-        const out = run.data || {};
-        if (out.ok) {
-          logPythonBridgeDebug("nllb", "Translate finished successfully via", py);
-          return out;
+        return { ok: false, out: null, lastErr };
+      };
+
+      let runAttempt = await tryRunTranslate();
+      if (runAttempt.ok && runAttempt.out) return runAttempt.out;
+      let lastErr = String(runAttempt.lastErr || "NLLB execution failed").trim();
+
+      if (missingDepRe.test(lastErr)) {
+        logPythonBridgeDebug("nllb", "Missing python module detected, attempting dependency install");
+        const installRes = await installPythonBridgeDeps();
+        if (installRes?.ok) {
+          runAttempt = await tryRunTranslate();
+          if (runAttempt.ok && runAttempt.out) return runAttempt.out;
+          lastErr = String(runAttempt.lastErr || lastErr).trim();
+        } else {
+          lastErr = `${lastErr} | Python deps install failed: ${String(installRes?.error || "unknown")}`;
         }
-        lastErr = String(out.error || "NLLB translator returned error").trim();
       }
 
       logPythonBridgeDebug("nllb", "Translate failed", lastErr);

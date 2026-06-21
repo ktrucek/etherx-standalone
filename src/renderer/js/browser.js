@@ -1752,19 +1752,20 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const cfg = DB.getSettings() || {};
         const model = String(cfg.tkaiGuardianModel || 'grok-2').trim();
         const apiKey = String(cfg.tkaiGuardianApiKey || '').trim();
+        const endpoint = buildGuardianEndpoint(cfg);
 
         btn.disabled = true;
         btn.textContent = '⏳ Spajanje...';
-        statusEl.textContent = 'Pokušavam poslati ping na http://localhost:5555/v1/chat/completions ...';
+        statusEl.textContent = 'Pokušavam poslati ping na ' + endpoint + ' ...';
 
         try {
             const start = Date.now();
-            const response = await runGuardianAiRequest('Odgovori točno jednom riječju: PONG', 'You are a helpful test assistant.', model, apiKey);
+            const response = await runGuardianAiRequest('Odgovori točno jednom riječju: PONG', 'You are a helpful test assistant.', model, apiKey, cfg);
             const duration = Date.now() - start;
-            statusEl.innerHTML = '<span style="color:#10b981;font-weight:700">✅ Povezano!</span> (' + duration + 'ms)<br>Model: ' + escHtml(model) + '<br>Odgovor: ' + escHtml(response);
+            statusEl.innerHTML = '<span style="color:#10b981;font-weight:700">✅ Povezano!</span> (' + duration + 'ms)<br>Endpoint: ' + escHtml(endpoint) + '<br>Model: ' + escHtml(model) + '<br>Odgovor: ' + escHtml(response);
             showToast('✅ Veza s Guardian AI je uspješna!');
         } catch (err) {
-            statusEl.innerHTML = '<span style="color:#ef4444;font-weight:700">❌ Greška!</span><br>Detalj: ' + escHtml(err.message || String(err)) + '<br><span style="font-size:10px;opacity:.7">Provjeri radi li ti Guardian AI na portu 5555.</span>';
+            statusEl.innerHTML = '<span style="color:#ef4444;font-weight:700">❌ Greška!</span><br>Detalj: ' + escHtml(err.message || String(err)) + '<br><span style="font-size:10px;opacity:.7">Provjeri endpoint: ' + escHtml(endpoint) + '</span>';
             showToast('❌ Spajanje s Guardian AI nije uspjelo');
         } finally {
             btn.disabled = false;
@@ -4045,11 +4046,24 @@ async function getAiRuntimeSettings() {
         ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL),
     };
 }
-async function runGuardianAiRequest(prompt, systemPrompt = '', model = 'grok-2', apiKey = '') {
+function buildGuardianEndpoint(settings = {}) {
+    const protocol = String(settings?.tkaiGuardianProtocol || 'http').trim().toLowerCase() === 'https' ? 'https' : 'http';
+    const host = String(settings?.tkaiGuardianHost || 'localhost').trim() || 'localhost';
+    const rawPort = String(settings?.tkaiGuardianPort ?? '5555').trim();
+    const parsedPort = Number.parseInt(rawPort, 10);
+    const port = Number.isFinite(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? String(parsedPort) : '5555';
+    const rawPath = String(settings?.tkaiGuardianPath || '/v1/chat/completions').trim() || '/v1/chat/completions';
+    const pathPart = rawPath.startsWith('/') ? rawPath : ('/' + rawPath);
+    return `${protocol}://${host}:${port}${pathPart}`;
+}
+
+async function runGuardianAiRequest(prompt, systemPrompt = '', model = 'grok-2', apiKey = '', settings = null) {
+    const cfg = settings || DB.getSettings() || {};
+    const endpoint = buildGuardianEndpoint(cfg);
     const headers = { 'Content-Type': 'application/json' };
     if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
 
-    const response = await fetch('http://localhost:5555/v1/chat/completions', {
+    const response = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -4081,7 +4095,7 @@ async function runAiTextRequest(prompt, opts = {}) {
         const s = DB.getSettings() || {};
         const gModel = String(s.tkaiGuardianModel || 'grok-2').trim();
         const gApiKey = String(s.tkaiGuardianApiKey || '').trim();
-        return runGuardianAiRequest(prompt, systemPrompt, gModel, gApiKey);
+        return runGuardianAiRequest(prompt, systemPrompt, gModel, gApiKey, s);
     }
 
     const fetchWith202Retry = async (url, init, label, maxAttempts = 3) => {
@@ -5911,7 +5925,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
-            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi + pošalji u TikTok Chat AI</button>' +
+            '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi poruku</button>' +
             '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
             '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
@@ -5977,13 +5991,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             m.translatedLang = targetLang || 'en';
             renderMessages();
 
-            // Keep context menu open for rapid multi-translate workflow and
-            // mirror the translation into our TikTok Chat AI feed/popout.
-            if (typeof window.pushTextToTikTokAI === 'function') {
-                const sourceUser = String(m.user || '').trim() || 'TikTok user';
-                await window.pushTextToTikTokAI(text, sourceUser, { skipAutoTranslate: true });
-            }
-            showToast('🌐 Poruka prevedena i dodana u prošireni TikTok chat');
+            // Translate-only flow: keep result in the current message feed without sending.
+            showToast('🌐 Poruka prevedena');
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="send-target-translated"]')?.addEventListener('click', async () => {
@@ -15758,6 +15767,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const onTikTok = !!(getActiveTab()?.url && getActiveTab().url.includes('tiktok.com'));
         const ctxSendTikTokEl = document.getElementById('ctx-send-tiktok-ai');
         if (ctxSendTikTokEl) ctxSendTikTokEl.style.display = (onTikTok && hasSel) ? '' : 'none';
+        const ctxTranslateTikTokEl = document.getElementById('ctx-translate-tiktok-ai');
+        if (ctxTranslateTikTokEl) ctxTranslateTikTokEl.style.display = (onTikTok && hasSel) ? '' : 'none';
         const ctxRegionScanEl = document.getElementById('ctx-tiktok-region-scan');
         if (ctxRegionScanEl) ctxRegionScanEl.style.display = (onTikTok && window.electronWebview) ? '' : 'none';
         const ctxShadowbanEl = document.getElementById('ctx-shadowban-check');
@@ -16997,6 +17008,35 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         await window.pushTextToTikTokAI(sel, owner, { forceTranslate: true });
         await startTikTokScanFromSelection(sel);
         closeCtxMenu();
+    });
+    document.getElementById('ctx-translate-tiktok-ai')?.addEventListener('click', async () => {
+        const sel = String(_ctxSelectionText || window.getSelection()?.toString() || '').trim();
+        if (!sel) {
+            showToast('⚠️ Nema označenog teksta');
+            return;
+        }
+        const tab = getActiveTab();
+        if (!tab?.url || !tab.url.includes('tiktok.com')) {
+            showToast('⚠️ Ova opcija radi na TikTok stranici');
+            return;
+        }
+        if (typeof window.pushTextToTikTokAI !== 'function') {
+            showToast('⚠️ TikTok Chat AI nije spreman');
+            return;
+        }
+        let sourceUser = String(_ctxTikTokPayload?.user || '').trim();
+        try {
+            if (!sourceUser || /^unknown$/i.test(sourceUser)) {
+                const ctx = await extractTikTokSelectionContext(sel);
+                sourceUser = String(ctx?.anchorRow?.user || '').trim();
+            }
+        } catch (_) { }
+        const owner = sourceUser && !/^unknown$/i.test(sourceUser)
+            ? sourceUser
+            : (parseTikTokOwnerFromUrl(tab.url) || 'TikTok user');
+        await window.pushTextToTikTokAI(sel, owner, { forceTranslate: true });
+        closeCtxMenu();
+        showToast('🌐 Prijevod poslan u TikTok Chat AI');
     });
     document.getElementById('ctx-tiktok-region-scan')?.addEventListener('click', (event) => {
         closeCtxMenu();
