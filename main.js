@@ -960,6 +960,14 @@ function isWritableDir(dirPath) {
 }
 
 function resolvePythonProjectRoot(reqLookup = undefined) {
+  if (app.isPackaged) {
+    const fallbackRoot = path.join(app.getPath("userData"), "python_env");
+    try {
+      fs.mkdirSync(fallbackRoot, { recursive: true });
+    } catch (_) { }
+    return fallbackRoot;
+  }
+
   const lookup = reqLookup || resolveRequirementsPath();
   if (lookup.path) return path.dirname(lookup.path);
 
@@ -994,9 +1002,27 @@ function resolvePythonProjectRoot(reqLookup = undefined) {
 async function installPythonBridgeDeps() {
   try {
     const reqLookup = resolveRequirementsPath();
-    const requirementsPath = reqLookup.path;
     const fallbackPackages = ["torch", "transformers", "gliclass"];
     const projectRoot = resolvePythonProjectRoot(reqLookup);
+
+    // If packaged, materialize requirements.txt to the writable directory
+    if (app.isPackaged) {
+      const srcReq = path.join(app.getAppPath(), "requirements.txt");
+      const destReq = path.join(projectRoot, "requirements.txt");
+      try {
+        if (fs.existsSync(srcReq)) {
+          fs.writeFileSync(destReq, fs.readFileSync(srcReq));
+        } else {
+          // If not found, write a minimal default requirements.txt
+          fs.writeFileSync(destReq, "torch\ntransformers\ngliclass\n");
+        }
+      } catch (_) { }
+    }
+
+    const requirementsPath = app.isPackaged
+      ? path.join(projectRoot, "requirements.txt")
+      : reqLookup.path;
+
     const venvDir = path.join(projectRoot, ".venv");
     const venvPython =
       process.platform === "win32"
@@ -1086,11 +1112,35 @@ async function runOneClickLocalSetup() {
     const projectRoot = resolvePythonProjectRoot(reqLookup);
     const ecosystemPath = path.join(projectRoot, "ecosystem.config.cjs");
 
+    // Dynamically generate ecosystem.config.cjs for packaged production application
+    if (app.isPackaged) {
+      const configContent = `module.exports = {
+  apps: [
+    {
+      name: "etherx-browser",
+      script: "${process.execPath.replace(/\\/g, "/")}",
+      args: "--no-sandbox",
+      cwd: "${projectRoot.replace(/\\/g, "/")}",
+      autorestart: true,
+      watch: false,
+      max_restarts: 10,
+      min_uptime: "10s",
+      env: {
+        NODE_ENV: "production",
+      },
+    },
+  ],
+};`;
+      try {
+        fs.writeFileSync(ecosystemPath, configContent, "utf8");
+      } catch (_) { }
+    }
+
     const python = await installPythonBridgeDeps();
     const result = {
       ok: false,
       projectRoot,
-      requirementsPath: reqLookup.path || "",
+      requirementsPath: app.isPackaged ? path.join(projectRoot, "requirements.txt") : (reqLookup.path || ""),
       python,
       pm2: {
         ok: false,
