@@ -1670,7 +1670,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     const ALL_DRAWERS = [
         'tkaiDrawerCustomCategories', 'tkaiDrawerGiftGallery', 'tkaiDrawerFanClubGallery',
         'tkaiDrawerAutoScan', 'tkaiDrawerAiModel', 'tkaiDrawerFeatures',
-        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions'
+        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian'
     ];
     // Wire button → drawer, toggling off if already open
     const MAP = {
@@ -1683,6 +1683,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         btnTkaiMsgTypes: 'tkaiDrawerMsgTypes',
         btnTkaiTools: 'tkaiDrawerTools',
         btnTkaiSessions: 'tkaiDrawerSessions',
+        btnTkaiGuardian: 'tkaiDrawerGuardian',
     };
     Object.entries(MAP).forEach(([btnId, drawerId]) => {
         const btn = document.getElementById(btnId);
@@ -1741,6 +1742,34 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     });
     document.getElementById('btnTkaiToolsExportCsv')?.addEventListener('click', () => {
         document.getElementById('tkaiExportCsvBtn')?.click();
+    });
+
+    document.getElementById('btnTestGuardianConnection')?.addEventListener('click', async () => {
+        const statusEl = document.getElementById('tkaiGuardianTestStatus');
+        const btn = document.getElementById('btnTestGuardianConnection');
+        if (!statusEl || !btn) return;
+
+        const cfg = DB.getSettings() || {};
+        const model = String(cfg.tkaiGuardianModel || 'grok-2').trim();
+        const apiKey = String(cfg.tkaiGuardianApiKey || '').trim();
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Spajanje...';
+        statusEl.textContent = 'Pokušavam poslati ping na http://localhost:5555/v1/chat/completions ...';
+
+        try {
+            const start = Date.now();
+            const response = await runGuardianAiRequest('Odgovori točno jednom riječju: PONG', 'You are a helpful test assistant.', model, apiKey);
+            const duration = Date.now() - start;
+            statusEl.innerHTML = '<span style="color:#10b981;font-weight:700">✅ Povezano!</span> (' + duration + 'ms)<br>Model: ' + escHtml(model) + '<br>Odgovor: ' + escHtml(response);
+            showToast('✅ Veza s Guardian AI je uspješna!');
+        } catch (err) {
+            statusEl.innerHTML = '<span style="color:#ef4444;font-weight:700">❌ Greška!</span><br>Detalj: ' + escHtml(err.message || String(err)) + '<br><span style="font-size:10px;opacity:.7">Provjeri radi li ti Guardian AI na portu 5555.</span>';
+            showToast('❌ Spajanje s Guardian AI nije uspjelo');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🧪 Testiraj Guardian AI';
+        }
     });
     document.getElementById('btnTkaiToolsSongRec')?.addEventListener('click', () => {
         if (typeof window.runSongRecRecognition === 'function') {
@@ -4016,6 +4045,30 @@ async function getAiRuntimeSettings() {
         ollamaBaseUrl: normalizeLocalAiBaseUrl(document.getElementById('settingsOllamaBaseUrl')?.value || settings.ollamaBaseUrl || OLLAMA_REMOTE_DEFAULT_BASE_URL),
     };
 }
+async function runGuardianAiRequest(prompt, systemPrompt = '', model = 'grok-2', apiKey = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+
+    const response = await fetch('http://localhost:5555/v1/chat/completions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            model: model || 'grok-2',
+            messages: [
+                ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 300
+        })
+    });
+    if (!response.ok) {
+        throw new Error('Guardian AI HTTP ' + response.status);
+    }
+    const data = await response.json();
+    return (data.choices?.[0]?.message?.content || '').trim();
+}
+
 async function runAiTextRequest(prompt, opts = {}) {
     const runtime = await getAiRuntimeSettings();
     const provider = opts.provider || runtime.provider;
@@ -4023,6 +4076,13 @@ async function runAiTextRequest(prompt, opts = {}) {
     const temperature = opts.temperature ?? runtime.temperature ?? 0.7;
     const maxOutputTokens = opts.maxOutputTokens ?? 400;
     const systemPrompt = opts.systemPrompt || '';
+
+    if (provider === 'guardian') {
+        const s = DB.getSettings() || {};
+        const gModel = String(s.tkaiGuardianModel || 'grok-2').trim();
+        const gApiKey = String(s.tkaiGuardianApiKey || '').trim();
+        return runGuardianAiRequest(prompt, systemPrompt, gModel, gApiKey);
+    }
 
     const fetchWith202Retry = async (url, init, label, maxAttempts = 3) => {
         let lastAccepted = null;
@@ -9688,6 +9748,42 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 nllbError: ''
             };
         }
+
+        const s = DB.getSettings() || {};
+        if (s.tkaiGuardianEnabled && s.tkaiGuardianRoleTranslate) {
+            const gModel = String(s.tkaiGuardianModel || 'grok-2').trim();
+            const gApiKey = String(s.tkaiGuardianApiKey || '').trim();
+            const systemPrompt = "You are a professional Indonesian to Croatian translator. Translate the given Indonesian text to Croatian language.\n" +
+                "Return ONLY the translated text. Do not include any explanations, notes, quotes or original text.";
+            try {
+                const translated = await runGuardianAiRequest(clean, systemPrompt, gModel, gApiKey);
+                if (translated && translated !== clean) {
+                    nllbTranslateCache.set(key, translated);
+                    return {
+                        translated,
+                        model: 'guardian-ai',
+                        engine: 'guardian-translate',
+                        detectedAsIndonesian,
+                        usedCache: false,
+                        nllbOk: true,
+                        nllbError: '',
+                        sameAsInputAfterTranslate: false
+                    };
+                }
+            } catch (err) {
+                console.error('Guardian Translate failed:', err);
+                return {
+                    translated: clean,
+                    model,
+                    engine: 'fallback-guardian-error',
+                    detectedAsIndonesian,
+                    usedCache: false,
+                    nllbOk: false,
+                    nllbError: 'Guardian AI error: ' + (err.message || String(err)),
+                    sameAsInputAfterTranslate: true
+                };
+            }
+        }
         if (!window.electronAPI?.invoke) {
             const fallback = await translateViaGoogle(clean, 'hr');
             const translated = fallback || clean;
@@ -11097,16 +11193,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (genAllBtn) genAllBtn.disabled = true;
         if (repliesEl) repliesEl.innerHTML = '<div class="tkai-status"><span class="tkai-scanning-dot"></span>AI generira odgovore…</div>';
         try {
-            const _tkaiProviderOverride = DB.getSettings().tkaiProviderOverride || '';
-            const _tkaiModelOverride = DB.getSettings().tkaiModelOverride || '';
+            const s = DB.getSettings() || {};
+            const useGuardianForReplies = s.tkaiGuardianEnabled && s.tkaiGuardianRoleReplies;
+
+            const _tkaiProviderOverride = useGuardianForReplies ? 'guardian' : (s.tkaiProviderOverride || '');
+            const _tkaiModelOverride = useGuardianForReplies ? (s.tkaiGuardianModel || 'grok-2') : (s.tkaiModelOverride || '');
             const providerForReplies = _tkaiProviderOverride || getSelectedAiProvider();
             const directTkaiApiInput = String(document.getElementById('tkaiStackTestApiKey')?.value || '').trim();
-            const resolvedApiKey = directTkaiApiInput || getProviderApiKey(providerForReplies);
+            const resolvedApiKey = directTkaiApiInput || (useGuardianForReplies ? (s.tkaiGuardianApiKey || '') : getProviderApiKey(providerForReplies));
             const raw = await runAiTextRequest(buildPrompt(messages), {
                 temperature: 0.85,
                 maxOutputTokens: 600,
-                ...(_tkaiProviderOverride ? { provider: _tkaiProviderOverride } : {}),
-                ...(_tkaiModelOverride ? { model: _tkaiModelOverride } : {}),
+                provider: providerForReplies,
+                ...(useGuardianForReplies ? { model: _tkaiModelOverride } : (_tkaiModelOverride ? { model: _tkaiModelOverride } : {})),
                 ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {})
             });
             const suggestions = raw.split('\n')
@@ -16417,6 +16516,37 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         };
     }
 
+    async function runGuardianGuardForRegionRows(rows) {
+        const list = (Array.isArray(rows) ? rows : [])
+            .map(row => String(row?.text || '').trim())
+            .filter(Boolean);
+        if (!list.length) return { ok: true, results: [] };
+
+        const cfg = DB.getSettings() || {};
+        const model = String(cfg.tkaiGuardianModel || 'grok-2').trim();
+        const apiKey = String(cfg.tkaiGuardianApiKey || '').trim();
+
+        const systemPrompt = "You are Guardian AI, a content moderation filter. Analyze the safety and risk of the following chat messages.\n" +
+            "For each message, evaluate whether it is 'Safe', 'Controversial', or 'Unsafe'.\n" +
+            "Return the result as a raw JSON array matching the message order, where each element is an object:\n" +
+            "{ \"risk_level\": \"Safe\" | \"Controversial\" | \"Unsafe\", \"category\": \"Harassment\" | \"Hate Speech\" | \"Spam\" | \"Controversial\" | \"None\", \"score\": 0.0 to 1.0 }\n" +
+            "Do not wrap in any markdown blocks, just return a raw JSON array. Return exactly the same number of elements as input.";
+
+        const prompt = JSON.stringify(list);
+        try {
+            const raw = await runGuardianAiRequest(prompt, systemPrompt, model, apiKey);
+            const cleanJson = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+            const results = JSON.parse(cleanJson);
+            return {
+                ok: true,
+                results: Array.isArray(results) ? results : Array(list.length).fill({ risk_level: 'Safe', category: 'None', score: 0 })
+            };
+        } catch (err) {
+            console.error('Guardian AI Guard failed:', err);
+            throw err;
+        }
+    }
+
     async function runProviderGuardWithCache(provider, rows, runner, cacheEnabled) {
         const sourceRows = Array.isArray(rows) ? rows : [];
         const out = Array(sourceRows.length).fill(null);
@@ -16460,8 +16590,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const useOpir = mode === 'opir' || mode === 'both';
         const cacheEnabled = guardCfg?.cacheEnabled !== false;
 
+        const s = DB.getSettings() || {};
+        const useGuardian = s.tkaiGuardianEnabled && s.tkaiGuardianRoleGuard;
+
         let qwenRows = Array((Array.isArray(rows) ? rows.length : 0)).fill(null);
         let opirRows = Array((Array.isArray(rows) ? rows.length : 0)).fill(null);
+        let guardianRows = Array((Array.isArray(rows) ? rows.length : 0)).fill(null);
         const warnings = [];
 
         if (useQwen) {
@@ -16478,9 +16612,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 warnings.push('Opir: ' + String(err?.message || err));
             }
         }
+        if (useGuardian) {
+            try {
+                guardianRows = await runProviderGuardWithCache('guardian', rows, runGuardianGuardForRegionRows, cacheEnabled);
+            } catch (err) {
+                warnings.push('Guardian AI: ' + String(err?.message || err));
+            }
+        }
 
         const merged = (Array.isArray(rows) ? rows : []).map((row, idx) => {
-            const combined = combineGuardSignals([qwenRows[idx], opirRows[idx]]);
+            const combined = combineGuardSignals([qwenRows[idx], opirRows[idx], guardianRows[idx]]);
             return {
                 ...row,
                 guardRisk: combined.risk_level || '-',

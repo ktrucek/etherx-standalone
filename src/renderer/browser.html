@@ -3198,7 +3198,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.103</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.104</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -4158,11 +4158,70 @@
                                         types</button>
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAiModel">🤖 AI
                                         Model</button>
+                                    <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiGuardian">🛡️ Guardian AI
+                                        (5555)</button>
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiFeatures">🎛 Što
                                         prikazati</button>
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiTools">🔧 Alati</button>
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiSessions">📁 Sesije &amp;
                                         Statistike</button>
+                                </div>
+                                <!-- drawer: Guardian AI localhost:5555 -->
+                                <div id="tkaiDrawerGuardian"
+                                    style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                                    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
+                                        Konfiguriraj <b>Guardian AI</b> koji radi lokalno na portu 5555 koristeći Xai
+                                        API (Grok/OpenAI format).
+                                    </div>
+                                    <div class="s-row" style="margin-bottom:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Omogućen Guardian AI</div>
+                                            <div class="s-row-desc">Master ON/OFF za localhost:5555 integraciju</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiGuardianEnabled"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-bottom:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Uloga: Moderacija (Guard Scan)</div>
+                                            <div class="s-row-desc">Guardian AI analizira sigurnost chata</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiGuardianRoleGuard"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-bottom:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Uloga: Predlaganje odgovora</div>
+                                            <div class="s-row-desc">Generiraj replike preko localhost:5555</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiGuardianRoleReplies"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-bottom:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Uloga: Prijevod chata (ID->HR)</div>
+                                            <div class="s-row-desc">Koristi localhost:5555 umjesto NLLB</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiGuardianRoleTranslate"></div>
+                                    </div>
+                                    <div class="s-row" style="margin-bottom:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Naziv modela (Xai)</div>
+                                        </div>
+                                        <input type="text" class="s-input" data-setting="tkaiGuardianModel"
+                                            value="grok-2" placeholder="npr. grok-2 ili grok-beta" style="width:50%">
+                                    </div>
+                                    <div class="s-row" style="margin-bottom:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">Xai API ključ (opcionalno)</div>
+                                        </div>
+                                        <input type="password" class="s-input" data-setting="tkaiGuardianApiKey"
+                                            placeholder="xai-..." style="width:50%">
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+                                        <button class="s-btn-sm" id="btnTestGuardianConnection"
+                                            style="background:rgba(16,185,129,.15);border-color:rgba(16,185,129,.35)">🧪
+                                            Testiraj Guardian AI</button>
+                                        <span id="tkaiGuardianTestStatus"
+                                            style="font-size:10px;color:var(--text3)">Status: idle</span>
+                                    </div>
                                 </div>
                                 <!-- drawer: auto scan -->
                                 <div id="tkaiDrawerAutoScan"
@@ -4950,7 +5009,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.103</span></div>
+                                    v<span id="helpVersionNum2">3.0.104</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
