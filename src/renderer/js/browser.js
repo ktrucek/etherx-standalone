@@ -20705,8 +20705,40 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (pyBtn) {
                 pyBtn.disabled = false;
                 pyBtn.style.opacity = '';
-                pyBtn.textContent = beforePy || '⚡ Instaliraj Python pakete';
+                pyBtn.textContent = beforePy || '⚡ Samo Python pakete';
             }
+        }
+    });
+
+    document.getElementById('helpPM2StatusBtn')?.addEventListener('click', async () => {
+        const statusEl = document.getElementById('helpInstallPythonDepsStatus');
+        if (!statusEl) return;
+        statusEl.textContent = 'Dohvaćam PM2 status...';
+        try {
+            const res = await window.etherx?.app?.getPM2Status();
+            if (res && res.output) {
+                statusEl.textContent = '📊 PM2 STATUS:\n\n' + res.output;
+            } else {
+                statusEl.textContent = '⚠️ PM2 status nije dostupan ili PM2 nije pokrenut.';
+            }
+        } catch (err) {
+            statusEl.textContent = '❌ Greška pri dohvaćanju PM2 statusa: ' + (err.message || String(err));
+        }
+    });
+
+    document.getElementById('helpPM2LogsBtn')?.addEventListener('click', async () => {
+        const statusEl = document.getElementById('helpInstallPythonDepsStatus');
+        if (!statusEl) return;
+        statusEl.textContent = 'Dohvaćam PM2 logove...';
+        try {
+            const res = await window.etherx?.app?.getPM2Logs();
+            if (res && res.output) {
+                statusEl.textContent = '📜 PM2 LOGOVI:\n\n' + res.output;
+            } else {
+                statusEl.textContent = '⚠️ PM2 logovi nisu dostupni.';
+            }
+        } catch (err) {
+            statusEl.textContent = '❌ Greška pri dohvaćanju PM2 logova: ' + (err.message || String(err));
         }
     });
 

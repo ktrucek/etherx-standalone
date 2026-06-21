@@ -2480,6 +2480,26 @@ function setupIPC() {
     return runOneClickLocalSetup();
   });
 
+  ipcMain.handle("app:getPM2Status", async () => {
+    try {
+      const projectRoot = resolvePythonProjectRoot();
+      const run = await execFileText("npx", ["pm2", "status", "etherx-browser"], 30000, { cwd: projectRoot });
+      return { ok: run.ok, output: run.stdout || run.stderr || "Nema PM2 statusa" };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("app:getPM2Logs", async () => {
+    try {
+      const projectRoot = resolvePythonProjectRoot();
+      const run = await execFileText("npx", ["pm2", "logs", "etherx-browser", "--lines", "100", "--nostream"], 30000, { cwd: projectRoot });
+      return { ok: run.ok, output: run.stdout || run.stderr || "Nema PM2 logova" };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // ── Ad Blocker ─────────────────────────────────────────────────────────────
   ipcMain.handle("adblock:isEnabled", () =>
     adBlocker ? adBlocker.isEnabled() : false,
@@ -3175,10 +3195,10 @@ function setupIPC() {
       if (!input.items.length) return { ok: true, results: [] };
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
-      const prefReq = resolveRequirementsPath().path;
+      const resolvedProjectRoot = resolvePythonProjectRoot();
       const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
       const tryRunScan = async () => {
-        const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
+        const candidates = resolvePythonCandidates(resolvedProjectRoot);
         logPythonBridgeDebug("qwen3guard", "Python candidates", candidates);
         let lastErr = "Python runtime not found";
         let hadRuntimeError = false;
@@ -3247,8 +3267,8 @@ function setupIPC() {
       if (!input.items.length) return { ok: true, results: [] };
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
-      const prefReq = resolveRequirementsPath().path;
-      const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
+      const resolvedProjectRoot = resolvePythonProjectRoot();
+      const candidates = resolvePythonCandidates(resolvedProjectRoot);
       logPythonBridgeDebug("opir", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
@@ -3301,8 +3321,8 @@ function setupIPC() {
       if (!input.items.length) return { ok: true, results: [] };
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
-      const prefReq = resolveRequirementsPath().path;
-      const candidates = resolvePythonCandidates(prefReq ? path.dirname(prefReq) : "");
+      const resolvedProjectRoot = resolvePythonProjectRoot();
+      const candidates = resolvePythonCandidates(resolvedProjectRoot);
       logPythonBridgeDebug("nllb", "Python candidates", candidates);
       let lastErr = "Python runtime not found";
       let hadRuntimeError = false;
