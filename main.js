@@ -1112,23 +1112,26 @@ async function runOneClickLocalSetup() {
     const projectRoot = resolvePythonProjectRoot(reqLookup);
     const ecosystemPath = path.join(projectRoot, "ecosystem.config.cjs");
 
-    // Dynamically generate ecosystem.config.cjs for packaged production application
+    // Dynamically generate ecosystem.config.cjs and pm2-launcher.cjs for packaged production application
     if (app.isPackaged) {
-      let scriptField = "";
-      let argsField = "";
-      if (process.platform !== "win32") {
-        scriptField = `"sh"`;
-        argsField = `["-c", "exec \\"${process.execPath}\\" --no-sandbox"]`;
-      } else {
-        scriptField = JSON.stringify(process.execPath.replace(/\\/g, "/"));
-        argsField = `"--no-sandbox"`;
-      }
+      const launcherPath = path.join(projectRoot, "pm2-launcher.cjs");
+      const launcherContent = `const { spawn } = require("child_process");
+const child = spawn(${JSON.stringify(process.execPath)}, ["--no-sandbox"], {
+  stdio: "inherit"
+});
+child.on("exit", (code) => {
+  process.exit(code || 0);
+});
+child.on("error", (err) => {
+  console.error("Launcher error:", err);
+  process.exit(1);
+});`;
+
       const configContent = `module.exports = {
   apps: [
     {
       name: "etherx-browser",
-      script: ${scriptField},
-      args: ${argsField},
+      script: "./pm2-launcher.cjs",
       cwd: "${projectRoot.replace(/\\/g, "/")}",
       autorestart: true,
       watch: false,
@@ -1141,6 +1144,7 @@ async function runOneClickLocalSetup() {
   ],
 };`;
       try {
+        fs.writeFileSync(launcherPath, launcherContent, "utf8");
         fs.writeFileSync(ecosystemPath, configContent, "utf8");
       } catch (_) { }
     }
