@@ -1114,11 +1114,17 @@ async function runOneClickLocalSetup() {
 
     // Dynamically generate ecosystem.config.cjs for packaged production application
     if (app.isPackaged) {
+      let scriptPath = process.execPath;
+      if (process.platform !== "win32") {
+        scriptPath = scriptPath.replace(/ /g, "\\ ");
+      } else {
+        scriptPath = scriptPath.replace(/\\/g, "/");
+      }
       const configContent = `module.exports = {
   apps: [
     {
       name: "etherx-browser",
-      script: "${process.execPath.replace(/\\/g, "/")}",
+      script: "${scriptPath}",
       args: "--no-sandbox",
       cwd: "${projectRoot.replace(/\\/g, "/")}",
       autorestart: true,
