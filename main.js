@@ -1168,6 +1168,57 @@ function logPythonBridgeDebug(scope, message, extra = undefined) {
   } catch (_) { }
 }
 
+function getAugmentedEnv() {
+  const env = { ...process.env };
+  const os = require("os");
+  let pathSeparator = ":";
+  let paths = [];
+
+  if (process.platform === "win32") {
+    pathSeparator = ";";
+    paths = (env.PATH || env.Path || "").split(pathSeparator);
+    paths.push(path.join(process.env.APPDATA || "", "npm"));
+  } else {
+    pathSeparator = ":";
+    paths = (env.PATH || "").split(pathSeparator);
+
+    const home = os.homedir();
+    const commonPaths = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+      "/usr/sbin",
+      "/sbin",
+      path.join(home, ".npm-global", "bin"),
+      path.join(home, ".local", "bin"),
+      path.join(home, "bin"),
+    ];
+
+    try {
+      const nvmDir = path.join(home, ".nvm", "versions", "node");
+      if (fs.existsSync(nvmDir)) {
+        const versions = fs.readdirSync(nvmDir);
+        versions.forEach((v) => {
+          commonPaths.push(path.join(nvmDir, v, "bin"));
+        });
+      }
+    } catch (_) { }
+
+    commonPaths.forEach((p) => {
+      if (p && !paths.includes(p)) {
+        paths.push(p);
+      }
+    });
+  }
+
+  env.PATH = paths.filter(Boolean).join(pathSeparator);
+  if (process.platform === "win32") {
+    env.Path = env.PATH;
+  }
+  return env;
+}
+
 function execFileJson(command, args, timeoutMs = 240000) {
   return new Promise((resolve) => {
     execFile(
@@ -1177,7 +1228,8 @@ function execFileJson(command, args, timeoutMs = 240000) {
         windowsHide: true,
         timeout: Math.max(5000, Number(timeoutMs || 240000) || 240000),
         maxBuffer: 16 * 1024 * 1024,
-        env: process.env,
+        env: getAugmentedEnv(),
+        shell: true,
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -1209,7 +1261,8 @@ function execFileText(command, args, timeoutMs = 240000, options = {}) {
         windowsHide: true,
         timeout: Math.max(5000, Number(timeoutMs || 240000) || 240000),
         maxBuffer: 32 * 1024 * 1024,
-        env: process.env,
+        env: getAugmentedEnv(),
+        shell: true,
         ...options,
       },
       (error, stdout, stderr) => {
