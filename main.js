@@ -1279,7 +1279,7 @@ function execFileJson(command, args, timeoutMs = 240000) {
         timeout: Math.max(5000, Number(timeoutMs || 240000) || 240000),
         maxBuffer: 16 * 1024 * 1024,
         env: getAugmentedEnv(),
-        shell: true,
+        shell: process.platform === "win32",
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -1312,7 +1312,7 @@ function execFileText(command, args, timeoutMs = 240000, options = {}) {
         timeout: Math.max(5000, Number(timeoutMs || 240000) || 240000),
         maxBuffer: 32 * 1024 * 1024,
         env: getAugmentedEnv(),
-        shell: true,
+        shell: process.platform === "win32",
         ...options,
       },
       (error, stdout, stderr) => {
