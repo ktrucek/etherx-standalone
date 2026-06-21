@@ -948,14 +948,55 @@ function trimPythonInstallOutput(value, maxLen = 12000) {
   return text.slice(-maxLen);
 }
 
+function isWritableDir(dirPath) {
+  try {
+    if (!dirPath || !fs.existsSync(dirPath)) return false;
+    if (!fs.statSync(dirPath).isDirectory()) return false;
+    fs.accessSync(dirPath, fs.constants.W_OK);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function resolvePythonProjectRoot(reqLookup = undefined) {
+  const lookup = reqLookup || resolveRequirementsPath();
+  if (lookup.path) return path.dirname(lookup.path);
+
+  const tried = Array.isArray(lookup.tried) ? lookup.tried : [];
+  for (const reqCandidate of tried) {
+    const candidateDir = path.dirname(String(reqCandidate || ""));
+    const parsed = path.parse(candidateDir);
+    if (candidateDir && candidateDir !== parsed.root && isWritableDir(candidateDir)) {
+      return candidateDir;
+    }
+  }
+
+  const roots = resolveProjectRoots();
+  const writableRoots = roots.filter((root) => {
+    const parsed = path.parse(root);
+    return root && root !== parsed.root && isWritableDir(root);
+  });
+
+  const projectLike = writableRoots.find((root) => {
+    return fs.existsSync(path.join(root, "package.json")) || fs.existsSync(path.join(root, "src", "main"));
+  });
+  if (projectLike) return projectLike;
+  if (writableRoots.length) return writableRoots[0];
+
+  const fallbackRoot = path.join(app.getPath("userData"), "python-bridge");
+  try {
+    fs.mkdirSync(fallbackRoot, { recursive: true });
+  } catch (_) { }
+  return fallbackRoot;
+}
+
 async function installPythonBridgeDeps() {
   try {
     const reqLookup = resolveRequirementsPath();
     const requirementsPath = reqLookup.path;
     const fallbackPackages = ["torch", "transformers", "gliclass"];
-    const projectRoot = requirementsPath
-      ? path.dirname(requirementsPath)
-      : (resolveProjectRoots()[0] || process.cwd());
+    const projectRoot = resolvePythonProjectRoot(reqLookup);
     const venvDir = path.join(projectRoot, ".venv");
     const venvPython =
       process.platform === "win32"
@@ -984,7 +1025,9 @@ async function installPythonBridgeDeps() {
         ok: false,
         error: venvCreateError || "Ne mogu pronaći ili kreirati Python virtual environment (.venv).",
         requirementsPath,
+        projectRoot,
         venvDir,
+        tried: reqLookup.tried,
       };
     }
 
@@ -1011,6 +1054,7 @@ async function installPythonBridgeDeps() {
         createdVenv,
         requirementsPath: requirementsPath || "",
         requirementsFallback: !requirementsPath,
+        projectRoot,
         python: venvPython,
         pipUpgrade: pipUpgrade.ok,
         stdout: trimPythonInstallOutput(install.stdout),
@@ -1024,12 +1068,91 @@ async function installPythonBridgeDeps() {
       createdVenv,
       requirementsPath: requirementsPath || "",
       requirementsFallback: !requirementsPath,
+      projectRoot,
       python: venvPython,
       pipUpgrade: pipUpgrade.ok,
       stdout: trimPythonInstallOutput(install.stdout),
       stderr: trimPythonInstallOutput(install.stderr),
       tried: reqLookup.tried,
     };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+async function runOneClickLocalSetup() {
+  try {
+    const reqLookup = resolveRequirementsPath();
+    const projectRoot = resolvePythonProjectRoot(reqLookup);
+    const ecosystemPath = path.join(projectRoot, "ecosystem.config.cjs");
+
+    const python = await installPythonBridgeDeps();
+    const result = {
+      ok: false,
+      projectRoot,
+      requirementsPath: reqLookup.path || "",
+      python,
+      pm2: {
+        ok: false,
+        step: "",
+        saveOk: false,
+        status: "",
+        stdout: "",
+        stderr: "",
+        error: "",
+      },
+    };
+
+    if (!python?.ok) {
+      result.pm2.error = "Preskočeno jer Python install nije prošao.";
+      return result;
+    }
+
+    if (!fs.existsSync(ecosystemPath)) {
+      result.pm2.error = "Nedostaje ecosystem.config.cjs";
+      return result;
+    }
+
+    let pm2Run = await execFileText(
+      "npx",
+      ["pm2", "start", ecosystemPath, "--update-env"],
+      300000,
+      { cwd: projectRoot },
+    );
+    let pm2Step = "start";
+
+    if (!pm2Run.ok) {
+      const combined = String(pm2Run.stderr || "") + "\n" + String(pm2Run.stdout || "");
+      if (/already|exists|online|running|namespace/i.test(combined)) {
+        pm2Run = await execFileText(
+          "npx",
+          ["pm2", "restart", "etherx-browser", "--update-env"],
+          300000,
+          { cwd: projectRoot },
+        );
+        pm2Step = "restart";
+      }
+    }
+
+    const pm2Save = await execFileText("npx", ["pm2", "save"], 120000, { cwd: projectRoot });
+    const pm2Status = await execFileText("npx", ["pm2", "status", "etherx-browser"], 120000, {
+      cwd: projectRoot,
+    });
+
+    result.pm2 = {
+      ok: !!pm2Run.ok && !!pm2Save.ok,
+      step: pm2Step,
+      saveOk: !!pm2Save.ok,
+      status: trimPythonInstallOutput(pm2Status.stdout || pm2Status.stderr || ""),
+      stdout: trimPythonInstallOutput(pm2Run.stdout || ""),
+      stderr: trimPythonInstallOutput(pm2Run.stderr || ""),
+      error: pm2Run.ok
+        ? (pm2Save.ok ? "" : (trimPythonInstallOutput(pm2Save.stderr || pm2Save.stdout || "PM2 save failed")))
+        : trimPythonInstallOutput(pm2Run.stderr || pm2Run.stdout || pm2Run.error?.message || "PM2 start failed"),
+    };
+
+    result.ok = !!result.python?.ok && !!result.pm2?.ok;
+    return result;
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
   }
@@ -2351,6 +2474,10 @@ function setupIPC() {
 
   ipcMain.handle("ai:installPythonDeps", async () => {
     return installPythonBridgeDeps();
+  });
+
+  ipcMain.handle("app:runOneClickSetup", async () => {
+    return runOneClickLocalSetup();
   });
 
   // ── Ad Blocker ─────────────────────────────────────────────────────────────

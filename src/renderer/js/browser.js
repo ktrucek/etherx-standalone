@@ -9661,26 +9661,70 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
-    async function translateIndonesianToCroatianViaNllb(text, modelName) {
+    async function translateIndonesianToCroatianViaNllbDetailed(text, modelName) {
         const clean = String(text || '').replace(/\s+/g, ' ').trim();
-        if (!clean) return '';
+        if (!clean) {
+            return {
+                translated: '',
+                model: String(modelName || 'facebook/nllb-200-distilled-600M').trim() || 'facebook/nllb-200-distilled-600M',
+                engine: 'empty',
+                detectedAsIndonesian: false,
+                usedCache: false,
+                nllbOk: false,
+                nllbError: ''
+            };
+        }
         const model = String(modelName || 'facebook/nllb-200-distilled-600M').trim() || 'facebook/nllb-200-distilled-600M';
+        const detectedAsIndonesian = isLikelyIndonesianText(clean);
         const key = model + '|' + normalizeIdLangKey(clean);
-        if (nllbTranslateCache.has(key)) return nllbTranslateCache.get(key);
+        if (nllbTranslateCache.has(key)) {
+            return {
+                translated: String(nllbTranslateCache.get(key) || clean),
+                model,
+                engine: 'cache',
+                detectedAsIndonesian,
+                usedCache: true,
+                nllbOk: true,
+                nllbError: ''
+            };
+        }
         if (!window.electronAPI?.invoke) {
             const fallback = await translateViaGoogle(clean, 'hr');
-            nllbTranslateCache.set(key, fallback || clean);
-            return fallback || clean;
+            const translated = fallback || clean;
+            nllbTranslateCache.set(key, translated);
+            return {
+                translated,
+                model,
+                engine: 'fallback-no-bridge',
+                detectedAsIndonesian,
+                usedCache: false,
+                nllbOk: false,
+                nllbError: 'Electron bridge nije dostupan'
+            };
         }
+
+        let nllbOk = false;
+        let nllbError = '';
+        let engine = 'nllb';
         const run = await window.electronAPI.invoke('ai:nllbTranslate', {
             model,
             src_lang: 'ind_Latn',
             tgt_lang: 'hrv_Latn',
             items: [clean]
         });
+        nllbOk = !!run?.ok;
+        nllbError = String(run?.error || '').trim();
         let translated = String(run?.results?.[0] || '').trim();
-        if (!run?.ok || !translated) {
-            translated = await translateViaGoogle(clean, 'hr');
+        const sameAsInput = translated && normalizeIdLangKey(translated) === normalizeIdLangKey(clean);
+
+        if (!run?.ok || !translated || (sameAsInput && detectedAsIndonesian)) {
+            const fallback = await translateViaGoogle(clean, 'hr');
+            if (String(fallback || '').trim()) translated = fallback;
+            engine = !run?.ok
+                ? 'fallback-nllb-error'
+                : (!translated
+                    ? 'fallback-empty'
+                    : 'fallback-same-as-input');
         }
         translated = translated || clean;
         if (nllbTranslateCache.has(key)) nllbTranslateCache.delete(key);
@@ -9690,7 +9734,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (!oldest) break;
             nllbTranslateCache.delete(oldest);
         }
-        return translated;
+        return {
+            translated,
+            model,
+            engine,
+            detectedAsIndonesian,
+            usedCache: false,
+            nllbOk,
+            nllbError,
+            sameAsInputAfterTranslate: normalizeIdLangKey(translated) === normalizeIdLangKey(clean),
+        };
+    }
+
+    async function translateIndonesianToCroatianViaNllb(text, modelName) {
+        const detail = await translateIndonesianToCroatianViaNllbDetailed(text, modelName);
+        return String(detail?.translated || '').trim();
     }
 
     async function translateIndonesianMessagesInPlace(messages) {
@@ -18403,13 +18461,24 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     testBtn.textContent = '⏳ ...';
                     testResult.textContent = '🔄 Prevođenje s ' + model.replace('facebook/', '') + '...';
                     try {
-                        const translated = await translateIndonesianToCroatianViaNllb(text, model);
-                        const detected = isLikelyIndonesianText(text);
+                        const detail = await translateIndonesianToCroatianViaNllbDetailed(text, model);
+                        const translated = String(detail?.translated || '').trim();
+                        const detected = !!detail?.detectedAsIndonesian;
+                        const engine = String(detail?.engine || 'nllb');
+                        const nllbStatus = detail?.nllbOk ? 'OK' : 'fallback';
+                        const sameAsInput = !!detail?.sameAsInputAfterTranslate;
+                        const warning = sameAsInput && detected
+                            ? '<br><span style="font-size:10px;color:#fbbf24">⚠️ Rezultat je isti kao ulaz; provjeri Python deps i model.</span>'
+                            : '';
                         testResult.innerHTML =
                             '<b>Prijevod:</b> ' + escHtml(translated) +
                             '<br><span style="font-size:10px;opacity:.7">Detekcija: ' +
                             (detected ? '✅ prepoznat kao indonezijski' : '⚠️ nije prepoznat kao indonezijski') +
-                            ' · model: ' + escHtml(model.replace('facebook/', '')) + '</span>';
+                            ' · model: ' + escHtml(model.replace('facebook/', '')) +
+                            ' · engine: ' + escHtml(engine) +
+                            ' · NLLB: ' + escHtml(nllbStatus) + '</span>' +
+                            (detail?.nllbError ? '<br><span style="font-size:10px;opacity:.7">NLLB detail: ' + escHtml(detail.nllbError) + '</span>' : '') +
+                            warning;
                     } catch (err) {
                         testResult.textContent = '❌ Greška: ' + (err.message || String(err));
                     }
@@ -20513,6 +20582,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
     document.getElementById('helpInstallPythonDepsBtn')?.addEventListener('click', async () => {
         const btn = document.getElementById('helpInstallPythonDepsBtn');
+        const allBtn = document.getElementById('helpInstallAllBtn');
         const statusEl = document.getElementById('helpInstallPythonDepsStatus');
         if (!btn || !statusEl) return;
 
@@ -20523,7 +20593,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
 
         const before = btn.textContent;
+        const beforeAll = allBtn?.textContent || '';
         btn.disabled = true;
+        if (allBtn) {
+            allBtn.disabled = true;
+            allBtn.style.opacity = '.7';
+        }
         btn.style.opacity = '.7';
         btn.textContent = '⏳ Instalacija u tijeku...';
         statusEl.textContent = 'Pokrećem .venv + pip install -r requirements.txt ...';
@@ -20533,6 +20608,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (res?.ok) {
                 const lines = [
                     '✅ Instalacija završena.',
+                    'Project root: ' + (res.projectRoot || 'n/a'),
                     'Python: ' + (res.python || 'n/a'),
                     'Requirements: ' + (res.requirementsPath || 'n/a'),
                     'Kreiran novi .venv: ' + (res.createdVenv ? 'da' : 'ne'),
@@ -20545,9 +20621,13 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 const lines = [
                     '❌ Instalacija nije uspjela.',
                     'Greška: ' + (res?.error || 'Nepoznata greška'),
+                    'Project root: ' + (res?.projectRoot || 'n/a'),
                     'Requirements: ' + (res?.requirementsPath || 'n/a'),
                     'Python: ' + (res?.python || 'n/a'),
                 ];
+                if (Array.isArray(res?.tried) && res.tried.length) {
+                    lines.push('', 'Tried requirements paths:', ...res.tried.map((v) => ' - ' + String(v)));
+                }
                 if (res?.stderr) lines.push('', 'stderr:', String(res.stderr));
                 else if (res?.stdout) lines.push('', 'stdout:', String(res.stdout));
                 statusEl.textContent = lines.join('\n');
@@ -20561,6 +20641,72 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             btn.disabled = false;
             btn.style.opacity = '';
             btn.textContent = before || '⚡ Instaliraj Python pakete';
+            if (allBtn) {
+                allBtn.disabled = false;
+                allBtn.style.opacity = '';
+                allBtn.textContent = beforeAll || '🚀 Pokreni sve (Python + PM2)';
+            }
+        }
+    });
+
+    document.getElementById('helpInstallAllBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('helpInstallAllBtn');
+        const pyBtn = document.getElementById('helpInstallPythonDepsBtn');
+        const statusEl = document.getElementById('helpInstallPythonDepsStatus');
+        if (!btn || !statusEl) return;
+
+        if (!window.etherx?.app?.runOneClickSetup) {
+            statusEl.textContent = 'Greška: one-click setup API nije dostupan u ovom buildu.';
+            showToast('⚠️ One-click setup API nije dostupan');
+            return;
+        }
+
+        const before = btn.textContent;
+        const beforePy = pyBtn?.textContent || '';
+        btn.disabled = true;
+        btn.style.opacity = '.7';
+        btn.textContent = '⏳ Pokrećem sve...';
+        if (pyBtn) {
+            pyBtn.disabled = true;
+            pyBtn.style.opacity = '.7';
+        }
+        statusEl.textContent = 'Pokrećem one-click setup: Python deps + PM2 start/restart + PM2 save ...';
+
+        try {
+            const res = await window.etherx.app.runOneClickSetup();
+            const lines = [
+                (res?.ok ? '✅ One-click setup završen.' : '❌ One-click setup nije uspio.'),
+                'Project root: ' + (res?.projectRoot || 'n/a'),
+                'Requirements: ' + (res?.requirementsPath || res?.python?.requirementsPath || 'n/a'),
+                '',
+                'Python install: ' + (res?.python?.ok ? 'OK' : 'FAILED'),
+                ' - Python: ' + (res?.python?.python || 'n/a'),
+                ' - .venv kreiran: ' + (res?.python?.createdVenv ? 'da' : 'ne'),
+                '',
+                'PM2: ' + (res?.pm2?.ok ? 'OK' : 'FAILED'),
+                ' - Step: ' + (res?.pm2?.step || 'n/a'),
+                ' - pm2 save: ' + (res?.pm2?.saveOk ? 'OK' : 'FAILED'),
+            ];
+
+            if (res?.python?.error) lines.push(' - Python error: ' + String(res.python.error));
+            if (res?.pm2?.error) lines.push(' - PM2 error: ' + String(res.pm2.error));
+            if (res?.pm2?.status) lines.push('', 'PM2 status:', String(res.pm2.status));
+
+            statusEl.textContent = lines.join('\n');
+            showToast(res?.ok ? '✅ Setup gotov (Python + PM2)' : '❌ Setup nije prošao');
+        } catch (err) {
+            const msg = String(err?.message || err || 'Nepoznata greška');
+            statusEl.textContent = '❌ Iznimka: ' + msg;
+            showToast('❌ Iznimka tijekom one-click setupa');
+        } finally {
+            btn.disabled = false;
+            btn.style.opacity = '';
+            btn.textContent = before || '🚀 Pokreni sve (Python + PM2)';
+            if (pyBtn) {
+                pyBtn.disabled = false;
+                pyBtn.style.opacity = '';
+                pyBtn.textContent = beforePy || '⚡ Instaliraj Python pakete';
+            }
         }
     });
 

@@ -80,6 +80,30 @@ Napomena:
 
 - `.venv/` je ignoriran u `.gitignore` i ne commit-a se u repozitorij.
 
+### PM2 lokalni proces (one-click)
+
+Za stabilno lokalno pokretanje (restart nakon crash-a + boot persistence), dodan je PM2 setup:
+
+```bash
+npm run pm2:setup
+```
+
+Ova komanda automatski:
+
+- pripremi `.venv` (ako ne postoji)
+- instalira Python AI pakete iz `requirements.txt`
+- pokrene `etherx-browser` preko PM2 (`ecosystem.config.cjs`)
+- snimi PM2 state (`pm2 save`)
+
+Korisne PM2 komande:
+
+```bash
+npm run pm2:start
+npm run pm2:restart
+npm run pm2:stop
+npm run pm2:logs
+```
+
 ### Siguran deploy bez .env commita
 
 `.env.local` je ignoriran i ne treba ići na GitHub.

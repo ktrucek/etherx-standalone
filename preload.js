@@ -262,6 +262,7 @@ contextBridge.exposeInMainWorld('etherx', {
     resetIcon: () => ipcRenderer.invoke('app:resetIcon'),
     chooseScreenshotFolder: () => ipcRenderer.invoke('app:chooseScreenshotFolder'),
     chooseProfilePicture: () => ipcRenderer.invoke('app:chooseProfilePicture'),
+    runOneClickSetup: () => ipcRenderer.invoke('app:runOneClickSetup'),
   },
 
   storage: {
