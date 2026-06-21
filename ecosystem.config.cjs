@@ -2,8 +2,9 @@ module.exports = {
     apps: [
         {
             name: "etherx-browser",
-            script: "npm",
-            args: "start",
+            script: "./node_modules/.bin/electron",
+            args: [".", "--no-sandbox"],
+            interpreter: "none",
             cwd: __dirname,
             autorestart: true,
             watch: false,
