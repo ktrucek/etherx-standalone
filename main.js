@@ -1169,26 +1169,16 @@ async function runOneClickLocalSetup() {
       return result;
     }
 
-    let pm2Run = await execFileText(
+    // Force delete any old registered process to clear PM2 internal cache/metadata for script paths
+    await execFileText("npx", ["pm2", "delete", "etherx-browser"], 60000, { cwd: projectRoot });
+
+    const pm2Run = await execFileText(
       "npx",
       ["pm2", "start", ecosystemPath, "--update-env"],
       300000,
       { cwd: projectRoot },
     );
-    let pm2Step = "start";
-
-    if (!pm2Run.ok) {
-      const combined = String(pm2Run.stderr || "") + "\n" + String(pm2Run.stdout || "");
-      if (/already|exists|online|running|namespace/i.test(combined)) {
-        pm2Run = await execFileText(
-          "npx",
-          ["pm2", "restart", "etherx-browser", "--update-env"],
-          300000,
-          { cwd: projectRoot },
-        );
-        pm2Step = "restart";
-      }
-    }
+    const pm2Step = "start";
 
     const pm2Save = await execFileText("npx", ["pm2", "save"], 120000, { cwd: projectRoot });
     const pm2Status = await execFileText("npx", ["pm2", "status", "etherx-browser"], 120000, {
