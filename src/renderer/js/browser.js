@@ -5305,11 +5305,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
 
     function updateCcReadButton() {
-        if (!ccReadBtn) return;
         const on = isCcReadEnabled();
-        ccReadBtn.textContent = on ? '💬🔊 CC Read ON' : '💬🔊 CC Read OFF';
-        ccReadBtn.style.opacity = on ? '1' : '.85';
-        ccReadBtn.style.boxShadow = on ? '0 0 0 1px rgba(125,211,252,.45) inset' : 'none';
+        const apply = (btn) => {
+            if (!btn) return;
+            btn.textContent = on ? '💬🔊 CC Read ON' : '💬🔊 CC Read OFF';
+            btn.style.opacity = on ? '1' : '.85';
+            btn.style.boxShadow = on ? '0 0 0 1px rgba(125,211,252,.45) inset' : 'none';
+        };
+        apply(ccReadBtn);
+        apply(document.getElementById('tkaiLiveCcReadBtn'));
     }
 
     function speakCaptionText(text, langCode, options = {}) {
@@ -7647,20 +7651,41 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (!text) return false;
             return /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text);
         };
+        const resolveJoinUserName = (m) => {
+            const direct = String(m?.user || '').trim().replace(/^@+/, '').slice(0, 40);
+            if (direct && direct.toLowerCase() !== 'unknown') return direct;
+            const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
+            if (!text) return 'unknown';
+            const fromAction = text.match(/^\s*@?([a-z0-9._-]{2,40})\s+(?:joined|join|entered|shared|liked|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)\b/i);
+            if (fromAction && fromAction[1]) {
+                return String(fromAction[1]).trim().replace(/^@+/, '').slice(0, 40) || 'unknown';
+            }
+            const fromColon = text.match(/^\s*@?([a-z0-9._-]{2,40})\s*[:：]/i);
+            if (fromColon && fromColon[1]) {
+                return String(fromColon[1]).trim().replace(/^@+/, '').slice(0, 40) || 'unknown';
+            }
+            return 'unknown';
+        };
         const joinSeen = new Set();
         const joinScanBase = (Array.isArray(source) ? source : messages).slice(-(Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 300) || 300)));
         const freshJoinCutoff = Number(sessionStartedAt || 0);
+        const joinMinLevel = Math.max(0, Math.min(99, Number(DB.getSettings().tkaiJoinMinLevel || 0) || 0));
+        const joinScanCooldownSec = Math.max(5, Math.min(300, Number(DB.getSettings().tkaiJoinScanCooldownSec || 15) || 15));
+        const joinScanCooldownMs = joinScanCooldownSec * 1000;
         const joinSource = joinScanBase
             .filter((m) => isJoinLikeMessage(m))
             .filter((m) => !freshJoinCutoff || Number(m?.ts || now) >= freshJoinCutoff)
             .map((m) => ({
-                user: String(m.user || '').slice(0, 40) || 'unknown',
+                user: resolveJoinUserName(m),
                 level: extractJoinLevel(m),
                 ts: Number(m.ts || now)
             }))
-            .filter((j) => j.user && j.user.toLowerCase() !== 'unknown')
             .filter((j) => {
-                const bucket = Math.floor((Number(j.ts || now)) / 15000);
+                if (joinMinLevel <= 0) return true;
+                return Number(j.level || 0) >= joinMinLevel;
+            })
+            .filter((j) => {
+                const bucket = Math.floor((Number(j.ts || now)) / joinScanCooldownMs);
                 const key = `${String(j.user || '').toLowerCase()}|${Number(j.level || 0)}|${bucket}`;
                 if (joinSeen.has(key)) return false;
                 joinSeen.add(key);
@@ -7711,6 +7736,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             giftDetails,
             joinLevels: joinSource.slice(-120).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
             joinBuckets,
+            joinMinLevel,
             spikeDebug: {
                 sensitivity: spikeSensitivity,
                 viewers: viewerSpikeDebug,
@@ -8343,9 +8369,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             joinLevelListEl.innerHTML = '';
             const joins = (Array.isArray(insights.joinLevels) ? insights.joinLevels : []);
             const buckets = insights.joinBuckets || {};
+            const joinMinLevel = Math.max(0, Math.min(99, Number(insights.joinMinLevel ?? DB.getSettings().tkaiJoinMinLevel ?? 0) || 0));
             const summary = document.createElement('li');
             summary.textContent =
-                `Svi leveli • Unknown: ${formatNum(buckets.unknown || 0)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)}`;
+                `Min lvl: ${formatNum(joinMinLevel)} • Unknown: ${formatNum(buckets.unknown || 0)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)}`;
             joinLevelListEl.appendChild(summary);
             if (!joins.length) {
                 const li = document.createElement('li');
@@ -8358,21 +8385,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+                    const userName = String(j.user || '').replace(/^@+/, '') || 'unknown';
                     const mention = document.createElement('a');
                     mention.href = '#';
                     mention.className = 'tkai-join-mention';
-                    mention.textContent = '@' + String(j.user || '').replace(/^@+/, '');
-                    mention.style.color = getUserColor(j.user);
-                    mention.title = 'Klik: poruke korisnika | Desni klik: kopiraj @mention';
-                    mention.addEventListener('click', (ev) => {
-                        ev.preventDefault();
-                        showTkaiUserMessagesModal(String(j.user || '').replace(/^@+/, ''));
-                    });
-                    mention.addEventListener('contextmenu', (ev) => {
-                        ev.preventDefault();
-                        const value = '@' + String(j.user || '').replace(/^@+/, '') + ' ';
-                        navigator.clipboard.writeText(value).then(() => showToast('📋 Kopirano: ' + value.trim())).catch(() => { });
-                    });
+                    mention.textContent = '@' + userName;
+                    mention.style.color = getUserColor(userName);
+                    if (userName.toLowerCase() === 'unknown') {
+                        mention.title = 'Join event bez prepoznatog korisnika';
+                        mention.addEventListener('click', (ev) => ev.preventDefault());
+                    } else {
+                        mention.title = 'Klik: poruke korisnika | Desni klik: kopiraj @mention';
+                        mention.addEventListener('click', (ev) => {
+                            ev.preventDefault();
+                            showTkaiUserMessagesModal(userName);
+                        });
+                        mention.addEventListener('contextmenu', (ev) => {
+                            ev.preventDefault();
+                            const value = '@' + userName + ' ';
+                            navigator.clipboard.writeText(value).then(() => showToast('📋 Kopirano: ' + value.trim())).catch(() => { });
+                        });
+                    }
                     const joinLevel = Number(j.level || 0);
                     const levelLabel = joinLevel > 0 ? `lvl ${formatNum(joinLevel)}` : 'lvl ?';
                     li.appendChild(mention);
@@ -8977,6 +9010,17 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     if (typeof window.runDjCcNow === 'function') window.runDjCcNow(true);
                     return;
                 }
+                if (button.id === 'tkaiLiveCcReadBtn') {
+                    const next = !isCcReadEnabled();
+                    DB.saveSetting('tkaiCcReadEnabled', next);
+                    updateTkaiAudioButton();
+                    updateCcReadButton();
+                    if (!next && 'speechSynthesis' in window && window.speechSynthesis) {
+                        speechSynthesis.cancel();
+                    }
+                    showToast(next ? '💬🔊 CC čitanje uključeno' : '💬🔇 CC čitanje isključeno');
+                    return;
+                }
                 if (button.id === 'tkaiSpikeAll' || button.id === 'tkaiSpikeViewers' || button.id === 'tkaiSpikeGifts' || button.id === 'tkaiSpikeJoin' || button.id === 'tkaiSpikeShare' || button.id === 'tkaiSpikeChat') {
                     spikeFilter = button.id === 'tkaiSpikeViewers' ? 'viewers' : button.id === 'tkaiSpikeGifts' ? 'gifts' : button.id === 'tkaiSpikeJoin' ? 'join' : button.id === 'tkaiSpikeShare' ? 'share' : button.id === 'tkaiSpikeChat' ? 'chat' : 'all';
                     updateSpikeFilterButtons();
@@ -9079,6 +9123,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<div style="display:flex;gap:8px;align-items:center">' +
             '<button id="tkaiLiveSongRecNow" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">🎧 SongRec now</button>' +
             '<button id="tkaiLiveDjCcNow" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">💬 DJ CC now</button>' +
+            '<button id="tkaiLiveCcReadBtn" class="tkai-gen-btn" style="font-size:10px;padding:3px 8px">💬🔊 CC Read OFF</button>' +
             '<button id="tkaiLiveDashClose" class="panel-close" style="position:static">×</button>' +
             '</div>' +
             '</div>' +
@@ -11732,6 +11777,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             return;
         }
         if (typeof toggleBtn?.click === 'function') toggleBtn.click();
+        if (typeof window.runSongRecRecognition === 'function') {
+            // Shortcut start should kick both scan flow and SongRec detection.
+            window.runSongRecRecognition(true).catch(() => { });
+        }
     };
 
     ccReadBtn?.addEventListener('click', () => {
@@ -17214,12 +17263,72 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
     }
     function timeAgo(ts) { const d = Date.now() - ts; if (d < 60000) return 'now'; if (d < 3600000) return Math.floor(d / 60000) + 'm'; if (d < 86400000) return Math.floor(d / 3600000) + 'h'; return Math.floor(d / 86400000) + 'd'; }
+
+    function forwardClipboardShortcutToActiveWebview(action) {
+        const tab = getActiveTab();
+        const webview = document.getElementById('browseFrame_' + (tab?.id || '')) || document.getElementById('browseFrame');
+        if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') return false;
+
+        const run = async () => {
+            const clipText = action === 'paste'
+                ? await navigator.clipboard.readText().catch(() => '')
+                : '';
+            const script = `(() => {
+                const action = ${JSON.stringify(action)};
+                const clipText = ${JSON.stringify(clipText)};
+                const active = document.activeElement;
+                const editable = !!(active && (active.isContentEditable || active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.getAttribute?.('role') === 'textbox'));
+
+                if (action === 'copy') return !!document.execCommand('copy');
+                if (action === 'cut') return !!document.execCommand('cut');
+                if (action === 'selectAll') return !!document.execCommand('selectAll');
+
+                if (action === 'paste') {
+                    if (!editable) return false;
+                    if (active && active.isContentEditable) {
+                        try {
+                            document.execCommand('insertText', false, clipText);
+                        } catch (_) {
+                            active.textContent = clipText;
+                        }
+                        active.dispatchEvent(new Event('input', { bubbles: true }));
+                        return true;
+                    }
+                    if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
+                        const start = Number(active.selectionStart || 0);
+                        const end = Number(active.selectionEnd || 0);
+                        const value = String(active.value || '');
+                        active.value = value.slice(0, start) + clipText + value.slice(end);
+                        const pos = start + clipText.length;
+                        active.selectionStart = pos;
+                        active.selectionEnd = pos;
+                        active.dispatchEvent(new Event('input', { bubbles: true }));
+                        return true;
+                    }
+                }
+                return false;
+            })()`;
+            try { await webview.executeJavaScript(script, true); } catch (_) { }
+        };
+
+        void run();
+        return true;
+    }
+
     document.addEventListener('keydown', e => {
         const ctrl = e.ctrlKey || e.metaKey; const shift = e.shiftKey;
         // Never intercept clipboard/undo/redo — let OS and webview handle natively
         // Also skip all Ctrl shortcuts when focus is in input/textarea to allow paste etc.
         const isInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
-        if (ctrl && !shift && ['c', 'C', 'v', 'V', 'x', 'X', 'a', 'A', 'z', 'Z', 'y', 'Y'].includes(e.key)) return;
+        if (ctrl && !shift && ['c', 'C', 'v', 'V', 'x', 'X', 'a', 'A', 'z', 'Z', 'y', 'Y'].includes(e.key)) {
+            const key = String(e.key || '').toLowerCase();
+            const action = key === 'c' ? 'copy' : key === 'v' ? 'paste' : key === 'x' ? 'cut' : key === 'a' ? 'selectAll' : '';
+            if (!isInput && action && forwardClipboardShortcutToActiveWebview(action)) {
+                e.preventDefault();
+                return;
+            }
+            return;
+        }
         if (isInput && ctrl) return; // Allow all Ctrl+key in inputs
         if (ctrl && e.key === 't') { e.preventDefault(); createTab(); }
         else if (ctrl && e.key === 'w') { e.preventDefault(); closeTab(STATE.activeTabId); }
