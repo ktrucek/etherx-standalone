@@ -1114,18 +1114,21 @@ async function runOneClickLocalSetup() {
 
     // Dynamically generate ecosystem.config.cjs for packaged production application
     if (app.isPackaged) {
-      let scriptPath = process.execPath;
+      let scriptField = "";
+      let argsField = "";
       if (process.platform !== "win32") {
-        scriptPath = `"${scriptPath}"`;
+        scriptField = `"sh"`;
+        argsField = `["-c", "exec \\"${process.execPath}\\" --no-sandbox"]`;
       } else {
-        scriptPath = scriptPath.replace(/\\/g, "/");
+        scriptField = JSON.stringify(process.execPath.replace(/\\/g, "/"));
+        argsField = `"--no-sandbox"`;
       }
       const configContent = `module.exports = {
   apps: [
     {
       name: "etherx-browser",
-      script: ${JSON.stringify(scriptPath)},
-      args: "--no-sandbox",
+      script: ${scriptField},
+      args: ${argsField},
       cwd: "${projectRoot.replace(/\\/g, "/")}",
       autorestart: true,
       watch: false,
