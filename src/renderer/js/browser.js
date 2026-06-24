@@ -9286,6 +9286,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     shadowbanUserFilterEl?.addEventListener('change', () => {
         renderShadowbanUserStats();
     });
+
+    // DEBUG
+    document.getElementById('tkaiDebugScraperBtn')?.addEventListener('click', () => {
+        _runDebugScraper();
+    });
+
     function updateSessionStatsUI() {
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         const giftStats = computeGiftStats();
