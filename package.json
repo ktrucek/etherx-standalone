@@ -28,7 +28,7 @@
     "node": ">=20.0.0"
   },
   "overrides": {
-    "ws": "8.20.1",
+    "ws": "8.21.0",
     "lzma-native": {
       "node-addon-api": "^7.1.0"
     },
@@ -101,7 +101,7 @@
     "electron": "^39.8.5",
     "electron-builder": "^24.13.3",
     "picomatch": "^4.0.4",
-    "ws": "8.20.1"
+    "ws": "8.21.0"
   },
   "dependencies": {
     "@cliqz/adblocker-electron": "^1.26.8",
