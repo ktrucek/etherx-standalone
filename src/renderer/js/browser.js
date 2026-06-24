@@ -998,19 +998,11 @@ if (window.electronWebview) {
         wv.addEventListener('new-window', (e) => {
             // Bug #1/#17/#19: Convert popups to tabs; handle YouTube, Google multi-account
             const url = e.url || '';
-            // Google auth / Gmail: open externally UNLESS triggered from a third-party site
-            // (e.g. TikTok "Sign in with Google" must complete inside the same session so
-            // the OAuth callback can return to TikTok — opening externally breaks the flow)
+            // Always open Google auth/login pages externally.
+            // Google blocks embedded/webview sign-in with "This browser may not be secure".
             if (shouldOpenGoogleExternally(url)) {
-                const triggerOrigin = (() => { try { return new URL(wv.src || '').hostname; } catch (_) { return ''; } })();
-                const isThirdPartyAuth = triggerOrigin && !triggerOrigin.endsWith('google.com');
-                if (isThirdPartyAuth) {
-                    // Let Google OAuth open as a new in-app tab so the callback stays in-session
-                    createTab(url, '', true);
-                } else {
-                    window.etherx?.openExternal?.(url)?.catch?.(() => { });
-                    showToast('🔐 Google login otvaram u zadanom browseru');
-                }
+                window.etherx?.openExternal?.(url)?.catch?.(() => { });
+                showToast('🔐 Google login otvaram u zadanom browseru');
                 return;
             }
             // YouTube popups — open as new tab
@@ -3341,17 +3333,10 @@ function navigateTo(raw, tabId) {
         if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
     } catch (e) { return; }
     if (shouldOpenGoogleExternally(url) && window.electronWebview && window.etherx?.openExternal) {
-        // Only open externally when navigating directly to Google (e.g. user typed mail.google.com)
-        // NOT when a third-party site (TikTok, etc.) is redirecting through Google OAuth,
-        // because the callback needs to return to that site inside the same session.
-        const activeWv = getActiveTab() ? document.getElementById('browseFrame_' + getActiveTab()?.id) || document.getElementById('browseFrame') : null;
-        const currentHost = (() => { try { return new URL(activeWv?.src || '').hostname; } catch (_) { return ''; } })();
-        if (!currentHost || currentHost.endsWith('google.com')) {
-            window.etherx.openExternal(url).catch(() => { });
-            showToast('🔐 Google/Gmail otvaram u zadanom browseru da prijava radi');
-            consoleLog('info', '🌐 Opened externally: ' + url);
-            return;
-        }
+        window.etherx.openExternal(url).catch(() => { });
+        showToast('🔐 Google/Gmail otvaram u zadanom browseru da prijava radi');
+        consoleLog('info', '🌐 Opened externally: ' + url);
+        return;
     }
     const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
     closeAllPanels();
