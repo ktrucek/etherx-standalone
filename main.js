@@ -4304,16 +4304,23 @@ app.on("web-contents-created", (_event, contents) => {
             details.url,
           );
 
-        const isGoogleOAuthPopup =
-          /accounts\.google\.com|consent\.google\.com|\/o\/oauth2|flowname=glifwebsignin|flowentry=servicelogin/i.test(
-            details.url,
-          );
+        // Force all Google sign-in/OAuth popups to open in the external browser.
+        // Google blocks sign-in from Electron/CEF user agents ("untrusted browser").
+        const isGoogleAuth = (url) => {
+          try {
+            const u = new URL(url);
+            const host = u.hostname.toLowerCase();
+            if (host === 'accounts.google.com' || host === 'consent.google.com' || host === 'myaccount.google.com') return true;
+            if (host.endsWith('.google.com') && (u.pathname.includes('/o/oauth') || u.pathname.includes('/signin') || u.pathname.includes('/servicelogin'))) return true;
+            const search = (u.search || '').toLowerCase();
+            if (search.includes('flowname=glifwebsignin') || search.includes('flowentry=servicelogin')) return true;
+            return false;
+          } catch (_) { return false; }
+        };
 
-        if (isGoogleOAuthPopup) {
-          // Google aggressively blocks embedded OAuth/login windows. Route only
-          // Google auth popups to the system browser to guarantee sign-in.
+        if (isGoogleAuth(details.url)) {
           shell.openExternal(details.url).catch(() => { });
-          return { action: "deny" };
+          return { action: 'deny' };
         }
 
         if (isOAuthPopup) {

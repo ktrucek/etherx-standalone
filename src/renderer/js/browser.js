@@ -1736,12 +1736,25 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         document.getElementById('tkaiExportCsvBtn')?.click();
     });
 
+    document.getElementById('tkaiDebugScraperBtn')?.addEventListener('click', () => {
+        if (typeof _runDebugScraper === 'function') {
+            _runDebugScraper();
+        } else {
+            console.error('Debug scraper function not found.');
+            showToast('Greška: debug funkcija nije dostupna.');
+        }
+    });
+
     document.getElementById('btnTestGuardianConnection')?.addEventListener('click', async () => {
         const statusEl = document.getElementById('tkaiGuardianTestStatus');
         const btn = document.getElementById('btnTestGuardianConnection');
         if (!statusEl || !btn) return;
 
         const cfg = DB.getSettings() || {};
+        if (cfg.tkaiGuardianEnabled !== true) {
+            statusEl.innerHTML = '<span style="color:#f97316">ℹ️ Guardian AI je isključen.</span><br>Uključi ga u "Features & UI" sekciji ako ga želiš koristiti.';
+            return;
+        }
         const model = String(cfg.tkaiGuardianModel || 'grok-2').trim();
         const apiKey = String(cfg.tkaiGuardianApiKey || '').trim();
         const endpoint = buildGuardianEndpoint(cfg);
@@ -1757,7 +1770,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             statusEl.innerHTML = '<span style="color:#10b981;font-weight:700">✅ Povezano!</span> (' + duration + 'ms)<br>Endpoint: ' + escHtml(endpoint) + '<br>Model: ' + escHtml(model) + '<br>Odgovor: ' + escHtml(response);
             showToast('✅ Veza s Guardian AI je uspješna!');
         } catch (err) {
-            statusEl.innerHTML = '<span style="color:#ef4444;font-weight:700">❌ Greška!</span><br>Detalj: ' + escHtml(err.message || String(err)) + '<br><span style="font-size:10px;opacity:.7">Provjeri endpoint: ' + escHtml(endpoint) + '</span>';
+            statusEl.innerHTML = '<span style="color:#ef4444;font-weight:700">❌ Greška!</span><br>Detalj: ' + escHtml(err.message || String(err)) + '<br><span style="font-size:10px;opacity:.7">Provjeri endpoint: ' + escHtml(endpoint) + '. <br><b>Provjeri da li je Guardian AI servis pokrenut lokalno na tom portu.</b></span>';
             showToast('❌ Spajanje s Guardian AI nije uspjelo');
         } finally {
             btn.disabled = false;
@@ -9285,11 +9298,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     });
     shadowbanUserFilterEl?.addEventListener('change', () => {
         renderShadowbanUserStats();
-    });
-
-    // DEBUG
-    document.getElementById('tkaiDebugScraperBtn')?.addEventListener('click', () => {
-        _runDebugScraper();
     });
 
     function updateSessionStatsUI() {
