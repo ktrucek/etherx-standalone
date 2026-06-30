@@ -3266,16 +3266,6 @@ function resolveQuickSiteAlias(raw) {
     return QUICK_SITE_ALIASES[q] || '';
 }
 
-function resolveInternalDashboardUrl(name) {
-    const slug = String(name || "").trim().toLowerCase();
-    if (!slug) return "";
-    try {
-        return new URL("./" + slug + "/index.html", window.location.href).href;
-    } catch (_) {
-        return "";
-    }
-}
-
 function normalizeUrl(raw) {
     if (!raw || typeof raw !== 'string') return '';
     raw = raw.trim(); if (!raw) return '';
@@ -15855,10 +15845,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     applyNtpSettings();
     renderRecentSites();
 
-    document.querySelectorAll('.ntp-card').forEach(card => card.addEventListener('click', () => {
-        const dashboardUrl = resolveInternalDashboardUrl(card.dataset.dashboard);
-        navigateTo(dashboardUrl || card.dataset.url);
-    }));
+    document.querySelectorAll('.ntp-card').forEach(card => card.addEventListener('click', () => navigateTo(card.dataset.url)));
     document.getElementById('boOpen').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) window.open(t.url, '_blank'); });
     document.getElementById('boRetry').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) navigateTo(t.url); });
     const ctxMenu = document.getElementById('ctxMenu');

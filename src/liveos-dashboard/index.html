@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LiveOS Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="dashboard-shell">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-mark"><span></span><span></span><span></span><span></span><span></span></div>
+          <div><strong>LiveOS</strong><p>Creator Intelligence</p></div>
+        </div>
+        <nav class="sidebar-nav">
+          <button class="nav-item active"><span>◉</span>Dashboard</button>
+          <button class="nav-item"><span>▣</span>Live Sessions</button>
+          <button class="nav-item"><span>⌁</span>Analytics</button>
+          <button class="nav-item"><span>◌</span>Users</button>
+          <button class="nav-item"><span>✦</span>Gifts</button>
+          <button class="nav-item"><span>✉</span>Chat AI</button>
+          <button class="nav-item"><span>♫</span>Music & BPM</button>
+          <button class="nav-item"><span>◈</span>Content Scanner</button>
+          <button class="nav-item"><span>⟡</span>Alerts</button>
+          <button class="nav-item"><span>⌘</span>Automations</button>
+          <button class="nav-item"><span>✧</span>AI Tools</button>
+          <button class="nav-item"><span>⚙</span>Settings</button>
+        </nav>
+      </div>
+
+      <div class="sidebar-stack">
+        <div class="sidebar-card status-card">
+          <span class="eyebrow">Live Status</span>
+          <strong>Connected</strong>
+          <p>TikTok Live API</p>
+          <small>99.9% uptime</small>
+          <ul class="mini-list">
+            <li><span class="status-dot online"></span>Connected</li>
+            <li><span class="status-dot"></span>TikTok Live API</li>
+            <li><span class="status-dot"></span>99.9% uptime</li>
+          </ul>
+        </div>
+
+        <div class="sidebar-card profile-card">
+          <div class="avatar">K</div>
+          <div class="profile-copy">
+            <strong>Kristijan</strong>
+            <p>Pro Tier</p>
+          </div>
+        </div>
+
+        <div class="profile-actions">
+          <button>☼</button>
+          <button>◎</button>
+          <button>▣</button>
+          <button>⇆</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <div class="page-title-row">
+            <h1>Live Dashboard</h1>
+            <span class="powered-badge">AI Powered</span>
+          </div>
+          <p>Real-time overview of your live streaming empire</p>
+        </div>
+
+        <div class="topbar-actions">
+          <label class="search"><span>⌕</span><em>Search anything...</em><kbd>⌘K</kbd></label>
+          <div class="top-chip" id="currentDate"></div>
+          <button class="ghost-btn">Export <span>▾</span></button>
+          <div class="top-icons">
+            <button class="icon-dot">◔</button>
+            <button class="icon-dot">⚑</button>
+          </div>
+          <button class="primary-btn">AI Assistant <span>▾</span></button>
+        </div>
+      </header>
+
+      <section class="metrics-grid">
+        <article class="metric-card accent-purple">
+          <div class="metric-icon">◷</div>
+          <span class="metric-label">Session Time</span>
+          <strong>295m</strong>
+          <small>Live now</small>
+        </article>
+        <article class="metric-card accent-blue">
+          <div class="metric-icon">◌</div>
+          <span class="metric-label">Viewers</span>
+          <strong>502</strong>
+          <small>Peak: 997</small>
+          <em>+12%</em>
+        </article>
+        <article class="metric-card accent-orange">
+          <div class="metric-icon">✦</div>
+          <span class="metric-label">Gift Coins</span>
+          <strong>24.662</strong>
+          <small>≈ €350.42</small>
+          <em>+8%</em>
+        </article>
+        <article class="metric-card accent-orange soft">
+          <div class="metric-icon">⟡</div>
+          <span class="metric-label">Gifts Total</span>
+          <strong>499</strong>
+          <small>23 different</small>
+          <em>+15%</em>
+        </article>
+        <article class="metric-card accent-pink">
+          <div class="metric-icon">♡</div>
+          <span class="metric-label">Supporters</span>
+          <strong>143</strong>
+          <small>Unique</small>
+          <em class="positive">+0.9</em>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <div class="panel trend-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Viewer Trend</h2>
+              <p>Real-time viewers over time</p>
+            </div>
+            <div class="segmented"><button>1H</button><button class="active">6H</button><button>24H</button><button>7D</button></div>
+          </div>
+          <div class="chart chart-line">
+            <svg viewBox="0 0 640 260" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="viewerFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(147,92,255,0.60)"></stop>
+                  <stop offset="100%" stop-color="rgba(147,92,255,0.02)"></stop>
+                </linearGradient>
+              </defs>
+              <path class="grid-line" d="M0 30H640 M0 90H640 M0 150H640 M0 210H640"></path>
+              <path class="area-path" d="M0 210 C40 160,80 190,120 165 S200 110,240 125 S320 80,360 90 S440 65,500 95 S575 200,640 155 L640 260 L0 260 Z"></path>
+              <path class="line-path" d="M0 210 C40 160,80 190,120 165 S200 110,240 125 S320 80,360 90 S440 65,500 95 S575 200,640 155"></path>
+            </svg>
+            <div class="chart-y-axis"><span>1K</span><span>750</span><span>500</span><span>250</span><span>0</span></div>
+            <div class="chart-label peak">Peak: 997 viewers</div>
+            <div class="chart-axis"><span>00:00</span><span>01:00</span><span>02:00</span><span>03:00</span><span>04:00</span><span>05:00</span></div>
+          </div>
+        </div>
+
+        <div class="panel gift-panel">
+          <div class="panel-head"><div><h2>Gift Distribution</h2><p>499 gifts · 23 types</p></div></div>
+          <div class="gift-content">
+            <div class="donut"><div class="donut-hole"><strong>499</strong><span>Total</span></div></div>
+            <div class="legend">
+              <div><span class="dot pink"></span><span class="legend-name">Diamond Tree</span><b>9.796</b><small>(19.6%)</small></div>
+              <div><span class="dot coral"></span><span class="legend-name">Glowing Jellyfish</span><b>6.007</b><small>(12.0%)</small></div>
+              <div><span class="dot blue"></span><span class="legend-name">Hand Heart</span><b>4.132</b><small>(8.3%)</small></div>
+              <div><span class="dot orange"></span><span class="legend-name">Mishka Bear</span><b>2.441</b><small>(4.9%)</small></div>
+              <div><span class="dot violet"></span><span class="legend-name">Lost in Your Music</span><b>1.009</b><small>(2.0%)</small></div>
+              <div><span class="dot white"></span><span class="legend-name">Others</span><b>11.669</b><small>(23.4%)</small></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel chat-panel">
+          <div class="panel-head utility-head">
+            <div><h2>Live Chat AI Feed</h2><p>17 msg/min</p></div>
+            <div class="tiny-actions"><button>⌁</button><button>⚙</button><button>✣</button></div>
+          </div>
+          <div class="chat-list">
+            <div class="chat-item tone-gold"><span class="chat-user">Adi Setiawan</span><span class="chat-event">followed the host</span><small>now</small></div>
+            <div class="chat-item tone-blue"><span class="chat-user">3st</span><span class="chat-event">Power hug Orange Juice</span><small>now</small></div>
+            <div class="chat-item tone-gold"><span class="chat-user">eva</span><span class="chat-event">Rose Heart Me followed</span><small>30s</small></div>
+            <div class="chat-item tone-rose"><span class="chat-user">djkitty.lynn</span><span class="chat-event">liked x13</span><small>1m</small></div>
+            <div class="chat-item tone-green"><span class="chat-user">ThaBishop</span><span class="chat-event">Finger heart Rose Heart Me</span><small>1m</small></div>
+            <div class="chat-item tone-blue"><span class="chat-user">Pachinko</span><span class="chat-event">Go Popular Rose Blow a kiss</span><small>2m</small></div>
+            <div class="chat-item tone-violet"><span class="chat-user">Vivi Ramelia</span><span class="chat-event">shared the LIVE</span><small>2m</small></div>
+          </div>
+          <div class="chat-input-row"><input type="text" value="Type a message..." aria-label="Type a message"><button>Send</button></div>
+        </div>
+
+        <div class="panel supporters-panel">
+          <div class="panel-head"><div><h2>Top Supporters</h2><p>By gift coins</p></div><button class="ghost-btn small">View All</button></div>
+          <div class="supporters-list">
+            <div class="row"><span class="rank">1</span><span class="supporter-name">eva ✨</span><b>41.969</b><small>514.911</small></div>
+            <div class="row"><span class="rank">2</span><span class="supporter-name">Kristijan Truc...</span><b>28.204</b><small>352.481</small></div>
+            <div class="row"><span class="rank">3</span><span class="supporter-name">Fanny Trance ✧</span><b>32.654</b><small>273.681</small></div>
+            <div class="row"><span class="rank">4</span><span class="supporter-name">Vivi Ramelia</span><b>14.689</b><small>254.602</small></div>
+            <div class="row"><span class="rank">5</span><span class="supporter-name">Andreas Steger</span><b>14.132</b><small>221.365</small></div>
+          </div>
+        </div>
+
+        <div class="panel sentiment-panel">
+          <div class="panel-head"><div><h2>Sentiment Analysis</h2><p>Live audience mood</p></div></div>
+          <div class="sentiment-layout">
+            <div class="gauge"><div class="gauge-ring"><strong>89%</strong><span>Very Positive</span></div></div>
+            <div class="mood-stats">
+              <div><span>Positive</span><b>89%</b></div>
+              <div><span>Neutral</span><b>8%</b></div>
+              <div><span>Negative</span><b>3%</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel music-panel">
+          <div class="panel-head"><div><h2>Music & BPM</h2><p>Current track analysis</p></div></div>
+          <div class="track-card"><div class="album-art"></div><div><strong>Chill & Slow Vibes</strong><p>Lo-Fi Hip Hop</p></div></div>
+          <div class="track-meta"><span class="track-badge">⟲ 72</span><span>Perfect Range</span></div>
+          <div class="waveform" id="waveform"></div>
+        </div>
+
+        <div class="panel insights-panel">
+          <div class="panel-head"><div><h2>AI Insights</h2><p>Live analysis & recommendations</p></div><button class="ghost-btn small">View All</button></div>
+          <div class="insight-list">
+            <div class="insight-item"><span>Engagement is 23% higher than usual</span><b>95%</b></div>
+            <div class="insight-item warn"><span>Viewer retention dropping at 45min mark</span><b>67%</b></div>
+            <div class="insight-item info"><span>Top gifter likely to return in 12min</span><b>89%</b></div>
+            <div class="insight-item good"><span>Music BPM is perfect for engagement</span><b>98%</b></div>
+          </div>
+        </div>
+
+        <div class="panel timeline-panel">
+          <div class="panel-head"><div><h2>Activity Timeline</h2><p>All events in real-time</p></div><div class="segmented"><button class="active">All</button><button>Gifts</button><button>Chat</button><button>Joins</button><button>Shares</button></div></div>
+          <div class="timeline-list">
+            <div class="timeline-item"><span>♥ eva sent Rose Heart ×1</span><small>2m ago</small></div>
+            <div class="timeline-item"><span>◉ Adi Setiawan followed the host</span><small>2m ago</small></div>
+            <div class="timeline-item"><span>♡ djkitty.lynn liked the LIVE</span><small>3m ago</small></div>
+            <div class="timeline-item"><span>⤴ Vivi Ramelia shared the LIVE</span><small>3m ago</small></div>
+          </div>
+        </div>
+
+        <div class="panel health-panel">
+          <div class="panel-head"><div><h2>Session Health</h2><p>System performance</p></div><span class="health-pill">Excellent</span></div>
+          <div class="health-metrics">
+            <div><span>API Response</span><b>98ms</b><small>Good</small></div>
+            <div><span>Data Flow</span><b>100%</b><small>Perfect</small></div>
+            <div><span>AI Processing</span><b>2.3s</b><small>Good</small></div>
+            <div><span>Uptime</span><b>99.9%</b><small>Perfect</small></div>
+          </div>
+        </div>
+
+        <div class="panel actions-panel">
+          <div class="panel-head"><div><h2>Quick Actions</h2><p>Frequently used actions</p></div></div>
+          <div class="actions-grid">
+            <button>⌕ Scan User</button>
+            <button>✦ AI Summary</button>
+            <button>⇪ Export Data</button>
+            <button>◎ Shadowban Check</button>
+            <button>⇄ Translate All</button>
+            <button>♫ Music ID</button>
+            <button>◌ User Profile</button>
+            <button>⟡ Gift Analysis</button>
+            <button>▣ Content Report</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
