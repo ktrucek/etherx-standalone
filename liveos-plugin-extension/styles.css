@@ -699,3 +699,41 @@ button { appearance: none; }
   .legend b,
   .legend small { justify-self: start; }
 }
+
+.metric-card {
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.14);
+}
+.hidden-by-view {
+  display: none !important;
+}
+.plugin-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  max-width: 320px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(7, 18, 30, 0.94);
+  border: 1px solid rgba(84, 198, 255, 0.22);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.34);
+  color: var(--text);
+  font-size: 12px;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 30;
+}
+.plugin-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.chat-item.injected {
+  border-color: rgba(31, 179, 156, 0.28);
+  background: linear-gradient(135deg, rgba(31, 179, 156, 0.18), rgba(255, 139, 83, 0.08));
+}
