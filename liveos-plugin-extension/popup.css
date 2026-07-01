@@ -1,0 +1,70 @@
+:root {
+  --bg: #08161a;
+  --card: rgba(10, 28, 32, 0.96);
+  --border: rgba(124, 214, 199, 0.18);
+  --text: #effcf8;
+  --muted: #9dc9c1;
+  --accent: #1fb39c;
+  --accent-2: #ff8b53;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 220px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(31, 179, 156, 0.24), transparent 34%),
+    radial-gradient(circle at top right, rgba(255, 139, 83, 0.2), transparent 30%),
+    linear-gradient(180deg, #051014 0%, #0a1a1f 100%);
+}
+.popup-shell {
+  margin: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+}
+.badge {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(31, 179, 156, 0.15);
+  color: #bbfff0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+h1 {
+  margin: 14px 0 8px;
+  font-size: 24px;
+  line-height: 1;
+}
+p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.actions {
+  margin-top: 18px;
+}
+.primary-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+.hint {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}

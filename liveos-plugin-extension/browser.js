@@ -3266,16 +3266,6 @@ function resolveQuickSiteAlias(raw) {
     return QUICK_SITE_ALIASES[q] || '';
 }
 
-function resolveInternalDashboardUrl(name) {
-    const slug = String(name || "").trim().toLowerCase();
-    if (!slug) return "";
-    try {
-        return new URL("./" + slug + "/index.html", window.location.href).href;
-    } catch (_) {
-        return "";
-    }
-}
-
 function normalizeUrl(raw) {
     if (!raw || typeof raw !== 'string') return '';
     raw = raw.trim(); if (!raw) return '';
@@ -15283,27 +15273,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         } catch (e) { console.warn('[Ext] Reveye seed failed:', e); }
     })();
 
-    // Seed bundled LiveOS Plugin extension (unpacked)
-    (async function seedLiveOsPluginExtension() {
-        if (!window.etherx?.app?.getAppPath) return;
-        try {
-            const appPath = await window.etherx.app.getAppPath();
-            const pluginPath = appPath + "/liveos-plugin-extension";
-            const existing = EXT_DB.get();
-            const found = existing.find(e => e.path === pluginPath || e.name === "LiveOS Plugin Dashboard" || e.id === "liveos-plugin-builtin");
-            if (!found) {
-                existing.push({ id: "liveos-plugin-builtin", name: "LiveOS Plugin Dashboard", icon: "🧩", desc: "Standalone LiveOS dashboard as a built-in unpacked extension", enabled: true, installMode: "unpacked", path: pluginPath, home: "index.html", source: "builtin", installedAt: Date.now() });
-                EXT_DB.save(existing);
-                renderExtList && renderExtList();
-            } else {
-                if (!found.enabled) found.enabled = true;
-                if (!found.home) found.home = "index.html";
-                EXT_DB.save(existing);
-                renderExtList && renderExtList();
-            }
-        } catch (e) { console.warn("[Ext] LiveOS Plugin seed failed:", e); }
-    })();
-
     function renderExtList() {
         const list = document.getElementById('extList');
         if (!list) return;
@@ -15351,12 +15320,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     window.etherx.openExternal(url).catch(() => { });
                     showToast('🌐 Otvaram ekstenziju izvan EtherX-a: ' + ext.name);
                 } else if (ext.installMode === 'unpacked') {
-                    if (ext.source && String(ext.source).startsWith('chrome-extension://')) {
-                        navigateTo(ext.source);
-                        showToast('🧩 Opening: ' + ext.name);
-                    } else {
-                        showToast('🧩 Unpacked extension loaded: ' + ext.name);
-                    }
+                    showToast('🧩 Unpacked extension loaded: ' + ext.name);
                 } else {
                     navigateTo(url);
                     showToast('🧩 Opening: ' + ext.name);
@@ -15863,7 +15827,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 ext.id = loaded.id;
                 ext.name = loaded.name || ext.name;
                 ext.desc = 'Loaded unpacked extension v' + (loaded.version || '?');
-                if (ext.home) ext.source = 'chrome-extension://' + loaded.id + '/' + ext.home;
                 changed = true;
             }
         }
@@ -15882,10 +15845,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     applyNtpSettings();
     renderRecentSites();
 
-    document.querySelectorAll('.ntp-card').forEach(card => card.addEventListener('click', () => {
-        const dashboardUrl = resolveInternalDashboardUrl(card.dataset.dashboard);
-        navigateTo(dashboardUrl || card.dataset.url);
-    }));
+    document.querySelectorAll('.ntp-card').forEach(card => card.addEventListener('click', () => navigateTo(card.dataset.url)));
     document.getElementById('boOpen').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) window.open(t.url, '_blank'); });
     document.getElementById('boRetry').addEventListener('click', () => { const t = getActiveTab(); if (t?.url) navigateTo(t.url); });
     const ctxMenu = document.getElementById('ctxMenu');

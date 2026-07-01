@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "LiveOS Plugin Dashboard",
+  "version": "1.0.0",
+  "description": "Standalone LiveOS analytics dashboard bundled as an unpacked EtherX extension.",
+  "permissions": ["tabs"],
+  "action": {
+    "default_title": "LiveOS Plugin Dashboard",
+    "default_popup": "popup.html"
+  }
+}

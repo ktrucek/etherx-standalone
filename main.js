@@ -1634,6 +1634,20 @@ app.whenReady().then(async () => {
     console.warn("[Ext] Reveye setup error:", e.message);
   }
 
+
+  // Auto-load bundled LiveOS Plugin Dashboard extension
+  try {
+    const liveOsPluginPath = path.join(__dirname, "liveos-plugin-extension");
+    if (fs.existsSync(path.join(liveOsPluginPath, "manifest.json"))) {
+      session.defaultSession
+        .loadExtension(liveOsPluginPath, { allowFileAccess: true })
+        .then((ext) => console.log("[Ext] LiveOS Plugin loaded:", ext.name, ext.id))
+        .catch((e) => console.warn("[Ext] LiveOS Plugin load skipped:", e.message));
+    }
+  } catch (e) {
+    console.warn("[Ext] LiveOS Plugin setup error:", e.message);
+  }
+
   // Setup IPC handlers ONCE before creating any window
   if (!_ipcSetupDone) {
     setupIPC();
