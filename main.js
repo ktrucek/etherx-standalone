@@ -2893,7 +2893,7 @@ function setupIPC() {
       const list = Array.isArray(all) ? all : Object.values(all || {});
       const ext = list.find((item) => item && (item.name === "LiveOS Plugin Dashboard" || item.name === "LiveOS Plugin"));
       if (!ext) return { ok: false, error: "Builtin LiveOS Plugin is not loaded." };
-      return { ok: true, id: ext.id, name: ext.name, url: `chrome-extension:///index.html` };
+      return { ok: true, id: ext.id, name: ext.name, url: "chrome-extension://" + ext.id + "/index.html" };
     } catch (e) {
       return { ok: false, error: e.message };
     }
