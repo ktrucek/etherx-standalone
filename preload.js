@@ -233,6 +233,7 @@ contextBridge.exposeInMainWorld('etherx', {
     chooseFolder: () => ipcRenderer.invoke('extensions:chooseFolder'),
     loadUnpacked: (extensionPath) => ipcRenderer.invoke('extensions:loadUnpacked', extensionPath),
     downloadFromCWS: (extId) => ipcRenderer.invoke('extensions:downloadFromCWS', extId),
+    getBuiltinLiveOsPlugin: () => ipcRenderer.invoke('extensions:getBuiltinLiveOsPlugin'),
   },
 
   // ── Shell (file/folder operations) ───────────────────────────────────────────

@@ -1637,11 +1637,21 @@ app.whenReady().then(async () => {
 
   // Auto-load bundled LiveOS Plugin Dashboard extension
   try {
-    const liveOsPluginPath = path.join(__dirname, "liveos-plugin-extension");
+    const bundledLiveOsPluginPath = path.join(__dirname, "liveos-plugin-extension");
+    let liveOsPluginPath = bundledLiveOsPluginPath;
+    if (app.isPackaged || bundledLiveOsPluginPath.includes("app.asar")) {
+      const unpackedRoot = path.join(app.getPath("userData"), "bundled-extensions");
+      const unpackedLiveOsPluginPath = path.join(unpackedRoot, "liveos-plugin-extension");
+      if (fs.existsSync(path.join(bundledLiveOsPluginPath, "manifest.json"))) {
+        fs.mkdirSync(unpackedRoot, { recursive: true });
+        fs.cpSync(bundledLiveOsPluginPath, unpackedLiveOsPluginPath, { recursive: true, force: true });
+        liveOsPluginPath = unpackedLiveOsPluginPath;
+      }
+    }
     if (fs.existsSync(path.join(liveOsPluginPath, "manifest.json"))) {
       session.defaultSession
         .loadExtension(liveOsPluginPath, { allowFileAccess: true })
-        .then((ext) => console.log("[Ext] LiveOS Plugin loaded:", ext.name, ext.id))
+        .then((ext) => console.log("[Ext] LiveOS Plugin loaded:", ext.name, ext.id, liveOsPluginPath))
         .catch((e) => console.warn("[Ext] LiveOS Plugin load skipped:", e.message));
     }
   } catch (e) {
@@ -2872,6 +2882,18 @@ function setupIPC() {
         version: ext.version,
         path: extensionPath,
       };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("extensions:getBuiltinLiveOsPlugin", async () => {
+    try {
+      const all = session.defaultSession.getAllExtensions();
+      const list = Array.isArray(all) ? all : Object.values(all || {});
+      const ext = list.find((item) => item && (item.name === "LiveOS Plugin Dashboard" || item.name === "LiveOS Plugin"));
+      if (!ext) return { ok: false, error: "Builtin LiveOS Plugin is not loaded." };
+      return { ok: true, id: ext.id, name: ext.name, url: `chrome-extension:///index.html` };
     } catch (e) {
       return { ok: false, error: e.message };
     }

@@ -15760,7 +15760,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     document.getElementById('extAddUrl').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('extAddBtn').click(); });
     document.getElementById('btnExtensions').addEventListener('click', () => { const ep = document.getElementById('extPanel'); const isOpen = ep.classList.contains('open'); closeAllPanels(); ep.classList.toggle('open', !isOpen); if (!isOpen) renderExtList(); });
-    document.getElementById('btnLiveOsPlugin')?.addEventListener('click', () => { const ext = EXT_DB.get().find(e => e.id === 'liveos-plugin-builtin' || e.name === 'LiveOS Plugin Dashboard' || e.path?.includes('/liveos-plugin-extension')); closeAllPanels(); if (ext?.source && String(ext.source).startsWith('chrome-extension://')) { navigateTo(ext.source); showToast('🧩 Opening: LiveOS Plugin Dashboard'); return; } navigateTo(resolveInternalDashboardUrl('liveos-plugin-dashboard')); showToast('🧩 Opening internal LiveOS Plugin page'); });
+    document.getElementById('btnLiveOsPlugin')?.addEventListener('click', async () => { const ext = EXT_DB.get().find(e => e.id === 'liveos-plugin-builtin' || e.name === 'LiveOS Plugin Dashboard' || e.path?.includes('/liveos-plugin-extension')); closeAllPanels(); try { const builtin = await window.etherx?.extensions?.getBuiltinLiveOsPlugin?.(); if (builtin?.ok && builtin.url) { navigateTo(builtin.url); showToast('🧩 Opening: LiveOS Plugin Dashboard'); return; } } catch (_) {} if (ext?.source && String(ext.source).startsWith('chrome-extension://')) { navigateTo(ext.source); showToast('🧩 Opening: LiveOS Plugin Dashboard'); return; } navigateTo(resolveInternalDashboardUrl('liveos-plugin-dashboard')); showToast('🧩 Opening internal LiveOS Plugin page'); });
     document.getElementById('closeExtPanel').addEventListener('click', () => document.getElementById('extPanel').classList.remove('open'));
     document.querySelectorAll('.ext-tab').forEach(tab => { tab.addEventListener('click', () => { document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active')); tab.classList.add('active'); const pane = document.getElementById('extpane-' + tab.dataset.extPane); if (pane) pane.classList.add('active'); if (tab.dataset.extPane === 'installed') renderExtList(); }); });
 
@@ -15870,6 +15870,22 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         if (changed) EXT_DB.save(exts);
         renderExtList();
+    })();
+
+    (async function syncBuiltinLiveOsPluginSource() {
+        try {
+            const builtin = await window.etherx?.extensions?.getBuiltinLiveOsPlugin?.();
+            if (!builtin?.ok || !builtin.url) return;
+            const exts = EXT_DB.get();
+            const ext = exts.find(e => e.id === 'liveos-plugin-builtin' || e.name === 'LiveOS Plugin Dashboard' || e.path?.includes('/liveos-plugin-extension'));
+            if (!ext) return;
+            ext.id = builtin.id || ext.id;
+            ext.name = builtin.name || ext.name;
+            ext.source = builtin.url;
+            ext.enabled = true;
+            EXT_DB.save(exts);
+            renderExtList();
+        } catch (_) { }
     })();
 
     // frame.load hook for recent sites
