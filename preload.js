@@ -275,6 +275,11 @@ contextBridge.exposeInMainWorld('etherx', {
     clear: () => ipcRenderer.sendSync('storage:clear'),
   },
 
+  liveos: {
+    publishSnapshot: (snapshot) => ipcRenderer.invoke('liveos:publishSnapshot', snapshot),
+    getSnapshot: () => ipcRenderer.invoke('liveos:getSnapshot'),
+  },
+
   // ── DevTools ──────────────────────────────────────────────────────────────────
   devtools: {
     toggle: () => ipcRenderer.send('devtools:toggle'),
@@ -282,7 +287,7 @@ contextBridge.exposeInMainWorld('etherx', {
 
   // ── Event listeners ───────────────────────────────────────────────────────────
   on: (channel, fn) => {
-    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab', 'update:progress', 'network-log-batch'];
+    const allowed = ['open-url', 'phishing-warning', 'adblock-update', 'webview-context-menu', 'download-update', 'app:createTab', 'update:progress', 'network-log-batch', 'liveos:command'];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, ...a) => fn(...a));
   },
   off: (channel, fn) => ipcRenderer.removeListener(channel, fn),

@@ -283,9 +283,28 @@ document.querySelector(".ghost-btn:not(.small)")?.addEventListener("click", () =
   showToast("Dashboard export created");
 });
 
-document.querySelector(".primary-btn")?.addEventListener("click", () => {
-  setView("tools");
-  showToast("Plugin tools opened");
+const pluginToolsButton = document.querySelector(".primary-btn");
+let pluginToolsMenu = null;
+pluginToolsButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (pluginToolsMenu) {
+    pluginToolsMenu.remove();
+    pluginToolsMenu = null;
+    return;
+  }
+  pluginToolsMenu = document.createElement("div");
+  pluginToolsMenu.className = "plugin-tools-menu";
+  pluginToolsMenu.style.cssText = "position:fixed;z-index:1000;right:24px;top:68px;width:220px;padding:8px;background:#171b2d;border:1px solid rgba(255,255,255,.14);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.45);display:grid;gap:6px";
+  const actions = [
+    ["▶ Start Scan", "start-scan"],
+    ["■ Stop Scan", "stop-scan"],
+    ["💬 Open AI Live Chat", "open-ai-live-chat"],
+    ["♫ SongRec Now", "songrec-now"],
+  ];
+  pluginToolsMenu.innerHTML = actions.map(([label, action]) =>
+    `<button type="button" data-liveos-command="${action}" style="text-align:left;padding:9px 10px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.04);color:#eef2ff;cursor:pointer">${label}</button>`
+  ).join("");
+  document.body.appendChild(pluginToolsMenu);
 });
 
 document.querySelector(".search")?.addEventListener("click", () => {
@@ -296,6 +315,8 @@ document.querySelector(".search")?.addEventListener("click", () => {
 setView("dashboard");
 
 const state = { view: "dashboard" };
+let liveOsSnapshot = null;
+let liveOsTimelineFilter = "all";
 const liveosViewState = { range: {}, drafts: {} };
 const liveosMeta = {
   dashboard: { label: "Plugin Dashboard", title: "LiveOS Plugin Dashboard", subtitle: "Separate dashboard plugin layout for LiveOS analytics.", visible: ["trend-panel", "gift-panel", "chat-panel", "supporters-panel", "sentiment-panel", "music-panel", "insights-panel", "timeline-panel", "health-panel", "actions-panel"], range: "6H" },
@@ -452,7 +473,11 @@ function liveosRenderView() {
   panelMap.forEach((panel, key) => panel.classList.toggle("hidden-by-view", !meta.visible.includes(key)));
   liveosRenderMetrics(model); liveosRenderTrend(meta); liveosRenderGift(model, meta); liveosRenderChat(model, meta); liveosRenderSupporters(model, meta); liveosRenderSentiment(model, meta); liveosRenderMusic(model, meta); liveosRenderInsights(model, meta); liveosRenderTimeline(model, meta); liveosRenderHealth(model, meta); liveosRenderActions(model, meta);
 }
-setView = function (key) { state.view = liveosMeta[key] ? key : "dashboard"; liveosRenderView(); };
+setView = function (key) {
+  state.view = liveosMeta[key] ? key : "dashboard";
+  if (liveOsSnapshot) renderLiveOsSnapshot(liveOsSnapshot);
+  else liveosRenderView();
+};
 function liveosSendChat() {
   const input = panelMap.get("chat-panel")?.querySelector(".chat-input-row input");
   const value = String(input?.value || "").trim(); if (!value) return;
@@ -460,6 +485,20 @@ function liveosSendChat() {
   liveosRenderChat(liveosModel(state.view), liveosMetaFor(state.view)); showToast("Message pushed to feed");
 }
 document.addEventListener("click", (event) => {
+  const commandButton = event.target.closest("[data-liveos-command]");
+  if (commandButton) {
+    const action = commandButton.dataset.liveosCommand;
+    window.liveos?.command(action).then((result) => {
+      showToast(result?.ok ? `${commandButton.textContent.trim()} requested` : (result?.error || "Command failed"));
+    }).catch((error) => showToast(error.message || "Command failed"));
+    pluginToolsMenu?.remove();
+    pluginToolsMenu = null;
+    return;
+  }
+  if (pluginToolsMenu && !event.target.closest(".plugin-tools-menu")) {
+    pluginToolsMenu.remove();
+    pluginToolsMenu = null;
+  }
   const rangeBtn = event.target.closest(".trend-panel .segmented button[data-range]");
   if (rangeBtn) { liveosViewState.range[state.view] = rangeBtn.dataset.range; liveosRenderTrend(liveosMetaFor(state.view)); showToast(`Range switched to ${rangeBtn.dataset.range}`); return; }
   const timelineBtn = event.target.closest(".timeline-panel .segmented button[data-static-filter]");
@@ -470,4 +509,188 @@ document.addEventListener("click", (event) => {
 });
 chatInput?.removeEventListener?.("keydown", sendChatMessage);
 chatInput?.addEventListener("keydown", (event) => { if (event.key === "Enter") liveosSendChat(); });
-liveosRenderView();
+function liveOsFormat(value) {
+  return new Intl.NumberFormat("hr-HR").format(Math.max(0, Number(value || 0)));
+}
+function liveOsRelativeTime(ts) {
+  const seconds = Math.max(0, Math.floor((Date.now() - Number(ts || Date.now())) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h`;
+}
+function liveOsEventType(event) {
+  const type = String(event?.type || "chat").toLowerCase();
+  return ["gift", "subscriber", "caption", "song", "join", "share", "like", "chat"].includes(type) ? type : "chat";
+}
+function renderLiveOsMetrics(snapshot) {
+  const session = snapshot.session || {};
+  const startedAt = Number(session.startedAt || 0);
+  const duration = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 60000)) : 0;
+  const rows = [
+    { icon: "◷", label: "Session Time", value: `${duration}m`, meta: snapshot.connection?.state || "idle", delta: "" },
+    { icon: "◌", label: "Viewers", value: liveOsFormat(session.currentViewers), meta: `Peak: ${liveOsFormat(session.peakViewers)}`, delta: "" },
+    { icon: "✦", label: "Gift Coins", value: liveOsFormat(session.totalCoins), meta: `${liveOsFormat(snapshot.gifts?.length)} gift types`, delta: "" },
+    { icon: "⟡", label: "Events", value: liveOsFormat(session.messageCount), meta: "Current session", delta: "" },
+    { icon: "♡", label: "Users", value: liveOsFormat(session.uniqueUsers), meta: "Unique", delta: "" },
+  ];
+  metricCards.forEach((card, index) => {
+    const row = rows[index];
+    if (!row) return;
+    card.querySelector(".metric-icon").textContent = row.icon;
+    card.querySelector(".metric-label").textContent = row.label;
+    card.querySelector("strong").textContent = row.value;
+    card.querySelector("small").textContent = row.meta;
+    const delta = card.querySelector("em");
+    if (delta) delta.textContent = row.delta;
+  });
+}
+function renderLiveOsTimeline(snapshot) {
+  const panel = panelMap.get("timeline-panel");
+  if (!panel) return;
+  const allEvents = Array.isArray(snapshot.events) ? snapshot.events : [];
+  const filters = ["all", "gift", "chat", "join", "share", "like", "caption"];
+  panel.querySelector(".segmented").innerHTML = filters.map((filter) => {
+    const count = filter === "all" ? allEvents.length : allEvents.filter((event) => liveOsEventType(event) === filter || (filter === "gift" && liveOsEventType(event) === "subscriber")).length;
+    const label = filter === "caption" ? "CC" : filter[0].toUpperCase() + filter.slice(1);
+    return `<button class="${filter === liveOsTimelineFilter ? "active" : ""}" data-liveos-filter="${filter}">${label} (${count})</button>`;
+  }).join("");
+  const events = allEvents
+    .filter((event) => liveOsTimelineFilter === "all" || liveOsEventType(event) === liveOsTimelineFilter || (liveOsTimelineFilter === "gift" && liveOsEventType(event) === "subscriber"))
+    .slice(-100)
+    .reverse();
+  panel.querySelector(".timeline-list").innerHTML = events.length ? events.map((event) => {
+    const type = liveOsEventType(event);
+    const gift = type === "gift" || type === "subscriber"
+      ? ` · ${liveosEsc(event.giftName || "Gift")} ×${liveOsFormat(event.quantity || 1)} · ${liveOsFormat(event.coins)} coins`
+      : "";
+    return `<div class="timeline-item"><span><b>${liveosEsc(type.toUpperCase())}</b> · ${liveosEsc(event.user || "Unknown")} · ${liveosEsc(event.text || "")}${gift}</span><small>${liveOsRelativeTime(event.ts)}</small></div>`;
+  }).join("") : '<div class="timeline-item"><span>No events for this filter.</span></div>';
+}
+function renderLiveOsDataPanels(snapshot) {
+  const gifts = Array.isArray(snapshot.gifts) ? snapshot.gifts : [];
+  const giftPanel = panelMap.get("gift-panel");
+  if (giftPanel) {
+    const total = gifts.reduce((sum, gift) => sum + Number(gift.coins || 0), 0);
+    giftPanel.querySelector("h2").textContent = "Gift Distribution";
+    giftPanel.querySelector(".panel-head p").textContent = `${liveOsFormat(gifts.reduce((sum, gift) => sum + Number(gift.quantity || 0), 0))} gifts · ${liveOsFormat(gifts.length)} types`;
+    giftPanel.querySelector(".donut-hole strong").textContent = liveOsFormat(total);
+    giftPanel.querySelector(".donut-hole span").textContent = "Coins";
+    giftPanel.querySelector(".legend").innerHTML = gifts.slice(0, 8).map((gift, index) => {
+      const pct = total > 0 ? Math.round(Number(gift.coins || 0) / total * 100) : 0;
+      return `<div><span class="dot ${liveosDots[index % liveosDots.length]}"></span><span class="legend-name">${liveosEsc(gift.name)}</span><b>${liveOsFormat(gift.coins)}</b><small>(${pct}%)</small></div>`;
+    }).join("") || "<div>No gift events in this session.</div>";
+  }
+  const chatPanel = panelMap.get("chat-panel");
+  if (chatPanel) {
+    const events = (snapshot.events || []).filter((event) => ["chat", "caption"].includes(liveOsEventType(event))).slice(-50).reverse();
+    chatPanel.querySelector("h2").textContent = "Live Chat & Host CC";
+    chatPanel.querySelector(".panel-head p").textContent = `${liveOsFormat(events.length)} recent rows`;
+    chatPanel.querySelector(".chat-list").innerHTML = events.map((event, index) =>
+      `<div class="chat-item ${liveosTones[index % liveosTones.length]}"><span class="chat-user">${liveosEsc(liveOsEventType(event) === "caption" ? "HOST CC" : event.user)}</span><span class="chat-event">${liveosEsc(event.translatedText || event.text)}</span><small>${liveOsRelativeTime(event.ts)}</small></div>`
+    ).join("") || '<div class="chat-item"><span class="chat-event">Waiting for chat and creator captions.</span></div>';
+  }
+  const supportersPanel = panelMap.get("supporters-panel");
+  if (supportersPanel) {
+    const showingUsers = state.view === "users";
+    const rows = showingUsers
+      ? (Array.isArray(snapshot.users) ? snapshot.users : [])
+      : (Array.isArray(snapshot.supporters) ? snapshot.supporters : []);
+    supportersPanel.querySelector("h2").textContent = showingUsers ? "All Users" : "Top Supporters";
+    supportersPanel.querySelector(".panel-head p").textContent = showingUsers ? `${liveOsFormat(rows.length)} session users` : "By gift coins";
+    supportersPanel.querySelector(".supporters-list").innerHTML = rows.slice(0, showingUsers ? 500 : 50).map((row, index) =>
+      `<div class="row"><span class="rank">${index + 1}</span><span class="supporter-name">${liveosEsc(row.user)}</span><b>${liveOsFormat(showingUsers ? row.total : row.coins)}</b><small>${showingUsers ? `chat ${liveOsFormat(row.chat)} · gifts ${liveOsFormat(row.gifts)} · joins ${liveOsFormat(row.joins)}` : `${liveOsFormat(row.events)} events`}</small></div>`
+    ).join("") || `<div class="row"><span class="supporter-name">${showingUsers ? "No users in this session." : "No supporters yet."}</span></div>`;
+  }
+  const insightsPanel = panelMap.get("insights-panel");
+  if (insightsPanel) {
+    const insights = Array.isArray(snapshot.insights) ? snapshot.insights : [];
+    insightsPanel.querySelector(".insight-list").innerHTML = insights.map((insight) =>
+      `<div class="insight-item ${insight.type === "spike" ? "warn" : "info"}"><span>${liveosEsc(insight.text)}</span><b>${liveOsFormat(insight.score)}</b></div>`
+    ).join("") || '<div class="insight-item"><span>No calculated insights yet.</span><b>-</b></div>';
+  }
+  const sentimentPanel = panelMap.get("sentiment-panel");
+  if (sentimentPanel) {
+    const sentiment = snapshot.sentiment || {};
+    const counts = sentiment.counts || {};
+    const confidence = sentiment.confidence == null ? "-" : `${liveOsFormat(sentiment.confidence)}%`;
+    sentimentPanel.querySelector(".gauge-ring strong").textContent = confidence;
+    sentimentPanel.querySelector(".gauge-ring span").textContent = String(sentiment.label || "neutral");
+    sentimentPanel.querySelector(".mood-stats").innerHTML = [
+      ["Positive", counts.positivePct],
+      ["Neutral", counts.neutralPct],
+      ["Negative", counts.negativePct],
+    ].map(([label, value]) => `<div><span>${label}</span><b>${liveOsFormat(value)}%</b></div>`).join("");
+  }
+  const musicPanel = panelMap.get("music-panel");
+  if (musicPanel) {
+    const track = snapshot.music?.currentTrack;
+    musicPanel.querySelector(".track-card strong").textContent = track?.title || "No track detected";
+    musicPanel.querySelector(".track-card p").textContent = track?.source || "SongRec / DJ CC";
+    musicPanel.querySelector(".track-meta .track-badge").textContent = track?.bpm ? `⟲ ${track.bpm}` : "BPM -";
+  }
+  const healthPanel = panelMap.get("health-panel");
+  if (healthPanel) {
+    const stateLabel = String(snapshot.connection?.state || "idle");
+    healthPanel.querySelector(".health-pill").textContent = stateLabel;
+    healthPanel.querySelector(".health-metrics").innerHTML = [
+      ["Data Bridge", "Online", "Good"],
+      ["Scan State", stateLabel, stateLabel === "scanning" ? "Live" : "Waiting"],
+      ["Last Event", snapshot.connection?.lastEventAt ? liveOsRelativeTime(snapshot.connection.lastEventAt) : "-", "Ago"],
+      ["Snapshot", snapshot.publishedAt ? liveOsRelativeTime(snapshot.publishedAt) : "-", "Ago"],
+    ].map(([label, value, meta]) => `<div><span>${liveosEsc(label)}</span><b>${liveosEsc(value)}</b><small>${liveosEsc(meta)}</small></div>`).join("");
+  }
+}
+function renderLiveOsSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  liveOsSnapshot = snapshot;
+  const meta = liveosMetaFor(state.view);
+  if (titleNode) titleNode.textContent = state.view === "dashboard" ? (snapshot.session?.title || "LiveOS Dashboard") : meta.title;
+  if (subtitleNode) subtitleNode.textContent = `${snapshot.connection?.state || "idle"} · ${liveOsFormat(snapshot.session?.messageCount)} events · updated ${liveOsRelativeTime(snapshot.publishedAt)}`;
+  navButtons.forEach((button) => {
+    const label = button.textContent.replace(/^[^A-Za-z]+/, "").trim();
+    button.classList.toggle("active", label === meta.label);
+  });
+  panelMap.forEach((panel, key) => panel.classList.toggle("hidden-by-view", !meta.visible.includes(key)));
+  renderLiveOsMetrics(snapshot);
+  renderLiveOsTimeline(snapshot);
+  renderLiveOsDataPanels(snapshot);
+}
+async function bootLiveOsBridge() {
+  const emptySnapshot = {
+    publishedAt: Date.now(),
+    connection: { state: "idle", lastEventAt: null },
+    session: { messageCount: 0, currentViewers: 0, peakViewers: 0, totalCoins: 0, uniqueUsers: 0 },
+    events: [], users: [], gifts: [], supporters: [], insights: [],
+    music: {}, sentiment: { label: "neutral", counts: {} },
+  };
+  if (!window.liveos) {
+    renderLiveOsSnapshot(emptySnapshot);
+    if (subtitleNode) subtitleNode.textContent = "LiveOS bridge unavailable. Open the bundled extension dashboard.";
+    return;
+  }
+  window.liveos.onSnapshot(renderLiveOsSnapshot);
+  const result = await window.liveos.subscribe();
+  const snapshot = result?.snapshot || await window.liveos.getSnapshot();
+  if (snapshot) renderLiveOsSnapshot(snapshot);
+  else {
+    renderLiveOsSnapshot(emptySnapshot);
+    if (subtitleNode) subtitleNode.textContent = "Waiting for AI Live Chat data. Start TikTok scanning.";
+  }
+  window.addEventListener("beforeunload", () => window.liveos.unsubscribe());
+}
+document.addEventListener("click", (event) => {
+  const filter = event.target.closest("[data-liveos-filter]");
+  if (filter && liveOsSnapshot) {
+    liveOsTimelineFilter = filter.dataset.liveosFilter || "all";
+    renderLiveOsTimeline(liveOsSnapshot);
+    return;
+  }
+  if (event.target.closest(".supporters-panel .ghost-btn.small")) {
+    setView("users");
+  } else if (event.target.closest(".insights-panel .ghost-btn.small")) {
+    setView("analytics");
+  }
+});
+bootLiveOsBridge().catch((error) => {
+  if (subtitleNode) subtitleNode.textContent = `LiveOS bridge error: ${error.message || error}`;
+});

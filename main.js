@@ -216,6 +216,88 @@ try {
 
 // ─── Global state ─────────────────────────────────────────────────────────────
 let mainWindow = null;
+let liveOsSnapshot = null;
+const liveOsSubscribers = new Set();
+
+function sanitizeLiveOsSnapshot(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const safeText = (value, max = 500) => String(value || "").slice(0, max);
+  const safeNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const events = Array.isArray(source.events) ? source.events.slice(-1000) : [];
+  const settings = source.settings && typeof source.settings === "object" ? source.settings : {};
+  const safeSettings = {};
+  for (const [key, value] of Object.entries(settings)) {
+    if (!/^tkai[A-Z0-9_]/.test(key)) continue;
+    if (/(key|token|secret|password|license|hash)/i.test(key)) {
+      safeSettings[key] = { configured: !!String(value || "").trim() };
+      continue;
+    }
+    if (["boolean", "number", "string"].includes(typeof value)) {
+      safeSettings[key] = typeof value === "string" ? value.slice(0, 1000) : value;
+    }
+  }
+  const safeEvents = events.map((event) => ({
+    id: safeText(event?.id, 180),
+    type: safeText(event?.type || "chat", 24),
+    sourceType: safeText(event?.sourceType, 24),
+    user: safeText(event?.user, 80),
+    userHandle: safeText(event?.userHandle, 80),
+    text: safeText(event?.text, 600),
+    translatedText: safeText(event?.translatedText, 600),
+    translatedLang: safeText(event?.translatedLang, 16),
+    ts: safeNumber(event?.ts),
+    giftName: safeText(event?.giftName, 120),
+    quantity: safeNumber(event?.quantity),
+    unitCoins: safeNumber(event?.unitCoins),
+    coins: safeNumber(event?.coins),
+  }));
+  return {
+    version: 1,
+    publishedAt: Date.now(),
+    connection: {
+      state: safeText(source.connection?.state || "idle", 24),
+      tabId: safeNumber(source.connection?.tabId) || null,
+      liveUrl: safeText(source.connection?.liveUrl, 1000),
+      owner: safeText(source.connection?.owner, 80),
+      startedAt: safeNumber(source.connection?.startedAt) || null,
+      lastEventAt: safeNumber(source.connection?.lastEventAt) || null,
+      error: safeText(source.connection?.error, 300),
+    },
+    session: {
+      id: safeText(source.session?.id, 120),
+      title: safeText(source.session?.title, 180),
+      startedAt: safeNumber(source.session?.startedAt) || null,
+      endedAt: safeNumber(source.session?.endedAt) || null,
+      messageCount: safeNumber(source.session?.messageCount),
+      peakViewers: safeNumber(source.session?.peakViewers),
+      currentViewers: safeNumber(source.session?.currentViewers),
+      totalCoins: safeNumber(source.session?.totalCoins),
+      uniqueUsers: safeNumber(source.session?.uniqueUsers),
+    },
+    events: safeEvents,
+    users: Array.isArray(source.users) ? source.users.slice(0, 500) : [],
+    gifts: Array.isArray(source.gifts) ? source.gifts.slice(0, 500) : [],
+    supporters: Array.isArray(source.supporters) ? source.supporters.slice(0, 200) : [],
+    insights: Array.isArray(source.insights) ? source.insights.slice(0, 100) : [],
+    scans: Array.isArray(source.scans) ? source.scans.slice(0, 100) : [],
+    music: source.music && typeof source.music === "object" ? source.music : {},
+    sentiment: source.sentiment && typeof source.sentiment === "object" ? source.sentiment : {},
+    settings: safeSettings,
+  };
+}
+
+function publishLiveOsSnapshot(snapshot) {
+  liveOsSnapshot = sanitizeLiveOsSnapshot(snapshot);
+  for (const id of Array.from(liveOsSubscribers)) {
+    const contents = require("electron").webContents.fromId(id);
+    if (!contents || contents.isDestroyed()) {
+      liveOsSubscribers.delete(id);
+      continue;
+    }
+    contents.send("liveos:snapshot", liveOsSnapshot);
+  }
+  return liveOsSnapshot;
+}
 let db = null;
 let adBlocker = null;
 let ai = null;
@@ -2474,6 +2556,45 @@ function createWindow() {
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 function setupIPC() {
+  const isAuthorizedLiveOsReader = (sender) => {
+    if (!sender) return false;
+    if (mainWindow && sender.id === mainWindow.webContents.id) return true;
+    return String(sender.getURL?.() || "").startsWith("chrome-extension://");
+  };
+  ipcMain.handle("liveos:publishSnapshot", (event, payload) => {
+    if (!mainWindow || event.sender.id !== mainWindow.webContents.id) {
+      return { ok: false, error: "LiveOS publisher is not authorized." };
+    }
+    publishLiveOsSnapshot(payload);
+    return { ok: true, publishedAt: liveOsSnapshot?.publishedAt || Date.now() };
+  });
+  ipcMain.handle("liveos:getSnapshot", (event) =>
+    isAuthorizedLiveOsReader(event.sender) ? liveOsSnapshot : null);
+  ipcMain.handle("liveos:subscribe", (event) => {
+    const senderUrl = String(event.sender.getURL?.() || "");
+    if (!senderUrl.startsWith("chrome-extension://") && event.sender.id !== mainWindow?.webContents.id) {
+      return { ok: false, error: "LiveOS subscriber is not authorized." };
+    }
+    liveOsSubscribers.add(event.sender.id);
+    event.sender.once("destroyed", () => liveOsSubscribers.delete(event.sender.id));
+    return { ok: true, snapshot: liveOsSnapshot };
+  });
+  ipcMain.handle("liveos:unsubscribe", (event) => {
+    liveOsSubscribers.delete(event.sender.id);
+    return { ok: true };
+  });
+  ipcMain.handle("liveos:command", (event, action) => {
+    const allowed = new Set(["start-scan", "stop-scan", "open-ai-live-chat", "songrec-now"]);
+    const normalized = String(action || "");
+    if (!isAuthorizedLiveOsReader(event.sender) || !allowed.has(normalized)) {
+      return { ok: false, error: "LiveOS command is not authorized." };
+    }
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { ok: false, error: "Main window is unavailable." };
+    }
+    mainWindow.webContents.send("liveos:command", { action: normalized });
+    return { ok: true, action: normalized };
+  });
   ipcMain.on("get-window-id", (event) => {
     event.returnValue =
       BrowserWindow.fromWebContents(event.sender)?.id || "main";

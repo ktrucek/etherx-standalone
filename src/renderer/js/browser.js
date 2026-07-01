@@ -4848,6 +4848,78 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let nllbTranslateInFlight = false;
     const TKAI_FORCED_TRANSLATE_USERS_KEY = 'tkaiForcedTranslateUsers';
     const STORAGE_KEY = 'ex_tkai_cfg';
+    let liveOsPublishTimer = null;
+
+    function scheduleLiveOsSnapshotPublish() {
+        if (!window.etherx?.liveos?.publishSnapshot) return;
+        if (liveOsPublishTimer) clearTimeout(liveOsPublishTimer);
+        liveOsPublishTimer = setTimeout(() => {
+            liveOsPublishTimer = null;
+            try {
+                const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
+                const giftStats = computeGiftStats();
+                const users = buildUserStats(messages, Math.max(200, Number(DB.getSettings().tkaiUserScanLimit || 200)));
+                const insightsSnapshot = computeInsightsSnapshot(messages);
+                const tab = getActiveTab();
+                const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
+                const lastEventAt = messages.reduce((max, row) => Math.max(max, Number(row?.ts || 0)), 0);
+                const giftTypes = new Map();
+                messages.forEach((message) => {
+                    const type = normalizeTkaiMessageType(message);
+                    if (type !== 'gift' && type !== 'subscriber') return;
+                    const name = String(message.giftName || safeResolveGiftMetaFromMessage(message)?.giftName || message.text || 'Unknown gift').trim();
+                    const key = name.toLowerCase();
+                    const row = giftTypes.get(key) || { name, events: 0, quantity: 0, coins: 0 };
+                    row.events += 1;
+                    row.quantity += Math.max(1, Number(message.quantity || 1));
+                    row.coins += Math.max(0, Number(message.coins || 0));
+                    giftTypes.set(key, row);
+                });
+                const snapshot = {
+                    connection: {
+                        state: scanActive ? 'scanning' : (messages.length ? 'paused' : 'idle'),
+                        tabId: tab?.id || null,
+                        liveUrl: tab?.url || '',
+                        owner,
+                        startedAt: sessionStartedAt,
+                        lastEventAt,
+                        error: '',
+                    },
+                    session: {
+                        id: sessionStartedAt ? `live-${sessionStartedAt}` : '',
+                        title: owner ? `@${owner} LIVE` : 'TikTok LIVE',
+                        startedAt: sessionStartedAt,
+                        messageCount: messages.length,
+                        peakViewers: peakViewerCount,
+                        currentViewers: liveViewerCount,
+                        totalCoins: giftStats.totalCoins,
+                        uniqueUsers: users.length,
+                    },
+                    events: messages,
+                    users,
+                    gifts: Array.from(giftTypes.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity),
+                    supporters: Array.isArray(giftStats.leaders) ? giftStats.leaders : [],
+                    insights: [
+                        ...(insightsSnapshot.topTopics || []).map((topic) => ({ type: 'topic', text: String(topic?.topic || topic?.label || topic), score: Number(topic?.count || 0) })),
+                        ...(insightsSnapshot.spikes || []).map((spike) => ({ type: 'spike', text: `${spike.type || 'activity'} spike`, score: Number(spike.delta || 0), ts: Number(spike.ts || Date.now()) })),
+                    ],
+                    music: {
+                        currentTrack: insightsSnapshot.songs?.[0] || null,
+                        history: insightsSnapshot.songs || [],
+                    },
+                    sentiment: {
+                        label: _cardiffSentiment?.label || insightsSnapshot.sentiment || 'neutral',
+                        confidence: _cardiffSentiment ? Math.round(Number(_cardiffSentiment.score || 0) * 100) : null,
+                        counts: insightsSnapshot.sentimentCounts || {},
+                    },
+                    settings: DB.getSettings(),
+                };
+                window.etherx.liveos.publishSnapshot(snapshot).catch(() => {});
+            } catch (error) {
+                console.warn('[LiveOS] Snapshot publish failed:', error);
+            }
+        }, 350);
+    }
     const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
     const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
     const TKAI_SCAN_FAST_WINDOW_MS = 30000;
@@ -5182,6 +5254,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let dashboardLayoutLocked = DB.getSettings().tkaiDashboardLayoutLocked !== false;
     let dashboardLayoutFolded = DB.getSettings().tkaiDashboardLayoutFolded === true;
     let lastShadowbanUserStats = [];
+    try {
+        const eventDefaultsMigrationKey = 'ex_tkai_event_defaults_v2';
+        if (localStorage.getItem(eventDefaultsMigrationKey) !== '1') {
+            DB.saveSetting('tkaiScanJoins', true);
+            DB.saveSetting('tkaiScanShares', true);
+            DB.saveSetting('tkaiScanLikes', true);
+            DB.saveSetting('tkaiPieIncludeJoin', true);
+            DB.saveSetting('tkaiPieIncludeShare', true);
+            DB.saveSetting('tkaiPieIncludeLike', true);
+            localStorage.setItem(eventDefaultsMigrationKey, '1');
+        }
+    } catch (_) { }
     const toneEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTone"]');
     const readLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiReadLang"]');
     const translateLangEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTranslateLang"]');
@@ -7660,11 +7744,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 .filter((m) => normalizeTkaiMessageType(m) === 'like')
                 .reduce((sum, m) => sum + Math.max(1, Number(m?.quantity || 1)), 0)
         };
-        const msgTypeTotal = Math.max(
-            1,
-            msgTypeCounts.chat + msgTypeCounts.gift + msgTypeCounts.caption + msgTypeCounts.song + msgTypeCounts.join + msgTypeCounts.share + msgTypeCounts.like
-        );
-        const pieBreakdown = [
+        const pieRows = [
             { key: 'chat', label: 'Chat', color: '#60a5fa', value: msgTypeCounts.chat },
             { key: 'gift', label: 'Gifts', color: '#f97316', value: msgTypeCounts.gift },
             { key: 'caption', label: 'CC', color: '#a78bfa', value: msgTypeCounts.caption },
@@ -7672,10 +7752,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             { key: 'join', label: 'Join', color: '#6b7280', value: msgTypeCounts.join },
             { key: 'share', label: 'Share', color: '#f472b6', value: msgTypeCounts.share },
             { key: 'like', label: 'Likes', color: '#fb7185', value: msgTypeCounts.like }
-        ].map((row) => ({
-            ...row,
-            pct: Math.round((row.value / msgTypeTotal) * 100)
-        })).filter((row) => {
+        ].filter((row) => {
             const cfg = DB.getSettings();
             if (row.key === 'chat') return cfg.tkaiPieIncludeChat !== false;
             if (row.key === 'gift') return cfg.tkaiPieIncludeGift !== false;
@@ -7686,6 +7763,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (row.key === 'like') return cfg.tkaiPieIncludeLike !== false;
             return true;
         });
+        const visiblePieTotal = pieRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+        const pieBreakdown = pieRows.map((row) => ({
+            ...row,
+            pct: visiblePieTotal > 0 ? (Number(row.value || 0) / visiblePieTotal) * 100 : 0
+        }));
 
         const shareEvents = messages
             .filter((m) => m && isShareLikeMessage(m))
@@ -8820,6 +8902,124 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             card.dataset.tkaiCardInit = '1';
         });
     }
+    function initTkaiSessionLayout() {
+        const root = document.querySelector('#tiktokAIPanel .tkai-main-wrap');
+        if (!root || root.dataset.tkaiLayoutInit === '1') return;
+        root.dataset.tkaiLayoutInit = '1';
+        const orderKey = 'ex_tkai_session_layout_v1';
+        const collapsedPrefix = 'ex_tkai_session_collapsed_';
+        const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement);
+        const originalOrder = [];
+        let draggedSection = null;
+        let dragArmed = false;
+
+        sections.forEach((section, index) => {
+            const key = section.id || `section-${index}`;
+            section.dataset.tkaiLayoutKey = key;
+            section.classList.add('tkai-layout-section');
+            originalOrder.push(key);
+
+            const tools = document.createElement('div');
+            tools.className = 'tkai-section-tools';
+            const drag = document.createElement('button');
+            drag.type = 'button';
+            drag.className = 'tkai-section-tool tkai-section-drag';
+            drag.textContent = '⠿';
+            drag.title = 'Povuci i premjesti sekciju';
+            const collapse = document.createElement('button');
+            collapse.type = 'button';
+            collapse.className = 'tkai-section-tool tkai-section-collapse';
+            collapse.title = 'Sakrij/prikaži sekciju';
+            tools.append(drag, collapse);
+            section.appendChild(tools);
+
+            const applyCollapsed = (collapsed) => {
+                section.classList.toggle('tkai-section-collapsed', collapsed);
+                collapse.textContent = collapsed ? '▸' : '▾';
+                localStorage.setItem(collapsedPrefix + key, collapsed ? '1' : '0');
+            };
+            applyCollapsed(localStorage.getItem(collapsedPrefix + key) === '1');
+            collapse.addEventListener('click', () => {
+                applyCollapsed(!section.classList.contains('tkai-section-collapsed'));
+            });
+            drag.addEventListener('pointerdown', () => { dragArmed = !dashboardLayoutLocked; });
+            drag.addEventListener('pointerup', () => { dragArmed = false; });
+            section.draggable = !dashboardLayoutLocked;
+            section.addEventListener('dragstart', (event) => {
+                if (dashboardLayoutLocked || !dragArmed) {
+                    event.preventDefault();
+                    return;
+                }
+                draggedSection = section;
+                section.classList.add('tkai-layout-dragging');
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', key);
+            });
+            section.addEventListener('dragover', (event) => {
+                if (!draggedSection || draggedSection === section) return;
+                event.preventDefault();
+                section.classList.add('tkai-layout-drag-over');
+                const rect = section.getBoundingClientRect();
+                const insertAfter = event.clientY > rect.top + rect.height / 2;
+                root.insertBefore(draggedSection, insertAfter ? section.nextSibling : section);
+            });
+            section.addEventListener('dragleave', () => section.classList.remove('tkai-layout-drag-over'));
+            section.addEventListener('drop', (event) => {
+                event.preventDefault();
+                section.classList.remove('tkai-layout-drag-over');
+            });
+            section.addEventListener('dragend', () => {
+                sections.forEach((node) => node.classList.remove('tkai-layout-dragging', 'tkai-layout-drag-over'));
+                draggedSection = null;
+                dragArmed = false;
+                const order = Array.from(root.children)
+                    .map((node) => node.dataset?.tkaiLayoutKey)
+                    .filter(Boolean);
+                localStorage.setItem(orderKey, JSON.stringify(order));
+            });
+        });
+
+        const applyOrder = (order) => {
+            (Array.isArray(order) ? order : []).forEach((key) => {
+                const section = sections.find((node) => node.dataset.tkaiLayoutKey === key);
+                if (section) root.appendChild(section);
+            });
+        };
+        try { applyOrder(JSON.parse(localStorage.getItem(orderKey) || '[]')); } catch (_) { }
+
+        const syncLockState = () => {
+            root.classList.toggle('tkai-layout-locked', dashboardLayoutLocked);
+            root.classList.toggle('tkai-layout-unlocked', !dashboardLayoutLocked);
+            sections.forEach((section) => { section.draggable = !dashboardLayoutLocked; });
+            if (layoutLockBtn) layoutLockBtn.textContent = dashboardLayoutLocked ? '🔒 Zaključano' : '🔓 Pomicanje ON';
+        };
+        layoutLockBtn?.addEventListener('click', () => {
+            dashboardLayoutLocked = !dashboardLayoutLocked;
+            DB.saveSetting('tkaiDashboardLayoutLocked', dashboardLayoutLocked);
+            syncLockState();
+        });
+        layoutFoldBtn?.addEventListener('click', () => {
+            sections.forEach((section) => {
+                if (!section.classList.contains('tkai-section-collapsed')) {
+                    section.querySelector(':scope > .tkai-section-tools .tkai-section-collapse')?.click();
+                }
+            });
+        });
+        layoutUnfoldBtn?.addEventListener('click', (event) => {
+            if (event.shiftKey) {
+                localStorage.removeItem(orderKey);
+                applyOrder(originalOrder);
+            }
+            sections.forEach((section) => {
+                if (section.classList.contains('tkai-section-collapsed')) {
+                    section.querySelector(':scope > .tkai-section-tools .tkai-section-collapse')?.click();
+                }
+            });
+        });
+        layoutUnfoldBtn.title = 'Prikaži sve; Shift+klik vraća početni redoslijed';
+        syncLockState();
+    }
+    initTkaiSessionLayout();
     initRecommendationsCardDrag();
     spikeAllBtn?.addEventListener('click', () => { spikeFilter = 'all'; updateSpikeFilterButtons(); updateInsightsUI(); });
     spikeViewersBtn?.addEventListener('click', () => { spikeFilter = 'viewers'; updateSpikeFilterButtons(); updateInsightsUI(); });
@@ -9510,6 +9710,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         updateTopSupportersUI(mergedSupporters, Math.max(giftStats.supportersCount || 0, mergedSupporters.length));
         renderViewerSparkline();
         updateInsightsUI();
+        scheduleLiveOsSnapshotPublish();
     }
     function renderGiftGallery() {
         if (!giftGalleryEl) return;
@@ -9617,6 +9818,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const showTranslated = targetLang !== 'auto';
         const renderRow = (message, container) => {
             const div = document.createElement('div');
+            const displayType = normalizeTkaiMessageType(message);
             div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
             if (targetedChatUser && String(message.user || '') === targetedChatUser) {
                 div.classList.add('targeted');
@@ -9625,21 +9827,29 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const giftMeta = isGiftLike ? safeResolveGiftMetaFromMessage(message) : null;
             // Resolve display username — replace 'unknown/Unknown' with stream owner
             const resolvedUser = (() => {
+                if (displayType === 'caption') {
+                    const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
+                    return owner ? `HOST CC · @${owner}` : 'HOST CC';
+                }
                 const u = String(message.user || '').trim();
                 if (u && u.toLowerCase() !== 'unknown') return u;
                 const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
                 return owner || u || 'unknown';
             })();
-            const typeBadge = message.type === 'gift'
+            const typeBadge = displayType === 'gift'
                 ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(255,195,74,.25);color:#ffd278;border:1px solid rgba(255,210,120,.35)">🎁 gift</span>'
-                : (message.type === 'subscriber'
+                : (displayType === 'subscriber'
                     ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(120,200,255,.22);color:#bde7ff;border:1px solid rgba(150,220,255,.35)">⭐ sub</span>'
-                    : (message.type === 'share'
+                    : (displayType === 'share'
                         ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(244,114,182,.18);color:#f9a8d4;border:1px solid rgba(244,114,182,.35)">↗ share</span>'
-                        : (message.type === 'like'
+                        : (displayType === 'like'
                             ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(244,63,94,.18);color:#fda4af;border:1px solid rgba(244,63,94,.35)">❤️ like</span>'
-                            : '')));
-            const showCaptionTranslation = message.type === 'caption' && !!message.translatedText;
+                            : (displayType === 'join'
+                                ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(45,212,191,.16);color:#5eead4;border:1px solid rgba(45,212,191,.35)">👋 join</span>'
+                                : (displayType === 'caption'
+                                    ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.35)">🎙 CC</span>'
+                                    : '')))));
+            const showCaptionTranslation = displayType === 'caption' && !!message.translatedText;
             const nllbShowBoth = DB.getSettings().tkaiNllbShowBoth !== false;
             const showNllbIdHrTranslation = nllbShowBoth
                 && message.type === 'chat'
@@ -9690,7 +9900,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     + ' × ' + formatNum(Math.max(1, Number(giftMeta.quantity || message.quantity || 1)))
                     + ' • ' + formatNum(Math.max(0, Number(giftMeta.coins || message.coins || 0))) + ' 🪙</div>';
             })();
-            const likeSummary = message.type === 'like' && Math.max(1, Number(message.quantity || 1)) > 1
+            const likeSummary = displayType === 'like' && Math.max(1, Number(message.quantity || 1)) > 1
                 ? '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#fda4af">'
                 + 'Likes × ' + formatNum(Math.max(1, Number(message.quantity || 1))) + '</div>'
                 : '';
@@ -11190,7 +11400,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         userHandle: normalizeTikTokProfileHandle(message.userHandle || message.profileHandle || ''),
                         coins: isGiftType ? Number(message.coins || giftMeta?.coins || parseCoinsFromText(message.text)) : 0,
                         giftName: isGiftType ? (message.giftName || giftMeta?.giftName || message.text) : '',
-                        quantity: isGiftType ? (message.quantity || giftMeta?.quantity || 1) : 1,
+                        quantity: isGiftType
+                            ? (message.quantity || giftMeta?.quantity || 1)
+                            : (type === 'like'
+                                ? Math.max(1, Number(message.quantity || String(message.text || '').match(/[×x]\s*(\d+)/i)?.[1] || 1))
+                                : 1),
                         unitCoins: isGiftType ? (message.unitCoins || giftMeta?.unitCoins || 0) : 0
                     };
                     collectedMessages.push(normalizedMessage);
@@ -11871,6 +12085,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             window.runSongRecRecognition(true).catch(() => { });
         }
     };
+    window.stopTkaiScanShortcut = function () {
+        if (!scanActive) {
+            showToast('Skeniranje je već zaustavljeno');
+            return;
+        }
+        stopScanning();
+    };
+    window.etherx?.on?.('liveos:command', ({ action } = {}) => {
+        if (action === 'start-scan') {
+            window.startTkaiScanShortcut();
+        } else if (action === 'stop-scan') {
+            window.stopTkaiScanShortcut();
+        } else if (action === 'open-ai-live-chat') {
+            document.getElementById('btnTikTokAI')?.click();
+        } else if (action === 'songrec-now') {
+            window.runSongRecRecognition?.(true);
+        }
+    });
 
     ccReadBtn?.addEventListener('click', () => {
         const next = !isCcReadEnabled();

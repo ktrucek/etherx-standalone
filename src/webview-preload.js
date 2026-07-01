@@ -6,6 +6,23 @@
  */
 'use strict';
 
+const { contextBridge, ipcRenderer } = require('electron');
+
+if (location.protocol === 'chrome-extension:') {
+    contextBridge.exposeInMainWorld('liveos', {
+        getSnapshot: () => ipcRenderer.invoke('liveos:getSnapshot'),
+        subscribe: () => ipcRenderer.invoke('liveos:subscribe'),
+        unsubscribe: () => ipcRenderer.invoke('liveos:unsubscribe'),
+        command: (action) => ipcRenderer.invoke('liveos:command', action),
+        onSnapshot: (callback) => {
+            if (typeof callback !== 'function') return () => {};
+            const listener = (_event, snapshot) => callback(snapshot);
+            ipcRenderer.on('liveos:snapshot', listener);
+            return () => ipcRenderer.removeListener('liveos:snapshot', listener);
+        },
+    });
+}
+
 // ── Spoof navigator.webdriver ────────────────────────────────────────────────
 // Electron sets navigator.webdriver = true (inherited from Chromium automation
 // detection). TikTok, TikTok LIVE, Instagram and many other sites check this

@@ -6525,3 +6525,64 @@ a {
 .cookie-btn-decline:hover {
   background: rgba(255, 255, 255, 0.14);
 }
+
+.tkai-layout-section {
+  position: relative;
+  transition: opacity 0.15s ease, transform 0.15s ease, outline-color 0.15s ease;
+}
+
+.tkai-layout-section.tkai-layout-dragging {
+  opacity: 0.45;
+  transform: scale(0.99);
+}
+
+.tkai-layout-section.tkai-layout-drag-over {
+  outline: 2px solid rgba(45, 212, 191, 0.75);
+  outline-offset: 3px;
+}
+
+.tkai-section-tools {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  z-index: 8;
+  display: flex;
+  gap: 3px;
+}
+
+.tkai-section-tool {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.tkai-layout-unlocked .tkai-section-drag {
+  color: #5eead4;
+  cursor: grab;
+}
+
+.tkai-layout-unlocked .tkai-section-drag:active {
+  cursor: grabbing;
+}
+
+.tkai-layout-locked .tkai-section-drag {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tkai-layout-section.tkai-section-collapsed {
+  min-height: 32px;
+  padding-top: 30px;
+  overflow: hidden;
+}
+
+.tkai-layout-section.tkai-section-collapsed > :not(.tkai-section-tools) {
+  display: none !important;
+}
