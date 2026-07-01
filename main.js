@@ -1190,15 +1190,37 @@ async function runOneClickLocalSetup() {
       const outLogPath = path.join(projectRoot, "pm2-out.log").replace(/\\/g, "/");
       const errLogPath = path.join(projectRoot, "pm2-error.log").replace(/\\/g, "/");
       const execPath = String(process.execPath || "").replace(/\\/g, "/");
+      let pm2Script = execPath;
+      let pm2Args = ["--no-sandbox"];
+      let pm2Interpreter = "none";
+
+      if (process.platform === "darwin") {
+        const launcherPath = path.join(projectRoot, "launch-etherx.sh");
+        const shellQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+        const launcherContent = [
+          "#!/bin/bash",
+          "set -e",
+          `while kill -0 ${process.pid} 2>/dev/null; do`,
+          "  sleep 2",
+          "done",
+          `exec ${shellQuote(execPath)} --no-sandbox`,
+          "",
+        ].join("\n");
+        fs.writeFileSync(launcherPath, launcherContent, { encoding: "utf8", mode: 0o700 });
+        fs.chmodSync(launcherPath, 0o700);
+        pm2Script = launcherPath.replace(/\\/g, "/");
+        pm2Args = [];
+        pm2Interpreter = "/bin/bash";
+      }
 
       const configContent = `module.exports = {
   apps: [
     {
       name: "etherx-browser",
-      script: ${JSON.stringify(execPath)},
-      args: ["--no-sandbox"],
-      interpreter: "none",
-      cwd: "${projectRoot.replace(/\\/g, "/")}",
+      script: ${JSON.stringify(pm2Script)},
+      args: ${JSON.stringify(pm2Args)},
+      interpreter: ${JSON.stringify(pm2Interpreter)},
+      cwd: ${JSON.stringify(projectRoot.replace(/\\/g, "/"))},
       autorestart: true,
       watch: false,
       max_restarts: 10,
@@ -1659,10 +1681,18 @@ app.whenReady().then(async () => {
       }
     }
     if (fs.existsSync(path.join(liveOsPluginPath, "manifest.json"))) {
-      session.defaultSession
-        .loadExtension(liveOsPluginPath, { allowFileAccess: true })
-        .then((ext) => console.log("[Ext] LiveOS Plugin loaded:", ext.name, ext.id, liveOsPluginPath))
-        .catch((e) => console.warn("[Ext] LiveOS Plugin load skipped:", e.message));
+      const extensionSessions = [
+        ["main", session.defaultSession],
+        ["webview", session.fromPartition("persist:etherx")],
+      ];
+      await Promise.all(extensionSessions.map(async ([scope, targetSession]) => {
+        try {
+          const ext = await targetSession.loadExtension(liveOsPluginPath, { allowFileAccess: true });
+          console.log(`[Ext] LiveOS Plugin loaded (${scope}):`, ext.name, ext.id, liveOsPluginPath);
+        } catch (error) {
+          console.warn(`[Ext] LiveOS Plugin load skipped (${scope}):`, error.message);
+        }
+      }));
     }
   } catch (e) {
     console.warn("[Ext] LiveOS Plugin setup error:", e.message);
@@ -2899,7 +2929,7 @@ function setupIPC() {
 
   ipcMain.handle("extensions:getBuiltinLiveOsPlugin", async () => {
     try {
-      const all = session.defaultSession.getAllExtensions();
+      const all = session.fromPartition("persist:etherx").getAllExtensions();
       const list = Array.isArray(all) ? all : Object.values(all || {});
       const ext = list.find((item) => item && (item.name === "LiveOS Plugin Dashboard" || item.name === "LiveOS Plugin"));
       if (!ext) return { ok: false, error: "Builtin LiveOS Plugin is not loaded." };
@@ -3861,7 +3891,15 @@ function setupIPC() {
       const os = require("os");
       const tmpDir = path.join(os.tmpdir(), "etherx-update");
       if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-      const dest = path.join(tmpDir, filename);
+      const safeFilename = path.basename(String(filename || ""));
+      if (
+        !safeFilename ||
+        safeFilename !== filename ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(safeFilename)
+      ) {
+        return { ok: false, error: "Invalid update filename" };
+      }
+      const dest = path.join(tmpDir, safeFilename);
       // Clean previous download if any
       if (fs.existsSync(dest)) fs.unlinkSync(dest);
 
@@ -3905,20 +3943,43 @@ function setupIPC() {
       const safeUrl = normalizeUpdateUrl(url);
       if (!safeUrl) return { ok: false, error: "Invalid update URL" };
 
-      // Use net.fetch with redirect:'follow' — Electron handles GitHub's multi-hop
-      // CDN redirects transparently, eliminating ERR_ABORTED (-3) race conditions
-      // that occur when using net.request with redirect:'manual'.
-      const fetchHeaders = {
-        "User-Agent": "EtherX-Browser",
-        "Accept": "application/octet-stream",
+      const buildUpdateHeaders = (requestUrl) => {
+        const headers = {
+          "User-Agent": "EtherX-Browser",
+          "Accept": "application/octet-stream",
+        };
+        const host = new URL(requestUrl).hostname.toLowerCase();
+        if (token && (host === "github.com" || host === "api.github.com")) {
+          headers["Authorization"] = "Bearer " + token;
+        }
+        return headers;
       };
-      if (token) fetchHeaders["Authorization"] = "Bearer " + token;
+      const redirectCodes = new Set([301, 302, 303, 307, 308]);
+      const fetchUpdateAsset = async (initialUrl) => {
+        let requestUrl = initialUrl;
+        for (let redirectCount = 0; redirectCount <= 8; redirectCount += 1) {
+          const validatedUrl = normalizeUpdateUrl(requestUrl);
+          if (!validatedUrl) throw new Error("Blocked unsafe update URL");
 
-      const response = await net.fetch(safeUrl, {
-        method: "GET",
-        headers: fetchHeaders,
-        redirect: "follow",
-      });
+          const response = await net.fetch(validatedUrl, {
+            method: "GET",
+            headers: buildUpdateHeaders(validatedUrl),
+            redirect: "manual",
+          });
+          if (!redirectCodes.has(response.status)) return response;
+
+          const location = response.headers.get("location");
+          if (!location) throw new Error("Update redirect is missing a location");
+          if (redirectCount === 8) throw new Error("Too many update redirects");
+
+          const validatedRedirect = normalizeUpdateUrl(location, validatedUrl);
+          if (!validatedRedirect) throw new Error("Blocked unsafe update redirect");
+          requestUrl = validatedRedirect;
+        }
+        throw new Error("Too many update redirects");
+      };
+
+      const response = await fetchUpdateAsset(safeUrl);
 
       if (!response.ok) {
         throw new Error("HTTP " + response.status);
@@ -3945,7 +4006,7 @@ function setupIPC() {
                 percent: pct,
                 received,
                 total,
-                filename,
+                filename: safeFilename,
               });
             }
           }
@@ -3956,7 +4017,7 @@ function setupIPC() {
 
       await new Promise((res, rej) => ws.end((err) => err ? rej(err) : res()));
 
-      return { ok: true, filePath: dest, filename };
+      return { ok: true, filePath: dest, filename: safeFilename };
     } catch (e) {
       return { ok: false, error: e.message };
     }

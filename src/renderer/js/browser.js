@@ -3276,6 +3276,27 @@ function resolveInternalDashboardUrl(name) {
     }
 }
 
+async function resolveLiveOsDashboardUrl() {
+    try {
+        const builtin = await window.etherx?.extensions?.getBuiltinLiveOsPlugin?.();
+        if (builtin?.ok && /^chrome-extension:\/\/[a-z]{32}\/index\.html$/i.test(builtin.url || "")) {
+            return builtin.url;
+        }
+    } catch (error) {
+        console.warn("[LiveOS] Extension URL unavailable, using bundled fallback:", error);
+    }
+    return resolveInternalDashboardUrl("liveos-plugin-dashboard");
+}
+
+async function openLiveOsDashboard() {
+    const url = await resolveLiveOsDashboardUrl();
+    if (!url) {
+        showToast("LiveOS Dashboard is unavailable");
+        return;
+    }
+    navigateTo(url);
+}
+
 function normalizeUrl(raw) {
     if (!raw || typeof raw !== 'string') return '';
     raw = raw.trim(); if (!raw) return '';
@@ -15760,7 +15781,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     document.getElementById('extAddUrl').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('extAddBtn').click(); });
     document.getElementById('btnExtensions').addEventListener('click', () => { const ep = document.getElementById('extPanel'); const isOpen = ep.classList.contains('open'); closeAllPanels(); ep.classList.toggle('open', !isOpen); if (!isOpen) renderExtList(); });
-    document.getElementById('btnLiveOsPlugin')?.addEventListener('click', () => { closeAllPanels(); navigateTo(resolveInternalDashboardUrl('liveos-plugin-dashboard')); showToast('📊 Opening built-in LiveOS Dashboard'); });
+    document.getElementById('btnLiveOsPlugin')?.addEventListener('click', async () => {
+        closeAllPanels();
+        await openLiveOsDashboard();
+        showToast('Opening LiveOS Dashboard');
+    });
     document.getElementById('closeExtPanel').addEventListener('click', () => document.getElementById('extPanel').classList.remove('open'));
     document.querySelectorAll('.ext-tab').forEach(tab => { tab.addEventListener('click', () => { document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active')); tab.classList.add('active'); const pane = document.getElementById('extpane-' + tab.dataset.extPane); if (pane) pane.classList.add('active'); if (tab.dataset.extPane === 'installed') renderExtList(); }); });
 
@@ -15899,7 +15924,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     applyNtpSettings();
     renderRecentSites();
 
-    document.querySelectorAll('.ntp-card').forEach(card => card.addEventListener('click', () => {
+    document.querySelectorAll('.ntp-card').forEach(card => card.addEventListener('click', async () => {
+        if (card.dataset.dashboard === "liveos") {
+            await openLiveOsDashboard();
+            return;
+        }
         const dashboardUrl = resolveInternalDashboardUrl(card.dataset.dashboard);
         navigateTo(dashboardUrl || card.dataset.url);
     }));

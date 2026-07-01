@@ -147,10 +147,10 @@ jobs:
             dist/**/*.exe
             dist/**/*.zip
   # ─── macOS Build (x64 + arm64) ───────────────────────────────────────────────
-  # macos-13 is no longer available — cross-compile both arches from macos-latest
+  # Pin macOS 15 so macos-latest migrations cannot change the build toolchain.
   build-macos-x64:
     name: 🍎 macOS Intel x64 (cross-compiled)
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: 📥 Checkout code
@@ -219,7 +219,7 @@ jobs:
 
   build-macos-arm64:
     name: 🍎 macOS Apple Silicon arm64
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: 📥 Checkout code

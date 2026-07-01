@@ -227,7 +227,15 @@ function sendChatMessage() {
   if (!value || !chatList) return;
   const row = document.createElement("div");
   row.className = "chat-item tone-green injected";
-  row.innerHTML = `<span class="chat-user">You</span><span class="chat-event">${value}</span><small>now</small>`;
+  const user = document.createElement("span");
+  user.className = "chat-user";
+  user.textContent = "You";
+  const message = document.createElement("span");
+  message.className = "chat-event";
+  message.textContent = value;
+  const timestamp = document.createElement("small");
+  timestamp.textContent = "now";
+  row.append(user, message, timestamp);
   chatList.prepend(row);
   if (chatInput) chatInput.value = "";
   showToast("Message pushed to feed");
@@ -287,6 +295,7 @@ document.querySelector(".search")?.addEventListener("click", () => {
 
 setView("dashboard");
 
+const state = { view: "dashboard" };
 const liveosViewState = { range: {}, drafts: {} };
 const liveosMeta = {
   dashboard: { label: "Plugin Dashboard", title: "LiveOS Plugin Dashboard", subtitle: "Separate dashboard plugin layout for LiveOS analytics.", visible: ["trend-panel", "gift-panel", "chat-panel", "supporters-panel", "sentiment-panel", "music-panel", "insights-panel", "timeline-panel", "health-panel", "actions-panel"], range: "6H" },

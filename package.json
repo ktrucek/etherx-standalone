@@ -1,11 +1,12 @@
 {
   "name": "etherx-standalone",
-  "version": "3.0.129",
+  "version": "3.0.130",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --no-sandbox --inspect=5858",
+    "build": "electron-builder --dir --publish never",
     "tkai:env": "node scripts/tkai-hashes-to-env.js",
     "pm2:setup": "bash scripts/pm2-bootstrap.sh",
     "pm2:start": "npx pm2 start ecosystem.config.cjs --update-env",
@@ -117,5 +118,5 @@
     "uuid": "^11.1.1",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-07-01T21:33:30Z"
+  "buildTime": "2026-07-01T22:00:04Z"
 }
