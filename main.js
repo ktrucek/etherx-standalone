@@ -965,7 +965,15 @@ function parsePm2ProcessSnapshot(rawJson, processName) {
     if (!Array.isArray(list)) return null;
     const name = String(processName || "").trim();
     if (!name) return null;
-    const item = list.find((entry) => String(entry?.name || "") === name);
+    const normalizedName = name.toLowerCase();
+    const item = list.find((entry) => {
+      const entryName = String(entry?.name || "").trim();
+      const entryNameLower = entryName.toLowerCase();
+      const pm2Env = entry?.pm2_env || {};
+      const execPath = String(pm2Env.pm_exec_path || entry?.pm_exec_path || "").toLowerCase();
+      const cwd = String(pm2Env.pm_cwd || entry?.pm_cwd || "").toLowerCase();
+      return entryName === name || entryNameLower === normalizedName || entryNameLower.includes(normalizedName) || execPath.includes(normalizedName) || cwd.includes(normalizedName);
+    });
     if (!item) return null;
 
     const pm2Env = item.pm2_env || {};
@@ -1237,6 +1245,7 @@ async function runOneClickLocalSetup() {
 
     // Force delete any old registered process to clear PM2 internal cache/metadata for script paths
     await execFileText("npx", ["pm2", "delete", "etherx-browser"], 60000, { cwd: projectRoot });
+    const pm2Update = await execFileText("npx", ["pm2", "update"], 180000, { cwd: projectRoot });
 
     const pm2Run = await execFileText(
       "npx",
@@ -1254,15 +1263,16 @@ async function runOneClickLocalSetup() {
     const pm2Snapshot = pm2SnapshotResult.snapshot;
     const pm2IsOnline = !!pm2Snapshot?.online;
     const statusText = trimPythonInstallOutput(pm2Status.stdout || pm2Status.stderr || "");
+    const pm2StatusLooksOnline = /etherx-browser/i.test(statusText) && /\bonline\b/i.test(statusText);
 
     let pm2Error = "";
     if (!pm2Run.ok) {
       pm2Error = trimPythonInstallOutput(pm2Run.stderr || pm2Run.stdout || pm2Run.error?.message || "PM2 start failed");
     } else if (!pm2Save.ok) {
       pm2Error = trimPythonInstallOutput(pm2Save.stderr || pm2Save.stdout || "PM2 save failed");
-    } else if (!pm2SnapshotResult.ok) {
+    } else if (!pm2SnapshotResult.ok && !pm2StatusLooksOnline) {
       pm2Error = trimPythonInstallOutput(pm2SnapshotResult.error || "PM2 snapshot nije dostupan.");
-    } else if (!pm2IsOnline) {
+    } else if (!pm2IsOnline && !pm2StatusLooksOnline) {
       const stateLabel = String(pm2Snapshot?.state || "unknown");
       const execPathLabel = String(pm2Snapshot?.execPath || "");
       pm2Error = trimPythonInstallOutput(
@@ -1271,7 +1281,7 @@ async function runOneClickLocalSetup() {
     }
 
     result.pm2 = {
-      ok: !!pm2Run.ok && !!pm2Save.ok && pm2IsOnline,
+      ok: !!pm2Run.ok && !!pm2Save.ok && (pm2IsOnline || pm2StatusLooksOnline),
       step: pm2Step,
       saveOk: !!pm2Save.ok,
       status: statusText,
@@ -1283,7 +1293,7 @@ async function runOneClickLocalSetup() {
       restarts: Number(pm2Snapshot?.restarts || 0) || 0,
       unstableRestarts: Number(pm2Snapshot?.unstableRestarts || 0) || 0,
       stdout: trimPythonInstallOutput(pm2Run.stdout || ""),
-      stderr: trimPythonInstallOutput(pm2Run.stderr || ""),
+      stderr: trimPythonInstallOutput((pm2Run.stderr || "") + (pm2Update?.stderr ? "\n" + pm2Update.stderr : "")),
       error: pm2Error,
     };
 

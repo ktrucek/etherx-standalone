@@ -15760,7 +15760,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     document.getElementById('extAddUrl').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('extAddBtn').click(); });
     document.getElementById('btnExtensions').addEventListener('click', () => { const ep = document.getElementById('extPanel'); const isOpen = ep.classList.contains('open'); closeAllPanels(); ep.classList.toggle('open', !isOpen); if (!isOpen) renderExtList(); });
-    document.getElementById('btnLiveOsPlugin')?.addEventListener('click', async () => { const ext = EXT_DB.get().find(e => e.id === 'liveos-plugin-builtin' || e.name === 'LiveOS Plugin Dashboard' || e.path?.includes('/liveos-plugin-extension')); closeAllPanels(); try { const builtin = await window.etherx?.extensions?.getBuiltinLiveOsPlugin?.(); if (builtin?.ok && builtin.url) { navigateTo(builtin.url); showToast('🧩 Opening: LiveOS Plugin Dashboard'); return; } } catch (_) {} if (ext?.source && String(ext.source).startsWith('chrome-extension://')) { navigateTo(ext.source); showToast('🧩 Opening: LiveOS Plugin Dashboard'); return; } navigateTo(resolveInternalDashboardUrl('liveos-plugin-dashboard')); showToast('🧩 Opening internal LiveOS Plugin page'); });
+    document.getElementById('btnLiveOsPlugin')?.addEventListener('click', () => { closeAllPanels(); navigateTo(resolveInternalDashboardUrl('liveos-plugin-dashboard')); showToast('📊 Opening built-in LiveOS Dashboard'); });
     document.getElementById('closeExtPanel').addEventListener('click', () => document.getElementById('extPanel').classList.remove('open'));
     document.querySelectorAll('.ext-tab').forEach(tab => { tab.addEventListener('click', () => { document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active')); tab.classList.add('active'); const pane = document.getElementById('extpane-' + tab.dataset.extPane); if (pane) pane.classList.add('active'); if (tab.dataset.extPane === 'installed') renderExtList(); }); });
 
@@ -20043,7 +20043,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         { id: 'btnBobiAI', key: 'showBtnBobiAI', icon: '🎬', name: 'Bobi AI' },
         { id: 'btnAiAgent', key: 'showBtnAiAgent', icon: '🤖', name: 'AI Agent' },
         { id: 'btnTikTokAI', key: 'showBtnTikTokAI', icon: '🎵', name: 'TikTok Chat AI' },
-        { id: 'btnLiveOsPlugin', key: 'showBtnLiveOsPlugin', icon: '🧩', name: 'LiveOS Plugin Dashboard' },
+        { id: 'btnLiveOsPlugin', key: 'showBtnLiveOsPlugin', icon: '🧩', name: 'LiveOS Dashboard' },
         { id: 'btnKripto', key: 'showBtnKripto', icon: '📰', name: 'Kripto' },
         { id: 'btnEtherX', key: 'showBtnEtherX', icon: '👥', name: 'EtherX' },
         { id: 'btnExtensions', key: 'showBtnExtensions', icon: '🧩', name: 'Extensions' },
