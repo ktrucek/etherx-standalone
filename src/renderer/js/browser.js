@@ -16015,8 +16015,59 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.getElementById('btnExtensions').addEventListener('click', () => { const ep = document.getElementById('extPanel'); const isOpen = ep.classList.contains('open'); closeAllPanels(); ep.classList.toggle('open', !isOpen); if (!isOpen) renderExtList(); });
     document.getElementById('btnLiveOsPlugin')?.addEventListener('click', async () => {
         closeAllPanels();
+        // Publish a fresh snapshot before opening so the dashboard has data immediately
+        scheduleLiveOsSnapshotPublish();
         await openLiveOsDashboard();
-        showToast('Opening LiveOS Dashboard');
+        showToast('🧩 Opening LiveOS Dashboard');
+    });
+
+    // ── "Send to LiveOS" button in TikTok AI panel ────────────────────────────
+    // This gumb captures all current TikTok Chat AI data and sends it to the
+    // LiveOS plugin dashboard via IPC + localStorage autosave.
+    document.getElementById('btnSendToLiveOs')?.addEventListener('click', async () => {
+        if (!window.etherx?.liveos?.publishSnapshot) {
+            showToast('⚠ LiveOS bridge not available. Restart app.'); return;
+        }
+        try {
+            // Force immediate snapshot publish
+            const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
+            if (!messages.length) { showToast('⚠ No TikTok Chat AI data to send.'); return; }
+
+            const giftStats = computeGiftStats();
+            const users = buildUserStats(messages, 200);
+            const insightsSnapshot = computeInsightsSnapshot(messages);
+            const tab = getActiveTab();
+            const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
+            const giftTypes = new Map();
+            messages.forEach(m => {
+                const type = normalizeTkaiMessageType(m);
+                if (type !== 'gift' && type !== 'subscriber') return;
+                const name = String(m.giftName || safeResolveGiftMetaFromMessage(m)?.giftName || m.text || 'Unknown gift').trim();
+                const key = name.toLowerCase();
+                const row = giftTypes.get(key) || { name, events: 0, quantity: 0, coins: 0 };
+                row.events += 1; row.quantity += Math.max(1, Number(m.quantity || 1)); row.coins += Math.max(0, Number(m.coins || 0));
+                giftTypes.set(key, row);
+            });
+            const snapshot = {
+                connection: { state: scanActive ? 'scanning' : 'paused', tabId: tab?.id || null, liveUrl: tab?.url || '', owner, startedAt: sessionStartedAt, lastEventAt: messages.reduce((mx, r) => Math.max(mx, Number(r?.ts || 0)), 0), error: '' },
+                session: { id: sessionStartedAt ? `live-${sessionStartedAt}` : `export-${Date.now()}`, title: owner ? `@${owner} LIVE` : 'TikTok LIVE', startedAt: sessionStartedAt, messageCount: messages.length, peakViewers: peakViewerCount, currentViewers: liveViewerCount, totalCoins: giftStats.totalCoins, uniqueUsers: users.length },
+                events: messages, users, gifts: Array.from(giftTypes.values()).sort((a, b) => b.coins - a.coins),
+                supporters: Array.isArray(giftStats.leaders) ? giftStats.leaders : [],
+                insights: [...(insightsSnapshot.topTopics || []).map(t => ({ type: 'topic', text: String(t?.topic || t?.label || t), score: Number(t?.count || 0) })), ...(insightsSnapshot.spikes || []).map(s => ({ type: 'spike', text: `${s.type || 'activity'} spike`, score: Number(s.delta || 0), ts: Number(s.ts || Date.now()) }))],
+                music: { currentTrack: insightsSnapshot.songs?.[0] || null, history: insightsSnapshot.songs || [] },
+                sentiment: { label: _cardiffSentiment?.label || insightsSnapshot.sentiment || 'neutral', confidence: _cardiffSentiment ? Math.round(Number(_cardiffSentiment.score || 0) * 100) : null, counts: insightsSnapshot.sentimentCounts || {} },
+                settings: DB.getSettings(),
+            };
+            // Also persist to autosave so dashboard can load it without IPC
+            try { localStorage.setItem('ex_tkai_live_autosave', JSON.stringify({ messages, sessionStartedAt, liveViewerCount, peakViewerCount, totalCoins: giftStats.totalCoins })); } catch (_) { }
+            await window.etherx.liveos.publishSnapshot(snapshot);
+            showToast(`✅ ${messages.length} events sent to LiveOS Dashboard`);
+            // Open dashboard
+            await openLiveOsDashboard();
+        } catch (err) {
+            showToast('❌ LiveOS send failed: ' + String(err?.message || err));
+            console.error('[LiveOS] Send failed:', err);
+        }
     });
     document.getElementById('closeExtPanel').addEventListener('click', () => document.getElementById('extPanel').classList.remove('open'));
     document.querySelectorAll('.ext-tab').forEach(tab => { tab.addEventListener('click', () => { document.querySelectorAll('.ext-tab').forEach(t => t.classList.remove('active')); document.querySelectorAll('.ext-pane').forEach(p => p.classList.remove('active')); tab.classList.add('active'); const pane = document.getElementById('extpane-' + tab.dataset.extPane); if (pane) pane.classList.add('active'); if (tab.dataset.extPane === 'installed') renderExtList(); }); });
