@@ -4034,10 +4034,12 @@ function setupIPC() {
         "objects-origin.githubusercontent.com",
         "release-assets.githubusercontent.com",
         "github-releases.githubusercontent.com",
+        "git.kasp.top",
       ]);
       const allowedUpdateHostSuffixes = [
         ".githubusercontent.com",
         ".github-releases.githubusercontent.com",
+        ".kasp.top",
       ];
       const isAllowedUpdateHost = (host) => {
         const h = String(host || "").toLowerCase();
@@ -4092,6 +4094,18 @@ function setupIPC() {
           const location = response.headers.get("location");
           if (!location) throw new Error("Update redirect is missing a location");
           if (redirectCount === 8) throw new Error("Too many update redirects");
+
+          // CodeQL SSRF mitigation: explicit validation of redirect target before use
+          // Ensure location header points only to whitelisted GitHub/Gitea/S3 asset hosts
+          let redirectUrl;
+          try {
+            redirectUrl = new URL(location, validatedUrl);
+            if (!isAllowedUpdateHost(redirectUrl.hostname.toLowerCase())) {
+              throw new Error("Redirect target not in whitelist");
+            }
+          } catch (err) {
+            throw new Error("Blocked unsafe update redirect: " + err.message);
+          }
 
           const validatedRedirect = normalizeUpdateUrl(location, validatedUrl);
           if (!validatedRedirect) throw new Error("Blocked unsafe update redirect");
