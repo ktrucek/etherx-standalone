@@ -13889,6 +13889,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             renderAppTab(type);
         });
     });
+    // Inline onclick handlers in generated App tab HTML call renderAppTab by name.
+    // Expose it on window so callbacks like Clear Cookies can refresh the panel safely.
+    window.renderAppTab = renderAppTab;
     function renderAppTab(type) {
         const c = document.getElementById('appContent'); if (!c) return;
         if (type === 'localstorage') {
