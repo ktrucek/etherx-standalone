@@ -586,6 +586,13 @@ if [[ "$NO_PUSH" == false ]]; then
     GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" push --dry-run "$auth_url" "HEAD:main" >/dev/null 2>&1
   }
 
+  # Re-source .env.local to ensure we have the latest tokens before push
+  # (user may have updated tokens after initial script load)
+  if [[ -f "$REPO_DIR/.env.local" ]]; then
+    # shellcheck disable=SC1091
+    source "$REPO_DIR/.env.local" 2>/dev/null || true
+  fi
+
   # Resolve working GitHub deploy token.
   # Priority: GITHUB_TOKEN_DEPLOY -> GITHUB_TOKEN -> GH_TOKEN -> gh auth token fallback
   # This avoids hard-failing when one env var contains an expired token.
@@ -598,6 +605,7 @@ if [[ "$NO_PUSH" == false ]]; then
     [[ -n "$GH_TOKEN_FALLBACK" ]] && TOKEN_CANDIDATES+=("$GH_TOKEN_FALLBACK")
   fi
 
+  info "Testing ${#TOKEN_CANDIDATES[@]} token candidate(s) for GitHub write access..."
   WORKING_GITHUB_TOKEN=""
   DEPLOY_TOKEN_PROVIDED="${GITHUB_TOKEN_DEPLOY:-}"
   for cand in "${TOKEN_CANDIDATES[@]}"; do
