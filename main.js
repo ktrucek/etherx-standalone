@@ -4082,16 +4082,26 @@ function setupIPC() {
         let requestUrl = initialUrl;
         for (let redirectCount = 0; redirectCount <= 8; redirectCount += 1) {
           const validatedUrl = normalizeUpdateUrl(requestUrl);
-          if (!validatedUrl) throw new Error("Blocked unsafe update URL");
+          if (!validatedUrl) {
+            console.error("[Update] Blocked unsafe URL:", requestUrl);
+            throw new Error("Blocked unsafe update URL");
+          }
 
+          console.log(`[Update] Fetch attempt ${redirectCount + 1}: ${validatedUrl.substring(0, 100)}...`);
           const response = await net.fetch(validatedUrl, {
             method: "GET",
             headers: buildUpdateHeaders(validatedUrl),
             redirect: "manual",
           });
-          if (!redirectCodes.has(response.status)) return response;
+
+          if (!redirectCodes.has(response.status)) {
+            console.log(`[Update] Got final response with status ${response.status}`);
+            return response;
+          }
 
           const location = response.headers.get("location");
+          console.log(`[Update] Redirect ${redirectCount + 1} → ${response.status} → ${location?.substring(0, 100) || '(no location)'}...`);
+
           if (!location) throw new Error("Update redirect is missing a location");
           if (redirectCount === 8) throw new Error("Too many update redirects");
 
@@ -4100,16 +4110,22 @@ function setupIPC() {
           let redirectUrl;
           try {
             redirectUrl = new URL(location, validatedUrl);
-            if (!isAllowedUpdateHost(redirectUrl.hostname.toLowerCase())) {
-              throw new Error("Redirect target not in whitelist");
+            const redirectHost = redirectUrl.hostname.toLowerCase();
+            if (!isAllowedUpdateHost(redirectHost)) {
+              console.error("[Update] Blocked redirect to non-whitelisted host:", redirectHost);
+              throw new Error("Redirect target not in whitelist: " + redirectHost);
+            }
+            if (redirectUrl.protocol !== "https:") {
+              console.error("[Update] Blocked non-HTTPS redirect:", redirectUrl.protocol);
+              throw new Error("Redirect must use HTTPS");
             }
           } catch (err) {
+            console.error("[Update] Redirect validation failed:", err.message);
             throw new Error("Blocked unsafe update redirect: " + err.message);
           }
 
-          const validatedRedirect = normalizeUpdateUrl(location, validatedUrl);
-          if (!validatedRedirect) throw new Error("Blocked unsafe update redirect");
-          requestUrl = validatedRedirect;
+          // Use the already validated and normalized URL object
+          requestUrl = redirectUrl.href;
         }
         throw new Error("Too many update redirects");
       };

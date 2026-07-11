@@ -4914,7 +4914,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     },
                     settings: DB.getSettings(),
                 };
-                window.etherx.liveos.publishSnapshot(snapshot).catch(() => {});
+                window.etherx.liveos.publishSnapshot(snapshot).catch(() => { });
             } catch (error) {
                 console.warn('[LiveOS] Snapshot publish failed:', error);
             }
@@ -22811,7 +22811,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         function isBenignUpdateRedirectError(err) {
             const raw = String(err?.message || err || '').trim();
-            return /redirect was cancelled|err_aborted|\(-3\)/i.test(raw);
+            return /redirect was cancelled|err_aborted|\(-3\)|too many update redirects|blocked unsafe update redirect/i.test(raw);
         }
 
         window.checkForUpdates = async function (silent = false) {
