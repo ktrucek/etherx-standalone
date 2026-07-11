@@ -573,33 +573,57 @@ ensure_github_remote
 # ── Push to GitHub ───────────────────────────────────────────────────────
 if [[ "$NO_PUSH" == false ]]; then
 
-  # Provjera tokena (env var ili gh auth fallback)
-  if [[ -z "${GITHUB_TOKEN_DEPLOY:-}" ]]; then
-    if command -v gh &>/dev/null; then
-      GH_TOKEN_FALLBACK="$(gh auth token 2>/dev/null || true)"
-      if [[ -n "$GH_TOKEN_FALLBACK" ]]; then
-        GITHUB_TOKEN_DEPLOY="$GH_TOKEN_FALLBACK"
-        info "Using GitHub token from gh auth session"
-      fi
-    fi
-  fi
-
-  if [[ -z "${GITHUB_TOKEN_DEPLOY:-}" ]]; then
-    error "GitHub token missing. Set GITHUB_TOKEN_DEPLOY or run: gh auth login && gh auth setup-git"
-  fi
-
-  # Build one-off authenticated URL (not persisted in git config).
-  # Using x-access-token form works reliably for PAT/App tokens on GitHub HTTPS git endpoints.
-  GITHUB_AUTH_REPO_URL="https://x-access-token:${GITHUB_TOKEN_DEPLOY}@github.com/ktrucek/etherx-standalone.git"
-
   # Keep git non-interactive during deploy.
   GIT_AUTH=(
     -c "core.askPass="
     -c "credential.helper="
   )
 
+  can_auth_with_token() {
+    local token="$1"
+    local auth_url="https://x-access-token:${token}@github.com/ktrucek/etherx-standalone.git"
+    # Deploy requires write permission, so validate with a dry-run push instead of read-only ls-remote.
+    GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" push --dry-run "$auth_url" "HEAD:main" >/dev/null 2>&1
+  }
+
+  # Resolve working GitHub deploy token.
+  # Priority: GITHUB_TOKEN_DEPLOY -> GITHUB_TOKEN -> GH_TOKEN -> gh auth token fallback
+  # This avoids hard-failing when one env var contains an expired token.
+  TOKEN_CANDIDATES=()
+  [[ -n "${GITHUB_TOKEN_DEPLOY:-}" ]] && TOKEN_CANDIDATES+=("$GITHUB_TOKEN_DEPLOY")
+  [[ -n "${GITHUB_TOKEN:-}" ]] && TOKEN_CANDIDATES+=("$GITHUB_TOKEN")
+  [[ -n "${GH_TOKEN:-}" ]] && TOKEN_CANDIDATES+=("$GH_TOKEN")
+  if command -v gh &>/dev/null; then
+    GH_TOKEN_FALLBACK="$(gh auth token 2>/dev/null || true)"
+    [[ -n "$GH_TOKEN_FALLBACK" ]] && TOKEN_CANDIDATES+=("$GH_TOKEN_FALLBACK")
+  fi
+
+  WORKING_GITHUB_TOKEN=""
+  DEPLOY_TOKEN_PROVIDED="${GITHUB_TOKEN_DEPLOY:-}"
+  for cand in "${TOKEN_CANDIDATES[@]}"; do
+    [[ -n "$cand" ]] || continue
+    if can_auth_with_token "$cand"; then
+      WORKING_GITHUB_TOKEN="$cand"
+      break
+    fi
+  done
+
+  if [[ -z "$WORKING_GITHUB_TOKEN" ]]; then
+    error "GitHub auth failed for all available tokens. Update GITHUB_TOKEN_DEPLOY (repo write scope) or run: gh auth login"
+  fi
+
+  if [[ -n "$DEPLOY_TOKEN_PROVIDED" && "$WORKING_GITHUB_TOKEN" != "$DEPLOY_TOKEN_PROVIDED" ]]; then
+    warn "GITHUB_TOKEN_DEPLOY is invalid/expired; using fallback token that passed auth"
+  fi
+
+  GITHUB_TOKEN_DEPLOY="$WORKING_GITHUB_TOKEN"
+
+  # Build one-off authenticated URL (not persisted in git config).
+  # Using x-access-token form works reliably for PAT/App tokens on GitHub HTTPS git endpoints.
+  GITHUB_AUTH_REPO_URL="https://x-access-token:${GITHUB_TOKEN_DEPLOY}@github.com/ktrucek/etherx-standalone.git"
+
   info "Fetching github/main to refresh stale tracking ref..."
-  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" ls-remote "$GITHUB_AUTH_REPO_URL" >/dev/null || error "GitHub auth failed for deploy token (check scopes/revocation)"
+  GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" ls-remote "$GITHUB_AUTH_REPO_URL" >/dev/null || error "GitHub auth failed for resolved deploy token (check scopes/revocation)"
   GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch github main:refs/remotes/github/main >/dev/null 2>&1 || true
 
   read -r GITHUB_BEHIND_COUNT GITHUB_AHEAD_COUNT < <(git rev-list --left-right --count github/main...HEAD)
