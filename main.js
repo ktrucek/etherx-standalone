@@ -2122,17 +2122,18 @@ function createWindow() {
           .replace(/\s*Electron\/[\d.]+/gi, "")
           .replace(/\s*EtherX\/[\d.]+/gi, "")
           .trim();
-        // For Google domains force clean modern Chrome UA
+        // For Google domains and TikTok force clean modern Chrome UA
         const url = details.url || "";
+        const isTikTok = /tiktok\.com/i.test(url);
         if (
-          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login/i.test(
+          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com/i.test(
             url,
           )
         ) {
           ua = GOOGLE_UA;
           // Remove X-Frame-Options bypass headers that trigger security checks
           delete headers["X-Requested-With"];
-          if (isGoogleAuthRequest(url)) {
+          if (isGoogleAuthRequest(url) || isTikTok) {
             headers["Sec-CH-UA"] =
               '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
             headers["Sec-CH-UA-Mobile"] = "?0";
@@ -2279,16 +2280,17 @@ function createWindow() {
           .replace(/\s*Electron\/[\d.]+/gi, "")
           .replace(/\s*EtherX\/[\d.]+/gi, "")
           .trim();
-        // For Google domains force clean modern Chrome UA
+        // For Google domains and TikTok force clean modern Chrome UA
         const url = details.url || "";
+        const isTikTok = /tiktok\.com/i.test(url);
         if (
-          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login/i.test(
+          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com/i.test(
             url,
           )
         ) {
           ua = GOOGLE_UA;
           delete headers["X-Requested-With"];
-          if (isGoogleAuthRequest(url)) {
+          if (isGoogleAuthRequest(url) || isTikTok) {
             headers["Sec-CH-UA"] =
               '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
             headers["Sec-CH-UA-Mobile"] = "?0";
