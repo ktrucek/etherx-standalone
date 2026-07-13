@@ -998,11 +998,15 @@ if (window.electronWebview) {
         wv.addEventListener('new-window', (e) => {
             // Bug #1/#17/#19: Convert popups to tabs; handle YouTube, Google multi-account
             const url = e.url || '';
-            // Always open Google auth/login pages externally.
-            // Google blocks embedded/webview sign-in with "This browser may not be secure".
-            if (shouldOpenGoogleExternally(url)) {
-                window.etherx?.openExternal?.(url)?.catch?.(() => { });
-                showToast('🔐 Google login otvaram u zadanom browseru');
+            if (isAuthPopupUrl(url) && window.etherx?.openAuthWindow) {
+                window.etherx.openAuthWindow(url).then((result) => {
+                    if (!result?.ok) {
+                        createTab(url, 'Sign in', true);
+                        showToast('🔐 Auth otvoren u tabu');
+                    } else {
+                        showToast('🔐 Auth prozor otvoren u EtherX sesiji');
+                    }
+                }).catch(() => createTab(url, 'Sign in', true));
                 return;
             }
             // YouTube popups — open as new tab
@@ -3341,21 +3345,25 @@ function showNTP() {
     renderRecentSites();
 }
 function showFrame(tab) { ntp.style.display = 'none'; frame.style.removeProperty('display'); frame.classList.add('active'); document.getElementById('blockedOverlay').classList.remove('show'); }
-function shouldOpenGoogleExternally(rawUrl) {
+function isAuthPopupUrl(rawUrl) {
     try {
         const u = new URL(rawUrl);
         const host = u.hostname.toLowerCase();
         const path = u.pathname.toLowerCase();
         const qs = (u.search || '').toLowerCase();
 
-        if (host === 'accounts.google.com' || host === 'consent.google.com') return true;
+        if (host === 'accounts.google.com' || host === 'consent.google.com' || host === 'myaccount.google.com') return true;
 
-        // OAuth endpoints often bounce through these Google paths and fail in embedded views.
         if (host.endsWith('.google.com') && (path.includes('/o/oauth2') || path.includes('/signin') || path.includes('/servicelogin'))) return true;
 
-        // Keep this as fallback for Google's JS-driven sign-in flow parameters.
         if (host.endsWith('.google.com') && (qs.includes('flowname=glifwebsignin') || qs.includes('flowentry=servicelogin'))) return true;
+
+        if (/login\.live\.com|appleid\.apple\.com|facebook\.com\/dialog|twitter\.com\/oauth|x\.com\/oauth|github\.com\/login\/oauth|discord\.com\/oauth2|linkedin\.com\/oauth|reddit\.com\/api\/v1\/authorize|auth0\.com|okta\.com|openrouter\.ai\/auth|accounts\.openrouter\.ai|clerk\.openrouter\.ai|auth\.openrouter\.ai|huggingface\.co\/login|openai\.com\/auth|anthropic\.com\/login/i.test(rawUrl)) return true;
     } catch (_) { }
+    return false;
+}
+
+function shouldOpenGoogleExternally() {
     return false;
 }
 
@@ -3388,12 +3396,6 @@ function navigateTo(raw, tabId) {
         const { protocol } = new URL(url);
         if (!['http:', 'https:', 'file:', 'about:', 'chrome-extension:', 'etherx:'].includes(protocol)) return;
     } catch (e) { return; }
-    if (shouldOpenGoogleExternally(url) && window.electronWebview && window.etherx?.openExternal) {
-        window.etherx.openExternal(url).catch(() => { });
-        showToast('🔐 Google/Gmail otvaram u zadanom browseru da prijava radi');
-        consoleLog('info', '🌐 Opened externally: ' + url);
-        return;
-    }
     const tab = tabId ? STATE.tabs.find(t => t.id === tabId) : getActiveTab(); if (!tab) return;
     closeAllPanels();
     tab.url = url;

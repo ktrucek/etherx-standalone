@@ -114,6 +114,23 @@ const CHROME_CLEAN_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 app.userAgentFallback = CHROME_CLEAN_UA;
 
+function isAuthDeepLinkProtocol(protocol) {
+  return [
+    "intent:",
+    "itms-apps:",
+    "itms:",
+    "x-apple.systempreferences:",
+    "comgoogleaccounts:",
+    "com.googleusercontent.apps:",
+    "googlechrome:",
+    "googlechromes:",
+    "signinwithapple:",
+    "appleauth:",
+    "msauth:",
+    "ms-appx-web:",
+  ].includes(String(protocol || "").toLowerCase());
+}
+
 // ─── New modules (wrapped in try/catch — native modules can crash on wrong arch) ─
 let DatabaseManager, AdBlocker, SecurityManager, PasswordManager, SecretStore;
 let QRSyncManager, DefaultBrowser, UserAgentManager, I18nManager, AIManager;
@@ -2211,9 +2228,9 @@ function createWindow() {
           ua = GOOGLE_UA;
           // Remove X-Frame-Options bypass headers that trigger security checks
           delete headers["X-Requested-With"];
-          if (isGoogleAuthRequest(url)) {
+          if (isGoogleAuthRequest(url) && String(details.resourceType || "").toLowerCase() === "mainframe") {
             headers["Sec-CH-UA"] =
-              '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
+              '"Google Chrome";v="131", "Chromium";v="131", "Not?A_Brand";v="99"';
             headers["Sec-CH-UA-Mobile"] = "?0";
             headers["Sec-CH-UA-Platform"] = '"Windows"';
             headers["Sec-Fetch-Site"] = "none";
@@ -2368,9 +2385,9 @@ function createWindow() {
         ) {
           ua = GOOGLE_UA;
           delete headers["X-Requested-With"];
-          if (isGoogleAuthRequest(url)) {
+          if (isGoogleAuthRequest(url) && String(details.resourceType || "").toLowerCase() === "mainframe") {
             headers["Sec-CH-UA"] =
-              '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
+              '"Google Chrome";v="131", "Chromium";v="131", "Not?A_Brand";v="99"';
             headers["Sec-CH-UA-Mobile"] = "?0";
             headers["Sec-CH-UA-Platform"] = '"Windows"';
             headers["Sec-Fetch-Site"] = "none";
@@ -3117,6 +3134,77 @@ function setupIPC() {
     // Security: only allow http/https/mailto URLs via openExternal
     if (/^https?:\/\/|^mailto:/i.test(url)) return shell.openExternal(url);
     return Promise.resolve({ ok: false, error: "URL scheme not allowed" });
+  });
+  ipcMain.handle("app:openAuthWindow", async (_e, url) => {
+    try {
+      const parsed = new URL(String(url || ""));
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return { ok: false, error: "URL scheme not allowed" };
+      }
+      const authWin = new BrowserWindow({
+        width: 560,
+        height: 720,
+        parent: mainWindow || undefined,
+        modal: false,
+        title: "Sign in",
+        backgroundColor: "#10131f",
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: false,
+          partition: "persist:etherx",
+          webviewTag: false,
+          preload: path.join(__dirname, "src", "webview-preload.js"),
+        },
+      });
+      authWin.setMenuBarVisibility(false);
+      authWin.webContents.setUserAgent(CHROME_CLEAN_UA);
+      authWin.webContents.on("did-finish-load", () => {
+        authWin.webContents.executeJavaScript(`
+          (() => {
+            if (window.__etherxAuthPasskeyFallback) return;
+            window.__etherxAuthPasskeyFallback = true;
+            const showFallback = (detail) => {
+              if (document.getElementById('__etherxAuthFallback')) return;
+              const box = document.createElement('div');
+              box.id = '__etherxAuthFallback';
+              box.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;z-index:2147483647;padding:12px 14px;border-radius:12px;background:rgba(12,18,32,.96);border:1px solid rgba(96,165,250,.45);color:#e5efff;font:13px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 16px 40px rgba(0,0,0,.35)';
+              box.innerHTML = '<b>Passkey/iPhone login ne odgovara u ovom prozoru.</b><div style="margin-top:4px;color:#b7c6e8">Pokušaj email/lozinku ili otvori ovaj auth tok u sistemskom browseru.</div><button id="__etherxAuthOpenExternal" style="margin-top:8px;padding:6px 10px;border:0;border-radius:8px;background:#3b82f6;color:white;cursor:pointer">Otvori vanjski browser</button>';
+              document.body.appendChild(box);
+              document.getElementById('__etherxAuthOpenExternal')?.addEventListener('click', () => {
+                location.href = 'etherx-open-external:' + encodeURIComponent(location.href);
+              });
+              console.warn('[EtherX Auth] Passkey fallback:', detail || '');
+            };
+            const wrap = (obj, name) => {
+              const original = obj && obj[name];
+              if (typeof original !== 'function') return;
+              obj[name] = function(...args) {
+                const p = original.apply(this, args);
+                if (p && typeof p.catch === 'function') p.catch((err) => showFallback(err && err.message ? err.message : String(err || '')));
+                setTimeout(() => {
+                  const text = String(document.body?.innerText || '').toLowerCase();
+                  if (/iphone|passkey|security key|qr code|scan/i.test(text) && /sign in|continue|use your/i.test(text)) showFallback('passkey-screen-timeout');
+                }, 15000);
+                return p;
+              };
+            };
+            try { wrap(navigator.credentials, 'get'); wrap(navigator.credentials, 'create'); } catch (_) {}
+          })();
+        `).catch(() => { });
+      });
+      authWin.webContents.on("will-navigate", (event, nextUrl) => {
+        if (String(nextUrl || "").startsWith("etherx-open-external:")) {
+          event.preventDefault();
+          const target = decodeURIComponent(String(nextUrl).slice("etherx-open-external:".length));
+          shell.openExternal(target).catch(() => { });
+        }
+      });
+      await authWin.loadURL(parsed.toString());
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message || String(e) };
+    }
   });
   ipcMain.handle("app:openApplePasswords", async () => {
     if (process.platform !== "darwin")
@@ -4692,6 +4780,11 @@ app.on("web-contents-created", (_event, contents) => {
       const parsedUrl = new URL(details.url);
 
       // Block external app protocols
+      if (isAuthDeepLinkProtocol(parsedUrl.protocol)) {
+        shell.openExternal(details.url).catch(() => { });
+        return { action: "deny" };
+      }
+
       if (
         [
           "mailto:",
@@ -4722,8 +4815,8 @@ app.on("web-contents-created", (_event, contents) => {
             details.url,
           );
 
-        // Force all Google sign-in/OAuth popups to open in the external browser.
-        // Google blocks sign-in from Electron/CEF user agents ("untrusted browser").
+        // Google and other OAuth popups must stay inside the persisted EtherX
+        // session so cookies are saved for Gmail/Drive/etc.
         const isGoogleAuth = (url) => {
           try {
             const u = new URL(url);
@@ -4736,12 +4829,7 @@ app.on("web-contents-created", (_event, contents) => {
           } catch (_) { return false; }
         };
 
-        if (isGoogleAuth(details.url)) {
-          shell.openExternal(details.url).catch(() => { });
-          return { action: 'deny' };
-        }
-
-        if (isOAuthPopup) {
+        if (isOAuthPopup || isGoogleAuth(details.url)) {
           // Allow as a real popup BrowserWindow so window.opener is preserved.
           // Include the webview-preload so navigator.webdriver = false and other
           // bot-detection spoofs are active inside the popup (needed for Clerk,
@@ -4783,7 +4871,14 @@ app.on("web-contents-created", (_event, contents) => {
     try {
       const { URL: NURL } = require("url");
       const parsed = new NURL(url);
-      if (["mailto:", "tel:", "sms:", "magnet:"].includes(parsed.protocol)) {
+      if (parsed.protocol === "etherx-open-external:") {
+        _e.preventDefault();
+        const target = decodeURIComponent(String(url).slice("etherx-open-external:".length));
+        if (/^https?:\/\//i.test(target)) shell.openExternal(target).catch(() => { });
+      } else if (isAuthDeepLinkProtocol(parsed.protocol)) {
+        _e.preventDefault();
+        shell.openExternal(url).catch(() => { });
+      } else if (["mailto:", "tel:", "sms:", "magnet:"].includes(parsed.protocol)) {
         _e.preventDefault();
       } else if (
         !["http:", "https:", "file:", "about:", "chrome-extension:"].includes(

@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 contextBridge.exposeInMainWorld('etherx', {
 
   openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
+  openAuthWindow: (url) => ipcRenderer.invoke('app:openAuthWindow', url),
 
   // ── Window ──────────────────────────────────────────────────────────────────
   window: {
