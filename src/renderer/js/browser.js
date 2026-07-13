@@ -3966,6 +3966,8 @@ function openSettingsTab(stab) {
     const target = String(stab || 'general');
     document.querySelectorAll('.sit-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`.sit-btn[data-stab="${target}"]`)?.classList.add('active');
+    document.querySelectorAll('.s-tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('stab-' + target)?.classList.add('active');
     if (window.refreshSettingsPane) window.refreshSettingsPane(target);
 }
 window.openSettingsTab = openSettingsTab;
@@ -5120,6 +5122,44 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
         }, 350);
     }
+
+    window.getTikTokAiHealthSnapshot = function getTikTokAiHealthSnapshot() {
+        try {
+            const messages = Array.isArray(collectedMessages) ? collectedMessages : [];
+            const users = buildUserStats(messages, Math.max(200, Number(DB.getSettings().tkaiUserScanLimit || 200)));
+            const userDb = getTkaiUserDB();
+            const giftStats = computeGiftStatsFromMessages(messages);
+            const latest = messages[messages.length - 1] || null;
+            const sourceTab = getTikTokSourceTab() || null;
+            let autosave = null;
+            try {
+                const raw = localStorage.getItem(TKAI_AUTOSAVE_KEY);
+                autosave = raw ? JSON.parse(raw) : null;
+            } catch (_) { autosave = null; }
+            return {
+                ok: true,
+                scanActive,
+                holdLActive,
+                messageCount: messages.length,
+                chatCount: messages.filter((m) => normalizeTkaiMessageType(m) === 'chat').length,
+                giftCount: giftStats.totalGiftEvents || 0,
+                totalCoins: giftStats.totalCoins || 0,
+                userCount: users.length,
+                userDatabaseCount: userDb && typeof userDb === 'object' ? Object.keys(userDb).length : 0,
+                currentViewers: liveViewerCount,
+                peakViewers: peakViewerCount,
+                sessionStartedAt,
+                lastEventAt: latest?.ts || 0,
+                lastText: latest?.text || '',
+                sourceTabId: sourceTab?.id || tkaiLiveSourceTabId || null,
+                sourceTabUrl: sourceTab?.url || '',
+                autosaveUpdatedAt: autosave?.updatedAt || '',
+                autosaveMessageCount: Array.isArray(autosave?.messages) ? autosave.messages.length : 0,
+            };
+        } catch (error) {
+            return { ok: false, error: String(error?.message || error || 'TikTok AI health failed') };
+        }
+    };
     const TKAI_SCAN_INTERVAL_NORMAL_MS = 4000;
     const TKAI_SCAN_INTERVAL_FAST_MS = 2000;
     const TKAI_SCAN_FAST_WINDOW_MS = 30000;
@@ -21528,6 +21568,304 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     // Wire Refresh button via JS to avoid any inline-onclick scope issues
     document.addEventListener('click', e => {
         if (e.target && e.target.id === 'btnRefreshStorage') refreshStorageUsage();
+    });
+
+    // ── Diagnostics Center ────────────────────────────────────────────────────
+    const DIAG_STATE = { lastReportText: '' };
+
+    function diagFmtBytes(bytes) {
+        const n = Number(bytes || 0);
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+        return (n / 1048576).toFixed(2) + ' MB';
+    }
+
+    function diagCountStorage(storage) {
+        try {
+            let bytes = 0;
+            for (let i = 0; i < storage.length; i += 1) {
+                const key = storage.key(i);
+                const value = storage.getItem(key) || '';
+                bytes += new Blob([String(key || '') + String(value)]).size;
+            }
+            return { keys: storage.length, bytes };
+        } catch (error) {
+            return { keys: 0, bytes: 0, error: String(error?.message || error) };
+        }
+    }
+
+    function diagActiveWebview() {
+        const tab = getActiveTab?.();
+        const wv = getTabWebview?.(tab?.id || STATE.activeTabId)
+            || document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`)
+            || document.getElementById('browseFrame');
+        let webviewUrl = '';
+        try { webviewUrl = typeof wv?.getURL === 'function' ? wv.getURL() : ''; } catch (_) { webviewUrl = ''; }
+        return {
+            tab,
+            webview: wv && wv.tagName === 'WEBVIEW' ? wv : null,
+            url: webviewUrl || tab?.url || '',
+            title: tab?.title || '',
+            partition: wv?.getAttribute?.('partition') || '',
+            useragent: wv?.getAttribute?.('useragent') || '',
+            isLoading: typeof wv?.isLoading === 'function' ? !!wv.isLoading() : false,
+        };
+    }
+
+    async function diagCollectCookies(url) {
+        try {
+            if (!url || !window.etherx?.cookies?.getAll) return { ok: false, count: 0, reason: 'Cookie API nije dostupan' };
+            const res = await window.etherx.cookies.getAll(url);
+            const list = Array.isArray(res) ? res : (Array.isArray(res?.cookies) ? res.cookies : []);
+            const byPartition = list.reduce((acc, cookie) => {
+                const key = String(cookie?.partition || 'unknown');
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            }, {});
+            return { ok: res?.ok !== false, count: list.length, byPartition, error: res?.error || '' };
+        } catch (error) {
+            return { ok: false, count: 0, error: String(error?.message || error) };
+        }
+    }
+
+    async function diagCollectIndexedDb() {
+        try {
+            if (!indexedDB?.databases) return { ok: false, count: 0, reason: 'indexedDB.databases nije podržan u ovom shellu' };
+            const dbs = await indexedDB.databases();
+            return { ok: true, count: Array.isArray(dbs) ? dbs.length : 0, names: (dbs || []).map((db) => db.name).filter(Boolean).slice(0, 12) };
+        } catch (error) {
+            return { ok: false, count: 0, error: String(error?.message || error) };
+        }
+    }
+
+    async function diagCollectLiveOs() {
+        try {
+            if (!window.etherx?.liveos?.getSnapshot) return { ok: false, reason: 'LiveOS bridge nije dostupan' };
+            const snapshot = await window.etherx.liveos.getSnapshot();
+            return {
+                ok: !!snapshot,
+                state: snapshot?.connection?.state || 'empty',
+                events: Array.isArray(snapshot?.events) ? snapshot.events.length : 0,
+                users: Array.isArray(snapshot?.userDatabase) ? snapshot.userDatabase.length : (Array.isArray(snapshot?.users) ? snapshot.users.length : 0),
+                gifts: Array.isArray(snapshot?.giftLedger) ? snapshot.giftLedger.length : (Array.isArray(snapshot?.gifts) ? snapshot.gifts.length : 0),
+                savedSessions: Array.isArray(snapshot?.savedSessions) ? snapshot.savedSessions.length : Number(snapshot?.archive?.savedSessionCount || 0),
+                lastEventAt: snapshot?.connection?.lastEventAt || snapshot?.session?.startedAt || 0,
+            };
+        } catch (error) {
+            return { ok: false, error: String(error?.message || error) };
+        }
+    }
+
+    async function diagCollectPm2() {
+        try {
+            if (!window.etherx?.app?.getPM2Status) return { ok: false, reason: 'PM2 API nije dostupan' };
+            const res = await window.etherx.app.getPM2Status();
+            const output = String(res?.output || '').trim();
+            return {
+                ok: !!output && res?.ok !== false,
+                hasOutput: !!output,
+                online: /\bonline\b/i.test(output),
+                errored: /\berrored\b|\bstopped\b/i.test(output),
+                output: output.slice(0, 4000),
+                error: res?.error || '',
+            };
+        } catch (error) {
+            return { ok: false, error: String(error?.message || error) };
+        }
+    }
+
+    async function collectEtherxDiagnostics() {
+        const active = diagActiveWebview();
+        const activeReport = {
+            tabId: active.tab?.id || STATE.activeTabId || null,
+            url: active.url || '',
+            title: active.title || '',
+            partition: active.partition || '',
+            useragent: active.useragent || '',
+            isLoading: active.isLoading,
+        };
+        const local = diagCountStorage(localStorage);
+        const session = diagCountStorage(sessionStorage);
+        const [cookies, idb, liveos, pm2] = await Promise.all([
+            diagCollectCookies(active.url),
+            diagCollectIndexedDb(),
+            diagCollectLiveOs(),
+            diagCollectPm2(),
+        ]);
+        let storageEstimate = null;
+        try {
+            storageEstimate = navigator.storage?.estimate ? await navigator.storage.estimate() : null;
+        } catch (_) { storageEstimate = null; }
+
+        let appVersion = document.getElementById('helpVersionNum')?.textContent || document.getElementById('helpVersionNum2')?.textContent || '';
+        try {
+            if (window.etherx?.app?.getVersion) appVersion = await window.etherx.app.getVersion();
+        } catch (_) { }
+        const tiktokAi = typeof window.getTikTokAiHealthSnapshot === 'function'
+            ? window.getTikTokAiHealthSnapshot()
+            : { ok: false, reason: 'TikTok AI health nije registriran' };
+        const update = {
+            version: String(appVersion || '').trim(),
+            badge: document.getElementById('updateBadge')?.textContent || '',
+            status: document.getElementById('updateStatus')?.textContent || document.getElementById('updateStatusText')?.textContent || '',
+            packagedApi: !!window.etherx?.update?.check,
+        };
+        const loginHost = (() => {
+            try { return new URL(active.url).hostname.toLowerCase(); } catch (_) { return ''; }
+        })();
+        return {
+            generatedAt: new Date().toISOString(),
+            app: {
+                version: update.version,
+                platform: navigator.platform,
+                electronWebview: !!window.electronWebview,
+                userAgent: navigator.userAgent,
+            },
+            active: activeReport,
+            storage: {
+                local,
+                session,
+                estimate: storageEstimate ? {
+                    usage: storageEstimate.usage || 0,
+                    quota: storageEstimate.quota || 0,
+                    usageText: diagFmtBytes(storageEstimate.usage || 0),
+                    quotaText: diagFmtBytes(storageEstimate.quota || 0),
+                } : null,
+                indexedDb: idb,
+            },
+            cookies,
+            liveos,
+            tiktokAi,
+            pm2,
+            update,
+            login: {
+                host: loginHost,
+                isAuthSite: /(^|\.)accounts\.google\.com$|(^|\.)google\.com$|(^|\.)apple\.com$|(^|\.)microsoftonline\.com$|(^|\.)login\.live\.com$|(^|\.)tiktok\.com$/.test(loginHost),
+                cookieCount: cookies.count || 0,
+                partition: active.partition || '',
+                webviewUserAgent: active.useragent || '',
+            },
+        };
+    }
+
+    function diagCard(label, value, detail, tone = 'info') {
+        const colors = {
+            ok: 'rgba(16,185,129,.16);border-color:rgba(16,185,129,.38)',
+            warn: 'rgba(245,158,11,.16);border-color:rgba(245,158,11,.38)',
+            bad: 'rgba(239,68,68,.16);border-color:rgba(239,68,68,.38)',
+            info: 'rgba(59,130,246,.12);border-color:rgba(59,130,246,.28)',
+        };
+        return `<div style="background:${colors[tone] || colors.info};border:1px solid var(--border2);border-radius:7px;padding:9px 10px">
+            <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">${escHtml(label)}</div>
+            <div style="font-size:17px;font-weight:700;color:var(--text);margin-top:2px">${escHtml(value)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.35">${escHtml(detail || '')}</div>
+        </div>`;
+    }
+
+    function renderEtherxDiagnostics(report) {
+        const summaryEl = document.getElementById('diagSummary');
+        const gridEl = document.getElementById('diagGrid');
+        const reportEl = document.getElementById('diagReport');
+        if (!summaryEl || !gridEl || !reportEl) return;
+
+        const issues = [];
+        if (report.cookies.count === 0 && report.login.isAuthSite) issues.push('Auth stranica nema cookies u persistent sessionu.');
+        if (!report.active.partition && window.electronWebview) issues.push('Aktivni webview nema vidljiv partition atribut.');
+        if (report.pm2.errored) issues.push('PM2 status sadrži stopped/errored.');
+        if (report.liveos.ok && report.liveos.events === 0 && report.tiktokAi.messageCount > 0) issues.push('TikTok AI ima poruke, ali LiveOS snapshot nema evente.');
+        if (!report.tiktokAi.ok) issues.push(report.tiktokAi.reason || report.tiktokAi.error || 'TikTok AI health nije dostupan.');
+
+        const authHint = report.login.isAuthSite
+            ? `Auth host: ${report.login.host || 'n/a'} | cookies: ${report.login.cookieCount} | partition: ${report.login.partition || 'n/a'}`
+            : `Aktivni host: ${report.login.host || 'n/a'}`;
+        summaryEl.textContent = [
+            issues.length ? 'Status: treba pogledati ' + issues.length + ' stvar(i).' : 'Status: osnovne provjere su uredne.',
+            authHint,
+            'Active tab: ' + (report.active.title || report.active.url || 'n/a'),
+            issues.length ? ('\nProblemi:\n- ' + issues.join('\n- ')) : '',
+        ].filter(Boolean).join('\n');
+
+        gridEl.innerHTML = [
+            diagCard('Cookies', String(report.cookies.count || 0), Object.entries(report.cookies.byPartition || {}).map(([k, v]) => `${k}: ${v}`).join(' | ') || report.cookies.error || 'Nema cookies', report.cookies.count ? 'ok' : 'warn'),
+            diagCard('Storage', diagFmtBytes(report.storage.local.bytes), `${report.storage.local.keys} local keys | ${report.storage.session.keys} session keys`, report.storage.local.keys ? 'ok' : 'warn'),
+            diagCard('IndexedDB', String(report.storage.indexedDb.count || 0), (report.storage.indexedDb.names || []).join(', ') || report.storage.indexedDb.reason || report.storage.indexedDb.error || 'Nema baza', report.storage.indexedDb.count ? 'ok' : 'info'),
+            diagCard('TikTok Chat AI', String(report.tiktokAi.messageCount || 0), `${report.tiktokAi.chatCount || 0} chat | ${report.tiktokAi.giftCount || 0} gift | scan ${report.tiktokAi.scanActive ? 'ON' : 'OFF'}`, report.tiktokAi.ok ? 'ok' : 'bad'),
+            diagCard('LiveOS+', String(report.liveos.events || 0), `${report.liveos.users || 0} users | ${report.liveos.gifts || 0} gifts | ${report.liveos.savedSessions || 0} sessions`, report.liveos.ok ? (report.liveos.events ? 'ok' : 'warn') : 'bad'),
+            diagCard('PM2', report.pm2.online ? 'online' : (report.pm2.hasOutput ? 'check' : 'n/a'), report.pm2.error || report.pm2.reason || 'Status dohvaćen', report.pm2.errored ? 'bad' : (report.pm2.online ? 'ok' : 'warn')),
+            diagCard('Update', report.update.version || 'n/a', report.update.status || report.update.badge || 'Update API: ' + (report.update.packagedApi ? 'yes' : 'no'), report.update.packagedApi ? 'ok' : 'warn'),
+            diagCard('Login', report.login.isAuthSite ? 'auth site' : 'normal', report.login.webviewUserAgent ? report.login.webviewUserAgent.slice(0, 72) : 'UA nije vidljiv', report.login.isAuthSite && !report.cookies.count ? 'warn' : 'info'),
+        ].join('');
+
+        DIAG_STATE.lastReportText = JSON.stringify(report, null, 2);
+        reportEl.textContent = DIAG_STATE.lastReportText;
+    }
+
+    async function runEtherxDiagnostics() {
+        const btn = document.getElementById('diagRunAllBtn');
+        const summaryEl = document.getElementById('diagSummary');
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '.7';
+            btn.textContent = '⏳ Provjeravam...';
+        }
+        if (summaryEl) summaryEl.textContent = 'Pokrećem provjere...';
+        try {
+            const report = await collectEtherxDiagnostics();
+            renderEtherxDiagnostics(report);
+            return report;
+        } catch (error) {
+            const msg = 'Diagnostics greška: ' + String(error?.message || error);
+            if (summaryEl) summaryEl.textContent = msg;
+            const reportEl = document.getElementById('diagReport');
+            if (reportEl) reportEl.textContent = msg;
+            showToast('⚠️ Diagnostics nije uspio');
+            return null;
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = '';
+                btn.textContent = '▶ Pokreni provjere';
+            }
+        }
+    }
+
+    window.runEtherxDiagnostics = runEtherxDiagnostics;
+
+    document.getElementById('diagRunAllBtn')?.addEventListener('click', () => runEtherxDiagnostics());
+    document.getElementById('diagCopyBtn')?.addEventListener('click', async () => {
+        const text = DIAG_STATE.lastReportText || document.getElementById('diagReport')?.textContent || '';
+        if (!text || text.includes('Report još nije')) {
+            await runEtherxDiagnostics();
+        }
+        const finalText = DIAG_STATE.lastReportText || document.getElementById('diagReport')?.textContent || '';
+        try {
+            await navigator.clipboard.writeText(finalText);
+            showToast('📋 Diagnostics report kopiran');
+        } catch (_) {
+            showToast('⚠️ Clipboard nije dostupan');
+        }
+    });
+    document.getElementById('diagOpenWebviewDevtoolsBtn')?.addEventListener('click', () => {
+        if (typeof window.openActiveWebviewDevTools === 'function') window.openActiveWebviewDevTools();
+    });
+    document.getElementById('diagLoginModeBtn')?.addEventListener('click', () => {
+        const active = diagActiveWebview();
+        if (!active.webview || !active.url) {
+            showToast('⚠️ Nema aktivnog webview taba za login compatibility');
+            return;
+        }
+        try {
+            applyUserAgentForURL(active.webview, active.url);
+            if (typeof navigateWebviewToURL === 'function') navigateWebviewToURL(active.webview, active.url);
+            else active.webview.reload?.();
+            showToast('🔐 Login compatibility primijenjen na aktivni tab');
+            setTimeout(runEtherxDiagnostics, 1200);
+        } catch (error) {
+            showToast('⚠️ Login compatibility greška: ' + String(error?.message || error));
+        }
+    });
+    document.querySelectorAll('.sit-btn[data-stab="diagnostics"]').forEach((btn) => {
+        btn.addEventListener('click', () => setTimeout(runEtherxDiagnostics, 80));
     });
 
     // ── Master Password Change ────────────────────────────────────────────────
