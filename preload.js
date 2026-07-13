@@ -132,6 +132,7 @@ contextBridge.exposeInMainWorld('etherx', {
     readingMode: (html) => ipcRenderer.invoke('ai:readingMode', html),
     groupTabs: (tabs) => ipcRenderer.invoke('ai:groupTabs', tabs),
     translate: (text, targetLang) => ipcRenderer.invoke('ai:translate', text, targetLang),
+    guardianRequest: (payload) => ipcRenderer.invoke('ai:guardianRequest', payload),
     summarizePage: (url, html) => ipcRenderer.invoke('ai:summarizePage', url, html),
     installPythonDeps: () => ipcRenderer.invoke('ai:installPythonDeps'),
     getCachedSummaries: (limit) => ipcRenderer.invoke('db:getAiCache', limit),

@@ -3294,7 +3294,19 @@ async function openLiveOsDashboard() {
         showToast("LiveOS Dashboard is unavailable");
         return;
     }
-    navigateTo(url);
+    const existing = STATE.tabs.find((tab) => isLiveOsDashboardUrl(tab?.url));
+    if (existing) {
+        switchTab(existing.id);
+        if (existing.url !== url) navigateTo(url, existing.id);
+        return;
+    }
+    createTab(url, "LiveOS Dashboard", true);
+}
+
+function isLiveOsDashboardUrl(url) {
+    const value = String(url || "");
+    return /\/liveos-plugin-dashboard\/index\.html(?:[?#].*)?$/i.test(value)
+        || /^chrome-extension:\/\/[a-z]{32}\/index\.html(?:[?#].*)?$/i.test(value);
 }
 
 function normalizeUrl(raw) {
@@ -4092,6 +4104,19 @@ async function runGuardianAiRequest(prompt, systemPrompt = '', model = 'grok-2',
     const headers = { 'Content-Type': 'application/json' };
     if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
 
+    if (window.etherx?.ai?.guardianRequest) {
+        const proxied = await window.etherx.ai.guardianRequest({
+            endpoint,
+            model: model || 'grok-2',
+            apiKey,
+            prompt,
+            systemPrompt,
+            maxTokens: 300
+        });
+        if (!proxied?.ok) throw new Error(proxied?.error || 'Guardian AI proxy request failed');
+        return String(proxied.content || '').trim();
+    }
+
     const response = await fetch(endpoint, {
         method: 'POST',
         headers,
@@ -4807,6 +4832,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let isTranslating = false;
     let holdLActive = false;
     let holdLInterval = null;
+    let tkaiLiveSourceTabId = null;
     let turboScanFastUntilTs = 0;
     let sessionStartedAt = null;
     let liveViewerCount = 0;
@@ -4850,17 +4876,177 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const STORAGE_KEY = 'ex_tkai_cfg';
     let liveOsPublishTimer = null;
 
+    function getLiveOsSavedSessionPayload() {
+        let savedSessions = [];
+        let statsStorage = [];
+        let autosaveSession = null;
+        try {
+            const raw = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+            savedSessions = Array.isArray(raw) ? raw.slice(-20) : [];
+        } catch (_) { }
+        try {
+            const autosave = JSON.parse(localStorage.getItem(TKAI_AUTOSAVE_KEY) || 'null');
+            const autosaveMessages = Array.isArray(autosave?.messages) ? autosave.messages : [];
+            if (autosaveMessages.length) {
+                const autosaveGiftStats = computeGiftStatsFromMessages(autosaveMessages);
+                autosaveSession = {
+                    savedAt: autosave.updatedAt || new Date().toISOString(),
+                    owner: String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, ''),
+                    liveUrl: getTikTokSourceTab()?.url || '',
+                    messageCount: autosaveMessages.length,
+                    sessionMinutes: autosave.sessionStartedAt ? Math.floor((Date.now() - Number(autosave.sessionStartedAt || 0)) / 60000) : 0,
+                    peakViewers: Number(autosave.peakViewerCount || 0),
+                    currentViewers: Number(autosave.liveViewerCount || 0),
+                    totalCoins: autosaveGiftStats.totalCoins,
+                    messages: autosaveMessages
+                };
+            }
+        } catch (_) { }
+        if (!savedSessions.length && autosaveSession) savedSessions = [autosaveSession];
+        try {
+            if (typeof getTkaiStatsStorage === 'function') {
+                statsStorage = getTkaiStatsStorage().slice(-80);
+            } else {
+                const rawStats = JSON.parse(localStorage.getItem('ex_tkai_stats_storage') || '[]');
+                statsStorage = Array.isArray(rawStats) ? rawStats.slice(-80) : [];
+            }
+        } catch (_) { }
+        return {
+            savedSessions,
+            statsStorage,
+            savedSessionCount: savedSessions.length,
+            statsCount: statsStorage.length
+        };
+    }
+
+    function computeGiftStatsFromMessages(messages) {
+        const giftMessages = (Array.isArray(messages) ? messages : []).filter(isTkaiGiftLikeMessage);
+        let totalCoins = 0;
+        const byGift = new Map();
+        const byUser = new Map();
+        const ledger = [];
+        giftMessages.forEach((message) => {
+            const resolved = safeResolveGiftMetaFromMessage(message);
+            const giftName = String(message.giftName || resolved?.giftName || message.text || 'Gift').trim().slice(0, 80);
+            const quantity = Math.max(1, Number(message.quantity || resolved?.quantity || 1));
+            const coins = Math.max(0, Number(
+                message.coins
+                || resolved?.coins
+                || parseCoinsFromText(message.text)
+                || parseCoinsFromText(message.giftRawText)
+                || 0
+            ));
+            const user = String(message.user || '').trim() || 'Unknown';
+            totalCoins += coins;
+            const giftKey = giftName.toLowerCase();
+            const giftRow = byGift.get(giftKey) || { name: giftName, quantity: 0, coins: 0, events: 0, users: {} };
+            giftRow.quantity += quantity;
+            giftRow.coins += coins;
+            giftRow.events += 1;
+            giftRow.users[user] = (giftRow.users[user] || 0) + quantity;
+            byGift.set(giftKey, giftRow);
+            const userKey = user.toLowerCase();
+            const userRow = byUser.get(userKey) || { user, coins: 0, quantity: 0, events: 0, gifts: {} };
+            userRow.coins += coins;
+            userRow.quantity += quantity;
+            userRow.events += 1;
+            userRow.gifts[giftName] = (userRow.gifts[giftName] || 0) + quantity;
+            byUser.set(userKey, userRow);
+            ledger.push({
+                user,
+                giftName,
+                quantity,
+                coins,
+                text: String(message.text || message.giftRawText || '').trim(),
+                ts: Number(message.ts || Date.now()),
+            });
+        });
+        return {
+            gifts: Array.from(byGift.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity),
+            giftLedger: ledger.sort((a, b) => b.ts - a.ts).slice(0, 1000),
+            giftSupporters: Array.from(byUser.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity),
+            totalCoins,
+            totalGiftEvents: giftMessages.length,
+        };
+    }
+
+    function getLiveOsUserDatabasePayload(currentUsers) {
+        try {
+            const db = getTkaiUserDB();
+            return Object.values(db || {})
+                .map((entry) => ({
+                    user: entry.user,
+                    sessions: Number(entry.sessions || 0),
+                    totalMessages: Number(entry.totalMessages || 0),
+                    totalChat: Number(entry.totalChat || 0),
+                    totalGifts: Number(entry.totalGifts || 0),
+                    totalCoins: Number(entry.totalCoins || 0),
+                    totalLikes: Number(entry.totalLikes || 0),
+                    totalShares: Number(entry.totalShares || 0),
+                    totalJoins: Number(entry.totalJoins || 0),
+                    totalActiveMinutes: Number(entry.totalActiveMinutes || 0),
+                    firstSeen: Number(entry.firstSeen || 0),
+                    lastSeen: Number(entry.lastSeen || 0),
+                    lastMessage: String(entry.lastMessage || ''),
+                    giftTypes: Object.entries(entry.giftTypes || {}).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)).slice(0, 8),
+                    note: String(entry.note || ''),
+                }))
+                .sort((a, b) => b.totalCoins - a.totalCoins || b.totalMessages - a.totalMessages || b.lastSeen - a.lastSeen)
+                .slice(0, 5000);
+        } catch (_) {
+            return Array.isArray(currentUsers) ? currentUsers : [];
+        }
+    }
+
+    function buildLiveOsAnalyticsSummary(messages, users, giftDetails, insightsSnapshot) {
+        const list = Array.isArray(messages) ? messages : [];
+        const typed = list.reduce((acc, message) => {
+            const type = normalizeTkaiMessageType(message);
+            acc[type] = (acc[type] || 0) + 1;
+            return acc;
+        }, {});
+        const firstTs = list.reduce((min, row) => {
+            const ts = Number(row?.ts || 0);
+            return ts ? Math.min(min || ts, ts) : min;
+        }, 0);
+        const lastTs = list.reduce((max, row) => Math.max(max, Number(row?.ts || 0)), 0);
+        const durationMinutes = firstTs && lastTs ? Math.max(1, Math.round((lastTs - firstTs) / 60000)) : 0;
+        const topChatters = (Array.isArray(users) ? users : []).slice().sort((a, b) => Number(b.chat || b.totalMessages || 0) - Number(a.chat || a.totalMessages || 0)).slice(0, 12);
+        return {
+            messageCount: list.length,
+            durationMinutes,
+            eventTypes: typed,
+            uniqueUsers: Array.isArray(users) ? users.length : 0,
+            totalCoins: Number(giftDetails?.totalCoins || 0),
+            totalGiftEvents: Number(giftDetails?.totalGiftEvents || 0),
+            topChatters,
+            topGifters: Array.isArray(giftDetails?.giftSupporters) ? giftDetails.giftSupporters.slice(0, 12) : [],
+            sentiment: insightsSnapshot?.sentiment || 'neutral',
+            sentimentCounts: insightsSnapshot?.sentimentCounts || {},
+            recommendations: Array.isArray(insightsSnapshot?.recommendations) ? insightsSnapshot.recommendations.slice(0, 12) : [],
+            spikes: Array.isArray(insightsSnapshot?.spikes) ? insightsSnapshot.spikes.slice(0, 12) : [],
+        };
+    }
+
     function scheduleLiveOsSnapshotPublish() {
         if (!window.etherx?.liveos?.publishSnapshot) return;
         if (liveOsPublishTimer) clearTimeout(liveOsPublishTimer);
         liveOsPublishTimer = setTimeout(() => {
             liveOsPublishTimer = null;
             try {
-                const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
+                const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-5000) : [];
                 const giftStats = computeGiftStats();
                 const users = buildUserStats(messages, Math.max(200, Number(DB.getSettings().tkaiUserScanLimit || 200)));
                 const insightsSnapshot = computeInsightsSnapshot(messages);
-                const tab = getActiveTab();
+                const giftDetails = computeGiftStatsFromMessages(messages);
+                const userDatabase = getLiveOsUserDatabasePayload(users);
+                const analyticsSummary = buildLiveOsAnalyticsSummary(messages, userDatabase, giftDetails, insightsSnapshot);
+                const songHistory = extractSongEventsFromMessages(messages, Date.now(), 1000).reverse();
+                const alertRows = [
+                    ...(insightsSnapshot.spikes || []).map((spike) => ({ type: spike.type || 'activity', severity: 'warning', text: `${spike.type || 'activity'} spike`, score: Number(spike.delta || 0), ts: Number(spike.ts || Date.now()) })),
+                    ...(insightsSnapshot.recommendations || []).map((text) => ({ type: 'recommendation', severity: 'info', text: String(text), score: 0, ts: Date.now() })),
+                ];
+                const tab = getTikTokSourceTab() || getActiveTab();
                 const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
                 const lastEventAt = messages.reduce((max, row) => Math.max(max, Number(row?.ts || 0)), 0);
                 const giftTypes = new Map();
@@ -4875,6 +5061,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     row.coins += Math.max(0, Number(message.coins || 0));
                     giftTypes.set(key, row);
                 });
+                const liveOsSaved = getLiveOsSavedSessionPayload();
                 const snapshot = {
                     connection: {
                         state: scanActive ? 'scanning' : (messages.length ? 'paused' : 'idle'),
@@ -4897,22 +5084,33 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     },
                     events: messages,
                     users,
-                    gifts: Array.from(giftTypes.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity),
+                    userDatabase,
+                    gifts: giftDetails.gifts.length ? giftDetails.gifts : Array.from(giftTypes.values()).sort((a, b) => b.coins - a.coins || b.quantity - a.quantity),
+                    giftLedger: giftDetails.giftLedger,
+                    giftSupporters: giftDetails.giftSupporters,
                     supporters: Array.isArray(giftStats.leaders) ? giftStats.leaders : [],
                     insights: [
                         ...(insightsSnapshot.topTopics || []).map((topic) => ({ type: 'topic', text: String(topic?.topic || topic?.label || topic), score: Number(topic?.count || 0) })),
                         ...(insightsSnapshot.spikes || []).map((spike) => ({ type: 'spike', text: `${spike.type || 'activity'} spike`, score: Number(spike.delta || 0), ts: Number(spike.ts || Date.now()) })),
                     ],
+                    analytics: analyticsSummary,
                     music: {
-                        currentTrack: insightsSnapshot.songs?.[0] || null,
-                        history: insightsSnapshot.songs || [],
+                        currentTrack: songHistory[0] || insightsSnapshot.songs?.[0] || null,
+                        history: songHistory.length ? songHistory : (insightsSnapshot.songs || []),
                     },
+                    alerts: alertRows,
                     sentiment: {
                         label: _cardiffSentiment?.label || insightsSnapshot.sentiment || 'neutral',
                         confidence: _cardiffSentiment ? Math.round(Number(_cardiffSentiment.score || 0) * 100) : null,
                         counts: insightsSnapshot.sentimentCounts || {},
                     },
                     settings: DB.getSettings(),
+                    savedSessions: liveOsSaved.savedSessions,
+                    statsStorage: liveOsSaved.statsStorage,
+                    archive: {
+                        savedSessionCount: liveOsSaved.savedSessionCount,
+                        statsCount: liveOsSaved.statsCount,
+                    },
                 };
                 window.etherx.liveos.publishSnapshot(snapshot).catch(() => { });
             } catch (error) {
@@ -7141,15 +7339,33 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (viewerTrendLabelEl) viewerTrendLabelEl.textContent = trendText;
     }
     function getActiveTikTokWebview() {
-        const tab = getActiveTab();
+        const tab = getTikTokSourceTab();
         if (!tab) return null;
         return document.getElementById('browseFrame_' + tab.id) || document.getElementById('browseFrame');
+    }
+    function rememberTikTokSourceTab(tab) {
+        if (tab?.id && String(tab.url || '').includes('tiktok.com')) {
+            tkaiLiveSourceTabId = Number(tab.id);
+        }
+        return tab || null;
+    }
+    function getTikTokSourceTab() {
+        const active = getActiveTab();
+        if (active?.url && active.url.includes('tiktok.com')) return rememberTikTokSourceTab(active);
+        if (tkaiLiveSourceTabId) {
+            const remembered = STATE.tabs.find((tab) => Number(tab.id) === Number(tkaiLiveSourceTabId) && String(tab.url || '').includes('tiktok.com'));
+            if (remembered) return remembered;
+        }
+        const latest = [...STATE.tabs]
+            .filter((tab) => String(tab.url || '').includes('tiktok.com'))
+            .sort((a, b) => Number(b.lastActive || 0) - Number(a.lastActive || 0))[0];
+        return rememberTikTokSourceTab(latest || null);
     }
     async function sendTextToActiveTikTokChat(rawText, options = {}) {
         const text = String(rawText || '').replace(/\s+/g, ' ').trim().slice(0, 380);
         if (!text) return false;
         const webview = getActiveTikTokWebview();
-        const tab = getActiveTab();
+        const tab = getTikTokSourceTab();
         if (!webview || webview.tagName !== 'WEBVIEW' || typeof webview.executeJavaScript !== 'function') return false;
         if (!tab?.url || !tab.url.includes('tiktok.com')) return false;
         const shouldSubmit = options?.submit !== false;
@@ -9787,7 +10003,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const showTextInFeed = settings.tkaiShowFeedChat !== false;
         const showGiftsInFeed = settings.tkaiShowFeedGifts !== false;
         const showLikesInFeed = settings.tkaiShowFeedLikes !== false;
-        const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-200) : [];
+        const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
         const chatMessages = allMessages.filter((message) => {
             const type = normalizeTkaiMessageType(message);
             return message && (type === 'chat' || type === 'caption' || type === 'song');
@@ -9935,7 +10151,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
             container.appendChild(div);
         };
-        if (showTextInFeed) chatMessages.slice(-30).forEach((message) => renderRow(message, messagesEl));
+        if (showTextInFeed) chatMessages.slice(-300).forEach((message) => renderRow(message, messagesEl));
         else messagesEl.innerHTML = '<div class="tkai-empty">Tekst feed je sakriven filterom.</div>';
         if (showTextInFeed && !chatMessages.length && collectedMessages.length) {
             const nonChatCount = collectedMessages.length;
@@ -10702,6 +10918,26 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             .replace(/^[:\-\s]+/, '')
             .trim();
         }
+                function extractFullChatTextFromRow(rowText, user) {
+                    let value = String(rowText || '')
+                        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    if (!value) return '';
+                    const normalizedUser = normalizeChatUserName(user || '');
+                    const userPatterns = [];
+                    if (normalizedUser) {
+                        const userEsc = normalizedUser.replace(/[|{}()[\]\\^$+*?.-]/g, '\\$&');
+                        userPatterns.push(new RegExp('^\\s*@?' + userEsc + '\\s*[:\\-–—]?\\s*', 'i'));
+                    }
+                    const colonMatch = value.match(/^([^:]{2,80})\s*:\s*(.+)$/);
+                    if (colonMatch && normalizeChatUserName(colonMatch[1]) && colonMatch[2]) {
+                        value = colonMatch[2];
+                    }
+                    userPatterns.forEach((re) => { value = value.replace(re, ' '); });
+                    value = cleanChatText(value, normalizedUser);
+                    return value.slice(0, 2000);
+                }
         function collectCandidateTextParts(root, user) {
           const selector = [
             '[data-e2e="chat-message-text"]',
@@ -11070,7 +11306,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             .filter((part, idx, arr) => arr.indexOf(part) === idx)
             .filter(part => !isAuxiliaryText(part))
             .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
-          let rawText = (assembledText || textBase || fallbackParts.join(' ') || el.textContent || '').trim().slice(0, 1200);
+          const fullRowText = fallbackText.slice(0, 2400);
+          const rowFallbackText = extractFullChatTextFromRow(fullRowText, user);
+          let rawText = (assembledText || textBase || fallbackParts.join(' ') || rowFallbackText || el.textContent || '').trim().slice(0, 2000);
+          if (rowFallbackText && (!rawText || rawText.length < 2 || isAuxiliaryText(rawText))) {
+            rawText = rowFallbackText;
+          }
           
           // Hvati nagrade, emotikone, specijalne znakove
                     const giftEls = el.querySelectorAll(
@@ -11084,10 +11325,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     );
           const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
           
-          const cleaned = cleanChatText(rawText, user);
-                    const text = cleaned.slice(0, 900);
+          let cleaned = cleanChatText(rawText, user);
+                    let text = cleaned.slice(0, 1800);
           if (text && text.length > 1) {
-            const low = text.toLowerCase();
+            let low = text.toLowerCase();
             // "sent" na početku ili iza usernamea = gift red u chatu (npr. "Marko sent Rose x3")
             const hasSent = /\b(?:sent|gave)\b|(?:^|\s)(?:sent|gave)(?=[a-z0-9])/i.test(low);
             const hasGiftWord = /gift|rose|coins?|diamond|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|poklon|dar|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|×\s*\d|x\s*\d+/i.test(low);
@@ -11138,7 +11379,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                 });
                             }
                         }
-                        if (isLikelyNoiseChatText(text, user, messageType)) return;
+                        if (isLikelyNoiseChatText(text, user, messageType)) {
+                            const fallbackClean = extractFullChatTextFromRow(fullRowText, user);
+                            if (messageType !== 'chat' || !fallbackClean || isLikelyNoiseChatText(fallbackClean, user, 'chat')) return;
+                            text = fallbackClean.slice(0, 1800);
+                            low = text.toLowerCase();
+                        }
                         if ((messageType === 'join' || messageType === 'share') && (!user || String(user).toLowerCase() === 'unknown')) return;
                         const looksLikeCatalogGiftLine = /^(?:unknown\s*[·•|:\-]?\s*)?\d{1,7}\s+[^\s].*$/i.test(text)
                             || /^[^\d]{2,40}\s*[·•|:\-]\s*\d{1,7}(?:\s*(?:coins?|diamonds?|🪙))?$/i.test(text);
@@ -11200,9 +11446,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             setStatus('⚠️ TikTok Chat AI radi u Electron webview modu');
             return 0;
         }
-        const tab = getActiveTab();
+        const tab = getTikTokSourceTab();
         if (!tab?.url || !tab.url.includes('tiktok.com')) {
-            setStatus('⚠️ Nisi na TikTok stranici');
+            setStatus('⚠️ Otvori TikTok Live stranicu u browseru');
             updateTkaiStreamOwner('', tab?.url || '');
             return 0;
         }
@@ -12048,7 +12294,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             stopScanning();
             return;
         }
-        const tab = getActiveTab();
+        const tab = getTikTokSourceTab();
         if (!tab?.url || !tab.url.includes('tiktok.com')) {
             showToast('⚠️ Otvori TikTok Live stranicu u browseru pa klikni Skeniranje ON');
             return;
@@ -13683,6 +13929,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // ──────────────────────────────────────────────────────────────────────────
     document.getElementById('btnTabOverview')?.addEventListener('click', toggleTabOverview);
     document.getElementById('closeDevtools').addEventListener('click', () => { document.getElementById('devtools').classList.remove('open'); STATE.devtoolsOpen = false; });
+    window.openActiveWebviewDevTools = function openActiveWebviewDevTools() {
+        const wv = document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`) || document.getElementById('browseFrame');
+        if (!window.electronWebview || !wv || wv.tagName !== 'WEBVIEW') {
+            showToast('⚠️ Native webview DevTools dostupan je samo u Electron webview modu');
+            return false;
+        }
+        try {
+            if (typeof wv.openDevTools === 'function') {
+                wv.openDevTools();
+                showToast('🛠 Otvoren native DevTools za aktivni webview');
+                return true;
+            }
+        } catch (error) {
+            console.warn('[DevTools] webview openDevTools failed:', error);
+        }
+        showToast('⚠️ Webview DevTools nije dostupan za ovaj tab');
+        return false;
+    };
     function toggleDevtools() {
         STATE.devtoolsOpen = !STATE.devtoolsOpen;
         document.getElementById('devtools').classList.toggle('open', STATE.devtoolsOpen);
@@ -14154,21 +14418,30 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     function renderAppTab(type) {
         const c = document.getElementById('appContent'); if (!c) return;
+        const activeTab = getActiveTab();
+        const activeUrl = activeTab?.url || '';
+        const activeHost = (() => { try { return activeUrl ? new URL(activeUrl).hostname : ''; } catch (_) { return ''; } })();
+        const storageHint = window.electronWebview
+            ? `<div style="padding:8px 10px;border-bottom:1px solid var(--border);background:rgba(74,158,255,.08);color:#9cc9ff;font-size:10px;line-height:1.45">
+                Application panel ovdje prikazuje EtherX shell/storage. Za storage web stranice ${activeHost ? '<strong>' + escHtml(activeHost) + '</strong>' : ''} otvori native webview DevTools.
+                <button onclick="window.openActiveWebviewDevTools?.()" style="margin-left:8px;background:var(--accent);border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">Open Webview DevTools</button>
+              </div>`
+            : '';
         if (type === 'localstorage') {
             const keys = [];
             for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k != null) keys.push(k); }
-            if (!keys.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No local storage data.</p>'; return; }
+            if (!keys.length) { c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:8px">No local storage data.</p>'; return; }
             keys.sort();
-            c.innerHTML = '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
+            c.innerHTML = storageHint + '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
                 keys.map(k => { let v = localStorage.getItem(k) || ''; if (v.length > 120) v = v.slice(0, 120) + '…'; return `<tr><td>${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`; }).join('') + '</tbody></table>';
         } else if (type === 'sessionstorage') {
             const keys = [];
             for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k != null) keys.push(k); }
-            if (!keys.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">Session storage je prazan.<br><small style="color:#444">EtherX koristi localStorage bridge (renderer-storage.json) za trajne podatke. Provjeri <strong>Local Storage</strong> tab.</small></p>'; return; }
-            c.innerHTML = '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
+            if (!keys.length) { c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:8px">Session storage je prazan.<br><small style="color:#444">EtherX koristi localStorage bridge (renderer-storage.json) za trajne podatke. Provjeri <strong>Local Storage</strong> tab.</small></p>'; return; }
+            c.innerHTML = storageHint + '<table class="app-table"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>' +
                 keys.map(k => `<tr><td>${escHtml(k)}</td><td>${escHtml(sessionStorage.getItem(k) || '')}</td></tr>`).join('') + '</tbody></table>';
         } else if (type === 'cookies') {
-            c.innerHTML = '<p style="color:#858585;font-size:11px;padding:8px">⏳ Loading cookies…</p>';
+            c.innerHTML = storageHint + '<p style="color:#858585;font-size:11px;padding:8px">⏳ Loading cookies…</p>';
             // In Electron: read cookies from session via IPC
             // Get URL of active tab for context (or get all cookies)
             const activeUrl = getActiveTab()?.url || '';
@@ -14189,14 +14462,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 const docCookies = document.cookie ? document.cookie.split(';').map(p => { const [k, ...v] = p.trim().split('='); return { name: k, value: v.join('='), domain: window.location.hostname, path: '/' }; }) : [];
                 const all = electronCookies.length ? electronCookies : docCookies;
                 if (!all.length) {
-                    c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No cookies set for this session.<br><small style="color:#444">Cookies from web pages in webview are accessible after visiting a website.</small></p>';
+                    c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:8px">No cookies set for this session.<br><small style="color:#444">Ako očekuješ TikTok cookies, provjeri da TikTok tab koristi isti partition i otvori native webview DevTools.</small></p>';
                     return;
                 }
-                c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Cookies • ${all.length} entries ${activeUrl ? '(for: ' + escHtml(new URL(activeUrl).hostname) + ')' : '(all)'}
+                c.innerHTML = storageHint + `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">Cookies • ${all.length} entries ${activeUrl ? '(for: ' + escHtml(new URL(activeUrl).hostname) + ')' : '(all)'}
             <button onclick="${window.electronWebview ? "window.etherx?.cookies?.clearAll?.().then(()=>renderAppTab('cookies'))" : "document.cookie.split(';').forEach(c=>{const n=c.split('=')[0].trim();document.cookie=n+'=;expires=Thu,01 Jan 1970 00:00:00 GMT;path=/'});renderAppTab('cookies')"}" style="margin-left:8px;background:#c0392b;border:none;color:#fff;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">🗑 Clear All</button>
             <button onclick="renderAppTab('cookies')" style="margin-left:4px;background:#333;border:none;color:#aaa;border-radius:3px;cursor:pointer;font-size:10px;padding:1px 6px">↺</button></div>` +
-                    '<table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Domain</th><th>Path</th><th>Secure</th><th>Size</th></tr></thead><tbody>' +
-                    all.map(ck => `<tr><td style="color:var(--accent)">${escHtml(ck.name)}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ck.value)}">${escHtml((ck.value || '').slice(0, 50))}</td><td style="color:#888">${escHtml(ck.domain || '')}</td><td style="color:#888">${escHtml(ck.path || '/')}</td><td style="text-align:center">${ck.secure ? '🔒' : ''}</td><td style="color:#777">${((ck.name || '').length + (ck.value || '').length)} B</td></tr>`).join('') + '</tbody></table>';
+                    '<table class="app-table"><thead><tr><th>Name</th><th>Value</th><th>Domain</th><th>Partition</th><th>Path</th><th>Secure</th><th>Size</th></tr></thead><tbody>' +
+                    all.map(ck => `<tr><td style="color:var(--accent)">${escHtml(ck.name)}</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ck.value)}">${escHtml((ck.value || '').slice(0, 50))}</td><td style="color:#888">${escHtml(ck.domain || '')}</td><td style="color:#777">${escHtml(ck.partition || 'document')}</td><td style="color:#888">${escHtml(ck.path || '/')}</td><td style="text-align:center">${ck.secure ? '🔒' : ''}</td><td style="color:#777">${((ck.name || '').length + (ck.value || '').length)} B</td></tr>`).join('') + '</tbody></table>';
             });
 
             // ── SQLite tables ──────────────────────────────────────────────────
@@ -14437,18 +14710,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             });
 
         } else if (type === 'indexeddb') {
-            c.innerHTML = '<p style="color:#858585;font-size:11px;padding:8px">⏳ Učitavanje IndexedDB…</p>';
-            if (!window.indexedDB) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">IndexedDB nije dostupan u ovom kontekstu.</p>'; return; }
+            c.innerHTML = storageHint + '<p style="color:#858585;font-size:11px;padding:8px">⏳ Učitavanje IndexedDB…</p>';
+            if (!window.indexedDB) { c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:8px">IndexedDB nije dostupan u ovom kontekstu.</p>'; return; }
             const dbListPromise = (typeof indexedDB.databases === 'function') ? indexedDB.databases() : Promise.resolve([]);
             dbListPromise.then(dbs => {
-                if (!dbs || !dbs.length) { c.innerHTML = '<p style="color:#555;font-size:11px;padding:12px">🗄️ Nema IndexedDB baza podataka u ovom kontekstu.<br><small style="color:#444">IndexedDB baze vidljive su samo unutar webviewa (posjeti web stranicu koja ih koristi).</small></p>'; return; }
-                c.innerHTML = `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">IndexedDB • <strong>${dbs.length}</strong> baza</div>` +
+                if (!dbs || !dbs.length) { c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:12px">🗄️ Nema IndexedDB baza podataka u EtherX shell kontekstu.<br><small style="color:#444">Za IndexedDB web stranice otvori native webview DevTools na aktivnom tabu.</small></p>'; return; }
+                c.innerHTML = storageHint + `<div style="padding:8px 10px;font-size:10px;color:#858585;border-bottom:1px solid var(--border)">IndexedDB • <strong>${dbs.length}</strong> baza</div>` +
                     '<table class="app-table"><thead><tr><th>Naziv</th><th>Verzija</th></tr></thead><tbody>' +
                     dbs.map(db => `<tr><td style="color:var(--accent)">${escHtml(db.name || '')}</td><td style="color:#888">${db.version || 1}</td></tr>`).join('') +
                     '</tbody></table>';
-            }).catch(() => { c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">IndexedDB: greška pri čitanju baza podataka.</p>'; });
+            }).catch(() => { c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:8px">IndexedDB: greška pri čitanju baza podataka.</p>'; });
+        } else if (type === 'cache' || type === 'sw') {
+            c.innerHTML = storageHint + `<p style="color:#555;font-size:11px;padding:12px">${type === 'cache' ? 'Cache Storage' : 'Service Workers'} za web stranice žive u webview originu, ne u EtherX shellu.<br><small style="color:#444">Otvori native webview DevTools na aktivnom tabu i tamo pogledaj Application → ${type === 'cache' ? 'Cache Storage' : 'Service Workers'}.</small></p>`;
         } else {
-            c.innerHTML = '<p style="color:#555;font-size:11px;padding:8px">No data available.</p>';
+            c.innerHTML = storageHint + '<p style="color:#555;font-size:11px;padding:8px">No data available.</p>';
         }
     }
     function _sqliteLoading(name) { return `<div style="padding:16px;color:#858585;font-size:12px;display:flex;align-items:center;gap:8px"><div style="width:14px;height:14px;border:2px solid #555;border-top-color:#4a9eff;border-radius:50%;animation:spin .8s linear infinite"></div>Loading ${name} from SQLite…</div>`; }
@@ -14564,6 +14839,18 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         renderAppTab('sqlite-sessions');
         showToast('🗑 Session deleted');
     }
+    Object.assign(window, {
+        renderAppTab,
+        _editSetting,
+        _deleteSetting,
+        _addSetting,
+        _editUserField,
+        _changeUserAvatar,
+        _addNote,
+        _editNote,
+        _restoreSession,
+        _deleteSession,
+    });
 
     // ── Performance metrics
     function collectPerfMetrics() {
@@ -16030,13 +16317,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         try {
             // Force immediate snapshot publish
-            const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
+            const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-5000) : [];
             if (!messages.length) { showToast('⚠ No TikTok Chat AI data to send.'); return; }
 
             const giftStats = computeGiftStats();
             const users = buildUserStats(messages, 200);
             const insightsSnapshot = computeInsightsSnapshot(messages);
-            const tab = getActiveTab();
+            const giftDetails = computeGiftStatsFromMessages(messages);
+            const userDatabase = getLiveOsUserDatabasePayload(users);
+            const analyticsSummary = buildLiveOsAnalyticsSummary(messages, userDatabase, giftDetails, insightsSnapshot);
+            const songHistory = extractSongEventsFromMessages(messages, Date.now(), 1000).reverse();
+            const alertRows = [
+                ...(insightsSnapshot.spikes || []).map((spike) => ({ type: spike.type || 'activity', severity: 'warning', text: `${spike.type || 'activity'} spike`, score: Number(spike.delta || 0), ts: Number(spike.ts || Date.now()) })),
+                ...(insightsSnapshot.recommendations || []).map((text) => ({ type: 'recommendation', severity: 'info', text: String(text), score: 0, ts: Date.now() })),
+            ];
+            const tab = getTikTokSourceTab() || getActiveTab();
             const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
             const giftTypes = new Map();
             messages.forEach(m => {
@@ -16048,15 +16343,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 row.events += 1; row.quantity += Math.max(1, Number(m.quantity || 1)); row.coins += Math.max(0, Number(m.coins || 0));
                 giftTypes.set(key, row);
             });
+            const liveOsSaved = getLiveOsSavedSessionPayload();
             const snapshot = {
                 connection: { state: scanActive ? 'scanning' : 'paused', tabId: tab?.id || null, liveUrl: tab?.url || '', owner, startedAt: sessionStartedAt, lastEventAt: messages.reduce((mx, r) => Math.max(mx, Number(r?.ts || 0)), 0), error: '' },
                 session: { id: sessionStartedAt ? `live-${sessionStartedAt}` : `export-${Date.now()}`, title: owner ? `@${owner} LIVE` : 'TikTok LIVE', startedAt: sessionStartedAt, messageCount: messages.length, peakViewers: peakViewerCount, currentViewers: liveViewerCount, totalCoins: giftStats.totalCoins, uniqueUsers: users.length },
-                events: messages, users, gifts: Array.from(giftTypes.values()).sort((a, b) => b.coins - a.coins),
+                events: messages,
+                users,
+                userDatabase,
+                gifts: giftDetails.gifts.length ? giftDetails.gifts : Array.from(giftTypes.values()).sort((a, b) => b.coins - a.coins),
+                giftLedger: giftDetails.giftLedger,
+                giftSupporters: giftDetails.giftSupporters,
                 supporters: Array.isArray(giftStats.leaders) ? giftStats.leaders : [],
                 insights: [...(insightsSnapshot.topTopics || []).map(t => ({ type: 'topic', text: String(t?.topic || t?.label || t), score: Number(t?.count || 0) })), ...(insightsSnapshot.spikes || []).map(s => ({ type: 'spike', text: `${s.type || 'activity'} spike`, score: Number(s.delta || 0), ts: Number(s.ts || Date.now()) }))],
-                music: { currentTrack: insightsSnapshot.songs?.[0] || null, history: insightsSnapshot.songs || [] },
+                analytics: analyticsSummary,
+                music: { currentTrack: songHistory[0] || insightsSnapshot.songs?.[0] || null, history: songHistory.length ? songHistory : (insightsSnapshot.songs || []) },
+                alerts: alertRows,
                 sentiment: { label: _cardiffSentiment?.label || insightsSnapshot.sentiment || 'neutral', confidence: _cardiffSentiment ? Math.round(Number(_cardiffSentiment.score || 0) * 100) : null, counts: insightsSnapshot.sentimentCounts || {} },
                 settings: DB.getSettings(),
+                savedSessions: liveOsSaved.savedSessions,
+                statsStorage: liveOsSaved.statsStorage,
+                archive: {
+                    savedSessionCount: liveOsSaved.savedSessionCount,
+                    statsCount: liveOsSaved.statsCount,
+                },
             };
             // Also persist to autosave so dashboard can load it without IPC
             try { localStorage.setItem('ex_tkai_live_autosave', JSON.stringify({ messages, sessionStartedAt, liveViewerCount, peakViewerCount, totalCoins: giftStats.totalCoins })); } catch (_) { }
@@ -22848,6 +23157,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (/too many update redirects/i.test(raw)) {
                 return 'Previše preusmjerenja tijekom update preuzimanja. Pokušaj ponovno.';
             }
+            if (/update redirect cycle detected/i.test(raw)) {
+                return 'Update server vraća isti redirect u krug. Provjeri GitHub release asset ili preuzmi ručno iz Releases.';
+            }
             if (/github api greška:\s*http\s*403/i.test(raw)) {
                 return 'GitHub API limit (403). Pričekaj minutu ili spremi GitHub token u Updates postavkama.';
             }
@@ -22862,7 +23174,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         function isBenignUpdateRedirectError(err) {
             const raw = String(err?.message || err || '').trim();
-            return /redirect was cancelled|err_aborted|\(-3\)|too many update redirects|blocked unsafe update redirect/i.test(raw);
+            return /redirect was cancelled|err_aborted|\(-3\)|blocked unsafe update redirect/i.test(raw);
         }
 
         window.checkForUpdates = async function (silent = false) {

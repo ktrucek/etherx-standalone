@@ -239,6 +239,67 @@ PY
   fi
 }
 
+run_commit_preflight_checks() {
+  local staged_files=()
+  mapfile -t staged_files < <(git diff --cached --name-only --diff-filter=ACMRT)
+
+  if [[ ${#staged_files[@]} -eq 0 ]]; then
+    warn "Commit preflight skipped: no staged files"
+    return 0
+  fi
+
+  info "Commit preflight: files staged for GitHub commit:"
+  printf '  - %s\n' "${staged_files[@]}"
+
+  local blocked=0
+  local file
+  for file in "${staged_files[@]}"; do
+    case "$file" in
+      .env|.env.*|*.env|*.pem|*.key|*.p12|*.pfx|*id_rsa*|*id_ed25519*|node_modules/*|dist/*)
+        warn "Blocked from commit: $file"
+        blocked=1
+        ;;
+    esac
+  done
+  [[ "$blocked" -eq 0 ]] || error "Commit contains blocked secret/build artifact paths"
+
+  info "Commit preflight: git diff --cached --check"
+  git diff --cached --check || error "Staged diff has whitespace/conflict-marker problems"
+
+  info "Commit preflight: validating GitHub workflow files"
+  [[ -f ".github/workflows/build.yml" ]] || error ".github/workflows/build.yml missing"
+  grep -q 'tags:' .github/workflows/build.yml || error "GitHub build workflow does not trigger on tags"
+  grep -q 'electron-builder' .github/workflows/build.yml || error "GitHub build workflow does not run electron-builder"
+
+  info "Commit preflight: JavaScript syntax checks"
+  node --check main.js
+  node --check preload.js
+  node --check src/renderer/js/browser.js
+
+  info "Commit preflight: package metadata checks"
+  python3 - <<'PYEOF'
+import json, sys
+pkg = json.load(open('package.json', encoding='utf-8'))
+build = pkg.get('build') or {}
+required = {
+    'linux': 'EtherX.Browser-${version}-linux.${ext}',
+    'win': 'EtherX.Browser-${version}-win.${ext}',
+    'mac': 'EtherX.Browser-${version}-mac-${arch}.${ext}',
+}
+for section, expected in required.items():
+    actual = ((build.get(section) or {}).get('artifactName') or '')
+    if actual != expected:
+        raise SystemExit(f'{section}.artifactName mismatch: {actual!r} != {expected!r}')
+if not pkg.get('version'):
+    raise SystemExit('package.json version missing')
+PYEOF
+
+  info "Commit preflight: local electron-builder dry package"
+  npm run build
+
+  success "Commit preflight checks passed"
+}
+
 print_release_urls_for_tag() {
   local tag="$1"
   local release_api="https://api.github.com/repos/ktrucek/etherx-standalone/releases/tags/${tag}"
@@ -335,6 +396,8 @@ command -v git  &>/dev/null       || error "git not found"
 command -v python3 &>/dev/null    || error "python3 not found"
 command -v curl &>/dev/null       || error "curl not found"
 command -v base64 &>/dev/null      || error "base64 not found"
+command -v node &>/dev/null       || error "node not found"
+command -v npm &>/dev/null        || error "npm not found"
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   error "Current directory is not a git repository"
@@ -539,6 +602,7 @@ if git diff --cached --quiet; then
   warn "No changes to commit (version already set?)"
   CHANGES_STAGED=false
 else
+  run_commit_preflight_checks
   git commit -m "v${NEW_VERSION}: Version bump" || error "Commit failed"
   success "Committed v${NEW_VERSION}"
 fi
@@ -632,6 +696,9 @@ if [[ "$NO_PUSH" == false ]]; then
 
   info "Fetching github/main to refresh stale tracking ref..."
   GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" ls-remote "$GITHUB_AUTH_REPO_URL" >/dev/null || error "GitHub auth failed for resolved deploy token (check scopes/revocation)"
+  if GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" ls-remote --exit-code --tags "$GITHUB_AUTH_REPO_URL" "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+    error "GitHub remote tag ${TAG_NAME} already exists. Pick a new version or delete the remote tag intentionally."
+  fi
   GIT_TERMINAL_PROMPT=0 git "${GIT_AUTH[@]}" fetch github main:refs/remotes/github/main >/dev/null 2>&1 || true
 
   read -r GITHUB_BEHIND_COUNT GITHUB_AHEAD_COUNT < <(git rev-list --left-right --count github/main...HEAD)

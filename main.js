@@ -1089,6 +1089,79 @@ function parsePm2ProcessSnapshot(rawJson, processName) {
   }
 }
 
+function resolvePm2ElectronLaunchPath() {
+  const candidates = [];
+  const pushIf = (value) => {
+    if (!value || candidates.includes(value)) return;
+    candidates.push(value);
+  };
+  const findAppBundleUpward = (startPath) => {
+    try {
+      let current = path.resolve(startPath || "");
+      if (fs.existsSync(current) && fs.statSync(current).isFile()) {
+        current = path.dirname(current);
+      }
+      while (current && current !== path.dirname(current)) {
+        if (current.toLowerCase().endsWith(".app")) return current;
+        current = path.dirname(current);
+      }
+    } catch (_) { }
+    return "";
+  };
+  const findFirstNestedAppBundle = (rootDir) => {
+    try {
+      const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(rootDir, entry.name);
+        if (entry.isDirectory() && entry.name.endsWith(".app")) return fullPath;
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const nested = findFirstNestedAppBundle(path.join(rootDir, entry.name));
+        if (nested) return nested;
+      }
+    } catch (_) { }
+    return "";
+  };
+  const findFirstMacOsExecutable = (appBundle) => {
+    try {
+      const macOsDir = path.join(appBundle, "Contents", "MacOS");
+      const entries = fs.readdirSync(macOsDir, { withFileTypes: true });
+      const executable = entries.find((entry) => entry.isFile() || entry.isSymbolicLink());
+      return executable ? path.join(macOsDir, executable.name) : "";
+    } catch (_) {
+      return "";
+    }
+  };
+
+  pushIf(process.execPath);
+  if (process.platform === "darwin") {
+    const currentBundle = findAppBundleUpward(process.execPath);
+    if (currentBundle) {
+      pushIf(findFirstMacOsExecutable(currentBundle));
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !fs.existsSync(candidate)) continue;
+      const stat = fs.statSync(candidate);
+      if (stat.isFile()) return candidate;
+      if (process.platform === "darwin" && stat.isDirectory()) {
+        const appBundle = candidate.toLowerCase().endsWith(".app")
+          ? candidate
+          : findFirstNestedAppBundle(candidate);
+        if (appBundle) {
+          const executable = findFirstMacOsExecutable(appBundle);
+          if (executable) return executable;
+        }
+      }
+    } catch (_) { }
+  }
+
+  return process.execPath || "";
+}
+
 async function getPm2ProcessSnapshot(projectRoot, processName = "etherx-browser") {
   const jlist = await execFileText("npx", ["pm2", "jlist"], 120000, { cwd: projectRoot });
   if (!jlist.ok) {
@@ -1271,7 +1344,11 @@ async function runOneClickLocalSetup() {
     if (app.isPackaged) {
       const outLogPath = path.join(projectRoot, "pm2-out.log").replace(/\\/g, "/");
       const errLogPath = path.join(projectRoot, "pm2-error.log").replace(/\\/g, "/");
-      const execPath = String(process.execPath || "").replace(/\\/g, "/");
+      const resolvedExecPath = resolvePm2ElectronLaunchPath();
+      if (!resolvedExecPath || !fs.existsSync(resolvedExecPath) || !fs.statSync(resolvedExecPath).isFile()) {
+        throw new Error(`PM2 launch target nije izvršna datoteka: ${resolvedExecPath || "(empty)"}`);
+      }
+      const execPath = String(resolvedExecPath).replace(/\\/g, "/");
       let pm2Script = execPath;
       let pm2Args = ["--no-sandbox"];
       let pm2Interpreter = "none";
@@ -1618,6 +1695,7 @@ app.whenReady().then(async () => {
   try {
     session.defaultSession.setUserAgent(CHROME_CLEAN_UA);
     session.fromPartition("persist:etherx").setUserAgent(CHROME_CLEAN_UA);
+    session.fromPartition("persist:tiktok-watcher").setUserAgent(CHROME_CLEAN_UA);
   } catch (e) {
     console.error("❌ UA session init failed:", e.message);
   }
@@ -2133,7 +2211,7 @@ function createWindow() {
           ua = GOOGLE_UA;
           // Remove X-Frame-Options bypass headers that trigger security checks
           delete headers["X-Requested-With"];
-          if (isGoogleAuthRequest(url) || isTikTok) {
+          if (isGoogleAuthRequest(url)) {
             headers["Sec-CH-UA"] =
               '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
             headers["Sec-CH-UA-Mobile"] = "?0";
@@ -2290,7 +2368,7 @@ function createWindow() {
         ) {
           ua = GOOGLE_UA;
           delete headers["X-Requested-With"];
-          if (isGoogleAuthRequest(url) || isTikTok) {
+          if (isGoogleAuthRequest(url)) {
             headers["Sec-CH-UA"] =
               '"Google Chrome";v="135", "Chromium";v="135", "Not?A_Brand";v="99"';
             headers["Sec-CH-UA-Mobile"] = "?0";
@@ -2832,6 +2910,52 @@ function setupIPC() {
       settings.geminiApiKey || settings.gemini_api_key || process.env.GEMINI_API_KEY || "";
     return ai.translate(text, targetLang, geminiKey);
   });
+  ipcMain.handle("ai:guardianRequest", async (_e, payload) => {
+    try {
+      const endpoint = String(payload?.endpoint || "").trim();
+      const model = String(payload?.model || "grok-2").trim() || "grok-2";
+      const apiKey = String(payload?.apiKey || "").trim();
+      const prompt = String(payload?.prompt || "");
+      const systemPrompt = String(payload?.systemPrompt || "");
+      const parsed = new URL(endpoint);
+      const host = parsed.hostname.toLowerCase();
+      const isLocalHost = host === "localhost" || host === "127.0.0.1" || host === "::1";
+      const isPrivateIpv4 = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(host);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return { ok: false, error: "Guardian endpoint mora koristiti HTTP ili HTTPS." };
+      }
+      if (parsed.protocol === "http:" && !isLocalHost && !isPrivateIpv4) {
+        return { ok: false, error: "HTTP Guardian endpoint je dopušten samo za lokalnu/privatnu mrežu. Za remote koristi HTTPS." };
+      }
+
+      const headers = { "Content-Type": "application/json" };
+      if (apiKey) headers.Authorization = "Bearer " + apiKey;
+      const { net } = require("electron");
+      const response = await net.fetch(parsed.toString(), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: [
+            ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: Number(payload?.maxTokens || 300) || 300,
+        }),
+      });
+      const raw = await response.text();
+      if (!response.ok) {
+        return { ok: false, error: `Guardian AI HTTP ${response.status}: ${raw.slice(0, 500)}` };
+      }
+      let data = {};
+      try { data = JSON.parse(raw); } catch (_) { data = { text: raw }; }
+      const content = String(data.choices?.[0]?.message?.content || data.text || data.response || "").trim();
+      return { ok: true, content, raw: data };
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+  });
   ipcMain.handle("ai:detectBotUA", (_e, ua) =>
     ai ? ai.detectBotUA(ua) : { isBot: false, isIAB: false, reasons: [] },
   );
@@ -3248,10 +3372,32 @@ function setupIPC() {
   ipcMain.handle("clipboard:read", () => clipboard.readText());
 
   // ── Cookies ───────────────────────────────────────────────────────────────
+  function getBrowserCookieSessions() {
+    return [
+      ["default", session.defaultSession],
+      ["persist:etherx", session.fromPartition("persist:etherx")],
+      ["persist:tiktok-watcher", session.fromPartition("persist:tiktok-watcher")],
+    ];
+  }
   ipcMain.handle("cookies:getAll", async (_e, url) => {
     try {
       const filter = url ? { url } : {};
-      const cookies = await session.defaultSession.cookies.get(filter);
+      const merged = [];
+      const seen = new Set();
+      for (const [partition, ses] of getBrowserCookieSessions()) {
+        const rows = await ses.cookies.get(filter).catch(() => []);
+        for (const cookie of rows) {
+          const key = `${partition}|${cookie.domain}|${cookie.path}|${cookie.name}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push({ ...cookie, partition });
+        }
+      }
+      const cookies = merged.sort((a, b) =>
+        String(a.partition || "").localeCompare(String(b.partition || "")) ||
+        String(a.domain || "").localeCompare(String(b.domain || "")) ||
+        String(a.name || "").localeCompare(String(b.name || ""))
+      );
       return { ok: true, cookies };
     } catch (e) {
       return { ok: false, error: e.message, cookies: [] };
@@ -3259,7 +3405,7 @@ function setupIPC() {
   });
   ipcMain.handle("cookies:remove", async (_e, url, name) => {
     try {
-      await session.defaultSession.cookies.remove(url, name);
+      await Promise.all(getBrowserCookieSessions().map(([, ses]) => ses.cookies.remove(url, name).catch(() => null)));
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -3267,7 +3413,7 @@ function setupIPC() {
   });
   ipcMain.handle("cookies:clearAll", async () => {
     try {
-      await session.defaultSession.clearStorageData({ storages: ["cookies"] });
+      await Promise.all(getBrowserCookieSessions().map(([, ses]) => ses.clearStorageData({ storages: ["cookies"] }).catch(() => null)));
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -4082,12 +4228,21 @@ function setupIPC() {
       const redirectCodes = new Set([301, 302, 303, 307, 308]);
       const fetchUpdateAsset = async (initialUrl) => {
         let requestUrl = initialUrl;
-        for (let redirectCount = 0; redirectCount <= 8; redirectCount += 1) {
+        const visitedUrls = new Set();
+        const redirectTrace = [];
+        for (let redirectCount = 0; redirectCount <= 12; redirectCount += 1) {
           const validatedUrl = normalizeUpdateUrl(requestUrl);
           if (!validatedUrl) {
             console.error("[Update] Blocked unsafe URL:", requestUrl);
             throw new Error("Blocked unsafe update URL");
           }
+          if (visitedUrls.has(validatedUrl)) {
+            const trace = redirectTrace.concat(validatedUrl).slice(-6).join(" -> ");
+            console.error("[Update] Redirect cycle detected:", trace);
+            throw new Error("Update redirect cycle detected: " + trace);
+          }
+          visitedUrls.add(validatedUrl);
+          redirectTrace.push(validatedUrl);
 
           console.log(`[Update] Fetch attempt ${redirectCount + 1}: ${validatedUrl.substring(0, 100)}...`);
           const response = await net.fetch(validatedUrl, {
@@ -4105,7 +4260,10 @@ function setupIPC() {
           console.log(`[Update] Redirect ${redirectCount + 1} → ${response.status} → ${location?.substring(0, 100) || '(no location)'}...`);
 
           if (!location) throw new Error("Update redirect is missing a location");
-          if (redirectCount === 8) throw new Error("Too many update redirects");
+          if (redirectCount === 12) {
+            const trace = redirectTrace.slice(-6).join(" -> ");
+            throw new Error("Too many update redirects: " + trace);
+          }
 
           // CodeQL SSRF mitigation: explicit validation of redirect target before use
           // Ensure location header points only to whitelisted GitHub/Gitea/S3 asset hosts
