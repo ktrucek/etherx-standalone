@@ -10,7 +10,17 @@ from __future__ import annotations
 import base64
 import json
 import sys
+import warnings
 from typing import Any, Dict, List, cast
+
+warnings.filterwarnings("ignore", message=r".*urllib3 v2 only supports OpenSSL.*")
+warnings.filterwarnings("ignore", message=r".*torch_dtype.*deprecated.*")
+try:
+    from urllib3.exceptions import NotOpenSSLWarning
+
+    warnings.filterwarnings("ignore", category=NotOpenSSLWarning)
+except Exception:
+    pass
 
 
 def _error(message: str) -> None:
@@ -105,12 +115,24 @@ def main() -> int:
         tokenizer: Any = tokenizer_cls.from_pretrained(model_id, trust_remote_code=True)
         use_cuda = bool(getattr(torch_any, "cuda", None) and torch_any.cuda.is_available())
         dtype = torch_any.bfloat16 if use_cuda else torch_any.float32
-        model: Any = model_cls.from_pretrained(
-            model_id,
-            device_map="auto",
-            torch_dtype=dtype,
-            trust_remote_code=True,
-        ).eval()
+        model_kwargs = {
+            "device_map": "auto",
+            "trust_remote_code": True,
+        }
+        try:
+            model: Any = model_cls.from_pretrained(
+                model_id,
+                dtype=dtype,
+                **model_kwargs,
+            ).eval()
+        except TypeError as exc:
+            if "dtype" not in str(exc):
+                raise
+            model = model_cls.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+                **model_kwargs,
+            ).eval()
 
         results: List[Dict[str, str]] = []
         for item in items:

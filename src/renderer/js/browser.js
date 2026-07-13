@@ -1702,6 +1702,153 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         });
     });
 
+    function setSettingControlsValue(key, value) {
+        document.querySelectorAll(`[data-setting="${key}"]`).forEach((el) => {
+            if (el.classList?.contains('toggle')) {
+                el.classList.toggle('on', value === true);
+            } else if (el.tagName === 'INPUT' && el.type === 'checkbox') {
+                el.checked = value === true;
+            } else if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') {
+                el.value = String(value);
+            }
+        });
+        PENDING_SETTINGS[key] = value;
+        DB.saveSetting(key, value);
+    }
+
+    function syncDuplicateSettingControls(key, sourceEl) {
+        if (!key || !sourceEl) return;
+        let value;
+        if (sourceEl.classList?.contains('toggle')) value = sourceEl.classList.contains('on');
+        else if (sourceEl.tagName === 'INPUT' && sourceEl.type === 'checkbox') value = sourceEl.checked;
+        else value = sourceEl.value;
+        document.querySelectorAll(`[data-setting="${key}"]`).forEach((el) => {
+            if (el === sourceEl) return;
+            if (el.classList?.contains('toggle')) el.classList.toggle('on', value === true);
+            else if (el.tagName === 'INPUT' && el.type === 'checkbox') el.checked = value === true;
+            else if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') el.value = String(value);
+        });
+    }
+
+    document.getElementById('settingsPanel')?.addEventListener('change', (event) => {
+        const el = event.target?.closest?.('[data-setting]');
+        if (!el) return;
+        syncDuplicateSettingControls(el.dataset.setting, el);
+    });
+    document.getElementById('settingsPanel')?.addEventListener('input', (event) => {
+        const el = event.target?.closest?.('[data-setting]');
+        if (!el) return;
+        syncDuplicateSettingControls(el.dataset.setting, el);
+    });
+    document.getElementById('settingsPanel')?.addEventListener('click', (event) => {
+        const el = event.target?.closest?.('.toggle[data-setting]');
+        if (!el) return;
+        setTimeout(() => syncDuplicateSettingControls(el.dataset.setting, el), 0);
+    });
+
+    function persistTkaiLocalCfgPatch(patch) {
+        try {
+            const savedCfg = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}');
+            localStorage.setItem('ex_tkai_cfg', JSON.stringify({ ...savedCfg, ...patch }));
+        } catch (_) { }
+    }
+
+    function applyTkaiScanPreset(mode) {
+        const commonOn = [
+            'tkaiScanChat', 'tkaiScanGifts', 'tkaiScanLikes', 'tkaiScanSubs',
+            'tkaiScanCaptions', 'tkaiDetectSongs', 'tkaiScanJoins', 'tkaiScanShares',
+            'tkaiShowFeedChat', 'tkaiShowFeedGifts', 'tkaiShowFeedLikes',
+            'tkaiTurboScan', 'tkaiAutosaveEnabled', 'tkaiSongPerfTracking',
+            'tkaiAutoSongRecOnScan', 'tkaiAutoTranslate', 'tkaiAutoTranslateGift',
+            'tkaiAutoTranslateShare', 'tkaiAutoTranslateLike', 'tkaiNllbShowBoth',
+            'tkaiGuardCacheEnabled',
+        ];
+        commonOn.forEach((key) => setSettingControlsValue(key, true));
+        setSettingControlsValue('tkaiReadLang', 'auto');
+        setSettingControlsValue('tkaiTranslateLang', 'auto');
+        setSettingControlsValue('tkaiReplyLang', 'auto');
+        setSettingControlsValue('tkaiAutoTranslateSkipEnglish', false);
+        setSettingControlsValue('tkaiJoinMinLevel', 0);
+        setSettingControlsValue('tkaiRegionGuardMode', 'both');
+        setSettingControlsValue('tkaiGuardActionThreshold', 'controversial');
+        setSettingControlsValue('tkaiGuardUnsafeAction', 'highlight');
+        setSettingControlsValue('tkaiGuardControversialAction', 'tint');
+
+        const patches = {
+            full: {
+                tkaiScanIntervalMs: '2000',
+                tkaiMsgBuffer: '10000',
+                tkaiUserScanLimit: 1000,
+                tkaiViewerSampleIntervalSec: 5,
+                tkaiAutosaveSeconds: 15,
+                tkaiDedupWindowMs: 2500,
+                tkaiGiftDedupWindowMs: 1200,
+                tkaiAutoSuggestAfter: 0,
+            },
+            fast: {
+                tkaiScanIntervalMs: '2000',
+                tkaiMsgBuffer: '5000',
+                tkaiUserScanLimit: 800,
+                tkaiViewerSampleIntervalSec: 6,
+                tkaiAutosaveSeconds: 20,
+                tkaiDedupWindowMs: 4500,
+                tkaiGiftDedupWindowMs: 1800,
+                tkaiAutoSuggestAfter: 5,
+            },
+            quiet: {
+                tkaiScanIntervalMs: '10000',
+                tkaiMsgBuffer: '2000',
+                tkaiUserScanLimit: 300,
+                tkaiViewerSampleIntervalSec: 20,
+                tkaiAutosaveSeconds: 60,
+                tkaiDedupWindowMs: 9000,
+                tkaiGiftDedupWindowMs: 3500,
+                tkaiAutoSuggestAfter: 0,
+                tkaiTurboScan: false,
+                tkaiAutoSongRecOnScan: false,
+            },
+            text: {
+                tkaiScanIntervalMs: '2000',
+                tkaiMsgBuffer: '10000',
+                tkaiUserScanLimit: 1000,
+                tkaiViewerSampleIntervalSec: 8,
+                tkaiAutosaveSeconds: 15,
+                tkaiDedupWindowMs: 2500,
+                tkaiGiftDedupWindowMs: 1200,
+                tkaiScanGifts: false,
+                tkaiScanLikes: false,
+                tkaiScanSubs: false,
+                tkaiScanJoins: false,
+                tkaiScanShares: false,
+                tkaiShowFeedGifts: false,
+                tkaiShowFeedLikes: false,
+                tkaiAutoTranslateGift: false,
+                tkaiAutoTranslateShare: false,
+                tkaiAutoTranslateLike: false,
+            },
+        };
+        const selected = patches[mode] || patches.full;
+        Object.entries(selected).forEach(([key, value]) => setSettingControlsValue(key, value));
+        persistTkaiLocalCfgPatch({
+            lang: String(DB.getSettings().tkaiReplyLang || 'auto'),
+            readLang: String(DB.getSettings().tkaiReadLang || 'auto'),
+            translateLang: String(DB.getSettings().tkaiTranslateLang || 'auto'),
+            replyLang: String(DB.getSettings().tkaiReplyLang || 'auto'),
+            autoTranslate: DB.getSettings().tkaiAutoTranslate === true,
+            autoTranslateGift: DB.getSettings().tkaiAutoTranslateGift === true,
+            autoTranslateShare: DB.getSettings().tkaiAutoTranslateShare === true,
+            autoTranslateLike: DB.getSettings().tkaiAutoTranslateLike === true,
+            autoTranslateSkipEnglish: DB.getSettings().tkaiAutoTranslateSkipEnglish === true,
+        });
+        showSettingsAutoSaveIndicator();
+        showToast(mode === 'text' ? '📝 TikTok AI: samo tekst chat' : mode === 'quiet' ? '🌙 TikTok AI: mirni scan' : mode === 'fast' ? '⚡ TikTok AI: brzi scan' : '💬 TikTok AI: čitaj sve uključeno');
+    }
+
+    document.getElementById('tkaiPresetFullChat')?.addEventListener('click', () => applyTkaiScanPreset('full'));
+    document.getElementById('tkaiPresetFastScan')?.addEventListener('click', () => applyTkaiScanPreset('fast'));
+    document.getElementById('tkaiPresetQuietScan')?.addEventListener('click', () => applyTkaiScanPreset('quiet'));
+    document.getElementById('tkaiPresetTextOnly')?.addEventListener('click', () => applyTkaiScanPreset('text'));
+
     // Tools drawer — delegate to TikTok AI panel buttons
     document.getElementById('btnTkaiToolsOpenPanel')?.addEventListener('click', () => {
         document.getElementById('settingsPanel')?.classList.remove('open');
@@ -3887,7 +4034,68 @@ document.getElementById('mi-new-private').addEventListener('click', () => {
     document.body.style.filter = STATE.isPrivate ? 'hue-rotate(240deg) saturate(0.8)' : '';
     showToast(STATE.isPrivate ? '🕶 Private Mode ON' : '👁 Private Mode OFF');
 });
+const TKAI_PANEL_LAYOUT_KEY = 'ex_tkai_panel_layout_v1';
+function getPanelTopBoundary() {
+    const tabBar = document.querySelector('.tab-bar')?.getBoundingClientRect();
+    if (tabBar && Number.isFinite(tabBar.bottom)) return Math.max(0, Math.round(tabBar.bottom));
+    const content = document.querySelector('.content-area')?.getBoundingClientRect();
+    if (content && Number.isFinite(content.top)) return Math.max(0, Math.round(content.top));
+    return 72;
+}
+function clampTkaiPanelLayout(layout) {
+    const minW = 360;
+    const minH = 340;
+    const topBoundary = getPanelTopBoundary();
+    const maxW = Math.max(minW, window.innerWidth - 20);
+    const maxH = Math.max(minH, window.innerHeight - topBoundary - 10);
+    const width = Math.max(minW, Math.min(Number(layout?.width) || 460, maxW));
+    const height = Math.max(minH, Math.min(Number(layout?.height) || 580, maxH));
+    const left = Math.max(0, Math.min(Number(layout?.left) || 0, Math.max(0, window.innerWidth - width)));
+    const bottom = Math.max(0, Math.min(Number(layout?.bottom) || 10, Math.max(0, window.innerHeight - topBoundary - height)));
+    return { left, bottom, width, height };
+}
+function saveTikTokPanelLayout() {
+    const panel = document.getElementById('tiktokAIPanel');
+    if (!panel) return;
+    if (!panel.classList.contains('open')) return;
+    const rect = panel.getBoundingClientRect();
+    const layout = clampTkaiPanelLayout({
+        left: Number.isFinite(parseFloat(panel.style.left)) ? parseFloat(panel.style.left) : rect.left,
+        bottom: Number.isFinite(parseFloat(panel.style.bottom)) ? parseFloat(panel.style.bottom) : (window.innerHeight - rect.bottom),
+        width: rect.width || panel.offsetWidth,
+        height: rect.height || panel.offsetHeight,
+    });
+    try {
+        localStorage.setItem(TKAI_PANEL_LAYOUT_KEY, JSON.stringify(layout));
+        localStorage.setItem('ex_tkai_panel_pos', JSON.stringify({ left: layout.left, bottom: layout.bottom }));
+        localStorage.setItem('ex_tkai_panel_size', JSON.stringify({ width: layout.width, height: layout.height }));
+    } catch (_) { }
+}
+function restoreTikTokPanelLayout() {
+    const panel = document.getElementById('tiktokAIPanel');
+    if (!panel) return false;
+    let saved = null;
+    try {
+        saved = JSON.parse(localStorage.getItem(TKAI_PANEL_LAYOUT_KEY) || 'null');
+        if (!saved) {
+            const pos = JSON.parse(localStorage.getItem('ex_tkai_panel_pos') || 'null');
+            const size = JSON.parse(localStorage.getItem('ex_tkai_panel_size') || 'null');
+            if (pos || size) saved = { ...(pos || {}), ...(size || {}) };
+        }
+    } catch (_) { saved = null; }
+    if (!saved) return false;
+    const layout = clampTkaiPanelLayout(saved);
+    panel.style.transition = 'none';
+    panel.style.right = 'auto';
+    panel.style.top = 'auto';
+    panel.style.left = layout.left + 'px';
+    panel.style.bottom = layout.bottom + 'px';
+    panel.style.width = layout.width + 'px';
+    panel.style.height = layout.height + 'px';
+    return true;
+}
 function closeAllPanels() {
+    saveTikTokPanelLayout();
     ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'tiktokAIPanel', 'aiInspectPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel', 'shieldPanel'].forEach(id => document.getElementById(id)?.classList.remove('open'));
     document.getElementById('settingsBackdrop')?.classList.remove('open');
     const side = document.getElementById('elemSidebar');
@@ -3898,15 +4106,21 @@ function togglePanel(id) {
     if (!panel) return;
     const wasOpen = panel.classList.contains('open');
     closeAllPanels();
-    if (!wasOpen) panel.classList.add('open');
+    if (!wasOpen) {
+        if (id === 'tiktokAIPanel') restoreTikTokPanelLayout();
+        panel.classList.add('open');
+    }
 }
 function openPanel(id) {
     const panel = document.getElementById(id);
     if (!panel) return;
     closeAllPanels();
+    if (id === 'tiktokAIPanel') restoreTikTokPanelLayout();
     panel.classList.add('open');
     if (id === 'tiktokAIPanel') {
-        requestAnimationFrame(() => ensurePanelInViewport(panel));
+        requestAnimationFrame(() => {
+            if (!restoreTikTokPanelLayout()) ensurePanelInViewport(panel);
+        });
     }
 }
 function ensurePanelInViewport(panelOrId) {
@@ -5504,6 +5718,53 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             DB.saveSetting('tkaiPieIncludeShare', true);
             DB.saveSetting('tkaiPieIncludeLike', true);
             localStorage.setItem(eventDefaultsMigrationKey, '1');
+        }
+    } catch (_) { }
+    try {
+        const readAllChatMigrationKey = 'ex_tkai_read_all_chat_v1';
+        if (localStorage.getItem(readAllChatMigrationKey) !== '1') {
+            [
+                'tkaiScanChat',
+                'tkaiScanGifts',
+                'tkaiScanLikes',
+                'tkaiScanSubs',
+                'tkaiScanCaptions',
+                'tkaiDetectSongs',
+                'tkaiScanJoins',
+                'tkaiScanShares',
+                'tkaiShowFeedChat',
+                'tkaiShowFeedGifts',
+                'tkaiShowFeedLikes',
+                'tkaiTurboScan',
+                'tkaiAutosaveEnabled',
+            ].forEach((key) => DB.saveSetting(key, true));
+            DB.saveSetting('tkaiReadLang', 'auto');
+            DB.saveSetting('tkaiTranslateLang', 'auto');
+            DB.saveSetting('tkaiReplyLang', 'auto');
+            DB.saveSetting('tkaiAutoTranslate', true);
+            DB.saveSetting('tkaiAutoTranslateGift', true);
+            DB.saveSetting('tkaiAutoTranslateShare', true);
+            DB.saveSetting('tkaiAutoTranslateLike', true);
+            DB.saveSetting('tkaiAutoTranslateSkipEnglish', false);
+            DB.saveSetting('tkaiScanIntervalMs', '2000');
+            DB.saveSetting('tkaiMsgBuffer', '10000');
+            DB.saveSetting('tkaiUserScanLimit', 1000);
+            try {
+                const savedCfg = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}');
+                localStorage.setItem('ex_tkai_cfg', JSON.stringify({
+                    ...savedCfg,
+                    lang: 'auto',
+                    readLang: 'auto',
+                    translateLang: 'auto',
+                    replyLang: 'auto',
+                    autoTranslate: true,
+                    autoTranslateGift: true,
+                    autoTranslateShare: true,
+                    autoTranslateLike: true,
+                    autoTranslateSkipEnglish: false,
+                }));
+            } catch (_) { }
+            localStorage.setItem(readAllChatMigrationKey, '1');
         }
     } catch (_) { }
     const toneEl = document.querySelector('#stab-ai-live-chat [data-setting="tkaiTone"]');
@@ -12668,6 +12929,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             panel.style.top = 'auto';
             panel.style.bottom = '10px';
             try { localStorage.removeItem(TKAI_POS_KEY); } catch (_) { }
+            try { localStorage.removeItem(TKAI_PANEL_LAYOUT_KEY); } catch (_) { }
             setTimeout(() => { panel.style.transition = 'none'; }, 220);
         }
 
@@ -12750,6 +13012,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     bottom: parseFloat(panel.style.bottom)
                 }));
             } catch (e) { }
+            saveTikTokPanelLayout();
         });
 
         // Double-click header → reset to default bottom-right position
@@ -12839,6 +13102,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     window.removeEventListener('blur', onUp);
                     saveSize();
                     try { localStorage.setItem('ex_tkai_panel_pos', JSON.stringify({ left: parseFloat(panel.style.left) || 0, bottom: parseFloat(panel.style.bottom) || 10 })); } catch (_) { }
+                    saveTikTokPanelLayout();
                 };
                 document.addEventListener('mousemove', onMove);
                 document.addEventListener('mouseup', onUp);
@@ -15792,6 +16056,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // User Agent
     const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
     const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    const TIKTOK_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
     const UA_PRESETS = { 'default': ETHERX_DEFAULT_UA, 'Chrome 131 V8': CHROME_131_UA, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
     let activeUA = localStorage.getItem('ex_ua') || ETHERX_DEFAULT_UA;
     // Persist default so it's always visible in storage inspector
@@ -15817,12 +16082,27 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         } catch (e) { return false; }
     }
 
+    function isTikTokLoginSafeDomain(url) {
+        try {
+            const u = new URL(url);
+            const host = u.hostname.toLowerCase();
+            return host === 'tiktok.com'
+                || host === 'www.tiktok.com'
+                || host === 'accounts.tiktok.com'
+                || host.endsWith('.tiktok.com');
+        } catch (e) { return false; }
+    }
+
     function applyUserAgentForURL(wv, url) {
         if (!wv || !wv.setAttribute) return;
         if (isGoogleLoginDomain(url)) {
             // Use Chrome 131 for Google to avoid "This browser is not secure" block
             wv.setAttribute('useragent', CHROME_131_UA);
             consoleLog('info', '\uD83D\uDD10 Auto-switched to Chrome UA for Google login');
+        } else if (isTikTokLoginSafeDomain(url)) {
+            // Keep JS navigator.userAgent aligned with main-process TikTok request headers.
+            // TikTok QR login is sensitive to UA/header mismatches and popup session moves.
+            wv.setAttribute('useragent', TIKTOK_CHROME_UA);
         } else {
             // Use custom UA if set, otherwise default
             const customUA = localStorage.getItem('ex_ua') || activeUA || navigator.userAgent.replace(/EtherX.*?\s/, '');
@@ -23427,6 +23707,17 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         // Tab Discarding (Memory Saver) — handled by the shared interval at the top of the file.
 
+        function setUpdateCompatStatus(badgeText, statusText) {
+            const cleanBadge = String(badgeText || '').trim();
+            const cleanStatus = String(statusText || cleanBadge || '').trim();
+            const badgeEl = document.getElementById('updateBadge');
+            const statusEl = document.getElementById('updateStatus');
+            const statusTextEl = document.getElementById('updateStatusText');
+            if (badgeEl) badgeEl.textContent = cleanBadge;
+            if (statusEl) statusEl.textContent = cleanStatus;
+            if (statusTextEl) statusTextEl.textContent = cleanStatus;
+        }
+
         function _applyUpdateResult(data, currentTag) {
             const badge = document.getElementById('updStatusBadge');
             const resultBox = document.getElementById('updResultBox');
@@ -23440,8 +23731,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const isNew = Boolean(data.isNew) || derivedIsNew;
             if (isNew) {
                 if (badge) { badge.textContent = '⬆ Dostupno v' + latestTag; badge.style.background = 'rgba(255,189,46,.1)'; badge.style.color = '#ffbd2e'; badge.style.borderColor = 'rgba(255,189,46,.3)'; }
+                setUpdateCompatStatus('⬆ Dostupno v' + latestTag, 'Nova verzija dostupna: v' + latestTag);
             } else {
                 if (badge) { badge.textContent = '✓ Ažuran'; badge.style.background = 'rgba(39,201,63,.1)'; badge.style.color = '#27c93f'; badge.style.borderColor = 'rgba(39,201,63,.25)'; }
+                setUpdateCompatStatus('✓ Ažuran', 'Browser je ažuran: v' + currentTag);
             }
             if (resultBox) {
                 resultBox.style.display = 'block';
@@ -23491,8 +23784,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (/redirect was cancelled|err_aborted|\(-3\)/i.test(raw)) {
                 return 'Update server je vratio privremeno preusmjerenje (normalno).';
             }
+            if (/redirect target not in whitelist:\s*([a-z0-9.-]+)/i.test(raw)) {
+                const host = raw.match(/redirect target not in whitelist:\s*([a-z0-9.-]+)/i)?.[1] || '';
+                return 'GitHub release preusmjerava na neodobreni host' + (host ? ': ' + host : '') + '. Dodaj taj host u update whitelistu.';
+            }
             if (/blocked unsafe update redirect/i.test(raw)) {
-                return 'GitHub je vratio neočekivani redirect host. Ažuriraj ponovno za par sekundi.';
+                return 'GitHub je vratio download/CDN host koji nije na whitelisti. Ovo nije privremeni retry problem; treba dodati host u update whitelistu ili preuzeti release ručno.';
             }
             if (/too many update redirects/i.test(raw)) {
                 return 'Previše preusmjerenja tijekom update preuzimanja. Pokušaj ponovno.';
@@ -23514,7 +23811,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         function isBenignUpdateRedirectError(err) {
             const raw = String(err?.message || err || '').trim();
-            return /redirect was cancelled|err_aborted|\(-3\)|blocked unsafe update redirect/i.test(raw);
+            return /redirect was cancelled|err_aborted|\(-3\)/i.test(raw);
         }
 
         window.checkForUpdates = async function (silent = false) {
@@ -23550,7 +23847,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                             if (raw) {
                                 if (!latestTag) latestTag = (raw.tag_name || '').replace(/^v/, '');
                                 ghBody = raw.body || '';
-                                ghAssets = (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.download_url || '' }));
+                                ghAssets = (raw.assets || []).map(a => ({
+                                    name: a.name,
+                                    url: a.browser_download_url || a.download_url || '',
+                                    browserUrl: a.browser_download_url || a.download_url || '',
+                                    apiUrl: a.url || ''
+                                }));
                             }
                         }
                     } catch (_) { }
@@ -23568,6 +23870,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                         badge.style.color = '#ffbd2e';
                         badge.style.borderColor = 'rgba(255,189,46,.35)';
                     }
+                    setUpdateCompatStatus('↻ Preusmjerenje', 'Update server preusmjerenje je obrađeno automatski.');
                     // Auto-retry once in background for benign redirect-abort races.
                     if (!window.__etherxUpdateRedirectRetryInFlight) {
                         window.__etherxUpdateRedirectRetryInFlight = true;
@@ -23583,6 +23886,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 }
                 const friendlyErr = humanizeUpdateError(err);
                 if (badge) { badge.textContent = '? Greška'; badge.style.background = 'rgba(255,95,86,.1)'; badge.style.color = '#ff5f56'; badge.style.borderColor = 'rgba(255,95,86,.3)'; }
+                setUpdateCompatStatus('? Greška', friendlyErr);
                 if (!silent) showToast('❌ Greška pri provjeri: ' + friendlyErr);
                 // Show error in result box
                 const resultBox = document.getElementById('updResultBox');
@@ -23663,7 +23967,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     });
                 }
 
-                const result = await window.etherx.update.download(window._pendingUpdateAsset.url, window._pendingUpdateAsset.name);
+                const updateAssetUrl = window._pendingUpdateAsset.apiUrl || window._pendingUpdateAsset.url;
+                const result = await window.etherx.update.download(updateAssetUrl, window._pendingUpdateAsset.name);
                 if (!result.ok) throw new Error(result.error || 'Download error');
 
                 // Download complete
@@ -23857,7 +24162,12 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                         if (!res.ok) throw new Error('GitHub API greška: ' + res.status);
                         const raw = await res.json();
                         latestTag2 = (raw.tag_name || '').replace(/^v/, '');
-                        ghAssets2 = (raw.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.download_url || '' }));
+                        ghAssets2 = (raw.assets || []).map(a => ({
+                            name: a.name,
+                            url: a.browser_download_url || a.download_url || '',
+                            browserUrl: a.browser_download_url || a.download_url || '',
+                            apiUrl: a.url || ''
+                        }));
                     }
                     data = {
                         ok: true, latest: latestTag2, current: currentTag2,

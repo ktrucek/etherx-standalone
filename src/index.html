@@ -3267,7 +3267,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.143</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.144</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -4326,6 +4326,14 @@
                                 <!-- drawer: auto scan -->
                                 <div id="tkaiDrawerAutoScan"
                                     style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
+                                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
+                                        <button class="s-btn-sm" id="tkaiPresetFullChat"
+                                            style="background:rgba(16,185,129,.16);border-color:rgba(16,185,129,.42)">💬
+                                            Čitaj sve</button>
+                                        <button class="s-btn-sm" id="tkaiPresetFastScan">⚡ Brzo</button>
+                                        <button class="s-btn-sm" id="tkaiPresetQuietScan">🌙 Mirno</button>
+                                        <button class="s-btn-sm" id="tkaiPresetTextOnly">📝 Samo tekst</button>
+                                    </div>
                                     <div class="s-row">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Scan interval</div>
@@ -4377,7 +4385,9 @@
                                             <option value="300">300 messages</option>
                                             <option value="500">500 messages</option>
                                             <option value="1000">1000 messages</option>
-                                            <option value="2000" selected>2000 messages (default)</option>
+                                            <option value="2000">2000 messages</option>
+                                            <option value="5000">5000 messages</option>
+                                            <option value="10000" selected>10000 messages (full chat)</option>
                                         </select>
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
@@ -4468,6 +4478,162 @@
                                         <input type="number" class="s-input"
                                             data-setting="tkaiSongPerfSampleCooldownSec" min="10" max="600" value="30"
                                             style="width:70px">
+                                    </div>
+                                    <div
+                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
+                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Što skenirati
+                                        </div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanChat" checked> Chat tekst</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanGifts" checked> Giftovi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanLikes" checked> Likeovi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanSubs" checked> Sub/Fan Club</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanCaptions" checked> Captions / CC</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiDetectSongs" checked> Pjesme / DJ CC</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanJoins" checked> Join eventi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanShares" checked> Share eventi</label>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
+                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Što prikazati u
+                                            feedu</div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiShowFeedChat" checked> Chat tekst</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiShowFeedGifts" checked> Giftovi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiShowFeedLikes" checked> Likeovi</label>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
+                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Jezik, prijevod
+                                            i čitanje</div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px">
+                                            <label style="font-size:11px;color:var(--text3)">Čitanje
+                                                <select class="s-select" data-setting="tkaiReadLang"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="auto">Auto - svi jezici</option>
+                                                    <option value="hr">Croatian</option>
+                                                    <option value="en">English</option>
+                                                    <option value="de">German</option>
+                                                    <option value="es">Spanish</option>
+                                                    <option value="fr">French</option>
+                                                    <option value="pt">Portuguese</option>
+                                                    <option value="tr">Turkish</option>
+                                                </select>
+                                            </label>
+                                            <label style="font-size:11px;color:var(--text3)">Prijevod
+                                                <select class="s-select" data-setting="tkaiTranslateLang"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="auto">Auto</option>
+                                                    <option value="hr">Croatian</option>
+                                                    <option value="en">English</option>
+                                                    <option value="de">German</option>
+                                                    <option value="es">Spanish</option>
+                                                    <option value="fr">French</option>
+                                                    <option value="pt">Portuguese</option>
+                                                    <option value="tr">Turkish</option>
+                                                </select>
+                                            </label>
+                                            <label style="font-size:11px;color:var(--text3)">AI odgovor
+                                                <select class="s-select" data-setting="tkaiReplyLang"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="auto">Auto - jezik chata</option>
+                                                    <option value="read">Kao čitanje</option>
+                                                    <option value="hr">Croatian</option>
+                                                    <option value="en">English</option>
+                                                    <option value="en_auto">English AUTO</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:10px">
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiAutoTranslate" checked> Auto translate chat</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiAutoTranslateGift" checked> Translate gift</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiAutoTranslateShare" checked> Translate share</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiAutoTranslateLike" checked> Translate like</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiAutoTranslateSkipEnglish"> Preskoči engleski</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiNllbShowBoth" checked> Prikaži oba jezika</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiCcReadEnabled"> Čitaj CC naglas</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiAudioEnabled"> AI audio</label>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
+                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Dedup i filter
+                                            ponavljanja</div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px">
+                                            <label style="font-size:11px;color:var(--text3)">Chat dedup ms
+                                                <input type="number" class="s-input" data-setting="tkaiDedupWindowMs"
+                                                    min="2500" max="30000" value="7000"
+                                                    style="width:100%;margin-top:4px">
+                                            </label>
+                                            <label style="font-size:11px;color:var(--text3)">Gift dedup ms
+                                                <input type="number" class="s-input" data-setting="tkaiGiftDedupWindowMs"
+                                                    min="1200" max="15000" value="2500"
+                                                    style="width:100%;margin-top:4px">
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div
+                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
+                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Safety scan
+                                            regije</div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+                                            <label style="font-size:11px;color:var(--text3)">Guard model
+                                                <select class="s-select" data-setting="tkaiRegionGuardMode"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="both">Qwen3Guard + Opir</option>
+                                                    <option value="qwen">Qwen3Guard only</option>
+                                                    <option value="opir">Opir only</option>
+                                                </select>
+                                            </label>
+                                            <label style="font-size:11px;color:var(--text3)">Threshold
+                                                <select class="s-select" data-setting="tkaiGuardActionThreshold"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="controversial">Controversial + Unsafe</option>
+                                                    <option value="unsafe">Unsafe only</option>
+                                                    <option value="safe">All levels</option>
+                                                </select>
+                                            </label>
+                                            <label style="font-size:11px;color:var(--text3)">Unsafe action
+                                                <select class="s-select" data-setting="tkaiGuardUnsafeAction"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="highlight">Auto-highlight</option>
+                                                    <option value="warn">Warn color</option>
+                                                    <option value="none">No action</option>
+                                                </select>
+                                            </label>
+                                            <label style="font-size:11px;color:var(--text3)">Controversial action
+                                                <select class="s-select" data-setting="tkaiGuardControversialAction"
+                                                    style="width:100%;margin-top:4px">
+                                                    <option value="tint">Amber tint</option>
+                                                    <option value="warn">Warn color</option>
+                                                    <option value="none">No action</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        <label style="display:block;margin-top:8px;font-size:12px"><input
+                                                type="checkbox" data-setting="tkaiGuardCacheEnabled" checked> Local
+                                            cache za sigurnosnu klasifikaciju</label>
                                     </div>
                                 </div>
                                 <!-- drawer: AI model override -->
@@ -5122,7 +5288,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.143</span></div>
+                                    v<span id="helpVersionNum2">3.0.144</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -5132,6 +5298,9 @@
                             <div id="updStatusBadge"
                                 style="font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(39,201,63,.1);color:#27c93f;border:1px solid rgba(39,201,63,.25);white-space:nowrap">
                                 ✓ Ažuran</div>
+                            <div id="updateBadge" style="display:none" aria-hidden="true">✓ Ažuran</div>
+                            <div id="updateStatus" style="display:none" aria-hidden="true">Ažuran</div>
+                            <div id="updateStatusText" style="display:none" aria-hidden="true">Browser je ažuran.</div>
                         </div>
 
                         <div class="s-group">

@@ -1058,6 +1058,18 @@ function trimPythonInstallOutput(value, maxLen = 12000) {
   return text.slice(-maxLen);
 }
 
+function readTextFileTail(filePath, maxLen = 6000) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return "";
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return "";
+    const text = fs.readFileSync(filePath, "utf8");
+    return trimPythonInstallOutput(text, maxLen);
+  } catch (_) {
+    return "";
+  }
+}
+
 function parsePm2ProcessSnapshot(rawJson, processName) {
   try {
     const list = JSON.parse(String(rawJson || "[]"));
@@ -1106,54 +1118,57 @@ function parsePm2ProcessSnapshot(rawJson, processName) {
   }
 }
 
+function findMacAppBundleUpward(startPath) {
+  try {
+    let current = path.resolve(startPath || "");
+    if (fs.existsSync(current) && fs.statSync(current).isFile()) {
+      current = path.dirname(current);
+    }
+    while (current && current !== path.dirname(current)) {
+      if (current.toLowerCase().endsWith(".app")) return current;
+      current = path.dirname(current);
+    }
+  } catch (_) { }
+  return "";
+}
+
+function findFirstNestedMacAppBundle(rootDir) {
+  try {
+    const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(rootDir, entry.name);
+      if (entry.isDirectory() && entry.name.endsWith(".app")) return fullPath;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const nested = findFirstNestedMacAppBundle(path.join(rootDir, entry.name));
+      if (nested) return nested;
+    }
+  } catch (_) { }
+  return "";
+}
+
+function findFirstMacOsExecutable(appBundle) {
+  try {
+    const macOsDir = path.join(appBundle, "Contents", "MacOS");
+    const entries = fs.readdirSync(macOsDir, { withFileTypes: true });
+    const executable = entries.find((entry) => entry.isFile() || entry.isSymbolicLink());
+    return executable ? path.join(macOsDir, executable.name) : "";
+  } catch (_) {
+    return "";
+  }
+}
+
 function resolvePm2ElectronLaunchPath() {
   const candidates = [];
   const pushIf = (value) => {
     if (!value || candidates.includes(value)) return;
     candidates.push(value);
   };
-  const findAppBundleUpward = (startPath) => {
-    try {
-      let current = path.resolve(startPath || "");
-      if (fs.existsSync(current) && fs.statSync(current).isFile()) {
-        current = path.dirname(current);
-      }
-      while (current && current !== path.dirname(current)) {
-        if (current.toLowerCase().endsWith(".app")) return current;
-        current = path.dirname(current);
-      }
-    } catch (_) { }
-    return "";
-  };
-  const findFirstNestedAppBundle = (rootDir) => {
-    try {
-      const entries = fs.readdirSync(rootDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(rootDir, entry.name);
-        if (entry.isDirectory() && entry.name.endsWith(".app")) return fullPath;
-      }
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const nested = findFirstNestedAppBundle(path.join(rootDir, entry.name));
-        if (nested) return nested;
-      }
-    } catch (_) { }
-    return "";
-  };
-  const findFirstMacOsExecutable = (appBundle) => {
-    try {
-      const macOsDir = path.join(appBundle, "Contents", "MacOS");
-      const entries = fs.readdirSync(macOsDir, { withFileTypes: true });
-      const executable = entries.find((entry) => entry.isFile() || entry.isSymbolicLink());
-      return executable ? path.join(macOsDir, executable.name) : "";
-    } catch (_) {
-      return "";
-    }
-  };
 
   pushIf(process.execPath);
   if (process.platform === "darwin") {
-    const currentBundle = findAppBundleUpward(process.execPath);
+    const currentBundle = findMacAppBundleUpward(process.execPath);
     if (currentBundle) {
       pushIf(findFirstMacOsExecutable(currentBundle));
     }
@@ -1167,7 +1182,7 @@ function resolvePm2ElectronLaunchPath() {
       if (process.platform === "darwin" && stat.isDirectory()) {
         const appBundle = candidate.toLowerCase().endsWith(".app")
           ? candidate
-          : findFirstNestedAppBundle(candidate);
+          : findFirstNestedMacAppBundle(candidate);
         if (appBundle) {
           const executable = findFirstMacOsExecutable(appBundle);
           if (executable) return executable;
@@ -1372,21 +1387,31 @@ async function runOneClickLocalSetup() {
 
       if (process.platform === "darwin") {
         const launcherPath = path.join(projectRoot, "launch-etherx.sh");
+        const appBundlePath = findMacAppBundleUpward(execPath);
         const shellQuote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
         const launcherContent = [
           "#!/bin/bash",
           "set -e",
+          `APP_BUNDLE=${shellQuote(appBundlePath || "")}`,
+          `EXEC_PATH=${shellQuote(execPath)}`,
           `while kill -0 ${process.pid} 2>/dev/null; do`,
           "  sleep 2",
           "done",
-          `exec ${shellQuote(execPath)} --no-sandbox`,
+          'if [[ -n "$APP_BUNDLE" && -d "$APP_BUNDLE" ]]; then',
+          '  exec /usr/bin/open -W -n "$APP_BUNDLE" --args --no-sandbox',
+          "fi",
+          'if [[ ! -x "$EXEC_PATH" ]]; then',
+          '  echo "EtherX PM2 launch target nije executable: $EXEC_PATH" >&2',
+          "  exit 126",
+          "fi",
+          'exec "$EXEC_PATH" --no-sandbox',
           "",
         ].join("\n");
         fs.writeFileSync(launcherPath, launcherContent, { encoding: "utf8", mode: 0o700 });
         fs.chmodSync(launcherPath, 0o700);
         pm2Script = launcherPath.replace(/\\/g, "/");
         pm2Args = [];
-        pm2Interpreter = "/bin/bash";
+        pm2Interpreter = "none";
       }
 
       const configContent = `module.exports = {
@@ -1462,6 +1487,7 @@ async function runOneClickLocalSetup() {
     const pm2IsOnline = !!pm2Snapshot?.online;
     const statusText = trimPythonInstallOutput(pm2Status.stdout || pm2Status.stderr || "");
     const pm2StatusLooksOnline = /etherx-browser/i.test(statusText) && /\bonline\b/i.test(statusText);
+    const pm2ErrLogTail = readTextFileTail(pm2Snapshot?.errLogPath, 6000);
 
     let pm2Error = "";
     if (!pm2Run.ok) {
@@ -1477,6 +1503,9 @@ async function runOneClickLocalSetup() {
         `PM2 proces nije online (state=${stateLabel}).${execPathLabel ? ` Exec path: ${execPathLabel}` : ""}`,
       );
     }
+    if (pm2Error && pm2ErrLogTail) {
+      pm2Error = trimPythonInstallOutput(`${pm2Error}\n\nPM2 error log:\n${pm2ErrLogTail}`);
+    }
 
     result.pm2 = {
       ok: !!pm2Run.ok && !!pm2Save.ok && (pm2IsOnline || pm2StatusLooksOnline),
@@ -1491,7 +1520,11 @@ async function runOneClickLocalSetup() {
       restarts: Number(pm2Snapshot?.restarts || 0) || 0,
       unstableRestarts: Number(pm2Snapshot?.unstableRestarts || 0) || 0,
       stdout: trimPythonInstallOutput(pm2Run.stdout || ""),
-      stderr: trimPythonInstallOutput((pm2Run.stderr || "") + (pm2Update?.stderr ? "\n" + pm2Update.stderr : "")),
+      stderr: trimPythonInstallOutput(
+        (pm2Run.stderr || "") +
+        (pm2Update?.stderr ? "\n" + pm2Update.stderr : "") +
+        (pm2ErrLogTail ? "\nPM2 error log:\n" + pm2ErrLogTail : ""),
+      ),
       error: pm2Error,
     };
 
@@ -1576,11 +1609,20 @@ function execFileJson(command, args, timeoutMs = 240000) {
         shell: process.platform === "win32",
       },
       (error, stdout, stderr) => {
+        const raw = String(stdout || "").trim();
         if (error) {
-          resolve({ ok: false, error, stdout: String(stdout || ""), stderr: String(stderr || "") });
+          try {
+            resolve({
+              ok: true,
+              data: JSON.parse(raw || "{}"),
+              processError: error,
+              stderr: String(stderr || ""),
+            });
+          } catch (_) {
+            resolve({ ok: false, error, stdout: raw, stderr: String(stderr || "") });
+          }
           return;
         }
-        const raw = String(stdout || "").trim();
         try {
           resolve({ ok: true, data: JSON.parse(raw || "{}") });
         } catch (parseErr) {
@@ -1594,6 +1636,18 @@ function execFileJson(command, args, timeoutMs = 240000) {
       },
     );
   });
+}
+
+function formatPythonBridgeError(run, fallbackMessage) {
+  const ignoredWarningRe =
+    /(NotOpenSSLWarning|urllib3 v2 only supports OpenSSL|warnings\.warn\(|`?torch_dtype`?\s+is deprecated|Use `?dtype`?\s+instead)/i;
+  const stderr = String(run?.stderr || "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !ignoredWarningRe.test(line))
+    .join("\n")
+    .trim();
+  const stdout = String(run?.stdout || "").trim();
+  return String(stderr || stdout || run?.error?.message || fallbackMessage).trim();
 }
 
 function execFileText(command, args, timeoutMs = 240000, options = {}) {
@@ -3845,7 +3899,7 @@ function setupIPC() {
               continue;
             }
             hadRuntimeError = true;
-            lastErr = String(run.stderr || run.stdout || run.error?.message || "Qwen3Guard failed").trim();
+            lastErr = formatPythonBridgeError(run, "Qwen3Guard failed");
             continue;
           }
           const out = run.data || {};
@@ -3918,7 +3972,7 @@ function setupIPC() {
               continue;
             }
             hadRuntimeError = true;
-            lastErr = String(run.stderr || run.stdout || run.error?.message || "Opir failed").trim();
+            lastErr = formatPythonBridgeError(run, "Opir failed");
             continue;
           }
           const out = run.data || {};
@@ -3993,7 +4047,7 @@ function setupIPC() {
               continue;
             }
             hadRuntimeError = true;
-            lastErr = String(run.stderr || run.stdout || run.error?.message || "NLLB translation failed").trim();
+            lastErr = formatPythonBridgeError(run, "NLLB translation failed");
             continue;
           }
           const out = run.data || {};
@@ -4216,6 +4270,8 @@ function setupIPC() {
               const assets = (data.assets || []).map((a) => ({
                 name: a.name,
                 url: a.browser_download_url || "",
+                browserUrl: a.browser_download_url || "",
+                apiUrl: a.url || "",
                 size: a.size,
               }));
               resolve({
@@ -4811,7 +4867,7 @@ app.on("web-contents-created", (_event, contents) => {
         // to a new tab the window.opener reference is lost and login breaks.
         const isOAuthPopup =
           details.disposition === "new-popup" ||
-          /accounts\.google\.com|login\.live\.com|appleid\.apple\.com|facebook\.com\/dialog|twitter\.com\/oauth|x\.com\/oauth|tiktok\.com\/login|accounts\.tiktok\.com|github\.com\/login\/oauth|discord\.com\/oauth2|linkedin\.com\/oauth|reddit\.com\/api\/v1\/authorize|openrouter\.ai\/auth|accounts\.openrouter\.ai|clerk\.openrouter\.ai|auth\.openrouter\.ai|[^/]*\.clerk\.accounts\.dev|[^/]*\.clerk\.com|auth0\.com|okta\.com\/oauth2|login\.microsoftonline\.com|huggingface\.co\/login|openai\.com\/auth|anthropic\.com\/login/i.test(
+          /accounts\.google\.com|login\.live\.com|appleid\.apple\.com|facebook\.com\/dialog|twitter\.com\/oauth|x\.com\/oauth|github\.com\/login\/oauth|discord\.com\/oauth2|linkedin\.com\/oauth|reddit\.com\/api\/v1\/authorize|openrouter\.ai\/auth|accounts\.openrouter\.ai|clerk\.openrouter\.ai|auth\.openrouter\.ai|[^/]*\.clerk\.accounts\.dev|[^/]*\.clerk\.com|auth0\.com|okta\.com\/oauth2|login\.microsoftonline\.com|huggingface\.co\/login|openai\.com\/auth|anthropic\.com\/login/i.test(
             details.url,
           );
 
