@@ -268,6 +268,9 @@ contextBridge.exposeInMainWorld('etherx', {
     runOneClickSetup: () => ipcRenderer.invoke('app:runOneClickSetup'),
     getPM2Status: () => ipcRenderer.invoke('app:getPM2Status'),
     getPM2Logs: () => ipcRenderer.invoke('app:getPM2Logs'),
+    clearPM2Logs: () => ipcRenderer.invoke('app:clearPM2Logs'),
+    stopPM2Process: () => ipcRenderer.invoke('app:stopPM2Process'),
+    ensurePM2Process: () => ipcRenderer.invoke('app:ensurePM2Process'),
   },
 
   storage: {

@@ -708,7 +708,12 @@ if (window.electronWebview) {
                 const candidate = getCandidate();
                 if (candidate?.password) console.log('__ETHERX_SAVE_PASSWORD__' + JSON.stringify({ ...candidate, reason }));
               };
-              document.addEventListener('mousedown', () => console.log('__ETHERX_PAGE_CLICK__'), true);
+              document.addEventListener('mousedown', () => {
+                const now = Date.now();
+                if (now - (window.__etherxLastPageClickLog || 0) < 500) return;
+                window.__etherxLastPageClickLog = now;
+                console.log('__ETHERX_PAGE_CLICK__');
+              }, true);
               document.addEventListener('submit', () => setTimeout(() => emit('submit'), 80), true);
               document.addEventListener('click', ev => {
                 const target = ev.target && ev.target.closest ? ev.target.closest('button,input[type="submit"],input[type="button"]') : null;
@@ -4240,6 +4245,7 @@ function inferAiProviderFromModel(model) {
     if (value.startsWith('gpt')) return 'openai';
     if (value.startsWith('claude') && !value.includes('/')) return 'anthropic';
     if (value.startsWith('gemini') && !value.includes('/')) return 'gemini';
+    if (['grok-2', 'grok-beta', 'local-guardian'].includes(value)) return 'guardian';
     // OpenRouter models always contain a slash (e.g. "meta-llama/llama-3.3")
     if (value.includes('/')) return 'openrouter';
     // Groq-specific models (no slash, served by Groq API)
@@ -4265,6 +4271,7 @@ function getProviderApiKey(provider, settings = null) {
     if (p === 'groq') return String(cfg.groqApiKey || cfg.groq_api_key || '').trim();
     if (p === 'huggingface') return String(cfg.hfApiKey || cfg.hf_api_key || '').trim();
     if (p === 'local') return String(cfg.localAiApiKey || cfg.local_ai_api_key || '').trim();
+    if (p === 'guardian') return String(cfg.tkaiGuardianApiKey || '').trim();
     return '';
 }
 function normalizeLocalAiBaseUrl(baseUrl) {
@@ -4365,8 +4372,8 @@ async function runAiTextRequest(prompt, opts = {}) {
 
     if (provider === 'guardian') {
         const s = DB.getSettings() || {};
-        const gModel = String(s.tkaiGuardianModel || 'grok-2').trim();
-        const gApiKey = String(s.tkaiGuardianApiKey || '').trim();
+        const gModel = String(opts.model || s.tkaiGuardianModel || 'grok-2').trim();
+        const gApiKey = String(opts.apiKey || s.tkaiGuardianApiKey || '').trim();
         return runGuardianAiRequest(prompt, systemPrompt, gModel, gApiKey, s);
     }
 
@@ -4392,6 +4399,7 @@ async function runAiTextRequest(prompt, opts = {}) {
         gemini: 'Gemini',
         openai: 'OpenAI',
         local: 'Local AI',
+        guardian: 'Guardian AI',
         groq: 'Groq',
         openrouter: 'OpenRouter',
         huggingface: 'HuggingFace',
@@ -6184,6 +6192,64 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .replace(/^\.+|\.+$/g, '');
         return /^[a-z0-9._]{2,40}$/.test(fallback) ? fallback : '';
     }
+    function isUnknownTkaiUserName(value) {
+        return /^(?:unknown|undefined|null|chat\s*user|user)$/i.test(String(value || '').trim());
+    }
+    function normalizeTkaiDisplayUserName(value) {
+        const raw = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!raw || isUnknownTkaiUserName(raw)) return '';
+        const handle = normalizeTikTokProfileHandle(raw);
+        if (handle && /^@?[a-z0-9._]{2,40}$/i.test(raw)) return handle;
+        const cleaned = raw
+            .replace(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
+            .replace(/^(?:lvl|lv|level|razina)?\s*[:#-]?\s*\d{1,3}\s+/i, '')
+            .replace(/^[^\p{L}@#]+/u, '')
+            .replace(/^@+/, '')
+            .replace(/[,:;|].*$/, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        if (!cleaned || isUnknownTkaiUserName(cleaned)) return '';
+        if (/^[#@]?\d{1,3}$/.test(cleaned)) return '';
+        if (!/\p{L}/u.test(cleaned)) return '';
+        return cleaned.slice(0, 60);
+    }
+    function resolveTkaiMessageUser(message) {
+        const direct = normalizeTkaiDisplayUserName(message?.user || '');
+        if (direct) return direct;
+        const handle = normalizeTikTokProfileHandle(message?.userHandle || message?.profileHandle || '');
+        if (handle) return handle;
+        const sources = [
+            message?.rawText,
+            message?.giftRawText,
+            message?.text,
+            message?.ariaLabel,
+            message?.title
+        ].map((value) => String(value || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        const patterns = [
+            /^\s*(.{2,80}?)\s*[:\-–—]\s+.{1,}$/u,
+            /^\s*(.{2,80}?)\s+(?:sent|gave|gifted|donated|joined|shared|liked|poklon(?:io|ila)?|darovao|darovala|donirao|donirala|u[sš]ao|u[sš]la|podijelio|podijelila)\b/iu,
+            /^\s*(.{2,80}?)\s+(?:said|commented|wrote|ka[žz]e|komentira)\b/iu
+        ];
+        for (const source of sources) {
+            for (const pattern of patterns) {
+                const match = source.match(pattern);
+                const user = normalizeTkaiDisplayUserName(match?.[1] || '');
+                if (user) return user;
+            }
+        }
+        return '';
+    }
+    function repairTkaiMessageIdentity(message) {
+        if (!message || typeof message !== 'object') return message;
+        const user = resolveTkaiMessageUser(message);
+        const handle = normalizeTikTokProfileHandle(message.userHandle || message.profileHandle || user || '');
+        if (!user && !handle) return message;
+        return {
+            ...message,
+            user: user || handle || message.user,
+            userHandle: normalizeTikTokProfileHandle(message.userHandle || message.profileHandle || handle || '')
+        };
+    }
     function resolveTikTokProfileHandle(user, message = null) {
         const direct = normalizeTikTokProfileHandle(
             message?.userHandle
@@ -7805,6 +7871,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return false;
         }
     }
+    function isTkaiGiftThankYouText(text, rawText = '') {
+        const source = String(`${text || ''} ${rawText || ''}`).replace(/\s+/g, ' ').trim();
+        if (!source) return false;
+        const hasThanks = /\b(?:thanks?|thank\s*you|thx|tnx|tysm|ty|appreciate|hvala|fala|hvalaa+|zahval(?:a|jujem|juje|jujes|nost)?|tenkju)\b/i.test(source);
+        if (!hasThanks) return false;
+        const officialGiftEvent = /^\s*(?:sent|gave|gifted|donated|poklon(?:io|ila|ili|ile)?|darovao|darovala|donirao|donirala)\b/i.test(source)
+            || /^\s*.{2,60}?\s+(?:sent|gave|gifted|donated|poklon(?:io|ila|ili|ile)?|darovao|darovala|donirao|donirala)\b/i.test(source);
+        if (officialGiftEvent && !/\b(?:for|za|na|sto|što|jer)\b/i.test(source)) return false;
+        const hasGiftContext = /gift|gifts|rose|roses|ru[žz]a|ru[žz]u|ru[žz]i|poklon|poklone|dar|donation|coins?|coina|diamond|diamonds|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|🪙|💎/i.test(source)
+            || (typeof countGiftCatalogMatches === 'function' && countGiftCatalogMatches(source) > 0);
+        const hasThanksPreposition = /\b(?:thanks?|thank\s*you|hvala|fala|zahval\w*|appreciate)\b.{0,40}\b(?:for|za|na)\b/i.test(source);
+        return hasGiftContext || hasThanksPreposition;
+    }
     function updateHoldLButton() {
         if (!holdLBtn) return;
         holdLBtn.textContent = holdLActive ? '⌨️ L Hold ON' : '⌨️ L Hold OFF';
@@ -7866,9 +7945,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     function isTkaiGiftLikeMessage(message) {
         if (!message) return false;
+        const text = String(message.text || message.giftRawText || '').trim();
+        const giftContextText = `${message.giftRawText || ''} ${message.giftName || ''}`;
+        if (isTkaiGiftThankYouText(text, giftContextText)) return false;
         const type = normalizeTkaiMessageType(message);
         if (type === 'gift' || type === 'subscriber') return true;
-        const text = String(message.text || message.giftRawText || '').trim();
         if (!text) return false;
         const meta = getTkaiGiftMeta(text);
         const parsedCoins = Number(meta?.coins || 0) || Number(parseCoinsFromText(text) || 0);
@@ -7909,19 +7990,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const explicit = String(message?.type || '').trim().toLowerCase();
         const text = String(message?.text || message?.giftRawText || '').toLowerCase();
         if (!text) return (known.has(explicit) ? explicit : '') || 'chat';
+        const isGiftThanks = isTkaiGiftThankYouText(message?.text || text, `${message?.giftRawText || ''} ${message?.giftName || ''}`);
         const hasShare = /\b(shared\s+(?:the\s+)?live|shared\s+this\s+live|shared|share|podijelio|podijelila|dijelio\s+live|dijelila\s+live)\b/i.test(text);
         const hasJoin = /\b(joined\s+(?:the\s+)?live|joined\s+this\s+live|joined|join|entered\s+the\s+live|entered|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(text);
         const parsedCoins = Number(parseCoinsFromText(text) || 0);
         const catalogHits = countGiftCatalogMatches(text);
         const hasGiftVerb = /\b(sent|gift|gifted|rose|donut|diamond|coins?|gave|poklon|darovao|donirao)\b/i.test(text);
-        const hasGiftSignal = parsedCoins > 0
+        const hasGiftSignal = !isGiftThanks && (parsedCoins > 0
             || hasGiftVerb
             || catalogHits >= 2
-            || (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text));
+            || (catalogHits >= 1 && /(?:^|\s)[·•]\s*[a-z0-9_]{2,40}\s+/i.test(text)));
         if (hasShare && !hasGiftSignal) return 'share';
         if (hasJoin) return 'join';
 
         if (known.has(explicit) && explicit !== 'chat') {
+            if ((explicit === 'gift' || explicit === 'subscriber') && isGiftThanks) return 'chat';
             if ((explicit === 'gift' || explicit === 'subscriber') && hasShare && !hasGiftSignal) return 'share';
             return explicit;
         }
@@ -10300,6 +10383,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (supporterCountEl) supporterCountEl.textContent = formatNum(supporterSet.size);
         updateSessionStatsUI();
     }
+    function isTkaiViewerNoiseText(text) {
+        const t = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!t) return false;
+        if (/^(?:\d[\d.,\s]*[km]?\+?)(?:\s*(?:viewers?|watching|gledatelja|gleda))?$/i.test(t)) return true;
+        if (/\b(?:viewers?|watching(?:\s+now)?|spectators?|audience|gledatelja|gleda|viewer count|user count)\b/i.test(t)) return true;
+        if (/\b(?:top\s*(?:viewer|gifter|fan|supporter)|leaderboard|ranking|rank|weekly\s*ranking|daily\s*ranking)\b/i.test(t)) return true;
+        if (/^(?:#\s*)?\d{1,3}\s+.{2,60}\s+\d[\d.,\s]*[km]?(?:\s*(?:coins?|diamonds?))?$/i.test(t)) return true;
+        return false;
+    }
     function renderMessages() {
         if (!messagesEl) return;
         const settings = DB.getSettings();
@@ -10309,7 +10401,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
         const chatMessages = allMessages.filter((message) => {
             const type = normalizeTkaiMessageType(message);
-            return message && (type === 'chat' || type === 'caption' || type === 'song');
+            if (!message || !(type === 'chat' || type === 'caption' || type === 'song')) return false;
+            if (type === 'chat' && isTkaiViewerNoiseText(message.text)) return false;
+            return true;
         });
         const giftMessages = allMessages.filter((message) => {
             const type = normalizeTkaiMessageType(message);
@@ -10342,7 +10436,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (targetedChatUser && String(message.user || '') === targetedChatUser) {
                 div.classList.add('targeted');
             }
-            const isGiftLike = message.type === 'gift' || message.type === 'subscriber';
+            const isGiftLike = displayType === 'gift' || displayType === 'subscriber';
             const giftMeta = isGiftLike ? safeResolveGiftMetaFromMessage(message) : null;
             // Resolve display username — replace 'unknown/Unknown' with stream owner
             const resolvedUser = (() => {
@@ -11185,6 +11279,49 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           if (/^[#@]?\d{1,3}$/.test(t)) return true;
           return false;
         }
+                function isViewerOrLeaderboardText(text) {
+                    const t = String(text || '').replace(/\s+/g, ' ').trim();
+                    if (!t) return false;
+                    const viewerHint = /\b(?:viewers?|watching(?:\s+now)?|spectators?|audience|gledatelja|gleda|viewer count|user count)\b/i;
+                    const leaderboardHint = /\b(?:top\s*(?:viewer|gifter|fan|supporter)|leaderboard|ranking|rank|weekly\s*ranking|daily\s*ranking)\b/i;
+                    const plainCounter = /^(?:👁\s*)?\d[\d.,\s]*[km]?\+?(?:\s*(?:viewers?|watching|gledatelja|gleda))?$/i;
+                    const leaderboardRow = /^(?:#\s*)?\d{1,3}\s+.{2,60}\s+\d[\d.,\s]*[km]?(?:\s*(?:coins?|diamonds?|🪙))?$/i
+                        || /^(?:no\.?|rank|top)\s*\d{1,3}\b/i;
+                    return plainCounter.test(t) || viewerHint.test(t) || leaderboardHint.test(t) || leaderboardRow.test(t);
+                }
+                function isLikelyChatRowElement(el) {
+                    if (!el) return false;
+                    const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+                    if (!txt || txt.length < 2 || txt.length > 650) return false;
+                    if (isViewerOrLeaderboardText(txt)) return false;
+                    const hasExplicitChatMarker = !!el.querySelector?.(
+                        '[data-e2e*="chat" i],'
+                        + '[data-e2e*="message" i],'
+                        + '[data-e2e*="comment" i],'
+                        + '[class*="Chat" i],'
+                        + '[class*="Message" i],'
+                        + '[class*="Comment" i]'
+                    );
+                    const hasUserLike = !!el.querySelector?.(
+                        'a[href*="/@"],'
+                        + '[data-e2e*="user" i],'
+                        + '[data-e2e*="name" i],'
+                        + '[class*="User" i],'
+                        + '[class*="Nick" i],'
+                        + '[class*="Author" i],'
+                        + 'strong,b'
+                    );
+                    const hasTextLike = !!el.querySelector?.(
+                        '[data-e2e*="text" i],'
+                        + '[data-e2e*="content" i],'
+                        + '[class*="Text" i],'
+                        + '[class*="Content" i],'
+                        + 'p,span'
+                    );
+                    const hasChatTextShape = /^.{2,60}\s*[:\-–—]\s*.{1,}$/i.test(txt)
+                        || /\b(?:sent|gave|joined|shared|liked|gifted|u[sš]ao|u[sš]la|podijelio|podijelila)\b/i.test(txt);
+                    return (hasUserLike && hasTextLike) || (hasExplicitChatMarker && (hasTextLike || hasChatTextShape));
+                }
                 function stripChatMetaBadges(value) {
                     return String(value || '')
                         .replace(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
@@ -11197,13 +11334,71 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 function normalizeChatUserName(rawUser) {
                     const raw = String(rawUser || '').replace(/\s+/g, ' ').trim();
                     if (!raw) return '';
+                    if (/^(?:unknown|undefined|null|chat\s*user|user)$/i.test(raw)) return '';
                     const handleMatch = raw.match(/@([a-z0-9._]{2,40})\b/i);
                     if (handleMatch && handleMatch[1]) return handleMatch[1];
-                    return stripChatMetaBadges(raw)
+                    const normalized = stripChatMetaBadges(raw)
+                        .replace(/^(?:lvl|lv|level|razina)?\s*[:#-]?\s*\d{1,3}\s+/i, '')
+                        .replace(/^[^\p{L}@#]+/u, '')
                         .replace(/^@+/, '')
                         .replace(/[,:;|].*$/, '')
                         .replace(/\s{2,}/g, ' ')
                         .trim();
+                    if (/^(?:unknown|undefined|null|chat\s*user|user)$/i.test(normalized)) return '';
+                    if (!normalized || isAuxiliaryText(normalized)) return '';
+                    if (/^[#@]?\d{1,3}$/.test(normalized)) return '';
+                    if (!/\p{L}/u.test(normalized)) return '';
+                    return normalized;
+                }
+                function extractUserNameFromEventText(value) {
+                    const text = String(value || '').replace(/\s+/g, ' ').trim();
+                    if (!text || isViewerOrLeaderboardText(text)) return '';
+                    const patterns = [
+                        /^\s*(.{2,80}?)\s*[:\-–—]\s+.{1,}$/u,
+                        /^\s*(.{2,80}?)\s+(?:sent|gave|gifted|donated|joined|shared|liked|poklon(?:io|ila)?|darovao|darovala|donirao|donirala|u[sš]ao|u[sš]la|podijelio|podijelila)\b/iu,
+                        /^\s*(.{2,80}?)\s+(?:said|commented|wrote|ka[žz]e|komentira)\b/iu
+                    ];
+                    for (const pattern of patterns) {
+                        const m = text.match(pattern);
+                        const user = normalizeChatUserName(m?.[1] || '');
+                        if (user) return user;
+                    }
+                    return '';
+                }
+                function extractStructuredChatFromRow(row) {
+                    try {
+                        const raw = String(row?.innerText || row?.textContent || '')
+                            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+                            .trim();
+                        if (!raw) return null;
+                        const rawLines = raw
+                            .split(/\n+/)
+                            .map((line) => line.replace(/\s+/g, ' ').trim())
+                            .filter(Boolean)
+                            .filter((line) => !isViewerOrLeaderboardText(line));
+                        const lines = rawLines.filter((line) => !isAuxiliaryText(line));
+                        if (lines.length >= 2) {
+                            const user = normalizeChatUserName(lines[0]);
+                            const text = lines.slice(1).join(' ').trim();
+                            if (user && text && !isViewerOrLeaderboardText(text)) return { user, text };
+                        }
+                        const compact = rawLines.join(' ').replace(/\s+/g, ' ').trim();
+                        const withoutLevel = compact
+                            .replace(/^(?:lvl|lv|level|razina)?\s*[:#-]?\s*\d{1,3}\s+/i, '')
+                            .trim();
+                        const colonMatch = withoutLevel.match(/^(.{2,80}?)\s*[:\-–—]\s*(.{1,})$/);
+                        if (colonMatch) {
+                            const user = normalizeChatUserName(colonMatch[1]);
+                            const text = cleanChatText(colonMatch[2], user);
+                            if (user && text && !isViewerOrLeaderboardText(text)) return { user, text };
+                        }
+                        const eventUser = extractUserNameFromEventText(withoutLevel);
+                        if (eventUser) {
+                            const text = cleanChatText(withoutLevel, eventUser);
+                            if (text && !isViewerOrLeaderboardText(text)) return { user: eventUser, text };
+                        }
+                    } catch (_) { }
+                    return null;
                 }
         function cleanChatText(rawText, user) {
           let text = String(rawText || '').replace(/\s+/g, ' ').trim();
@@ -11274,25 +11469,97 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         function getTopSupportersFromPage() {
           const rows = [];
+          const cleanSupporterName = (value) => {
+            return normalizeChatUserName(
+              String(value || '')
+                .replace(/^(?:#\s*)?\d{1,3}\s*[.)-]?\s*/i, ' ')
+                .replace(/\b\d[\d.,\s]*[km]?\+?\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙)?\b/gi, ' ')
+                .replace(/\b(?:top\s*(?:viewer|gifter|fan|supporter)|leaderboard|ranking|rank)\b/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+            );
+          };
+          const pushRow = (rankRaw, userRaw, coinsRaw, source) => {
+            const rank = Math.max(1, Math.min(99, Number.parseInt(String(rankRaw || '').replace(/\D/g, ''), 10) || 99));
+            const coins = parseNumberLike(coinsRaw);
+            const user = cleanSupporterName(userRaw);
+            if (!user || !Number.isFinite(coins) || coins <= 0) return;
+            rows.push({ rank, user: user.slice(0, 60), coins, source: String(source || '') });
+          };
+          const parseSupporterText = (text, source) => {
+            const raw = String(text || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+            if (!raw) return;
+            const compact = raw.replace(/\s+/g, ' ').trim();
+            const compactPatterns = [
+              /(?:^|\s)#?\s*(\d{1,2})\s*[.)-]?\s+(.{2,80}?)\s+(\d[\d.,\s]*[km]?)\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙)?(?:\s|$)/ig,
+              /(?:^|\s)(?:rank|top|no\.?)\s*(\d{1,2})\s+(.{2,80}?)\s+(\d[\d.,\s]*[km]?)(?:\s|$)/ig
+            ];
+            for (const re of compactPatterns) {
+              let m;
+              while ((m = re.exec(compact))) {
+                pushRow(m[1], m[2], m[3], source);
+              }
+            }
+
+            const lines = raw
+              .split(/\n+/)
+              .map((line) => line.replace(/\s+/g, ' ').trim())
+              .filter(Boolean);
+            for (let i = 0; i < lines.length; i += 1) {
+              const rankMatch = lines[i].match(/^#?\s*(\d{1,2})\s*[.)-]?$/i);
+              if (!rankMatch) continue;
+              let userLine = '';
+              let coinsLine = '';
+              for (let j = i + 1; j < Math.min(lines.length, i + 5); j += 1) {
+                const line = lines[j];
+                if (!coinsLine && /\d[\d.,\s]*[km]?\+?\s*(?:coins?|coin|coina|kovanica|diamonds?|🪙)?$/i.test(line)) {
+                  coinsLine = line;
+                  break;
+                }
+                if (!userLine && !isAuxiliaryText(line) && !isViewerOrLeaderboardText(line)) {
+                  userLine = line;
+                }
+              }
+              if (userLine && coinsLine) {
+                pushRow(rankMatch[1], userLine, coinsLine, source);
+              }
+            }
+          };
           const leaderboardSelectors = [
             '[data-e2e*="top-viewer"]',
+            '[data-e2e*="top-gifter"]',
+            '[data-e2e*="supporter"]',
             '[data-e2e*="leaderboard"]',
+            '[data-e2e*="ranking"]',
             '[class*="rank"]',
+            '[class*="Rank"]',
             '[class*="leaderboard"]',
+            '[class*="Leaderboard"]',
             '[class*="supporter"]',
+            '[class*="Supporter"]',
+            '[class*="gifter"]',
+            '[class*="Gifter"]',
             '[class*="top"]'
           ];
           for (const sel of leaderboardSelectors) {
             try {
               document.querySelectorAll(sel).forEach(function(el) {
-                const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+                const txt = String(el.innerText || el.textContent || '').trim();
                 if (!txt || txt.length < 4) return;
-                const r = txt.match(/#?\s*([1-9])\s*[.)-]?\s*(.{2,40}?)\s+(\d[\d.,\s]*[km]?)(?:\s*(coins?|coin|coina|kovanica|diamonds?))?/i);
-                if (!r) return;
-                pushRow(r[1], r[2], r[3], sel);
+                parseSupporterText(txt, sel);
+                try {
+                  Array.from(el.children || []).forEach((child) => parseSupporterText(child.innerText || child.textContent || '', sel + ' child'));
+                } catch (_) {}
               });
             } catch (_) {}
           }
+          try {
+            document.querySelectorAll('[aria-label], [title]').forEach(function(el) {
+              const label = [el.getAttribute('aria-label') || '', el.getAttribute('title') || ''].join(' ').trim();
+              if (!/\b(top|rank|supporter|gifter|leaderboard|coins?|diamonds?)\b/i.test(label)) return;
+              parseSupporterText(label, 'aria/title');
+            });
+          } catch (_) {}
           const dedupe = new Map();
           rows.forEach((row) => {
             if (!row.user) return;
@@ -11332,7 +11599,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         for (const sel of primarySelectors) {
           try {
             const found = document.querySelectorAll(sel);
-            if (found.length > 0) { items = Array.from(found); break; }
+            if (found.length > 0) {
+              const foundItems = Array.from(found);
+              const chatLikeFound = foundItems.filter(isLikelyChatRowElement);
+              items = chatLikeFound.length ? chatLikeFound : foundItems.filter((el) => !isViewerOrLeaderboardText(el.textContent || ''));
+              break;
+            }
           } catch(_) {}
         }
         // Deep DOM scan fallback: find container with many child divs that look like chat
@@ -11354,9 +11626,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           for (const csel of chatContainerSelectors) {
             try {
               const container = document.querySelector(csel);
-              if (container) {
+            if (container) {
                 const children = Array.from(container.children).filter(c => c.textContent.trim().length > 5);
-                if (children.length > 0) { items = children; break; }
+                const chatLikeChildren = children.filter(isLikelyChatRowElement);
+                if (chatLikeChildren.length >= 2) { items = chatLikeChildren; break; }
+                if (children.length > 0 && children.some(c => !isViewerOrLeaderboardText(c.textContent || ''))) { items = children; break; }
               }
             } catch(_) {}
           }
@@ -11374,15 +11648,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               // Chat panel is typically on the right half of the live view
               if (r.left < window.innerWidth * 0.35) return false;
               const kids = Array.from(el.children).filter(c => c.textContent.trim().length > 4);
-              return kids.length >= 3;
+              const chatLikeKids = kids.filter(isLikelyChatRowElement);
+              return chatLikeKids.length >= 3;
             });
             if (scrollCandidates.length) {
-              // Pick the one furthest right (most likely the chat panel, not video controls)
+              // Pick the candidate with the most chat-like rows. Viewers/leaderboards can also be scrollable on the right.
               scrollCandidates.sort(function(a, b) {
+                const aKids = Array.from(a.children).filter(isLikelyChatRowElement).length;
+                const bKids = Array.from(b.children).filter(isLikelyChatRowElement).length;
+                if (bKids !== aKids) return bKids - aKids;
                 return b.getBoundingClientRect().left - a.getBoundingClientRect().left;
               });
               const container = scrollCandidates[0];
-              items = Array.from(container.children).filter(c => c.textContent.trim().length > 4);
+              items = Array.from(container.children).filter(isLikelyChatRowElement);
             }
           } catch(_) {}
         }
@@ -11454,7 +11732,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         || /^(?:no\.?|rank|top)\s*\d{1,3}\s+.{2,}\d/.test(t)
                         || (/^.{2,40}\s+\d{1,7}\s*(?:🪙|coins?|diamonds?)$/i.test(t) && /^[^a-z]*\d{1,3}[^a-z]/i.test(t));
 
-                    if (sameAsUser || looksCounter) return true;
+                    if (sameAsUser || looksCounter || isViewerOrLeaderboardText(t)) return true;
                     if (looksLeaderboard) return true;
                     if (onlyNumericOrPunct && !maybeStandaloneChatNumber) return true;
                     if (messageType === 'chat' && letterCount === 0 && emojiCount === 0 && symbolCount <= 2) return true;
@@ -11549,6 +11827,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             + 'p, span'
           ));
                     const fallbackText = (el.textContent || '').replace(/[\s]+/g, ' ').trim();
+                    if (isViewerOrLeaderboardText(fallbackText)) return;
                     const extractHandleFromHref = (hrefValue) => {
                         const href = String(hrefValue || '').trim();
                         if (!href) return '';
@@ -11560,7 +11839,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             return String(m[1]).replace(/^@+/, '').toLowerCase();
                         }
                     };
+                    const structuredRow = extractStructuredChatFromRow(el);
           const derivedUser = (() => {
+                        if (structuredRow?.user) return structuredRow.user;
             // 1) Explicit userEl text
                         const direct = normalizeChatUserName(userEl ? userEl.textContent.trim() : '');
             if (direct && direct.length > 0) return direct;
@@ -11575,6 +11856,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (aria) {
               const am = aria.match(/^([^:,\n]{2,40})(?::|,)/); 
                             if (am && am[1]) return normalizeChatUserName(am[1]);
+                            const ariaUser = extractUserNameFromEventText(aria);
+                            if (ariaUser) return ariaUser;
             }
             // 4) Look for a child element with data-e2e containing "user" or "name"
             const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
@@ -11587,6 +11870,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         if (colMatch && colMatch[1]) return normalizeChatUserName(colMatch[1]);
             const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)(?:\b|(?=[a-z0-9]))/i);
                         if (sentMatch && sentMatch[1]) return normalizeChatUserName(sentMatch[1]);
+                        const eventTextUser = extractUserNameFromEventText(fallbackText);
+                        if (eventTextUser) return eventTextUser;
             return '';
           })();
                     const userHandle = (() => {
@@ -11599,7 +11884,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         }
                         return '';
                     })();
-          let user = (derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
+          let user = (derivedUser || userHandle || '').slice(0, 60) || null; // null = skip if truly empty
           const textBase = textEl ? textEl.textContent.trim() : '';
           const candidateParts = collectCandidateTextParts(el, user);
           const assembledText = candidateParts.join(' ').trim();
@@ -11611,7 +11896,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
           const fullRowText = fallbackText.slice(0, 2400);
           const rowFallbackText = extractFullChatTextFromRow(fullRowText, user);
-          let rawText = (assembledText || textBase || fallbackParts.join(' ') || rowFallbackText || el.textContent || '').trim().slice(0, 2000);
+          let rawText = (structuredRow?.text || assembledText || textBase || fallbackParts.join(' ') || rowFallbackText || el.textContent || '').trim().slice(0, 2000);
           if (rowFallbackText && (!rawText || rawText.length < 2 || isAuxiliaryText(rawText))) {
             rawText = rowFallbackText;
           }
@@ -11627,6 +11912,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         + '[class*="GiftBadge"]'
                     );
           const emoteEls = el.querySelectorAll('img[alt], [class*="Emoji"], [class*="emoji"]');
+          const isGiftThankYouRowText = (value, originalValue, hasGiftNode) => {
+            const source = String((value || '') + ' ' + (originalValue || '')).replace(/\s+/g, ' ').trim();
+            if (!source) return false;
+            const hasThanks = /\b(?:thanks?|thank\s*you|thx|tnx|tysm|ty|appreciate|hvala|fala|hvalaa+|zahval(?:a|jujem|juje|jujes|nost)?|tenkju)\b/i.test(source);
+            if (!hasThanks) return false;
+            const officialGiftEvent = /^\s*(?:sent|gave|gifted|donated|poklon(?:io|ila|ili|ile)?|darovao|darovala|donirao|donirala)\b/i.test(source)
+                || /^\s*.{2,60}?\s+(?:sent|gave|gifted|donated|poklon(?:io|ila|ili|ile)?|darovao|darovala|donirao|donirala)\b/i.test(source);
+            if (officialGiftEvent && !/\b(?:for|za|na|sto|što|jer)\b/i.test(source)) return false;
+            const hasGiftContext = !!hasGiftNode
+                || /gift|gifts|rose|roses|ru[žz]a|ru[žz]u|ru[žz]i|poklon|poklone|dar|donation|coins?|coina|diamond|diamonds|galaxy|lion|lollipop|sunglasses|universe|castle|rocket|bear|unicorn|heart\s*me|hand\s*heart|hand\s*hearts|🎁|🌹|🪙|💎/i.test(source);
+            const hasThanksPreposition = /\b(?:thanks?|thank\s*you|hvala|fala|zahval\w*|appreciate)\b.{0,40}\b(?:for|za|na)\b/i.test(source);
+            return hasGiftContext || hasThanksPreposition;
+          };
           
           let cleaned = cleanChatText(rawText, user);
                     let text = cleaned.slice(0, 1800);
@@ -11639,8 +11937,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isLike = hasLikeWord && !hasSent && giftEls.length === 0 && !hasGiftWord;
                         const isShare = isStrictShareEvent(text, rawText, user, el);
                         const hasGiftVerb = /\b(?:gifted|poklon(?:io|ila)?|darovao|donirao)\b/i.test(low);
-                        const hasStrongGiftSignal = giftEls.length > 0 || hasGiftVerb || (hasSent && hasGiftWord);
-                        const isGift = !isLike && !isShare && hasStrongGiftSignal;
+                        const isGiftThanks = isGiftThankYouRowText(text, rawText, giftEls.length > 0);
+                        const hasStrongGiftSignal = !isGiftThanks && (giftEls.length > 0 || hasGiftVerb || (hasSent && hasGiftWord));
+                        const isGift = !isGiftThanks && !isLike && !isShare && hasStrongGiftSignal;
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
                         if ((!user || String(user).toLowerCase() === 'unknown') && (isGift || isJoin || isShare)) {
@@ -11675,6 +11974,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                         isJoin,
                                         isShare,
                                         isLike,
+                                        isGiftThanks,
                                         likelyMention,
                                         hasJoinWord,
                                         hasShareWord
@@ -11689,6 +11989,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             low = text.toLowerCase();
                         }
                         if ((messageType === 'join' || messageType === 'share') && (!user || String(user).toLowerCase() === 'unknown')) return;
+                        if (messageType === 'chat' && isViewerOrLeaderboardText(text)) return;
                         const looksLikeCatalogGiftLine = /^(?:unknown\s*[·•|:\-]?\s*)?\d{1,7}\s+[^\s].*$/i.test(text)
                             || /^[^\d]{2,40}\s*[·•|:\-]\s*\d{1,7}(?:\s*(?:coins?|diamonds?|🪙))?$/i.test(text);
                         if (looksLikeCatalogGiftLine && !/\b(?:sent|gave)\b/i.test(low)) return;
@@ -11697,6 +11998,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               user: user || 'unknown',
                             userHandle,
               text,
+              rawText: fullRowText,
+              ariaLabel: el.getAttribute('aria-label') || '',
+              title: el.getAttribute('title') || '',
               mid,
                                                                                                                 type: isShare ? 'share' : (isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isLike ? 'like' : 'chat')))),
               level: levelHint
@@ -11820,11 +12124,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const scanJoins = DB.getSettings().tkaiScanJoins !== false;
             const scanShares = DB.getSettings().tkaiScanShares !== false;
             const scanLikes = DB.getSettings().tkaiScanLikes !== false;
+            const dropUnknownUsers = DB.getSettings().tkaiDropUnknownUsers === true;
 
             const filteredMessages = messages
                 .map((m) => ({ ...m, type: normalizeTkaiMessageType(m) }))
+                .map((m) => repairTkaiMessageIdentity(m))
                 .filter((m) => {
                     if (m.type === 'chat' && !scanChat) return false;
+                    if (m.type === 'chat' && isTkaiViewerNoiseText(m.text)) return false;
+                    if (dropUnknownUsers && !['caption', 'song'].includes(m.type) && (!String(m.user || '').trim() || isUnknownTkaiUserName(m.user || ''))) return false;
                     if (m.type === 'gift' && !scanGifts) return false;
                     if (m.type === 'subscriber' && !scanSubs) return false;
                     if (m.type === 'caption' && !scanCaptions) return false;
@@ -12916,200 +13224,177 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     updateInsightsUI();
     if (holdLActive) startHoldL().catch(() => { });
 
-    // ── Draggable panel ──────────────────────────────────────────────────────
-    (function makePanelDraggable() {
-        const TKAI_POS_KEY = 'ex_tkai_panel_pos';
+    // ── TikTok AI panel move/resize ──────────────────────────────────────────
+    (function initTikTokPanelMoveResize() {
         const dragHandle = document.getElementById('tiktokAIPanelHeader');
-        if (!dragHandle || !panel) return;
+        if (!dragHandle || !panel || panel.dataset.moveResizeReady === '1') return;
+        panel.dataset.moveResizeReady = '1';
 
-        function resetPanelPosition() {
-            panel.style.transition = 'left .2s, bottom .2s';
-            panel.style.right = '0';
-            panel.style.left = 'auto';
-            panel.style.top = 'auto';
-            panel.style.bottom = '10px';
-            try { localStorage.removeItem(TKAI_POS_KEY); } catch (_) { }
-            try { localStorage.removeItem(TKAI_PANEL_LAYOUT_KEY); } catch (_) { }
-            setTimeout(() => { panel.style.transition = 'none'; }, 220);
-        }
-
-        function clampPanelPosition() {
-            const rect = panel.getBoundingClientRect();
-            const chromeH = getTkaiTopBoundary();
-            const maxLeft = Math.max(0, window.innerWidth - Math.min(panel.offsetWidth || rect.width, window.innerWidth));
-            const maxTop = Math.max(chromeH, window.innerHeight - Math.min(panel.offsetHeight || rect.height, window.innerHeight));
-            const visibleEnough = rect.right > 80 && rect.left < window.innerWidth - 40 && rect.bottom > chromeH + 40 && rect.top < window.innerHeight - 40;
-            if (!visibleEnough) {
-                resetPanelPosition();
-                return;
-            }
-            if (panel.style.left && panel.style.left !== 'auto') {
-                const left = Math.max(0, Math.min(parseFloat(panel.style.left) || 0, maxLeft));
-                panel.style.left = left + 'px';
-                const bottom = Math.max(0, Math.min(parseFloat(panel.style.bottom) || 10, Math.max(0, window.innerHeight - maxTop - (panel.offsetHeight || rect.height))));
-                panel.style.bottom = bottom + 'px';
-            }
-        }
-
-        function getTkaiTopBoundary() {
-            const tabTop = document.querySelector('.tab-bar')?.getBoundingClientRect()?.top;
-            if (Number.isFinite(tabTop)) return Math.max(0, tabTop);
-            const contentTop = document.querySelector('.content-area')?.getBoundingClientRect()?.top;
-            return Number.isFinite(contentTop) ? Math.max(0, contentTop) : 90;
-        }
-
-        // Restore saved position
-        try {
-            const saved = JSON.parse(localStorage.getItem(TKAI_POS_KEY) || 'null');
-            if (saved) {
-                panel.style.right = 'auto';
-                panel.style.top = 'auto';
-                panel.style.left = saved.left + 'px';
-                panel.style.bottom = saved.bottom + 'px';
-                clampPanelPosition();
-            }
-        } catch (e) { }
-
-        let dragging = false, ox = 0, oy = 0;
-
-        dragHandle.addEventListener('mousedown', e => {
-            if (e.target.closest('button, select, input, textarea')) return;
-            dragging = true;
-            const rect = panel.getBoundingClientRect();
-            // Switch from right-anchored to left-anchored, bottom-anchored
-            panel.style.right = 'auto';
-            panel.style.top = 'auto';
-            panel.style.left = rect.left + 'px';
-            panel.style.bottom = (window.innerHeight - rect.bottom) + 'px';
-            ox = e.clientX - rect.left;
-            oy = e.clientY - rect.top;
-            panel.style.transition = 'none';
-            e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', e => {
-            if (!dragging) return;
-            let nx = e.clientX - ox;
-            let ny = e.clientY - oy;
-            // Clamp inside viewport — don't allow dragging above browser chrome
-            const pw = panel.offsetWidth;
-            const ph = panel.offsetHeight;
-            const chromeH = getTkaiTopBoundary();
-            nx = Math.max(0, Math.min(nx, window.innerWidth - pw));
-            ny = Math.max(chromeH, Math.min(ny, window.innerHeight - ph));
-            panel.style.left = nx + 'px';
-            panel.style.bottom = (window.innerHeight - ny - ph) + 'px';
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (!dragging) return;
-            dragging = false;
-            clampPanelPosition();
-            // Save position
-            try {
-                localStorage.setItem(TKAI_POS_KEY, JSON.stringify({
-                    left: parseFloat(panel.style.left),
-                    bottom: parseFloat(panel.style.bottom)
-                }));
-            } catch (e) { }
-            saveTikTokPanelLayout();
-        });
-
-        // Double-click header → reset to default bottom-right position
-        dragHandle.addEventListener('dblclick', e => {
-            if (e.target.closest('button')) return;
-            resetPanelPosition();
-        });
-
-        window.addEventListener('resize', clampPanelPosition);
-    })();
-
-    // ── Resizable panel (all 8 sides) ────────────────────────────────────────
-    (function makePanelResizable() {
-        if (!panel) return;
-        const TKAI_SIZE_KEY = 'ex_tkai_panel_size';
+        const MIN_W = 360;
+        const MIN_H = 340;
         const DEFAULT_W = 460;
         const DEFAULT_H = 580;
-        const MIN_W = 360, MIN_H = 340;
-        function getMaxHeight() {
-            const chromeH = document.querySelector('.tab-bar')?.getBoundingClientRect()?.top;
-            const topBoundary = Number.isFinite(chromeH) ? Math.max(0, chromeH) : 90;
-            return Math.max(MIN_H, window.innerHeight - topBoundary - 10);
-        }
-        function clampPanelSize(width, height) {
-            const maxW = Math.max(MIN_W, window.innerWidth - 20);
-            const maxH = getMaxHeight();
+        let activeOp = null;
+
+        function getBounds(width, height) {
+            const topBoundary = getPanelTopBoundary();
+            const maxW = Math.max(MIN_W, window.innerWidth - 12);
+            const maxH = Math.max(MIN_H, window.innerHeight - topBoundary - 8);
             const w = Math.max(MIN_W, Math.min(Number(width) || DEFAULT_W, maxW));
             const h = Math.max(MIN_H, Math.min(Number(height) || Math.min(DEFAULT_H, maxH), maxH));
-            return { w, h };
+            return {
+                topBoundary,
+                width: w,
+                height: h,
+                maxLeft: Math.max(0, window.innerWidth - w - 6),
+                maxTop: Math.max(topBoundary, window.innerHeight - h - 6),
+            };
         }
-        function applyPanelSize(width, height) {
-            const size = clampPanelSize(width, height);
-            panel.style.width = size.w + 'px';
-            panel.style.height = size.h + 'px';
+
+        function applyLayout(left, top, width, height) {
+            const bounds = getBounds(width, height);
+            const x = Math.max(0, Math.min(Number(left) || 0, bounds.maxLeft));
+            const y = Math.max(bounds.topBoundary, Math.min(Number(top) || bounds.topBoundary, bounds.maxTop));
+            panel.style.right = 'auto';
+            panel.style.top = 'auto';
+            panel.style.left = x + 'px';
+            panel.style.bottom = Math.max(0, window.innerHeight - y - bounds.height) + 'px';
+            panel.style.width = bounds.width + 'px';
+            panel.style.height = bounds.height + 'px';
+            return { left: x, top: y, width: bounds.width, height: bounds.height };
         }
-        try {
-            const s = JSON.parse(localStorage.getItem(TKAI_SIZE_KEY) || 'null');
-            applyPanelSize(s?.width, s?.height);
-        } catch (_) { }
-        function saveSize() {
-            try { localStorage.setItem(TKAI_SIZE_KEY, JSON.stringify({ width: panel.offsetWidth, height: panel.offsetHeight })); } catch (_) { }
+
+        function currentLayout() {
+            const rect = panel.getBoundingClientRect();
+            return {
+                left: rect.left,
+                top: rect.top,
+                width: rect.width || panel.offsetWidth || DEFAULT_W,
+                height: rect.height || panel.offsetHeight || DEFAULT_H,
+            };
         }
-        window.addEventListener('resize', () => {
-            applyPanelSize(panel.offsetWidth, panel.offsetHeight);
-            saveSize();
-        });
-        ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach(dir => {
-            const h = document.createElement('div');
-            h.className = 'tkai-resize-handle tkai-resize-' + dir;
-            panel.appendChild(h);
-            h.addEventListener('mousedown', e => {
-                e.stopPropagation();
-                e.preventDefault();
-                let resizing = true;
-                const sx = e.clientX, sy = e.clientY;
-                const rect = panel.getBoundingClientRect();
-                const sw = rect.width, sh = rect.height;
-                panel.style.right = 'auto'; panel.style.top = 'auto';
-                const sl = parseFloat(panel.style.left) || rect.left;
-                const sb = parseFloat(panel.style.bottom) || (window.innerHeight - rect.bottom);
-                panel.style.left = sl + 'px'; panel.style.bottom = sb + 'px';
-                const onMove = e2 => {
-                    if (!resizing) return;
-                    const dx = e2.clientX - sx, dy = e2.clientY - sy;
-                    const maxW = Math.max(MIN_W, window.innerWidth - 20);
-                    const maxH = getMaxHeight();
-                    if (dir.includes('e')) panel.style.width = Math.max(MIN_W, Math.min(sw + dx, maxW)) + 'px';
-                    if (dir.includes('s')) panel.style.height = Math.max(MIN_H, Math.min(sh + dy, maxH)) + 'px';
-                    if (dir.includes('w')) {
-                        const nw = Math.max(MIN_W, Math.min(sw - dx, maxW));
-                        panel.style.width = nw + 'px';
-                        panel.style.left = (sl + sw - nw) + 'px';
-                    }
-                    if (dir === 'n' || dir === 'ne' || dir === 'nw') {
-                        const nh = Math.max(MIN_H, Math.min(sh - dy, maxH));
-                        panel.style.height = nh + 'px';
-                        // Keep bottom anchored while moving only the top edge.
-                        panel.style.bottom = sb + 'px';
-                    }
-                };
-                const onUp = () => {
-                    if (!resizing) return;
-                    resizing = false;
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
-                    document.removeEventListener('mouseleave', onUp);
-                    window.removeEventListener('blur', onUp);
-                    saveSize();
-                    try { localStorage.setItem('ex_tkai_panel_pos', JSON.stringify({ left: parseFloat(panel.style.left) || 0, bottom: parseFloat(panel.style.bottom) || 10 })); } catch (_) { }
-                    saveTikTokPanelLayout();
-                };
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
-                document.addEventListener('mouseleave', onUp);
-                window.addEventListener('blur', onUp);
+
+        function saveLayoutNow() {
+            const rect = panel.getBoundingClientRect();
+            const layout = clampTkaiPanelLayout({
+                left: rect.left,
+                bottom: window.innerHeight - rect.bottom,
+                width: rect.width || panel.offsetWidth,
+                height: rect.height || panel.offsetHeight,
             });
+            try {
+                localStorage.setItem(TKAI_PANEL_LAYOUT_KEY, JSON.stringify(layout));
+                localStorage.setItem('ex_tkai_panel_pos', JSON.stringify({ left: layout.left, bottom: layout.bottom }));
+                localStorage.setItem('ex_tkai_panel_size', JSON.stringify({ width: layout.width, height: layout.height }));
+            } catch (_) { }
+        }
+
+        function resetPanelLayout() {
+            const bounds = getBounds(DEFAULT_W, DEFAULT_H);
+            const left = Math.max(0, window.innerWidth - bounds.width - 8);
+            const top = Math.max(bounds.topBoundary, window.innerHeight - bounds.height - 10);
+            panel.style.transition = 'left .16s ease, bottom .16s ease, width .16s ease, height .16s ease';
+            applyLayout(left, top, bounds.width, bounds.height);
+            try {
+                localStorage.removeItem(TKAI_PANEL_LAYOUT_KEY);
+                localStorage.removeItem('ex_tkai_panel_pos');
+                localStorage.removeItem('ex_tkai_panel_size');
+            } catch (_) { }
+            setTimeout(() => { panel.style.transition = 'none'; }, 180);
+        }
+
+        function beginPointerOp(event, mode, dir = '') {
+            if (event.button != null && event.button !== 0) return;
+            if (mode === 'move' && event.target.closest('button, select, input, textarea, a')) return;
+            const start = currentLayout();
+            activeOp = {
+                mode,
+                dir,
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                start,
+            };
+            panel.classList.add(mode === 'move' ? 'tkai-panel-moving' : 'tkai-panel-resizing');
+            panel.style.transition = 'none';
+            document.body.classList.add('tkai-panel-interacting');
+            try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch (_) { }
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        function movePointerOp(event) {
+            if (!activeOp) return;
+            const dx = event.clientX - activeOp.startX;
+            const dy = event.clientY - activeOp.startY;
+            const s = activeOp.start;
+            if (activeOp.mode === 'move') {
+                applyLayout(s.left + dx, s.top + dy, s.width, s.height);
+                event.preventDefault();
+                return;
+            }
+
+            let left = s.left;
+            let top = s.top;
+            let width = s.width;
+            let height = s.height;
+            if (activeOp.dir.includes('e')) width = s.width + dx;
+            if (activeOp.dir.includes('s')) height = s.height + dy;
+            if (activeOp.dir.includes('w')) {
+                width = s.width - dx;
+                left = s.left + dx;
+            }
+            if (activeOp.dir.includes('n')) {
+                height = s.height - dy;
+                top = s.top + dy;
+            }
+
+            const bounds = getBounds(width, height);
+            if (activeOp.dir.includes('w') && bounds.width === MIN_W) left = s.left + s.width - MIN_W;
+            if (activeOp.dir.includes('n') && bounds.height === MIN_H) top = s.top + s.height - MIN_H;
+            applyLayout(left, top, bounds.width, bounds.height);
+            event.preventDefault();
+        }
+
+        function endPointerOp(event) {
+            if (!activeOp) return;
+            if (event?.pointerId != null && activeOp.pointerId !== event.pointerId) return;
+            panel.classList.remove('tkai-panel-moving', 'tkai-panel-resizing');
+            document.body.classList.remove('tkai-panel-interacting');
+            activeOp = null;
+            saveLayoutNow();
+        }
+
+        dragHandle.addEventListener('pointerdown', (event) => beginPointerOp(event, 'move'));
+        dragHandle.addEventListener('dblclick', (event) => {
+            if (event.target.closest('button, select, input, textarea, a')) return;
+            resetPanelLayout();
         });
+
+        ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((dir) => {
+            let handle = panel.querySelector('.tkai-resize-' + dir);
+            if (!handle) {
+                handle = document.createElement('div');
+                handle.className = 'tkai-resize-handle tkai-resize-' + dir;
+                panel.appendChild(handle);
+            }
+            handle.addEventListener('pointerdown', (event) => beginPointerOp(event, 'resize', dir));
+        });
+
+        document.addEventListener('pointermove', movePointerOp);
+        document.addEventListener('pointerup', endPointerOp);
+        document.addEventListener('pointercancel', endPointerOp);
+        window.addEventListener('blur', endPointerOp);
+        window.addEventListener('resize', () => {
+            const cur = currentLayout();
+            applyLayout(cur.left, cur.top, cur.width, cur.height);
+            saveLayoutNow();
+        });
+
+        if (!restoreTikTokPanelLayout()) {
+            const cur = currentLayout();
+            applyLayout(cur.left, cur.top, cur.width, cur.height);
+        }
     })();
     function renderBookmarksPanel() {
         const list = document.getElementById('bmList'); const bm = DB.getBookmarks();
@@ -14293,14 +14578,41 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // ── Console engine
     const consoleOutput = document.getElementById('consoleOutput');
     let dtErrCount = 0, dtWarnCount = 0;
+    const DEVTOOLS_CONSOLE_CLOSED_CAPTURE_KEY = 'devtoolsConsoleCaptureWhenClosed';
+    const DEVTOOLS_CONSOLE_MAX_LINES = 400;
     function updateDtBadges() {
         const eb = document.getElementById('dtErrBadge'); const wb = document.getElementById('dtWarnBadge');
         if (eb) eb.textContent = dtErrCount || ''; if (wb) wb.textContent = dtWarnCount || '';
     }
     let _conFilterTimer = null;
+    function shouldMirrorConsoleWhenClosed() {
+        try {
+            const value = DB.getSettings()?.[DEVTOOLS_CONSOLE_CLOSED_CAPTURE_KEY];
+            return value === true || value === 'true';
+        } catch (_) {
+            return false;
+        }
+    }
+    function shouldCaptureConsoleDom() {
+        return !!STATE.devtoolsOpen || shouldMirrorConsoleWhenClosed();
+    }
+    function stringifyConsoleArgs(args) {
+        return args.map(a => {
+            if (a instanceof Error) return a.message || String(a);
+            if (typeof a === 'object') {
+                try { return JSON.stringify(a); } catch (_) { return String(a); }
+            }
+            return String(a);
+        }).join(' ');
+    }
     function consoleLog(type, msg, src) {
         try {
             if (!consoleOutput) return;
+            if (!shouldCaptureConsoleDom()) {
+                if (type === 'error') { dtErrCount++; updateDtBadges(); }
+                if (type === 'warn') { dtWarnCount++; updateDtBadges(); }
+                return;
+            }
             const line = document.createElement('div'); line.className = 'cl ' + type;
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const srcHtml = src ? `<span class="csrc">${escHtml(String(src))}</span>` : '';
@@ -14308,6 +14620,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const safeMsg = typeof msg === 'string' ? msg : String(msg || '');
             line.innerHTML = `<span class="cp">${time}</span><span class="cm">${icon}${safeMsg}</span>${srcHtml}`;
             consoleOutput.appendChild(line); consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            while (consoleOutput.children.length > DEVTOOLS_CONSOLE_MAX_LINES) {
+                consoleOutput.removeChild(consoleOutput.firstElementChild);
+            }
             if (type === 'error') { dtErrCount++; updateDtBadges(); }
             if (type === 'warn') { dtWarnCount++; updateDtBadges(); }
             if (!_conFilterTimer) { _conFilterTimer = setTimeout(() => { _conFilterTimer = null; applyConsoleFilter(); }, 150); }
@@ -14318,16 +14633,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // ── Hook browser console & errors ────────────────────────────────────────
     (function hookBrowserConsole() {
         const origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
-        console.log = function (...args) { consoleLog('log', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'index.html'); origLog.apply(console, args); };
-        console.warn = function (...args) { consoleLog('warn', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'index.html'); origWarn.apply(console, args); };
+        console.log = function (...args) { if (shouldCaptureConsoleDom()) consoleLog('log', stringifyConsoleArgs(args), 'index.html'); origLog.apply(console, args); };
+        console.warn = function (...args) { if (shouldCaptureConsoleDom()) consoleLog('warn', stringifyConsoleArgs(args), 'index.html'); origWarn.apply(console, args); };
         console.error = function (...args) {
-            const msg = args.map(a => a instanceof Error ? (a.message || String(a)) : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+            const msg = stringifyConsoleArgs(args);
             // Silence Electron-internal ERR_ABORTED (-3) which is normal during navigation
             if (msg.includes('ERR_ABORTED (-3)')) { origError.apply(console, args); return; }
-            consoleLog('error', msg, 'index.html');
+            if (shouldCaptureConsoleDom()) consoleLog('error', msg, 'index.html');
             origError.apply(console, args);
         };
-        console.info = function (...args) { consoleLog('info', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'index.html'); origInfo.apply(console, args); };
+        console.info = function (...args) { if (shouldCaptureConsoleDom()) consoleLog('info', stringifyConsoleArgs(args), 'index.html'); origInfo.apply(console, args); };
 
         // Global error handler
         window.addEventListener('error', e => {
@@ -14342,15 +14657,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
         // Try to hook iframe console
         function hookFrameConsole() {
+            if (!shouldCaptureConsoleDom()) return;
             const fr = document.getElementById('browseFrame');
             if (!fr) return;
             try {
                 const win = fr.contentWindow;
                 if (!win) return;
                 const origFLog = win.console.log, origFWarn = win.console.warn, origFError = win.console.error;
-                win.console.log = function (...args) { consoleLog('log', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'page'); origFLog.apply(win.console, args); };
-                win.console.warn = function (...args) { consoleLog('warn', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'page'); origFWarn.apply(win.console, args); };
-                win.console.error = function (...args) { consoleLog('error', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'page'); origFError.apply(win.console, args); };
+                win.console.log = function (...args) { if (shouldCaptureConsoleDom()) consoleLog('log', stringifyConsoleArgs(args), 'page'); origFLog.apply(win.console, args); };
+                win.console.warn = function (...args) { if (shouldCaptureConsoleDom()) consoleLog('warn', stringifyConsoleArgs(args), 'page'); origFWarn.apply(win.console, args); };
+                win.console.error = function (...args) { if (shouldCaptureConsoleDom()) consoleLog('error', stringifyConsoleArgs(args), 'page'); origFError.apply(win.console, args); };
                 win.addEventListener('error', e => consoleLog('error', `Page: ${e.message} at ${e.filename}:${e.lineno}`, 'page'));
                 win.addEventListener('unhandledrejection', e => consoleLog('error', 'Page Promise Rejection: ' + (e.reason?.message || e.reason), 'page'));
             } catch (e) { /* cross-origin, can't hook */ }
@@ -17103,10 +17419,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 : (/\b(?:sent|gift|gifted|rose|diamond|coins?|poklon|darovao|donirao)\b/i.test(low)
                     ? 'gift'
                     : (/\b(?:likes?|liked|heart(?:ed|s)?)\b/i.test(low) ? 'like' : 'chat'));
+            const repaired = repairTkaiMessageIdentity({
+                user,
+                text,
+                type,
+                userHandle: row?.userHandle || row?.profileHandle || '',
+                rawText: row?.rawText || row?.ariaLabel || text
+            }) || { user, text, type };
+            user = String(repaired.user || user || 'unknown').trim().slice(0, 40) || 'unknown';
+            const dropUnknownUsers = DB.getSettings().tkaiDropUnknownUsers === true;
+            if (dropUnknownUsers && (!user || isUnknownTkaiUserName(user))) return;
             const key = `${type}:${user.toLowerCase()}:${text.toLowerCase()}`;
             if (seen.has(key)) return;
             seen.add(key);
-            out.push({ user, text, type, source });
+            out.push({ user, text, type, source, userHandle: normalizeTikTokProfileHandle(repaired.userHandle || row?.userHandle || row?.profileHandle || '') });
         });
         return out;
     }
@@ -17170,7 +17496,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     if (!rowText || rowText.length < 2 || rowText.length > 520) return;
                     const userEl = el.querySelector(userSelectors);
                     const textEl = el.querySelector(textSelectors);
-                    const fromHref = String(userEl?.getAttribute?.('href') || '').match(/\/\/@([^/?#]+)/i);
+                    const fromHref = String(userEl?.getAttribute?.('href') || '').match(/\/@([^/?#]+)/i);
                     let user = clean(fromHref?.[1] || userEl?.textContent || '').replace(/^@+/, '').replace(/[,:;].*$/, '');
                     let text = clean(textEl?.innerText || textEl?.textContent || '') || rowText;
                     const colonMatch = text.match(/^\s*@?([^:\-\n]{2,40})\s*[:：]\s*(.+)$/);
@@ -19680,6 +20006,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (provider === 'groq') return s.groqApiKey || s.groq_api_key || '';
             if (provider === 'openrouter') return s.openrouterApiKey || s.openrouter_api_key || '';
             if (provider === 'huggingface') return s.hfApiKey || s.hf_api_key || '';
+            if (provider === 'guardian') return s.tkaiGuardianApiKey || '';
             return '';
         }
         function currentProvider() {
@@ -19694,6 +20021,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (p === 'groq') return groqKeyEl?.value.trim() || await getStoredApiKey('groq');
             if (p === 'openrouter') return openrouterKeyEl?.value.trim() || await getStoredApiKey('openrouter');
             if (p === 'huggingface') return document.getElementById('settingsHfToken')?.value.trim() || await getStoredApiKey('huggingface');
+            if (p === 'guardian') return document.querySelector('[data-setting="tkaiGuardianApiKey"]')?.value.trim() || await getStoredApiKey('guardian') || 'guardian';
             if (p === 'ollama') return 'ollama';
             return '';
         }
@@ -19843,10 +20171,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         (function syncTranslateKeyRow() {
             const prov = cfg.translateAiProvider || '__main__';
             const row = document.getElementById('translateApiKeyRow');
-            if (row) row.style.display = (prov !== '__main__' && prov !== 'ollama') ? '' : 'none';
+            const needsTranslateKey = (value) => value !== '__main__' && value !== 'ollama' && value !== 'guardian';
+            if (row) row.style.display = needsTranslateKey(prov) ? '' : 'none';
             const provSel = document.getElementById('settingsTranslateProvider');
             if (provSel) provSel.addEventListener('change', () => {
-                if (row) row.style.display = (provSel.value !== '__main__' && provSel.value !== 'ollama') ? '' : 'none';
+                if (row) row.style.display = needsTranslateKey(provSel.value) ? '' : 'none';
                 updateTranslateCapabilityBadges();
             });
         })();
@@ -19893,6 +20222,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             document.getElementById('aiKeyRowOpenrouter')?.style && (document.getElementById('aiKeyRowOpenrouter').style.display = p === 'openrouter' ? '' : 'none');
             document.getElementById('aiKeyRowOllama')?.style && (document.getElementById('aiKeyRowOllama').style.display = p === 'ollama' ? '' : 'none');
             document.getElementById('aiKeyRowHuggingface')?.style && (document.getElementById('aiKeyRowHuggingface').style.display = p === 'huggingface' ? '' : 'none');
+            document.getElementById('aiKeyRowGuardian')?.style && (document.getElementById('aiKeyRowGuardian').style.display = p === 'guardian' ? '' : 'none');
             const defaults = defaultModelsByProvider[p] || defaultModelsByProvider.gemini;
             if (!modelSel.dataset['populated_' + p]) {
                 const prev = modelSel.value;
@@ -19910,6 +20240,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it', 'qwen-qwq-32b'],
             openrouter: ['meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.5-flash-preview', 'anthropic/claude-3.5-sonnet', 'deepseek/deepseek-r1', 'openai/gpt-4o'],
             ollama: ['llama3.1:8b', 'llama3.2:latest', 'mistral:7b-instruct', 'qwen2.5:7b'],
+            guardian: ['grok-2', 'grok-beta', 'local-guardian'],
             huggingface: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3', 'google/gemma-3-27b-it', 'deepseek-ai/DeepSeek-R1']
         };
         const fetchedModelsByProvider = {};
@@ -20092,6 +20423,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const grKey = groqKeyEl?.value.trim() || '';
             const orKey = openrouterKeyEl?.value.trim() || '';
             const olBaseUrl = normalizeLocalAiBaseUrl(ollamaBaseUrlEl?.value || OLLAMA_REMOTE_DEFAULT_BASE_URL);
+            const guardianProtocol = document.querySelector('[data-setting="tkaiGuardianProtocol"]')?.value || 'http';
+            const guardianHost = document.querySelector('[data-setting="tkaiGuardianHost"]')?.value?.trim() || 'localhost';
+            const guardianPort = document.querySelector('[data-setting="tkaiGuardianPort"]')?.value || '5555';
+            const guardianPath = document.querySelector('[data-setting="tkaiGuardianPath"]')?.value?.trim() || '/v1/chat/completions';
+            const guardianKey = document.querySelector('[data-setting="tkaiGuardianApiKey"]')?.value?.trim() || '';
             DB.saveSetting('aiProvider', p);
             DB.saveSetting('aiModel', modelSel.value);
             DB.saveSetting('translateAiProvider', document.getElementById('settingsTranslateProvider')?.value || '__main__');
@@ -20114,6 +20450,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             DB.saveSetting('openrouterApiKey', orKey);
             DB.saveSetting('openrouter_api_key', orKey);
             DB.saveSetting('ollamaBaseUrl', olBaseUrl);
+            DB.saveSetting('tkaiGuardianProtocol', guardianProtocol);
+            DB.saveSetting('tkaiGuardianHost', guardianHost);
+            DB.saveSetting('tkaiGuardianPort', guardianPort);
+            DB.saveSetting('tkaiGuardianPath', guardianPath);
+            DB.saveSetting('tkaiGuardianApiKey', guardianKey);
             const hfKey = document.getElementById('settingsHfToken')?.value.trim() || '';
             DB.saveSetting('hfApiKey', hfKey);
             DB.saveSetting('hf_api_key', hfKey);
@@ -22388,6 +22729,170 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             statusEl.textContent = '❌ Greška pri dohvaćanju PM2 logova: ' + (err.message || String(err));
         }
     });
+
+    (function initHelpPM2Controls() {
+        const AUTO_KEY = 'pm2AutoRestartEnabled';
+        const autoEl = document.getElementById('helpPM2AutoRestart');
+        const autoStatusEl = document.getElementById('helpPM2AutoRestartStatus');
+        const statusEl = document.getElementById('helpInstallPythonDepsStatus');
+        let timer = null;
+        let checking = false;
+
+        const isEnabled = () => {
+            const saved = DB.getSettings()?.[AUTO_KEY];
+            if (saved === true || saved === 'true') return true;
+            if (saved === false || saved === 'false') return false;
+            return localStorage.getItem('ex_pm2_auto_restart') === '1';
+        };
+
+        const setStatus = (text) => {
+            if (autoStatusEl) autoStatusEl.textContent = text;
+        };
+
+        const saveEnabled = (enabled) => {
+            try { DB.saveSetting(AUTO_KEY, !!enabled); } catch (_) { }
+            try { localStorage.setItem('ex_pm2_auto_restart', enabled ? '1' : '0'); } catch (_) { }
+            if (autoEl) autoEl.checked = !!enabled;
+        };
+
+        const isPm2Online = (res) => {
+            const state = String(res?.state || '').toLowerCase();
+            const output = String(res?.output || '').toLowerCase();
+            return state === 'online' || /\bonline\b/.test(output);
+        };
+
+        const runCheck = async (reason = 'periodic') => {
+            if (!isEnabled()) return;
+            if (checking) return;
+            checking = true;
+            try {
+                if (!window.etherx?.app?.getPM2Status || !window.etherx?.app?.ensurePM2Process) {
+                    setStatus('Auto PM2 nadzor: API nije dostupan u ovom buildu.');
+                    return;
+                }
+                const status = await window.etherx.app.getPM2Status();
+                if (isPm2Online(status)) {
+                    setStatus('Auto PM2 nadzor: uključen, proces je online.');
+                    return;
+                }
+                setStatus('Auto PM2 nadzor: proces nije online, pokrećem PM2...');
+                const ensured = await window.etherx.app.ensurePM2Process();
+                if (ensured?.ok) {
+                    setStatus('Auto PM2 nadzor: PM2 je pokrenut' + (ensured.alreadyOnline ? ' (već online).' : '.'));
+                    if (statusEl && reason === 'manual') statusEl.textContent = '✅ Auto PM2 provjera: proces je online.';
+                } else {
+                    const msg = String(ensured?.error || 'PM2 nije pokrenut.');
+                    setStatus('Auto PM2 nadzor: greška - ' + msg);
+                    if (statusEl && reason === 'manual') statusEl.textContent = '❌ Auto PM2 nije uspio: ' + msg;
+                }
+            } catch (err) {
+                const msg = String(err?.message || err || 'Nepoznata greška');
+                setStatus('Auto PM2 nadzor: greška - ' + msg);
+            } finally {
+                checking = false;
+            }
+        };
+
+        const restartTimer = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+            if (isEnabled()) {
+                setStatus('Auto PM2 nadzor: uključen, provjeravam status...');
+                runCheck('manual');
+                timer = setInterval(() => runCheck('periodic'), 30000);
+            } else {
+                setStatus('Auto PM2 nadzor: isključen.');
+            }
+        };
+
+        if (autoEl) {
+            autoEl.checked = isEnabled();
+            autoEl.addEventListener('change', () => {
+                saveEnabled(autoEl.checked);
+                restartTimer();
+                showToast(autoEl.checked ? '✅ Auto PM2 nadzor uključen' : '⏹ Auto PM2 nadzor isključen');
+            });
+        }
+
+        document.getElementById('helpPM2ClearLogsBtn')?.addEventListener('click', async () => {
+            const btn = document.getElementById('helpPM2ClearLogsBtn');
+            if (!statusEl) return;
+            if (!window.etherx?.app?.clearPM2Logs) {
+                statusEl.textContent = 'Greška: clear PM2 logs API nije dostupan u ovom buildu.';
+                return;
+            }
+            const before = btn?.textContent || '';
+            if (btn) {
+                btn.disabled = true;
+                btn.style.opacity = '.7';
+                btn.textContent = '⏳ Brišem...';
+            }
+            statusEl.textContent = 'Brišem PM2 logove...';
+            try {
+                const res = await window.etherx.app.clearPM2Logs();
+                if (res?.ok) {
+                    const lines = ['✅ PM2 logovi su obrisani.'];
+                    if (res.output) lines.push('', String(res.output));
+                    if (Array.isArray(res.truncated) && res.truncated.length) {
+                        lines.push('', 'Truncated files:', ...res.truncated.map((p) => ' - ' + p));
+                    }
+                    statusEl.textContent = lines.join('\n');
+                    showToast('✅ PM2 logovi obrisani');
+                } else {
+                    statusEl.textContent = '❌ PM2 logovi nisu obrisani: ' + String(res?.error || res?.output || 'Nepoznata greška');
+                    showToast('❌ PM2 logovi nisu obrisani');
+                }
+            } catch (err) {
+                statusEl.textContent = '❌ Greška pri brisanju PM2 logova: ' + (err.message || String(err));
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.style.opacity = '';
+                    btn.textContent = before || '🧹 Obriši PM2 logove';
+                }
+            }
+        });
+
+        document.getElementById('helpPM2StopBtn')?.addEventListener('click', async () => {
+            const btn = document.getElementById('helpPM2StopBtn');
+            if (!statusEl) return;
+            if (!window.etherx?.app?.stopPM2Process) {
+                statusEl.textContent = 'Greška: stop PM2 API nije dostupan u ovom buildu.';
+                return;
+            }
+            saveEnabled(false);
+            restartTimer();
+            const before = btn?.textContent || '';
+            if (btn) {
+                btn.disabled = true;
+                btn.style.opacity = '.7';
+                btn.textContent = '⏳ Zaustavljam...';
+            }
+            statusEl.textContent = 'Zaustavljam PM2 proces etherx-browser...';
+            try {
+                const res = await window.etherx.app.stopPM2Process();
+                if (res?.ok) {
+                    statusEl.textContent = '⏹ PM2 proces je zaustavljen.\n\n' + String(res.output || '');
+                    showToast('⏹ PM2 proces zaustavljen');
+                } else {
+                    statusEl.textContent = '❌ PM2 stop nije uspio: ' + String(res?.error || res?.output || 'Nepoznata greška');
+                    showToast('❌ PM2 stop nije uspio');
+                }
+            } catch (err) {
+                statusEl.textContent = '❌ Greška pri zaustavljanju PM2 procesa: ' + (err.message || String(err));
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.style.opacity = '';
+                    btn.textContent = before || '⏹ Zaustavi PM2';
+                }
+            }
+        });
+
+        restartTimer();
+    })();
 
     // ── Help → Browser Versions download buttons ──────────────────────────────
     ['Linux', 'Windows', 'MacIntel', 'MacArm', 'Android', 'IOS'].forEach(platform => {

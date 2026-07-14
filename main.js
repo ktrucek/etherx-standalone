@@ -17,6 +17,7 @@ const fs = require("fs");
 const https = require("https");
 const crypto = require("crypto");
 const { execFile } = require("child_process");
+const ETHERX_DEBUG_LOGS = process.env.ETHERX_DEBUG === "1" || process.env.ETHERX_DEBUG_LOGS === "1";
 let AdmZip;
 try {
   AdmZip = require("adm-zip");
@@ -1537,6 +1538,7 @@ async function runOneClickLocalSetup() {
 
 function logPythonBridgeDebug(scope, message, extra = undefined) {
   try {
+    if (!ETHERX_DEBUG_LOGS) return;
     if (extra === undefined) {
       console.log(`[AI Python Bridge][${scope}] ${message}`);
     } else {
@@ -2569,7 +2571,7 @@ function createWindow() {
 
   // Verify content actually loaded after 5 seconds
   mainWindow.webContents.on("did-finish-load", () => {
-    console.log("✅ did-finish-load fired");
+    if (ETHERX_DEBUG_LOGS) console.log("✅ did-finish-load fired");
     setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       mainWindow.webContents
@@ -2591,7 +2593,7 @@ function createWindow() {
         )
         .then((json) => {
           const info = JSON.parse(json);
-          console.log("🔍 Layout check:", info);
+          if (ETHERX_DEBUG_LOGS) console.log("🔍 Layout check:", info);
           if (info.contentArea && info.contentArea.h < 10) {
             console.error(
               "⚠️ Content area has 0 height! Layout may be broken.",
@@ -3075,6 +3077,66 @@ function setupIPC() {
       const projectRoot = resolvePythonProjectRoot();
       const run = await execFileText("npx", ["pm2", "logs", "etherx-browser", "--lines", "100", "--nostream"], 30000, { cwd: projectRoot });
       return { ok: run.ok, output: run.stdout || run.stderr || "Nema PM2 logova" };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("app:clearPM2Logs", async () => {
+    try {
+      const projectRoot = resolvePythonProjectRoot();
+      const snap = await getPm2ProcessSnapshot(projectRoot, "etherx-browser");
+      const flush = await execFileText("npx", ["pm2", "flush", "etherx-browser"], 30000, { cwd: projectRoot });
+      const truncated = [];
+      for (const filePath of [snap.snapshot?.outLogPath, snap.snapshot?.errLogPath]) {
+        if (!filePath) continue;
+        try {
+          if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            fs.truncateSync(filePath, 0);
+            truncated.push(filePath);
+          }
+        } catch (_) { }
+      }
+      return {
+        ok: !!flush.ok,
+        output: trimPythonInstallOutput(flush.stdout || flush.stderr || "PM2 logovi obrisani."),
+        truncated,
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("app:stopPM2Process", async () => {
+    try {
+      const projectRoot = resolvePythonProjectRoot();
+      const stop = await execFileText("npx", ["pm2", "stop", "etherx-browser"], 30000, { cwd: projectRoot });
+      const status = await execFileText("npx", ["pm2", "status", "etherx-browser"], 30000, { cwd: projectRoot });
+      return {
+        ok: !!stop.ok,
+        output: trimPythonInstallOutput((stop.stdout || stop.stderr || "") + "\n" + (status.stdout || status.stderr || "")),
+      };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("app:ensurePM2Process", async () => {
+    try {
+      const reqLookup = resolveRequirementsPath();
+      const projectRoot = resolvePythonProjectRoot(reqLookup);
+      const snap = await getPm2ProcessSnapshot(projectRoot, "etherx-browser");
+      if (snap.snapshot?.online) {
+        return { ok: true, alreadyOnline: true, state: snap.snapshot.state || "online" };
+      }
+      const setup = await runOneClickLocalSetup();
+      return {
+        ok: !!setup?.pm2?.ok,
+        alreadyOnline: false,
+        state: String(setup?.pm2?.state || ""),
+        output: setup,
+        error: setup?.pm2?.error || setup?.python?.error || "",
+      };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -4388,7 +4450,7 @@ function setupIPC() {
           visitedUrls.add(validatedUrl);
           redirectTrace.push(validatedUrl);
 
-          console.log(`[Update] Fetch attempt ${redirectCount + 1}: ${validatedUrl.substring(0, 100)}...`);
+          if (ETHERX_DEBUG_LOGS) console.log(`[Update] Fetch attempt ${redirectCount + 1}: ${validatedUrl.substring(0, 100)}...`);
           const response = await net.fetch(validatedUrl, {
             method: "GET",
             headers: buildUpdateHeaders(validatedUrl),
@@ -4396,12 +4458,12 @@ function setupIPC() {
           });
 
           if (!redirectCodes.has(response.status)) {
-            console.log(`[Update] Got final response with status ${response.status}`);
+            if (ETHERX_DEBUG_LOGS) console.log(`[Update] Got final response with status ${response.status}`);
             return response;
           }
 
           const location = response.headers.get("location");
-          console.log(`[Update] Redirect ${redirectCount + 1} → ${response.status} → ${location?.substring(0, 100) || '(no location)'}...`);
+          if (ETHERX_DEBUG_LOGS) console.log(`[Update] Redirect ${redirectCount + 1} → ${response.status} → ${location?.substring(0, 100) || '(no location)'}...`);
 
           if (!location) throw new Error("Update redirect is missing a location");
           if (redirectCount === 12) {

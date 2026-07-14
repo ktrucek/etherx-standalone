@@ -3252,6 +3252,21 @@
                                     <button id="helpPM2LogsBtn"
                                         style="font-size:11px;padding:6px 12px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.35);border-radius:6px;color:var(--text);cursor:pointer">📜
                                         PM2 Logovi</button>
+                                    <button id="helpPM2ClearLogsBtn"
+                                        style="font-size:11px;padding:6px 12px;background:rgba(244,63,94,.12);border:1px solid rgba(244,63,94,.35);border-radius:6px;color:var(--text);cursor:pointer">🧹
+                                        Obriši PM2 logove</button>
+                                    <button id="helpPM2StopBtn"
+                                        style="font-size:11px;padding:6px 12px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);border-radius:6px;color:var(--text);cursor:pointer">⏹
+                                        Zaustavi PM2</button>
+                                </div>
+                                <label
+                                    style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--text2);user-select:none">
+                                    <input type="checkbox" id="helpPM2AutoRestart"
+                                        style="width:15px;height:15px;accent-color:#10b981">
+                                    <span>Automatski pokreni PM2 ako nije online ili se ugasi</span>
+                                </label>
+                                <div id="helpPM2AutoRestartStatus"
+                                    style="margin-top:4px;color:var(--text3);font-size:11px">Auto PM2 nadzor: isključen.
                                 </div>
                                 <div id="helpInstallPythonDepsStatus"
                                     style="margin-top:8px;color:var(--text3);font-family:monospace;font-size:11px;white-space:pre-wrap;background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:6px;padding:8px">
@@ -3267,7 +3282,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.144</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.145</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -3340,6 +3355,7 @@
                                     <option value="huggingface">🤗 HuggingFace Router (besplatno)</option>
                                     <option value="ollama">Ollama (lokalno)</option>
                                     <option value="local">Local / OpenAI-compatible</option>
+                                    <option value="guardian">Guardian AI (lokalni/custom)</option>
                                 </select>
                             </div>
 
@@ -3515,6 +3531,29 @@
                                         Modeli</button>
                                 </div>
                             </div>
+                            <div class="s-row" id="aiKeyRowGuardian" style="display:none">
+                                <div class="s-row-left">
+                                    <div class="s-row-label">Guardian AI endpoint</div>
+                                    <div class="s-row-desc">Lokalni/custom OpenAI-compatible Guardian. Iste postavke
+                                        koristi i AI Live Chat → Guardian AI.</div>
+                                </div>
+                                <div
+                                    style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                                    <select class="s-select" data-setting="tkaiGuardianProtocol" style="width:86px">
+                                        <option value="http" selected>http</option>
+                                        <option value="https">https</option>
+                                    </select>
+                                    <input type="text" class="s-input" data-setting="tkaiGuardianHost"
+                                        value="localhost" placeholder="localhost" style="width:150px">
+                                    <input type="number" class="s-input" data-setting="tkaiGuardianPort" value="5555"
+                                        min="1" max="65535" style="width:82px">
+                                    <input type="text" class="s-input" data-setting="tkaiGuardianPath"
+                                        value="/v1/chat/completions" placeholder="/v1/chat/completions"
+                                        style="width:190px">
+                                    <input type="password" class="s-input" data-setting="tkaiGuardianApiKey"
+                                        placeholder="API key optional" style="width:150px">
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Model selector — populated dynamically or from defaults -->
@@ -3540,6 +3579,8 @@
                                 <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
                                 <option value="llama3.1:8b">llama3.1:8b (Ollama)</option>
                                 <option value="mistral:7b-instruct">mistral:7b-instruct (Ollama)</option>
+                                <option value="grok-2">grok-2 (Guardian AI)</option>
+                                <option value="grok-beta">grok-beta (Guardian AI)</option>
                             </select>
                         </div>
 
@@ -3547,10 +3588,10 @@
                         <div class="s-group" style="margin-bottom:0">
                             <div class="s-row" style="padding-bottom:0">
                                 <div class="s-row-left">
-                                    <div class="s-row-label">🌍 AI Model za prijevod</div>
-                                    <div class="s-row-desc">Model koji se koristi u AI Inspector → Prijevod stranice.
-                                        Ako je "Isti kao
-                                        glavni", koristi se gore odabrani AI model.</div>
+                                    <div class="s-row-label">🌍 AI Model za prijevod aplikacije</div>
+                                    <div class="s-row-desc">Globalni provider/model za prijevod u cijeloj aplikaciji:
+                                        AI Inspector, kontekstni prijevod i druge app prijevode. TikTok Chat AI jezici i
+                                        live-chat prijevod ostaju u AI Live Chat → Scanning.</div>
                                 </div>
                             </div>
                             <div class="s-row">
@@ -3567,6 +3608,7 @@
                                     <option value="huggingface">HuggingFace Router</option>
                                     <option value="ollama">Ollama</option>
                                     <option value="local">Local / OpenAI-compatible</option>
+                                    <option value="guardian">Guardian AI (lokalni/custom)</option>
                                 </select>
                             </div>
                             <div class="s-row">
@@ -3593,6 +3635,8 @@
                                     <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (OpenRouter)</option>
                                     <option value="llama3.1:8b">llama3.1:8b (Ollama)</option>
                                     <option value="mistral:7b-instruct">mistral:7b-instruct (Ollama)</option>
+                                    <option value="grok-2">grok-2 (Guardian AI)</option>
+                                    <option value="grok-beta">grok-beta (Guardian AI)</option>
                                 </select>
                             </div>
                             <div class="s-row">
@@ -3848,71 +3892,6 @@
 
                                 <div class="s-row">
                                     <div class="s-row-left">
-                                        <div class="s-row-label" data-i18n="tkaiReplyLangLabel">Reply language</div>
-                                        <div class="s-row-desc" data-i18n="tkaiReplyLangDesc">Language the AI writes its
-                                            reply suggestions
-                                            in</div>
-                                    </div>
-                                    <select class="s-select" data-setting="tkaiReplyLang">
-                                        <option value="en_auto">English (AUTO)</option>
-                                        <option value="auto">Auto (match chat language)</option>
-                                        <option value="read">Same as reading language</option>
-                                        <option value="hr">Croatian (Hrvatski)</option>
-                                        <option value="en">English</option>
-                                        <option value="de">German (Deutsch)</option>
-                                        <option value="es">Spanish (Español)</option>
-                                        <option value="fr">French (Français)</option>
-                                        <option value="pt">Portuguese (Português)</option>
-                                        <option value="it">Italian (Italiano)</option>
-                                        <option value="tr">Turkish (Türkçe)</option>
-                                        <option value="ar">Arabic (عربي)</option>
-                                    </select>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label" data-i18n="tkaiReadLangLabel">Chat reading language
-                                        </div>
-                                        <div class="s-row-desc" data-i18n="tkaiReadLangDesc">Language used when reading
-                                            and translating
-                                            incoming chat</div>
-                                    </div>
-                                    <select class="s-select" data-setting="tkaiReadLang">
-                                        <option value="auto">Auto-detect</option>
-                                        <option value="hr">Croatian</option>
-                                        <option value="en">English</option>
-                                        <option value="de">German</option>
-                                        <option value="es">Spanish</option>
-                                        <option value="fr">French</option>
-                                        <option value="pt">Portuguese</option>
-                                        <option value="tr">Turkish</option>
-                                    </select>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label" data-i18n="tkaiTranslateLangLabel">Translation language
-                                        </div>
-                                        <div class="s-row-desc" data-i18n="tkaiTranslateLangDesc">Target language for
-                                            auto-translated chat
-                                            text</div>
-                                    </div>
-                                    <select class="s-select" data-setting="tkaiTranslateLang">
-                                        <option value="auto">Auto (use reading language)</option>
-                                        <option value="hr">Croatian (Hrvatski)</option>
-                                        <option value="en">English</option>
-                                        <option value="de">German (Deutsch)</option>
-                                        <option value="es">Spanish (Español)</option>
-                                        <option value="fr">French (Français)</option>
-                                        <option value="pt">Portuguese (Português)</option>
-                                        <option value="it">Italian (Italiano)</option>
-                                        <option value="tr">Turkish (Türkçe)</option>
-                                        <option value="ar">Arabic (عربي)</option>
-                                    </select>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
                                         <div class="s-row-label" data-i18n="tkaiContextWindowLabel">Context window
                                             (messages)</div>
                                         <div class="s-row-desc" data-i18n="tkaiContextWindowDesc">How many previous
@@ -3921,93 +3900,6 @@
                                     </div>
                                     <input type="number" class="s-input" data-setting="tkaiContextCount" min="0"
                                         max="50" value="10" style="width:70px">
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label" data-i18n="tkaiAutoTranslateLabel">Auto-translate chat
-                                        </div>
-                                        <div class="s-row-desc" data-i18n="tkaiAutoTranslateDesc">Automatically
-                                            translate foreign chat
-                                            messages</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiAutoTranslate"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">Auto-translate gift poruka</div>
-                                        <div class="s-row-desc">Kad je isključeno, gift/subscriber poruke ostaju u
-                                            originalu</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiAutoTranslateGift"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">Auto-translate share poruka</div>
-                                        <div class="s-row-desc">Kad je isključeno, share poruke se ne prevode</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiAutoTranslateShare"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">Auto-translate like poruka</div>
-                                        <div class="s-row-desc">Kad je isključeno, like poruke se ne prevode</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiAutoTranslateLike"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">Preskoči engleski u auto-prijevodu</div>
-                                        <div class="s-row-desc">Ako je poruka već na engleskom, neće se prevoditi</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiAutoTranslateSkipEnglish"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">Preporučeni preset prijevoda</div>
-                                        <div class="s-row-desc">Chat ON, gift/share/like OFF, preskoči engleski ON</div>
-                                    </div>
-                                    <button id="tkaiPresetResetBtn" class="s-btn">Vrati preset</button>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">Prikaži oba jezika</div>
-                                        <div class="s-row-desc">U feedu prikazuje original ID i HR prijevod zajedno
-                                        </div>
-                                    </div>
-                                    <div class="toggle on" data-setting="tkaiNllbShowBoth"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">CC read aloud</div>
-                                        <div class="s-row-desc">Read creator captions aloud in selected translation
-                                            language</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiCcReadEnabled"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">AI prijevod za chat čitanje</div>
-                                        <div class="s-row-desc">Ako je OFF, obične chat poruke čita direktno bez AI
-                                            prijevoda</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiCcReadChatAiTranslate"></div>
-                                </div>
-
-                                <div class="s-row">
-                                    <div class="s-row-left">
-                                        <div class="s-row-label">AI Live Chat audio</div>
-                                        <div class="s-row-desc">Master ON/OFF za glas i zvučne efekte</div>
-                                    </div>
-                                    <div class="toggle" data-setting="tkaiAudioEnabled"></div>
                                 </div>
 
                                 <div class="s-row">
@@ -4223,8 +4115,8 @@
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAutoScan">⏱
                                         Scanning</button>
-                                    <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiMsgTypes">📋 Message
-                                        types</button>
+                                    <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiMsgTypes">✍️ Promptovi
+                                        poruka</button>
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiAiModel">🤖 AI
                                         Model</button>
                                     <button class="s-btn-sm tkai-settings-toggle" id="btnTkaiGuardian">🛡️ Guardian AI
@@ -4241,6 +4133,13 @@
                                     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
                                         Konfiguriraj <b>Guardian AI</b> endpoint (lokalni ili remote) koristeći
                                         OpenAI/Grok kompatibilan API.
+                                    </div>
+                                    <div
+                                        style="font-size:11px;color:var(--text2);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.45">
+                                        <b>Kako radi:</b> Guardian AI je dodatni OpenAI-compatible servis. Ako uključiš
+                                        ulogu “Predlaganje odgovora”, on preuzima AI replike. Ako uključiš “Prijevod”,
+                                        koristi se za chat prijevod. Ako uključiš “Moderacija”, dodaje se uz lokalni
+                                        guard scan iz Scanning sekcije.
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
@@ -4333,6 +4232,31 @@
                                         <button class="s-btn-sm" id="tkaiPresetFastScan">⚡ Brzo</button>
                                         <button class="s-btn-sm" id="tkaiPresetQuietScan">🌙 Mirno</button>
                                         <button class="s-btn-sm" id="tkaiPresetTextOnly">📝 Samo tekst</button>
+                                    </div>
+                                    <div
+                                        style="margin-bottom:12px;border-bottom:1px dashed rgba(255,255,255,.1);padding-bottom:12px">
+                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Što skenirati
+                                        </div>
+                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanChat" checked> Chat tekst</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanGifts" checked> Giftovi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanLikes" checked> Likeovi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanSubs" checked> Sub/Fan Club</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanCaptions" checked> Captions / CC</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiDetectSongs" checked> Pjesme / DJ CC</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanJoins" checked> Join eventi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiScanShares" checked> Share eventi</label>
+                                            <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiDropUnknownUsers"> Sakrij unknown korisnike</label>
+                                        </div>
                                     </div>
                                     <div class="s-row">
                                         <div class="s-row-left">
@@ -4481,29 +4405,6 @@
                                     </div>
                                     <div
                                         style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
-                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Što skenirati
-                                        </div>
-                                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanChat" checked> Chat tekst</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanGifts" checked> Giftovi</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanLikes" checked> Likeovi</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanSubs" checked> Sub/Fan Club</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanCaptions" checked> Captions / CC</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiDetectSongs" checked> Pjesme / DJ CC</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanJoins" checked> Join eventi</label>
-                                            <label style="font-size:12px"><input type="checkbox"
-                                                    data-setting="tkaiScanShares" checked> Share eventi</label>
-                                        </div>
-                                    </div>
-                                    <div
-                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
                                         <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Što prikazati u
                                             feedu</div>
                                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
@@ -4524,36 +4425,47 @@
                                                 <select class="s-select" data-setting="tkaiReadLang"
                                                     style="width:100%;margin-top:4px">
                                                     <option value="auto">Auto - svi jezici</option>
-                                                    <option value="hr">Croatian</option>
+                                                    <option value="hr">Croatian (Hrvatski)</option>
                                                     <option value="en">English</option>
-                                                    <option value="de">German</option>
-                                                    <option value="es">Spanish</option>
-                                                    <option value="fr">French</option>
-                                                    <option value="pt">Portuguese</option>
-                                                    <option value="tr">Turkish</option>
+                                                    <option value="de">German (Deutsch)</option>
+                                                    <option value="es">Spanish (Español)</option>
+                                                    <option value="fr">French (Français)</option>
+                                                    <option value="pt">Portuguese (Português)</option>
+                                                    <option value="it">Italian (Italiano)</option>
+                                                    <option value="tr">Turkish (Türkçe)</option>
+                                                    <option value="ar">Arabic (عربي)</option>
                                                 </select>
                                             </label>
                                             <label style="font-size:11px;color:var(--text3)">Prijevod
                                                 <select class="s-select" data-setting="tkaiTranslateLang"
                                                     style="width:100%;margin-top:4px">
-                                                    <option value="auto">Auto</option>
-                                                    <option value="hr">Croatian</option>
+                                                    <option value="auto">Auto (koristi čitanje)</option>
+                                                    <option value="hr">Croatian (Hrvatski)</option>
                                                     <option value="en">English</option>
-                                                    <option value="de">German</option>
-                                                    <option value="es">Spanish</option>
-                                                    <option value="fr">French</option>
-                                                    <option value="pt">Portuguese</option>
-                                                    <option value="tr">Turkish</option>
+                                                    <option value="de">German (Deutsch)</option>
+                                                    <option value="es">Spanish (Español)</option>
+                                                    <option value="fr">French (Français)</option>
+                                                    <option value="pt">Portuguese (Português)</option>
+                                                    <option value="it">Italian (Italiano)</option>
+                                                    <option value="tr">Turkish (Türkçe)</option>
+                                                    <option value="ar">Arabic (عربي)</option>
                                                 </select>
                                             </label>
                                             <label style="font-size:11px;color:var(--text3)">AI odgovor
                                                 <select class="s-select" data-setting="tkaiReplyLang"
                                                     style="width:100%;margin-top:4px">
+                                                    <option value="en_auto">English (AUTO)</option>
                                                     <option value="auto">Auto - jezik chata</option>
                                                     <option value="read">Kao čitanje</option>
-                                                    <option value="hr">Croatian</option>
+                                                    <option value="hr">Croatian (Hrvatski)</option>
                                                     <option value="en">English</option>
-                                                    <option value="en_auto">English AUTO</option>
+                                                    <option value="de">German (Deutsch)</option>
+                                                    <option value="es">Spanish (Español)</option>
+                                                    <option value="fr">French (Français)</option>
+                                                    <option value="pt">Portuguese (Português)</option>
+                                                    <option value="it">Italian (Italiano)</option>
+                                                    <option value="tr">Turkish (Türkçe)</option>
+                                                    <option value="ar">Arabic (عربي)</option>
                                                 </select>
                                             </label>
                                         </div>
@@ -4573,8 +4485,12 @@
                                             <label style="font-size:12px"><input type="checkbox"
                                                     data-setting="tkaiCcReadEnabled"> Čitaj CC naglas</label>
                                             <label style="font-size:12px"><input type="checkbox"
+                                                    data-setting="tkaiCcReadChatAiTranslate"> AI prijevod za čitanje</label>
+                                            <label style="font-size:12px"><input type="checkbox"
                                                     data-setting="tkaiAudioEnabled"> AI audio</label>
                                         </div>
+                                        <button id="tkaiPresetResetBtn" class="s-btn" style="margin-top:10px">Vrati
+                                            preset prijevoda</button>
                                     </div>
                                     <div
                                         style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
@@ -4644,6 +4560,13 @@
                                         Choose the AI model TikTok Chat AI
                                         uses for generating replies. <b>Default</b> uses the global model from Settings
                                         → AI.</div>
+                                    <div
+                                        style="font-size:11px;color:var(--text2);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.45">
+                                        <b>Mapa modela:</b> ovaj provider/model daje AI odgovore. Jezici, čitanje i
+                                        obični scan su u Scanning. Ovo ne mijenja globalni model za prijevod aplikacije.
+                                        Lokalni safety scan koristi Qwen3Guard/Opir. Guardian AI može preuzeti odgovore,
+                                        prijevod ili moderaciju ako su mu role uključene.
+                                    </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label" data-i18n="tkaiProviderOverrideLabel">Provider for
@@ -4661,6 +4584,7 @@
                                             <option value="groq">Groq</option>
                                             <option value="local">Local OpenAI-compatible</option>
                                             <option value="ollama">Ollama</option>
+                                            <option value="guardian">Guardian AI (lokalni/custom)</option>
                                         </select>
                                     </div>
                                     <div class="s-row">
@@ -4716,6 +4640,11 @@
                                                 <option value="deepseek/deepseek-r1">DeepSeek R1</option>
                                                 <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash
                                                 </option>
+                                            </optgroup>
+                                            <optgroup label="Guardian AI">
+                                                <option value="grok-2">grok-2</option>
+                                                <option value="grok-beta">grok-beta</option>
+                                                <option value="local-guardian">local-guardian</option>
                                             </optgroup>
                                         </select>
                                     </div>
@@ -4941,119 +4870,9 @@
                                 <!-- drawer: message type filter -->
                                 <div id="tkaiDrawerMsgTypes"
                                     style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
-                                    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Which message
-                                        types to scan and
-                                        display in the chat feed.</div>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanChat" checked> 💬 Chat messages
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanGifts" checked> 🎁 Gifts
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanLikes" checked> ❤️ Likes
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanSubs" checked> ⭐ Subscriptions /
-                                        Fan Club
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanCaptions" checked> 🎙️ Captions /
-                                        CC
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiDetectSongs" checked> ♫ Song detection
-                                        (DJ/CC)
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanJoins" checked> 👋 Join events
-                                    </label>
-                                    <label
-                                        style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-                                        <input type="checkbox" data-setting="tkaiScanShares" checked> ↗ Share events
-                                    </label>
-                                    <div
-                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
-                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Expanded chat
-                                            feed filter</div>
-                                        <label
-                                            style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                            <input type="checkbox" data-setting="tkaiShowFeedChat" checked> 💬 Prikaži
-                                            tekst
-                                        </label>
-                                        <label
-                                            style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;cursor:pointer">
-                                            <input type="checkbox" data-setting="tkaiShowFeedGifts" checked> 🎁 Prikaži
-                                            giftove
-                                        </label>
-                                        <label
-                                            style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-                                            <input type="checkbox" data-setting="tkaiShowFeedLikes" checked> ❤️ Prikaži
-                                            likeove
-                                        </label>
-                                    </div>
-                                    <div
-                                        style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
-                                        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Safety
-                                            moderation
-                                            (region scan)</div>
-                                        <div class="s-row" style="margin-bottom:8px">
-                                            <div class="s-row-left">
-                                                <div class="s-row-label">🛡️ Guard model</div>
-                                            </div>
-                                            <select class="s-select" data-setting="tkaiRegionGuardMode"
-                                                style="width:48%">
-                                                <option value="both">Qwen3Guard + Opir</option>
-                                                <option value="qwen">Qwen3Guard only</option>
-                                                <option value="opir">Opir only</option>
-                                            </select>
-                                        </div>
-                                        <div class="s-row" style="margin-bottom:8px">
-                                            <div class="s-row-left">
-                                                <div class="s-row-label">🎚️ Action threshold</div>
-                                            </div>
-                                            <select class="s-select" data-setting="tkaiGuardActionThreshold"
-                                                style="width:48%">
-                                                <option value="controversial">Controversial + Unsafe</option>
-                                                <option value="unsafe">Unsafe only</option>
-                                                <option value="safe">All levels</option>
-                                            </select>
-                                        </div>
-                                        <div class="s-row" style="margin-bottom:8px">
-                                            <div class="s-row-left">
-                                                <div class="s-row-label">🚨 Unsafe action</div>
-                                            </div>
-                                            <select class="s-select" data-setting="tkaiGuardUnsafeAction"
-                                                style="width:48%">
-                                                <option value="highlight">Auto-highlight</option>
-                                                <option value="warn">Warn color</option>
-                                                <option value="none">No action</option>
-                                            </select>
-                                        </div>
-                                        <div class="s-row" style="margin-bottom:8px">
-                                            <div class="s-row-left">
-                                                <div class="s-row-label">⚠️ Controversial action</div>
-                                            </div>
-                                            <select class="s-select" data-setting="tkaiGuardControversialAction"
-                                                style="width:48%">
-                                                <option value="tint">Amber tint</option>
-                                                <option value="warn">Warn color</option>
-                                                <option value="none">No action</option>
-                                            </select>
-                                        </div>
-                                        <label
-                                            style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-                                            <input type="checkbox" data-setting="tkaiGuardCacheEnabled" checked> ⚡ Local
-                                            cache
-                                            by text (skip reclassification)
-                                        </label>
+                                    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
+                                        Ovdje su samo upute za AI odgovore po tipu poruke. Skeniranje, feed filteri,
+                                        jezici i guard su u <b>Scanning</b>.
                                     </div>
                                     <div
                                         style="margin-top:12px;border-top:1px dashed rgba(255,255,255,.1);padding-top:10px">
@@ -5288,7 +5107,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.144</span></div>
+                                    v<span id="helpVersionNum2">3.0.145</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja

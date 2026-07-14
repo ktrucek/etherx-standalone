@@ -4689,6 +4689,10 @@ iframe.browse-frame.active {
   --tkai-ui-scale: 1;
   --tkai-font-scale: 1;
   zoom: var(--tkai-ui-scale);
+  min-width: 360px;
+  min-height: 340px;
+  overflow: hidden;
+  touch-action: none;
 }
 
 #tiktokAIPanel .panel-close {
@@ -4733,71 +4737,96 @@ iframe.browse-frame.active {
 
 .tkai-resize-handle {
   position: absolute;
-  z-index: 1001;
+  z-index: 1002;
+  touch-action: none;
+  user-select: none;
+}
+
+body.tkai-panel-interacting,
+body.tkai-panel-interacting * {
+  user-select: none !important;
+}
+
+#tiktokAIPanel.tkai-panel-moving,
+#tiktokAIPanel.tkai-panel-resizing {
+  opacity: 0.98;
+  box-shadow: -8px 10px 42px rgba(0, 0, 0, 0.68);
 }
 
 .tkai-resize-n {
-  top: 0;
-  left: 10px;
-  right: 10px;
-  height: 5px;
+  top: -5px;
+  left: 14px;
+  right: 14px;
+  height: 12px;
   cursor: n-resize;
 }
 
 .tkai-resize-s {
-  bottom: 0;
-  left: 10px;
-  right: 10px;
-  height: 5px;
+  bottom: -5px;
+  left: 14px;
+  right: 14px;
+  height: 12px;
   cursor: s-resize;
 }
 
 .tkai-resize-e {
-  right: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 5px;
+  right: -5px;
+  top: 14px;
+  bottom: 14px;
+  width: 12px;
   cursor: e-resize;
 }
 
 .tkai-resize-w {
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 5px;
+  left: -5px;
+  top: 14px;
+  bottom: 14px;
+  width: 12px;
   cursor: w-resize;
 }
 
 .tkai-resize-ne {
-  top: 0;
-  right: 0;
-  width: 14px;
-  height: 14px;
+  top: -5px;
+  right: -5px;
+  width: 22px;
+  height: 22px;
   cursor: ne-resize;
 }
 
 .tkai-resize-nw {
-  top: 0;
-  left: 0;
-  width: 14px;
-  height: 14px;
+  top: -5px;
+  left: -5px;
+  width: 22px;
+  height: 22px;
   cursor: nw-resize;
 }
 
 .tkai-resize-se {
-  bottom: 0;
-  right: 0;
-  width: 14px;
-  height: 14px;
+  bottom: -5px;
+  right: -5px;
+  width: 24px;
+  height: 24px;
   cursor: se-resize;
 }
 
 .tkai-resize-sw {
-  bottom: 0;
-  left: 0;
-  width: 14px;
-  height: 14px;
+  bottom: -5px;
+  left: -5px;
+  width: 22px;
+  height: 22px;
   cursor: sw-resize;
+}
+
+.tkai-resize-se::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 11px;
+  height: 11px;
+  border-right: 2px solid rgba(255, 255, 255, 0.42);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.42);
+  border-radius: 1px;
 }
 
 .tkai-body {
