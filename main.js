@@ -112,7 +112,7 @@ app.setName("EtherX Browser");
 // Prevents Electron from ever sending "Electron/x.x" in any session that hasn't
 // had setUserAgent() called on it (e.g. extension background pages, new sessions).
 const CHROME_CLEAN_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 app.userAgentFallback = CHROME_CLEAN_UA;
 
 function isAuthDeepLinkProtocol(protocol) {
@@ -2126,10 +2126,10 @@ function createWindow() {
   // Google accounts.google.com detects these tokens as "embedded webview" and
   // blocks login with "This browser may not be secure". Cleaning the UA fixes it.
   const CLEAN_UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
   // Google also checks Sec-Fetch-Site / Origin headers — force override for google domains
   const GOOGLE_UA =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
   // ── Network monitoring & CORS bypass ────────────────────────────────────────
   // Keep request tracking O(1) and batch IPC to avoid flooding the renderer on
   // media-heavy pages such as YouTube or TikTok.
@@ -2286,7 +2286,7 @@ function createWindow() {
           delete headers["X-Requested-With"];
           if (isGoogleAuthRequest(url) && String(details.resourceType || "").toLowerCase() === "mainframe") {
             headers["Sec-CH-UA"] =
-              '"Google Chrome";v="131", "Chromium";v="131", "Not?A_Brand";v="99"';
+              '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
             headers["Sec-CH-UA-Mobile"] = "?0";
             headers["Sec-CH-UA-Platform"] = '"Windows"';
             headers["Sec-Fetch-Site"] = "none";
@@ -2443,13 +2443,19 @@ function createWindow() {
           delete headers["X-Requested-With"];
           if (isGoogleAuthRequest(url) && String(details.resourceType || "").toLowerCase() === "mainframe") {
             headers["Sec-CH-UA"] =
-              '"Google Chrome";v="131", "Chromium";v="131", "Not?A_Brand";v="99"';
+              '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
             headers["Sec-CH-UA-Mobile"] = "?0";
             headers["Sec-CH-UA-Platform"] = '"Windows"';
             headers["Sec-Fetch-Site"] = "none";
             headers["Sec-Fetch-Mode"] = "navigate";
             headers["Sec-Fetch-Dest"] = "document";
             headers["Sec-Fetch-User"] = "?1";
+          }
+          if (isTikTok) {
+            headers["Sec-CH-UA"] =
+              '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
+            headers["Sec-CH-UA-Mobile"] = "?0";
+            headers["Sec-CH-UA-Platform"] = '"Windows"';
           }
         }
         headers[key] = ua || CLEAN_UA;

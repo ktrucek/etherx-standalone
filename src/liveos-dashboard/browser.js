@@ -1662,7 +1662,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     const ALL_DRAWERS = [
         'tkaiDrawerCustomCategories', 'tkaiDrawerGiftGallery', 'tkaiDrawerFanClubGallery',
         'tkaiDrawerAutoScan', 'tkaiDrawerAiModel', 'tkaiDrawerFeatures',
-        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian'
+        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian', 'tkaiDrawerWhisper'
     ];
     // Wire button → drawer, toggling off if already open
     const MAP = {
@@ -1676,6 +1676,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         btnTkaiTools: 'tkaiDrawerTools',
         btnTkaiSessions: 'tkaiDrawerSessions',
         btnTkaiGuardian: 'tkaiDrawerGuardian',
+        btnTkaiWhisper: 'tkaiDrawerWhisper',
     };
     Object.entries(MAP).forEach(([btnId, drawerId]) => {
         const btn = document.getElementById(btnId);
@@ -15198,8 +15199,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
 
     // User Agent
-    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-    const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
+    const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
     const UA_PRESETS = { 'default': ETHERX_DEFAULT_UA, 'Chrome 131 V8': CHROME_131_UA, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
     let activeUA = localStorage.getItem('ex_ua') || ETHERX_DEFAULT_UA;
     // Persist default so it's always visible in storage inspector

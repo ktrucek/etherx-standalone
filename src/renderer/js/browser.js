@@ -1671,7 +1671,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     const ALL_DRAWERS = [
         'tkaiDrawerCustomCategories', 'tkaiDrawerGiftGallery', 'tkaiDrawerFanClubGallery',
         'tkaiDrawerAutoScan', 'tkaiDrawerAiModel', 'tkaiDrawerFeatures',
-        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian'
+        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian', 'tkaiDrawerWhisper'
     ];
     // Wire button → drawer, toggling off if already open
     const MAP = {
@@ -1685,6 +1685,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         btnTkaiTools: 'tkaiDrawerTools',
         btnTkaiSessions: 'tkaiDrawerSessions',
         btnTkaiGuardian: 'tkaiDrawerGuardian',
+        btnTkaiWhisper: 'tkaiDrawerWhisper',
     };
     Object.entries(MAP).forEach(([btnId, drawerId]) => {
         const btn = document.getElementById(btnId);
@@ -3066,6 +3067,314 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             if (latest) openTkaiSessionStatsPage(latest, 1);
         } catch (e) { showToast('Greška pri spajanju: ' + e.message); }
     });
+})();
+
+// ── WhisperLive Integration ───────────────────────────────────────────────────
+(function initWhisperLive() {
+    let wsRef = null;
+    let mediaStream = null;
+    let audioCtx = null;
+    let processorNode = null;
+    let active = false;
+    let transcriptLines = [];
+    const MAX_LINES = 200;
+
+    function getCfg() {
+        const s = (typeof DB !== 'undefined' && DB.getSettings) ? DB.getSettings() : {};
+        return {
+            enabled: s.tkaiWhisperEnabled === true,
+            host: String(s.tkaiWhisperHost || 'localhost').trim(),
+            port: Number(s.tkaiWhisperPort || 9090),
+            lang: String(s.tkaiWhisperLang || 'auto').trim(),
+            task: String(s.tkaiWhisperTask || 'transcribe').trim(),
+            model: String(s.tkaiWhisperModel || 'small').trim(),
+            vad: s.tkaiWhisperVad !== false,
+            wordTs: s.tkaiWhisperWordTimestamps === true,
+            hotwords: String(s.tkaiWhisperHotwords || '').trim(),
+            diarize: s.tkaiWhisperDiarization === true,
+            maxSpeakers: Number(s.tkaiWhisperMaxSpeakers || 2),
+            initialPrompt: String(s.tkaiWhisperInitialPrompt || '').trim(),
+        };
+    }
+
+    function updateSection() {
+        const cfg = getCfg();
+        const section = document.getElementById('tkaiSlušanjeSection');
+        if (section) section.style.display = cfg.enabled ? '' : 'none';
+        const badge = document.getElementById('tkaiWhisperLangBadge');
+        if (badge) badge.textContent = cfg.lang === 'auto' ? 'auto' : cfg.lang;
+    }
+
+    function escT(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function appendTranscript(text, isPartial) {
+        const el = document.getElementById('tkaiWhisperTranscript');
+        if (!el) return;
+        const empty = el.querySelector('.tkai-empty');
+        if (empty) empty.remove();
+        if (isPartial) {
+            let partialEl = el.querySelector('.whisper-partial');
+            if (!partialEl) {
+                partialEl = document.createElement('div');
+                partialEl.className = 'whisper-partial';
+                partialEl.style.cssText = 'color:#94a3b8;font-style:italic;font-size:11px;line-height:1.4;padding:2px 0';
+                el.appendChild(partialEl);
+            }
+            partialEl.textContent = text;
+        } else {
+            el.querySelector('.whisper-partial')?.remove();
+            if (text.trim()) {
+                const time = new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const line = document.createElement('div');
+                line.style.cssText = 'font-size:11px;line-height:1.45;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)';
+                line.innerHTML = '<span style="color:#475569;font-size:9px;margin-right:4px">' + time + '</span><span>' + escT(text) + '</span>';
+                el.appendChild(line);
+                transcriptLines.push({ time, text });
+                if (transcriptLines.length > MAX_LINES) {
+                    transcriptLines = transcriptLines.slice(-MAX_LINES);
+                    const children = Array.from(el.children).filter(c => !c.classList.contains('whisper-partial'));
+                    if (children.length > MAX_LINES) children.slice(0, children.length - MAX_LINES).forEach(c => c.remove());
+                }
+            }
+        }
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function setStatus(text, color) {
+        const el = document.getElementById('tkaiWhisperStatus');
+        if (!el) return;
+        el.textContent = text;
+        el.style.color = color || '#94a3b8';
+    }
+
+    function setToggleBtn(isActive) {
+        const btn = document.getElementById('tkaiWhisperToggleBtn');
+        if (!btn) return;
+        if (isActive) {
+            btn.textContent = '⏹ Stop';
+            btn.style.background = 'rgba(239,68,68,.2)';
+            btn.style.borderColor = 'rgba(239,68,68,.4)';
+            btn.style.color = '#fca5a5';
+        } else {
+            btn.textContent = '▶ Start';
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
+    }
+
+    // Linear interpolation resample Float32Array → 16 kHz
+    function resampleBuffer(buffer, sourceRate) {
+        if (sourceRate === 16000) return buffer;
+        const ratio = sourceRate / 16000;
+        const length = Math.ceil(buffer.length / ratio);
+        const result = new Float32Array(length);
+        for (let i = 0; i < length; i++) {
+            const idx = i * ratio;
+            const lo = Math.floor(idx);
+            const hi = Math.min(lo + 1, buffer.length - 1);
+            result[i] = buffer[lo] * (1 - (idx - lo)) + buffer[hi] * (idx - lo);
+        }
+        return result;
+    }
+
+    function stopAudio() {
+        try { processorNode && processorNode.disconnect(); } catch (_) { }
+        try { audioCtx && audioCtx.close(); } catch (_) { }
+        try { mediaStream && mediaStream.getTracks().forEach(t => t.stop()); } catch (_) { }
+        processorNode = null;
+        audioCtx = null;
+        mediaStream = null;
+    }
+
+    function stop() {
+        active = false;
+        setToggleBtn(false);
+        stopAudio();
+        try { wsRef && wsRef.close(); } catch (_) { }
+        wsRef = null;
+        setStatus('⏸ Zaustavljeno', '#94a3b8');
+    }
+
+    async function start() {
+        if (active) return;
+        const cfg = getCfg();
+        setStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
+
+        const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
+        let ws;
+        try {
+            ws = new WebSocket(wsUrl);
+        } catch (e) {
+            setStatus('❌ ' + e.message, '#f87171');
+            if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + e.message);
+            return;
+        }
+        wsRef = ws;
+
+        ws.onopen = async () => {
+            // Send WhisperLive config message
+            const uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+            const config = {
+                uid,
+                language: cfg.lang === 'auto' ? null : cfg.lang,
+                task: cfg.task,
+                model: cfg.model,
+                use_vad: cfg.vad,
+                max_clients: 4,
+                max_connection_time: 600,
+                word_timestamps: cfg.wordTs,
+                hotwords: cfg.hotwords || null,
+                initial_prompt: cfg.initialPrompt || null,
+                diarization: cfg.diarize,
+                max_speakers: cfg.maxSpeakers,
+            };
+            ws.send(JSON.stringify(config));
+
+            // Capture microphone
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(mediaStream);
+                const bufferSize = 4096;
+                processorNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+                processorNode.onaudioprocess = (e) => {
+                    if (!active || ws.readyState !== WebSocket.OPEN) return;
+                    const input = e.inputBuffer.getChannelData(0);
+                    const resampled = resampleBuffer(input, audioCtx.sampleRate);
+                    // Copy to avoid detached buffer issues
+                    const copy = new Float32Array(resampled.length);
+                    copy.set(resampled);
+                    ws.send(copy.buffer);
+                };
+                source.connect(processorNode);
+                processorNode.connect(audioCtx.destination);
+                active = true;
+                setToggleBtn(true);
+                setStatus('🔴 Sluša…', '#4ade80');
+            } catch (micErr) {
+                setStatus('❌ Mikrofon: ' + micErr.message, '#f87171');
+                ws.close();
+                active = false;
+                setToggleBtn(false);
+                if (typeof showToast === 'function') showToast('❌ Mikrofon nedostupan: ' + micErr.message);
+            }
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.message === 'WAIT') { setStatus('⏳ Server zauzet…', '#fbbf24'); return; }
+                if (data.message === 'SERVER_READY') { setStatus('🔴 Sluša…', '#4ade80'); return; }
+                if (data.message === 'DISCONNECT') { stop(); if (typeof showToast === 'function') showToast('⚠️ WhisperLive prekinuo vezu'); return; }
+
+                // WhisperLive sends { segments: [{text, completed, ...}, ...] }
+                if (Array.isArray(data.segments)) {
+                    data.segments.forEach(seg => {
+                        const t = String(seg.text || '').trim();
+                        if (!t) return;
+                        appendTranscript(t, !seg.completed);
+                    });
+                    return;
+                }
+                // Fallback: { text, is_partial }
+                if (data.text !== undefined) {
+                    appendTranscript(String(data.text || '').trim(), data.is_partial === true);
+                }
+            } catch (_) { }
+        };
+
+        ws.onerror = () => { setStatus('❌ Greška veze', '#f87171'); };
+
+        ws.onclose = () => {
+            if (active) {
+                active = false;
+                setToggleBtn(false);
+                stopAudio();
+                setStatus('⏸ Veza prekinuta', '#94a3b8');
+            }
+        };
+    }
+
+    async function testConnection() {
+        const cfg = getCfg();
+        const statusEl = document.getElementById('tkaiWhisperTestStatus');
+        const btn = document.getElementById('btnTestWhisperConnection');
+        if (statusEl) { statusEl.textContent = '⏳ Testiram…'; statusEl.style.color = '#fbbf24'; }
+        if (btn) btn.disabled = true;
+        const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
+        try {
+            await new Promise((resolve, reject) => {
+                const timer = setTimeout(() => { try { tw.close(); } catch (_) { } reject(new Error('Timeout (5s)')); }, 5000);
+                const tw = new WebSocket(wsUrl);
+                tw.onopen = () => { clearTimeout(timer); tw.close(); resolve(); };
+                tw.onerror = () => { clearTimeout(timer); reject(new Error('Nije moguće spojiti se na ' + wsUrl)); };
+            });
+            if (statusEl) { statusEl.textContent = '✅ Veza OK! (' + wsUrl + ')'; statusEl.style.color = '#4ade80'; }
+            if (typeof showToast === 'function') showToast('✅ WhisperLive dostupan na ' + wsUrl);
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = '❌ ' + err.message; statusEl.style.color = '#f87171'; }
+            if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + err.message);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function init() {
+        updateSection();
+
+        document.getElementById('tkaiWhisperToggleBtn')?.addEventListener('click', () => {
+            if (active) stop(); else start();
+        });
+
+        document.getElementById('tkaiWhisperExportBtn')?.addEventListener('click', () => {
+            if (!transcriptLines.length) { if (typeof showToast === 'function') showToast('Nema transkripta za izvoz'); return; }
+            const content = transcriptLines.map(l => '[' + l.time + '] ' + l.text).join('\n');
+            const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            if (typeof downloadTextFile === 'function') downloadTextFile('whisper-transkript-' + ts + '.txt', content);
+            if (typeof showToast === 'function') showToast('📄 Transkript izvezen');
+        });
+
+        document.getElementById('tkaiWhisperClearBtn')?.addEventListener('click', () => {
+            transcriptLines = [];
+            const el = document.getElementById('tkaiWhisperTranscript');
+            if (el) el.innerHTML = '<div class="tkai-empty" style="font-size:11px;padding:6px 0">Klikni ▶ Start za live transkript govora (DJ, voditelja...).<br><span style="font-size:10px;color:var(--text3)">Potreban: WhisperLive server → Settings → AI Live Chat → 🎙️ WhisperLive</span></div>';
+        });
+
+        document.getElementById('tkaiWhisperCollapseBtn')?.addEventListener('click', () => {
+            const wrap = document.getElementById('tkaiWhisperTranscriptWrap');
+            const btn = document.getElementById('tkaiWhisperCollapseBtn');
+            if (!wrap) return;
+            const hidden = wrap.style.display === 'none';
+            wrap.style.display = hidden ? '' : 'none';
+            if (btn) btn.textContent = hidden ? '−' : '+';
+        });
+
+        document.getElementById('btnTestWhisperConnection')?.addEventListener('click', testConnection);
+
+        // Watch tkaiWhisperEnabled toggle to show/hide Slušanje section
+        document.querySelectorAll('[data-setting="tkaiWhisperEnabled"]').forEach(toggle => {
+            new MutationObserver(updateSection).observe(toggle, { attributes: true, attributeFilter: ['class'] });
+            toggle.addEventListener('change', updateSection);
+        });
+
+        // Update language badge on select change
+        document.querySelectorAll('[data-setting="tkaiWhisperLang"]').forEach(sel => {
+            sel.addEventListener('change', () => {
+                const badge = document.getElementById('tkaiWhisperLangBadge');
+                if (badge) badge.textContent = sel.value === 'auto' ? 'auto' : sel.value;
+            });
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(init, 600));
+    else setTimeout(init, 600);
+
+    window._whisperLiveStop = stop;
+    window._whisperLiveStart = start;
+    window._whisperLiveUpdateSection = updateSection;
 })();
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -16370,9 +16679,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
 
     // User Agent
-    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-    const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-    const TIKTOK_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36';
+    const ETHERX_DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
+    const CHROME_131_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
+    const TIKTOK_CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
     const UA_PRESETS = { 'default': ETHERX_DEFAULT_UA, 'Chrome 131 V8': CHROME_131_UA, 'Chrome Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Chrome Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36', 'Firefox Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0', 'Safari Mac': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15', 'Safari iOS': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1', 'Chrome Android': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.101 Mobile Safari/537.36', 'Edge Windows': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0', 'Googlebot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'curl': 'curl/8.5.0' };
     let activeUA = localStorage.getItem('ex_ua') || ETHERX_DEFAULT_UA;
     // Persist default so it's always visible in storage inspector

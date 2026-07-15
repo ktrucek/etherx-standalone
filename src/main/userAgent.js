@@ -15,7 +15,7 @@ const DEFAULT_UA =
 
 // Chrome 131 V8 for Google login compatibility
 const CHROME_131_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 
 let _current = DEFAULT_UA;
 
@@ -27,7 +27,7 @@ function isGoogleLoginDomain(url) {
     const u = new URL(url);
     const host = u.hostname.toLowerCase();
     // Google login/account domains that require Chrome UA
-    return host === 'accounts.google.com' 
+    return host === 'accounts.google.com'
       || host === 'myaccount.google.com'
       || host.endsWith('.accounts.google.com')
       || (host.endsWith('google.com') && (u.pathname.includes('/signin') || u.pathname.includes('/login') || u.pathname.includes('/ServiceLogin')));
