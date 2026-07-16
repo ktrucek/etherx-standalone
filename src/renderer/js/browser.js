@@ -2290,16 +2290,18 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             }))
             .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events || String(a.name || '').localeCompare(String(b.name || '')));
         const sorted = messages.slice().sort((a, b) => normalizeTs(a) - normalizeTs(b));
-        const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, song: 0, join: 0, share: 0, like: 0, other: 0 };
+        const typeCounts = { chat: 0, gift: 0, subscriber: 0, caption: 0, listening: 0, song: 0, join: 0, share: 0, like: 0, other: 0 };
         const userStatsMap = new Map();
         const giftTypeMap = new Map();
         const questions = [];
         const answers = [];
+        const joinEvents = [];
+        const shareEvents = [];
         const sessionCoinsTotal = Math.max(0, Number(session?.totalCoins || 0));
         let derivedCoinsTotal = 0;
         let joinsTotal = 0;
         sorted.forEach((m) => {
-            const type = String(m?.type || 'chat').toLowerCase();
+            const type = (typeof normalizeTkaiMessageType === 'function' ? normalizeTkaiMessageType(m) : String(m?.type || 'chat').toLowerCase()) || 'chat';
             if (typeCounts[type] !== undefined) typeCounts[type] += 1;
             else typeCounts.other += 1;
             if (type === 'join') joinsTotal += 1;
@@ -2342,8 +2344,15 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 overallGiftRow.coins += Math.max(0, coins);
                 if (user && user !== 'Unknown') overallGiftRow.users.add(user);
                 giftTypeMap.set(giftKey, overallGiftRow);
-            } else if (type === 'join') row.joins += 1;
-            else if (type === 'share') row.shares += 1;
+            } else if (type === 'join') {
+                row.joins += 1;
+                const level = typeof extractJoinLevel === 'function' ? extractJoinLevel({ ...m, type }) : null;
+                joinEvents.push({ user, text, ts: normalizeTs(m) || nowTs, level });
+            }
+            else if (type === 'share') {
+                row.shares += 1;
+                shareEvents.push({ user, text, ts: normalizeTs(m) || nowTs });
+            }
             else if (type === 'like') row.likes += Math.max(1, Number(m.quantity || 1));
             else row.chat += 1;
             row.coins += Math.max(0, coins);
@@ -2372,6 +2381,41 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const lastTs = sorted.length ? normalizeTs(sorted[sorted.length - 1]) : 0;
         const durationMin = Number(session?.sessionMinutes || 0) || (firstTs && lastTs && lastTs > firstTs ? Math.max(1, Math.floor((lastTs - firstTs) / 60000)) : 0);
         const peakViewers = Number(session?.peakViewers || session?.viewerCount || 0);
+        const activeMinutes = Math.max(1, Number(durationMin || 0) || (sorted.length ? 1 : 0));
+        const joinRatePerMin = joinsTotal / activeMinutes;
+        const shareRatePerMin = shareEvents.length / activeMinutes;
+        const joinLevels = joinEvents
+            .filter((event) => Number(event.level || 0) > 0)
+            .sort((a, b) => Number(b.level || 0) - Number(a.level || 0) || Number(b.ts || 0) - Number(a.ts || 0));
+        const joinLevelBuckets = { unknown: 0, lvl1to20: 0, lvl21to34: 0, lvl35to49: 0, lvl50plus: 0 };
+        joinEvents.forEach((event) => {
+            const level = Number(event.level || 0);
+            if (!level) joinLevelBuckets.unknown += 1;
+            else if (level <= 20) joinLevelBuckets.lvl1to20 += 1;
+            else if (level <= 34) joinLevelBuckets.lvl21to34 += 1;
+            else if (level <= 49) joinLevelBuckets.lvl35to49 += 1;
+            else joinLevelBuckets.lvl50plus += 1;
+        });
+        const joinActivityKey = joinRatePerMin >= 5 || joinsTotal >= 80 ? 'high' : (joinRatePerMin >= 2 || joinsTotal >= 25 ? 'medium' : (joinsTotal > 0 ? 'low' : 'none'));
+        const joinActivityLabel = joinActivityKey === 'high' ? 'visok' : (joinActivityKey === 'medium' ? 'srednji' : (joinActivityKey === 'low' ? 'nizak' : 'nema'));
+        const joinLevelStats = {
+            total: joinsTotal,
+            withLevel: joinLevels.length,
+            unknown: joinLevelBuckets.unknown,
+            averageLevel: joinLevels.length ? Math.round(joinLevels.reduce((sum, event) => sum + Number(event.level || 0), 0) / joinLevels.length) : 0,
+            maxLevel: joinLevels.length ? Math.max(...joinLevels.map((event) => Number(event.level || 0))) : 0,
+            ratePerMin: Number(joinRatePerMin.toFixed(2)),
+            activityKey: joinActivityKey,
+            activityLabel: joinActivityLabel,
+            buckets: joinLevelBuckets,
+            events: joinEvents.slice(-200).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
+            topLevels: joinLevels.slice(0, 120)
+        };
+        const shareStats = {
+            total: shareEvents.length,
+            ratePerMin: Number(shareRatePerMin.toFixed(2)),
+            events: shareEvents.slice(-200).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0))
+        };
         const startTs = firstTs || (lastTs ? Math.max(0, lastTs - durationMin * 60000) : nowTs);
         const perMinuteMap = new Map();
         sorted.forEach((m) => {
@@ -2403,6 +2447,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             questions: questions.slice(-80),
             answers: answers.slice(-80),
             joinsTotal,
+            joinLevelStats,
+            shareStats,
             coinsTotal: Math.max(0, Math.round(coinsTotal)),
             durationMin,
             peakViewers,
@@ -2504,6 +2550,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             totalCoins: analytics.coinsTotal,
             uniqueUsers: analytics.uniqueUsers,
             joins: analytics.joinsTotal,
+            joinLevelStats: analytics.joinLevelStats,
+            shareStats: analytics.shareStats,
             typeCounts: analytics.typeCounts,
             topUsersByMessages: analytics.usersByMessages.slice(0, 50),
             topUsersByCoins: analytics.usersByCoins.slice(0, 50),
@@ -2575,6 +2623,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             totalCoins: analytics.coinsTotal,
             uniqueUsers: analytics.uniqueUsers,
             joins: analytics.joinsTotal,
+            joinLevelStats: analytics.joinLevelStats,
+            shareStats: analytics.shareStats,
             typeCounts: analytics.typeCounts,
             topUsersByMessages: analytics.usersByMessages.slice(0, 50),
             topUsersByCoins: analytics.usersByCoins.slice(0, 50),
@@ -2595,8 +2645,25 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             lines.push(['summary', 'coins', analytics.coinsTotal].map(esc).join(','));
             lines.push(['summary', 'unique_users', analytics.uniqueUsers].map(esc).join(','));
             lines.push(['summary', 'joins', analytics.joinsTotal].map(esc).join(','));
+            lines.push(['summary', 'join_activity_level', analytics.joinLevelStats?.activityLabel || 'nema'].map(esc).join(','));
+            lines.push(['summary', 'join_with_level', analytics.joinLevelStats?.withLevel || 0].map(esc).join(','));
+            lines.push(['summary', 'join_avg_level', analytics.joinLevelStats?.averageLevel || 0].map(esc).join(','));
+            lines.push(['summary', 'join_max_level', analytics.joinLevelStats?.maxLevel || 0].map(esc).join(','));
+            lines.push(['summary', 'join_rate_per_min', analytics.joinLevelStats?.ratePerMin || 0].map(esc).join(','));
+            lines.push(['summary', 'share_events', analytics.shareStats?.total || 0].map(esc).join(','));
+            lines.push(['summary', 'share_rate_per_min', analytics.shareStats?.ratePerMin || 0].map(esc).join(','));
             Object.entries(analytics.typeCounts || {}).forEach(([k, v]) => {
                 lines.push(['type_count', k, v].map(esc).join(','));
+            });
+            lines.push(['', '', ''].map(esc).join(','));
+            lines.push(['join_levels', 'user', 'level', 'text', 'timestamp'].map(esc).join(','));
+            (analytics.joinLevelStats?.events || []).forEach((event) => {
+                lines.push(['join_levels', event.user, event.level || '', event.text || '', new Date(Number(event.ts || Date.now())).toISOString()].map(esc).join(','));
+            });
+            lines.push(['', '', '', '', ''].map(esc).join(','));
+            lines.push(['share_events', 'user', 'text', 'timestamp'].map(esc).join(','));
+            (analytics.shareStats?.events || []).forEach((event) => {
+                lines.push(['share_events', event.user, event.text || '', new Date(Number(event.ts || Date.now())).toISOString()].map(esc).join(','));
             });
             lines.push(['', '', ''].map(esc).join(','));
             lines.push(['users', 'user', 'total', 'chat', 'gifts', 'coins', 'joins'].map(esc).join(','));
@@ -2640,9 +2707,26 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             rows.push(`Coins: ${analytics.coinsTotal}`);
             rows.push(`Unique users: ${analytics.uniqueUsers}`);
             rows.push(`Joins: ${analytics.joinsTotal}`);
+            rows.push(`Join activity level: ${analytics.joinLevelStats?.activityLabel || 'nema'}`);
+            rows.push(`Join with level: ${analytics.joinLevelStats?.withLevel || 0}`);
+            rows.push(`Join average level: ${analytics.joinLevelStats?.averageLevel || 0}`);
+            rows.push(`Join max level: ${analytics.joinLevelStats?.maxLevel || 0}`);
+            rows.push(`Join rate/min: ${analytics.joinLevelStats?.ratePerMin || 0}`);
+            rows.push(`Share events: ${analytics.shareStats?.total || 0}`);
+            rows.push(`Share rate/min: ${analytics.shareStats?.ratePerMin || 0}`);
             rows.push('');
             rows.push('Type counts:');
             Object.entries(analytics.typeCounts || {}).forEach(([k, v]) => rows.push(`- ${k}: ${v}`));
+            rows.push('');
+            rows.push('Join levels:');
+            (analytics.joinLevelStats?.events || []).slice(0, 80).forEach((event, i) => {
+                rows.push(`${i + 1}. @${event.user} | level ${event.level || '-'} | ${new Date(Number(event.ts || Date.now())).toLocaleTimeString('hr-HR')} | ${event.text || ''}`);
+            });
+            rows.push('');
+            rows.push('Share events:');
+            (analytics.shareStats?.events || []).slice(0, 80).forEach((event, i) => {
+                rows.push(`${i + 1}. @${event.user} | ${new Date(Number(event.ts || Date.now())).toLocaleTimeString('hr-HR')} | ${event.text || ''}`);
+            });
             rows.push('');
             rows.push('Top users:');
             analytics.usersByMessages.slice(0, 30).forEach((u, i) => {
@@ -2674,7 +2758,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 return;
             }
             const summary = buildSummaryObject();
-            const html = `<!doctype html><html><head><meta charset="utf-8"><title>Session Dashboard PDF</title><style>body{font-family:Arial,sans-serif;padding:18px;color:#0f172a}h1{font-size:20px;margin:0 0 8px}h2{font-size:15px;margin:14px 0 6px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;font-size:12px}</style></head><body><h1>AI Live Chat - Session Dashboard</h1><div>Saved: ${escHtml(new Date(summary.savedAt).toLocaleString('hr-HR'))}</div><div>Messages: ${summary.messageCount} | Duration: ${summary.durationMinutes} min | Peak viewers: ${summary.peakViewers} | Coins: ${summary.totalCoins}</div><h2>Top users</h2><table><thead><tr><th>User</th><th>Total</th><th>Chat</th><th>Gifts</th><th>Coins</th><th>Join</th></tr></thead><tbody>${summary.topUsersByMessages.slice(0, 50).map((u) => `<tr><td>@${escHtml(u.user)}</td><td>${u.total}</td><td>${u.chat}</td><td>${u.gifts}</td><td>${u.coins}</td><td>${u.joins}</td></tr>`).join('')}</tbody></table><h2>Questions</h2><pre>${escHtml(summary.questions.map((q) => `@${q.user}: ${q.text}`).join('\n') || 'Nema pitanja')}</pre><h2>Answers</h2><pre>${escHtml(summary.answers.map((a) => `${a.user}: ${a.text}`).join('\n') || 'Nema odgovora')}</pre></body></html>`;
+            const html = `<!doctype html><html><head><meta charset="utf-8"><title>Session Dashboard PDF</title><style>body{font-family:Arial,sans-serif;padding:18px;color:#0f172a}h1{font-size:20px;margin:0 0 8px}h2{font-size:15px;margin:14px 0 6px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #e2e8f0;padding:8px;font-size:12px}</style></head><body><h1>AI Live Chat - Session Dashboard</h1><div>Saved: ${escHtml(new Date(summary.savedAt).toLocaleString('hr-HR'))}</div><div>Messages: ${summary.messageCount} | Duration: ${summary.durationMinutes} min | Peak viewers: ${summary.peakViewers} | Coins: ${summary.totalCoins}</div><div>Gift events: ${Number(summary.typeCounts?.gift || 0) + Number(summary.typeCounts?.subscriber || 0)} | Join level: ${escHtml(summary.joinLevelStats?.activityLabel || 'nema')} | Share events: ${summary.shareStats?.total || 0}</div><h2>Gift Stats</h2><table><thead><tr><th>Gift</th><th>Events</th><th>Qty</th><th>Coins</th><th>Users</th></tr></thead><tbody>${(summary.topGiftTypes || []).slice(0, 40).map((g) => `<tr><td>${escHtml(g.giftName)}</td><td>${g.events}</td><td>${g.quantity}</td><td>${g.coins}</td><td>${g.users}</td></tr>`).join('')}</tbody></table><h2>Join Level</h2><pre>${escHtml((summary.joinLevelStats?.events || []).slice(0, 80).map((e) => `@${e.user}: level ${e.level || '-'} ${e.text || ''}`).join('\n') || 'Nema join level događaja')}</pre><h2>Share Events</h2><pre>${escHtml((summary.shareStats?.events || []).slice(0, 80).map((e) => `@${e.user}: ${e.text || ''}`).join('\n') || 'Nema share događaja')}</pre><h2>Top users</h2><table><thead><tr><th>User</th><th>Total</th><th>Chat</th><th>Gifts</th><th>Coins</th><th>Join</th></tr></thead><tbody>${summary.topUsersByMessages.slice(0, 50).map((u) => `<tr><td>@${escHtml(u.user)}</td><td>${u.total}</td><td>${u.chat}</td><td>${u.gifts}</td><td>${u.coins}</td><td>${u.joins}</td></tr>`).join('')}</tbody></table><h2>Questions</h2><pre>${escHtml(summary.questions.map((q) => `@${q.user}: ${q.text}`).join('\n') || 'Nema pitanja')}</pre><h2>Answers</h2><pre>${escHtml(summary.answers.map((a) => `${a.user}: ${a.text}`).join('\n') || 'Nema odgovora')}</pre></body></html>`;
             win.document.open();
             win.document.write(html);
             win.document.close();
@@ -2685,13 +2769,19 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         modal.style.cssText =
             'position:fixed;inset:34px 2vw 2vh 2vw;z-index:100004;background:#0b1220;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden;';
         const type = analytics.typeCounts;
+        const giftEventTotal = Number(type.gift || 0) + Number(type.subscriber || 0);
+        const giftQuantityTotal = (analytics.topGiftTypes || []).reduce((sum, gift) => sum + Number(gift.quantity || 0), 0);
+        const topGift = (analytics.topGiftTypes || [])[0] || null;
+        const joinLevelStats = analytics.joinLevelStats || {};
+        const shareStats = analytics.shareStats || {};
         const total = Math.max(1, analytics.messages.length);
         const typeRows = [
             { label: 'Chat', value: type.chat, color: '#60a5fa' },
-            { label: 'Gifts', value: type.gift + type.subscriber, color: '#f97316' },
+            { label: 'Gifts', value: giftEventTotal, color: '#f97316' },
             { label: 'Join', value: type.join, color: '#a78bfa' },
             { label: 'Share', value: type.share || 0, color: '#f472b6' },
             { label: 'Likes', value: type.like || 0, color: '#fb7185' },
+            { label: 'Listen', value: type.listening || 0, color: '#14b8a6' },
             { label: 'CC', value: type.caption, color: '#38bdf8' },
             { label: 'Songs', value: type.song, color: '#22c55e' }
         ];
@@ -2740,6 +2830,19 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const giftTypesHtml = analytics.topGiftTypes.slice(0, 80).map((g, idx) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#fcd34d">#${idx + 1} ${escHtml(g.giftName)}</span><div style="font-size:10px;color:#cbd5e1">coins ${formatNum(g.coins)} • qty ${formatNum(g.quantity)} • events ${formatNum(g.events)} • users ${formatNum(g.users)}</div></div>`
         ).join('') || '<div style="color:#94a3b8">Nema gift događaja u sesiji.</div>';
+        const joinLevelsHtml = (joinLevelStats.events || []).slice(0, 120).map((event, idx) =>
+            `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#c4b5fd">#${idx + 1} @${escHtml(event.user || 'Unknown')}</span><div style="font-size:10px;color:#cbd5e1">level ${event.level ? formatNum(event.level) : '-'} • ${escHtml(new Date(Number(event.ts || Date.now())).toLocaleTimeString('hr-HR'))}${event.text ? ' • ' + escHtml(event.text) : ''}</div></div>`
+        ).join('') || '<div style="color:#94a3b8">Nema join level događaja u sesiji.</div>';
+        const joinBucketsHtml = [
+            ['Nepoznato', joinLevelStats.buckets?.unknown || 0],
+            ['Lv 1-20', joinLevelStats.buckets?.lvl1to20 || 0],
+            ['Lv 21-34', joinLevelStats.buckets?.lvl21to34 || 0],
+            ['Lv 35-49', joinLevelStats.buckets?.lvl35to49 || 0],
+            ['Lv 50+', joinLevelStats.buckets?.lvl50plus || 0]
+        ].map(([label, value]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0"><span>${escHtml(label)}</span><b>${formatNum(value)}</b></div>`).join('');
+        const shareEventsHtml = (shareStats.events || []).slice(0, 120).map((event, idx) =>
+            `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#f9a8d4">#${idx + 1} @${escHtml(event.user || 'Unknown')}</span><div style="font-size:10px;color:#cbd5e1">${escHtml(new Date(Number(event.ts || Date.now())).toLocaleTimeString('hr-HR'))}${event.text ? ' • ' + escHtml(event.text) : ''}</div></div>`
+        ).join('') || '<div style="color:#94a3b8">Nema share događaja u sesiji.</div>';
         const answersHtml = analytics.answers.slice(-50).reverse().map((a) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(a.user)}</span>: ${escHtml(a.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema system/AI odgovora u sesiji.</div>';
@@ -2754,6 +2857,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessOverview">Overview</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessUsers">Users</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessGifts">Gifts</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessJoinLevels">Join level</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessShares">Share events</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessQuestions">Questions</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessSongs">Songs</button>`
             + `</div>`
@@ -2761,9 +2866,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<div id="tkaiSessOverview" style="display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:4px">`
             + `<div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px">`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Poruke</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.messages.length)}</div></div>`
-            + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Giftovi</div><div style="font-size:20px;font-weight:700">${formatNum(type.gift + type.subscriber)}</div></div>`
+            + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Gift events</div><div style="font-size:20px;font-weight:700">${formatNum(giftEventTotal)}</div><div style="font-size:10px;color:#cbd5e1">qty ${formatNum(giftQuantityTotal)}</div></div>`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Joinovi</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.joinsTotal)}</div></div>`
-            + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Share</div><div style="font-size:20px;font-weight:700">${formatNum(type.share || 0)}</div></div>`
+            + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Join level</div><div style="font-size:20px;font-weight:700">${escHtml(joinLevelStats.activityLabel || 'nema')}</div><div style="font-size:10px;color:#cbd5e1">max ${formatNum(joinLevelStats.maxLevel || 0)} • avg ${formatNum(joinLevelStats.averageLevel || 0)}</div></div>`
+            + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Share events</div><div style="font-size:20px;font-weight:700">${formatNum(shareStats.total || 0)}</div><div style="font-size:10px;color:#cbd5e1">${formatNum(shareStats.ratePerMin || 0)} / min</div></div>`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Likes</div><div style="font-size:20px;font-weight:700">${formatNum(type.like || 0)}</div></div>`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Coini</div><div style="font-size:20px;font-weight:700;color:#fbbf24">${formatNum(analytics.coinsTotal)}</div></div>`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Jedinstveni users</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.uniqueUsers)}</div></div>`
@@ -2771,12 +2877,19 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Peak viewers</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.peakViewers)}</div></div>`
             + `<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:10px;color:#94a3b8">Pitanja / odgovori</div><div style="font-size:20px;font-weight:700">${formatNum(analytics.questions.length)} / ${formatNum(analytics.answers.length)}</div></div>`
             + `</div>`
+            + `<div style="display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:8px">`
+            + `<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:8px"><div style="font-size:10px;color:#fcd34d">Gift stats</div><div style="font-size:12px;color:#e2e8f0;margin-top:4px">events ${formatNum(giftEventTotal)} • qty ${formatNum(giftQuantityTotal)} • coins ${formatNum(analytics.coinsTotal)}</div><div style="font-size:10px;color:#cbd5e1;margin-top:3px">Top: ${topGift ? escHtml(topGift.giftName || '-') + ' (' + formatNum(topGift.quantity || 0) + ')' : '-'}</div></div>`
+            + `<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:8px"><div style="font-size:10px;color:#c4b5fd">Join level</div><div style="font-size:12px;color:#e2e8f0;margin-top:4px">aktivnost ${escHtml(joinLevelStats.activityLabel || 'nema')} • ${formatNum(joinLevelStats.ratePerMin || 0)} / min</div><div style="font-size:10px;color:#cbd5e1;margin-top:3px">poznat level ${formatNum(joinLevelStats.withLevel || 0)} / ${formatNum(joinLevelStats.total || 0)}</div></div>`
+            + `<div style="background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.2);border-radius:8px;padding:8px"><div style="font-size:10px;color:#f9a8d4">Share events</div><div style="font-size:12px;color:#e2e8f0;margin-top:4px">ukupno ${formatNum(shareStats.total || 0)} • ${formatNum(shareStats.ratePerMin || 0)} / min</div><div style="font-size:10px;color:#cbd5e1;margin-top:3px">zadnjih spremljeno ${formatNum((shareStats.events || []).length)}</div></div>`
+            + `</div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Poruke kroz vrijeme (scan timeline)</div><div style="height:160px">${timelineSvg}</div></div>`
             + `<div id="tkaiSessUsers" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
             + `</div>`
             + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto">`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:8px">Raspodjela tipova poruka</div><div style="display:flex;gap:12px;align-items:center"><div style="width:130px;height:130px;border-radius:50%;background:${donut};position:relative"><div style="position:absolute;inset:27px;border-radius:50%;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:11px;color:#cbd5e1">${formatNum(total)}<br>total</div></div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px">${typeRows.map((r) => `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${r.color}"></span>${r.label}: <b>${formatNum(r.value)}</b></div>`).join('')}</div></div></div>`
             + `<div id="tkaiSessGifts" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Gift breakdown</div><div style="max-height:220px;overflow:auto;font-size:11px">${giftTypesHtml}</div></div>`
+            + `<div id="tkaiSessJoinLevels" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Join level</div><div style="font-size:10px;color:#cbd5e1;margin-bottom:6px">${joinBucketsHtml}</div><div style="max-height:180px;overflow:auto;font-size:11px">${joinLevelsHtml}</div></div>`
+            + `<div id="tkaiSessShares" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Share events</div><div style="max-height:180px;overflow:auto;font-size:11px">${shareEventsHtml}</div></div>`
             + `<div id="tkaiSessSongs" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Song performance (engagement/sentiment)</div><div style="max-height:180px;overflow:auto;font-size:11px">${songPerfHtml}</div></div>`
             + `<div id="tkaiSessQuestions" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
@@ -2929,6 +3042,194 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         renderTkaiSessionHistory();
     });
 
+    function normalizeTkaiImportedMessage(message, fallback = {}) {
+        if (!message || typeof message !== 'object') return null;
+        const user = String(message.user || message.username || message.author || fallback.user || '').trim().replace(/^@+/, '');
+        const text = String(message.text || message.message || message.content || message.originalText || message.transcript || '').replace(/\s+/g, ' ').trim();
+        const translatedText = String(message.translatedText || message.translation || '').replace(/\s+/g, ' ').trim();
+        const rawTs = message.ts || message.timestamp || message.time || message.createdAt || message.date || fallback.ts || Date.now();
+        const parsedTs = typeof rawTs === 'number' ? rawTs : Date.parse(String(rawTs));
+        const ts = Number.isFinite(parsedTs) ? parsedTs : Date.now();
+        const type = typeof normalizeTkaiMessageType === 'function'
+            ? normalizeTkaiMessageType({ ...message, text, type: message.type || fallback.type || 'chat' })
+            : String(message.type || fallback.type || 'chat').toLowerCase();
+        if (!user && !text && !translatedText) return null;
+        const meta = (type === 'gift' || type === 'subscriber') && typeof safeResolveGiftMetaFromMessage === 'function'
+            ? safeResolveGiftMetaFromMessage({ ...message, text, ts, type })
+            : null;
+        const giftName = String(message.giftName || message.gift || meta?.giftName || '').trim();
+        const quantity = Math.max(0, Number(message.quantity || message.qty || meta?.quantity || 0) || 0);
+        const coins = Math.max(0, Number(message.coins || message.coin || message.diamonds || meta?.coins || 0) || 0);
+        const id = String(message.id || `${ts}:${user}:${type}:${(text || translatedText).slice(0, 120)}:${giftName}:${quantity}:${coins}`);
+        return {
+            ...message,
+            id,
+            user: user || 'Unknown',
+            text: text || translatedText,
+            originalText: String(message.originalText || '').replace(/\s+/g, ' ').trim(),
+            translatedText,
+            translatedLang: String(message.translatedLang || message.lang || '').trim(),
+            type,
+            ts,
+            timestamp: ts,
+            coins,
+            giftName,
+            giftRawText: message.giftRawText || '',
+            quantity,
+            unitCoins: Number(message.unitCoins || meta?.unitCoins || 0) || 0,
+            importedAt: fallback.importedAt || new Date().toISOString(),
+            sourceFile: fallback.sourceFile || message.sourceFile || ''
+        };
+    }
+
+    function extractTkaiImportMessages(data, sourceFile = '') {
+        const importedAt = new Date().toISOString();
+        const out = [];
+        const pushMessages = (rows, fallback = {}) => {
+            if (!Array.isArray(rows)) return;
+            rows.forEach((row) => {
+                const normalized = normalizeTkaiImportedMessage(row, { ...fallback, importedAt, sourceFile });
+                if (normalized) out.push(normalized);
+            });
+        };
+        const visit = (node, depth = 0) => {
+            if (!node || depth > 4) return;
+            if (Array.isArray(node)) {
+                const looksLikeMessages = node.some((row) => row && typeof row === 'object' && (row.text || row.message || row.user || row.username || row.type));
+                if (looksLikeMessages) pushMessages(node);
+                else node.forEach((item) => visit(item, depth + 1));
+                return;
+            }
+            if (typeof node !== 'object') return;
+            pushMessages(node.messages, { sessionKey: node.savedAt || node.exportedAt || node.sessionStartedAt || '' });
+            pushMessages(node.listeningMessages, { type: 'listening', user: 'Slušanje', sessionKey: node.savedAt || node.exportedAt || '' });
+            pushMessages(node.sessionData?.messages, { sessionKey: node.sessionData?.savedAt || node.sessionData?.exportedAt || '' });
+            pushMessages(node.summary?.messages, { sessionKey: node.summary?.savedAt || '' });
+            pushMessages(node.data?.messages, { sessionKey: node.data?.savedAt || node.data?.exportedAt || '' });
+            pushMessages(node.payload?.messages, { sessionKey: node.payload?.savedAt || node.payload?.exportedAt || '' });
+            if (Array.isArray(node.sessions)) node.sessions.forEach((session) => visit(session, depth + 1));
+            if (Array.isArray(node.items)) node.items.forEach((item) => visit(item, depth + 1));
+            if (Array.isArray(node.topUsersByMessages)) {
+                node.topUsersByMessages.forEach((user) => {
+                    if (user?.lastMessage) {
+                        const normalized = normalizeTkaiImportedMessage({
+                            user: user.user,
+                            text: user.lastMessage,
+                            type: 'chat',
+                            ts: node.savedAt || node.exportedAt || Date.now()
+                        }, { importedAt, sourceFile });
+                        if (normalized) out.push(normalized);
+                    }
+                });
+            }
+        };
+        visit(data);
+        return out;
+    }
+
+    function mergeTkaiImportedMessages(messages) {
+        const seen = new Set();
+        const merged = [];
+        (Array.isArray(messages) ? messages : []).forEach((message) => {
+            const normalized = normalizeTkaiImportedMessage(message);
+            if (!normalized) return;
+            const key = [
+                normalized.id || '',
+                normalized.ts || '',
+                normalizeTkaiUserDbKey ? normalizeTkaiUserDbKey(normalized.user) : String(normalized.user || '').toLowerCase(),
+                normalized.type || '',
+                String(normalized.text || '').slice(0, 160),
+                normalized.giftName || '',
+                normalized.quantity || 0,
+                normalized.coins || 0
+            ].join('|');
+            if (seen.has(key)) return;
+            seen.add(key);
+            merged.push(normalized);
+        });
+        return merged.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+    }
+
+    function saveTkaiMergedImport(messages, label = 'Import & merge') {
+        const merged = mergeTkaiImportedMessages(messages);
+        if (!merged.length) return { imported: 0, skipped: Array.isArray(messages) ? messages.length : 0, session: null };
+        const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+        const existingKeys = new Set();
+        sessions.forEach((session) => {
+            (Array.isArray(session?.messages) ? session.messages : []).forEach((message) => {
+                const normalized = normalizeTkaiImportedMessage(message);
+                if (!normalized) return;
+                existingKeys.add(`${normalized.ts}|${String(normalized.user || '').toLowerCase()}|${normalized.type}|${String(normalized.text || '').slice(0, 160)}`);
+            });
+        });
+        const newMessages = merged.filter((message) => {
+            const key = `${message.ts}|${String(message.user || '').toLowerCase()}|${message.type}|${String(message.text || '').slice(0, 160)}`;
+            return !existingKeys.has(key);
+        });
+        const allForUserDb = merged;
+        if (typeof updateTkaiUserDBFromMessages === 'function') updateTkaiUserDBFromMessages(allForUserDb);
+        if (!newMessages.length) return { imported: 0, skipped: merged.length, session: null };
+        const firstTs = Number(newMessages[0]?.ts || Date.now());
+        const lastTs = Number(newMessages[newMessages.length - 1]?.ts || firstTs);
+        const totalCoins = newMessages.reduce((sum, message) => sum + Math.max(0, Number(message.coins || 0) || 0), 0);
+        const sessionRecord = {
+            savedAt: new Date().toISOString(),
+            importedAt: new Date().toISOString(),
+            importLabel: label,
+            messageCount: newMessages.length,
+            listeningCount: newMessages.filter((message) => normalizeTkaiMessageType(message) === 'listening').length,
+            sessionMinutes: firstTs && lastTs && lastTs > firstTs ? Math.max(1, Math.round((lastTs - firstTs) / 60000)) : 0,
+            peakViewers: 0,
+            totalCoins,
+            questions: newMessages.filter((message) => String(message.text || '').includes('?')).slice(-200),
+            messages: newMessages
+        };
+        sessions.push(sessionRecord);
+        if (sessions.length > 80) sessions.splice(0, sessions.length - 80);
+        localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
+        try { saveTkaiStatsSnapshot(sessionRecord, label); } catch (_) { }
+        renderTkaiSessionHistory();
+        return { imported: newMessages.length, skipped: merged.length - newMessages.length, session: sessionRecord };
+    }
+
+    async function importAndMergeTkaiJsonFiles(files) {
+        const statusEl = document.getElementById('tkaiToolsImportMergeStatus');
+        const setStatus = (html, color = 'var(--text2)') => {
+            if (!statusEl) return;
+            statusEl.style.display = '';
+            statusEl.style.color = color;
+            statusEl.innerHTML = html;
+        };
+        const list = Array.from(files || []);
+        if (!list.length) return;
+        setStatus('Čitam ' + formatNum(list.length) + ' JSON datoteka...');
+        const allMessages = [];
+        let parsedFiles = 0;
+        let failedFiles = 0;
+        for (const file of list) {
+            try {
+                const raw = await file.text();
+                const data = JSON.parse(raw);
+                const rows = extractTkaiImportMessages(data, file.name || '');
+                allMessages.push(...rows);
+                parsedFiles += 1;
+            } catch (err) {
+                failedFiles += 1;
+                console.warn('[TikTokAI] import merge failed for file', file?.name, err);
+            }
+        }
+        const result = saveTkaiMergedImport(allMessages, 'Import & merge JSON');
+        const db = typeof getTkaiUserDB === 'function' ? getTkaiUserDB() : {};
+        setStatus(
+            '<div style="font-weight:600;color:#4ade80">✅ Import & merge završen</div>'
+            + '<div style="margin-top:4px">Datoteke: ' + formatNum(parsedFiles) + ' OK' + (failedFiles ? ' • ' + formatNum(failedFiles) + ' greška' : '') + '</div>'
+            + '<div>Pronađeno eventova: ' + formatNum(allMessages.length) + ' • novo spremljeno: ' + formatNum(result.imported) + ' • duplikati/preskočeno: ' + formatNum(result.skipped) + '</div>'
+            + '<div>User DB: ' + formatNum(Object.keys(db || {}).length) + ' korisnika</div>',
+            '#cbd5e1'
+        );
+        showToast(result.imported ? '✅ Import & merge: ' + formatNum(result.imported) + ' novih eventova' : 'ℹ️ Import & merge: nema novih eventova');
+    }
+
     function importTkaiSessionJsonData(data) {
         let imported = 0;
         let skipped = 0;
@@ -2941,6 +3242,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             if (alreadyExists) { skipped++; return; }
             item.importedAt = new Date().toISOString();
             sessions.push(item);
+            if (Array.isArray(item.messages) && typeof updateTkaiUserDBFromMessages === 'function') {
+                updateTkaiUserDBFromMessages(item.messages.map((message) => normalizeTkaiImportedMessage(message, { sourceFile: 'session-import' })).filter(Boolean));
+            }
             imported++;
         });
         if (sessions.length > 50) sessions.splice(0, sessions.length - 50);
@@ -2995,6 +3299,13 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     });
     document.getElementById('btnTkaiSessionsPaste')?.addEventListener('click', () => {
         showTkaiPasteImportModal();
+    });
+    document.getElementById('btnTkaiToolsImportMerge')?.addEventListener('click', () => {
+        document.getElementById('tkaiToolsImportMergeFile')?.click();
+    });
+    document.getElementById('tkaiToolsImportMergeFile')?.addEventListener('change', async function () {
+        await importAndMergeTkaiJsonFiles(this.files || []);
+        this.value = '';
     });
     document.getElementById('tkaiSessionImportFile')?.addEventListener('change', function () {
         const files = Array.from(this.files || []);
@@ -3534,6 +3845,147 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         }
     }
 
+    function setWhisperServerStatus(text, color) {
+        const statusEl = document.getElementById('tkaiWhisperServerStatus');
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.style.color = color || '#94a3b8';
+    }
+
+    function setWhisperSettingValue(setting, value) {
+        const el = document.querySelector('#stab-ai-live-chat [data-setting="' + setting + '"]');
+        if (!el) return;
+        el.value = value;
+        try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) { }
+        if (typeof DB !== 'undefined' && DB.saveSetting) {
+            const numeric = setting === 'tkaiWhisperPort' ? Number(value) : value;
+            DB.saveSetting(setting, numeric);
+        }
+    }
+
+    async function ensureWhisperLiveServer() {
+        const btn = document.getElementById('btnEnsureWhisperLiveServer');
+        if (!window.etherx?.app?.installWhisperLive) {
+            setWhisperServerStatus('server: API nije dostupan u ovom buildu', '#f87171');
+            if (typeof showToast === 'function') showToast('❌ WhisperLive install API nije dostupan');
+            return;
+        }
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Instaliram/pokrećem...';
+        }
+        setWhisperServerStatus('server: instaliram pip/venv i pokrećem lokalni server...', '#fbbf24');
+        try {
+            const res = await window.etherx.app.installWhisperLive('pip');
+            if (!res?.ok) {
+                throw new Error(res?.error || 'WhisperLive server nije pokrenut');
+            }
+            setWhisperSettingValue('tkaiWhisperHost', 'localhost');
+            setWhisperSettingValue('tkaiWhisperPort', 9090);
+            setWhisperServerStatus('server: pokrenut na ws://localhost:9090', '#4ade80');
+            if (typeof showToast === 'function') showToast('✅ WhisperLive server pokrenut');
+            await testConnection();
+        } catch (err) {
+            const msg = String(err?.message || err);
+            setWhisperServerStatus('server: ❌ ' + msg, '#f87171');
+            if (typeof showToast === 'function') showToast('❌ WhisperLive server: ' + msg);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Instaliraj/pokreni WhisperLive server';
+            }
+        }
+    }
+
+    async function cacheWhisperModel() {
+        const cfg = getCfg();
+        const statusEl = document.getElementById('tkaiWhisperCacheStatus');
+        const btn = document.getElementById('btnCacheWhisperModel');
+        const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
+        if (active || connecting) {
+            const msg = 'Zaustavi aktivno slušanje prije cacheiranja modela.';
+            if (statusEl) { statusEl.textContent = 'model cache: ' + msg; statusEl.style.color = '#fbbf24'; }
+            if (typeof showToast === 'function') showToast('⚠️ ' + msg);
+            return;
+        }
+        const targetLang = getWhisperTargetLang(cfg);
+        if (statusEl) {
+            statusEl.textContent = 'model cache: spajam se na ' + wsUrl + ' · model ' + cfg.model;
+            statusEl.style.color = '#fbbf24';
+        }
+        if (btn) btn.disabled = true;
+        try {
+            await new Promise((resolve, reject) => {
+                let settled = false;
+                const cacheWs = new WebSocket(wsUrl);
+                const done = (ok, value) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    try { cacheWs.close(); } catch (_) { }
+                    ok ? resolve(value) : reject(value);
+                };
+                const timer = setTimeout(() => {
+                    done(false, new Error('Timeout cacheiranja modela (90s). Server možda još preuzima veliki model.'));
+                }, 90000);
+                cacheWs.onopen = () => {
+                    const config = {
+                        uid: 'cache-' + Math.random().toString(36).slice(2) + Date.now().toString(36),
+                        language: cfg.lang === 'auto' ? null : cfg.lang,
+                        task: cfg.task === 'translate' && targetLang === 'en' ? 'translate' : 'transcribe',
+                        model: cfg.model,
+                        use_vad: cfg.vad,
+                        max_clients: 4,
+                        max_connection_time: 120,
+                        word_timestamps: false,
+                        hotwords: cfg.hotwords || null,
+                        initial_prompt: cfg.initialPrompt || null,
+                        diarization: false,
+                        max_speakers: cfg.maxSpeakers,
+                    };
+                    cacheWs.send(JSON.stringify(config));
+                    if (statusEl) {
+                        statusEl.textContent = 'model cache: učitavam/preuzimam ' + cfg.model + '...';
+                        statusEl.style.color = '#fbbf24';
+                    }
+                };
+                cacheWs.onmessage = (event) => {
+                    let data = null;
+                    try { data = JSON.parse(event.data); } catch (_) { }
+                    const msg = String(data?.message || '').trim();
+                    if (msg === 'WAIT') {
+                        if (statusEl) statusEl.textContent = 'model cache: server je zauzet, čekam...';
+                        return;
+                    }
+                    if (msg === 'SERVER_READY') {
+                        done(true);
+                    }
+                    if (msg === 'DISCONNECT') {
+                        done(false, new Error('Server je prekinuo cache sesiju.'));
+                    }
+                };
+                cacheWs.onerror = () => done(false, new Error('Nije moguće spojiti se na ' + wsUrl));
+                cacheWs.onclose = () => {
+                    if (!settled) done(false, new Error('Veza zatvorena prije potvrde modela.'));
+                };
+            });
+            if (statusEl) {
+                statusEl.textContent = 'model cache: gotovo · ' + cfg.model + ' lokalno spreman na WhisperLive serveru';
+                statusEl.style.color = '#4ade80';
+            }
+            if (typeof showToast === 'function') showToast('✅ Whisper model cacheiran: ' + cfg.model);
+        } catch (err) {
+            const msg = err?.message || String(err);
+            if (statusEl) {
+                statusEl.textContent = 'model cache: ❌ ' + msg;
+                statusEl.style.color = '#f87171';
+            }
+            if (typeof showToast === 'function') showToast('❌ Whisper model cache: ' + msg);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     function init() {
         try {
             updateSection();
@@ -3553,9 +4005,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
             document.getElementById('tkaiWhisperClearBtn')?.addEventListener('click', () => {
                 transcriptLines = [];
-                listeningMessages = [];
-                whisperPartialText = '';
-                renderListenFeed();
+                if (typeof clearTkaiListenFeed === 'function') clearTkaiListenFeed();
             });
 
             document.getElementById('tkaiWhisperCollapseBtn')?.addEventListener('click', () => {
@@ -3568,6 +4018,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             });
 
             document.getElementById('btnTestWhisperConnection')?.addEventListener('click', testConnection);
+            document.getElementById('btnEnsureWhisperLiveServer')?.addEventListener('click', ensureWhisperLiveServer);
+            document.getElementById('btnCacheWhisperModel')?.addEventListener('click', cacheWhisperModel);
             const testStatusEl = document.getElementById('tkaiWhisperTestStatus');
             if (testStatusEl && String(testStatusEl.textContent || '').trim().toLowerCase() === 'idle') {
                 testStatusEl.textContent = 'spremno za test';
@@ -5806,13 +6258,29 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         };
     }
 
+    function getTkaiSessionMessages(options = {}) {
+        const includeListening = options.includeListening !== false;
+        const rows = Array.isArray(collectedMessages) ? collectedMessages.slice() : [];
+        if (includeListening && Array.isArray(listeningMessages)) {
+            const existing = new Set(rows.map((message) => String(message?.id || '')).filter(Boolean));
+            listeningMessages.forEach((message) => {
+                if (!message || !String(message.text || '').trim()) return;
+                const id = String(message.id || '').trim();
+                if (id && existing.has(id)) return;
+                rows.push({ ...message, type: 'listening', user: message.user || 'Slušanje' });
+                if (id) existing.add(id);
+            });
+        }
+        return rows.sort((a, b) => Number(a?.ts || 0) - Number(b?.ts || 0));
+    }
+
     function scheduleLiveOsSnapshotPublish() {
         if (!window.etherx?.liveos?.publishSnapshot) return;
         if (liveOsPublishTimer) clearTimeout(liveOsPublishTimer);
         liveOsPublishTimer = setTimeout(() => {
             liveOsPublishTimer = null;
             try {
-                const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-5000) : [];
+                const messages = getTkaiSessionMessages().slice(-5000);
                 const giftStats = computeGiftStats();
                 const users = buildUserStats(messages, Math.max(200, Number(DB.getSettings().tkaiUserScanLimit || 200)));
                 const insightsSnapshot = computeInsightsSnapshot(messages);
@@ -5899,7 +6367,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     window.getTikTokAiHealthSnapshot = function getTikTokAiHealthSnapshot() {
         try {
-            const messages = Array.isArray(collectedMessages) ? collectedMessages : [];
+            const messages = getTkaiSessionMessages();
             const users = buildUserStats(messages, Math.max(200, Number(DB.getSettings().tkaiUserScanLimit || 200)));
             const userDb = getTkaiUserDB();
             const giftStats = computeGiftStatsFromMessages(messages);
@@ -5916,6 +6384,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 holdLActive,
                 messageCount: messages.length,
                 chatCount: messages.filter((m) => normalizeTkaiMessageType(m) === 'chat').length,
+                listeningCount: messages.filter((m) => normalizeTkaiMessageType(m) === 'listening').length,
                 giftCount: giftStats.totalGiftEvents || 0,
                 totalCoins: giftStats.totalCoins || 0,
                 userCount: users.length,
@@ -7233,7 +7702,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="translate-user-session" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#22d3ee;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🧭 Uvijek prevedi ovog korisnika (sesija)</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
             '<button type="button" data-act="show-messages" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#60a5fa;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">💬 Poruke korisnika + sentiment</button>' +
-            '<button type="button" data-act="gift-gallery" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fb923c;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎁 Darovi korisnika (sesija)</button>' +
+            '<button type="button" data-act="gift-gallery" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fb923c;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎁 Darovi korisnika (sve)</button>' +
             '<button type="button" data-act="user-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a3e635;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">👤 Profil korisnika (baza)</button>' +
             '<button type="button" data-act="open-tiktok-profile" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#34d399;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🔗 Otvori TikTok profil</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
@@ -7549,22 +8018,22 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function showTkaiUserMessagesModal(username) {
         const clean = String(username || '').trim().replace(/^@+/, '');
         if (!clean) return;
-        const userMsgs = (Array.isArray(collectedMessages) ? collectedMessages : [])
-            .filter((m) => String(m?.user || '').trim().toLowerCase() === clean.toLowerCase())
-            .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-        const chatMsgs = userMsgs.filter((m) => m.type !== 'join' && m.type !== 'like');
+        updateTkaiUserDBFromMessages(typeof getTkaiSessionMessages === 'function' ? getTkaiSessionMessages() : (Array.isArray(collectedMessages) ? collectedMessages : []));
+        const userMsgs = getTkaiUserDbMessages(clean);
+        const visibleMsgs = userMsgs.filter((m) => normalizeTkaiMessageType(m) !== 'like');
+        const chatMsgs = visibleMsgs.filter((m) => !['gift', 'subscriber', 'join', 'share', 'like'].includes(normalizeTkaiMessageType(m)));
         const sentiment = computeUserSentiment(chatMsgs);
         const db = getTkaiUserDB();
-        const dbEntry = db[clean.toLowerCase()];
+        const dbEntry = db[normalizeTkaiUserDbKey(clean)];
         const modal = document.createElement('div');
         modal.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px';
         const card = document.createElement('div');
-        card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;width:min(580px,96vw);max-height:88vh;overflow-y:auto;color:#e5e7eb;font-size:13px;display:flex;flex-direction:column;gap:0';
+        card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;width:min(760px,96vw);max-height:88vh;overflow-y:auto;color:#e5e7eb;font-size:13px;display:flex;flex-direction:column;gap:0';
         // Header
         let html = `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">`;
         html += `<div>`;
         html += `<div style="font-size:17px;font-weight:700;color:${getUserColor(clean)}">@${escHtml(clean)}</div>`;
-        html += `<div style="font-size:11px;color:#6b7280;margin-top:2px">${formatNum(userMsgs.length)} poruka u sesiji</div>`;
+        html += `<div style="font-size:11px;color:#6b7280;margin-top:2px">${formatNum(visibleMsgs.length)} spremljenih događaja kroz sve sesije</div>`;
         html += `</div>`;
         html += `<div style="display:flex;gap:6px;align-items:center">`;
         html += `<button id="tkaiMsgModalGifts" style="background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.4);color:#fb923c;border-radius:5px;padding:4px 10px;font-size:10px;cursor:pointer">🎁 Darovi</button>`;
@@ -7575,39 +8044,52 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">`;
         html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:18px">${sentiment.emoji}</div><div style="font-size:10px;color:${sentiment.color};font-weight:600;margin-top:2px">${escHtml(sentiment.label)}</div></div>`;
         // Stats grid
-        const chatCount = userMsgs.filter((m) => !['gift', 'subscriber', 'join', 'like'].includes(m.type)).length;
-        const giftCount = userMsgs.filter((m) => m.type === 'gift' || m.type === 'subscriber').length;
+        const chatCount = visibleMsgs.filter((m) => !['gift', 'subscriber', 'join', 'share', 'like'].includes(normalizeTkaiMessageType(m))).length;
+        const giftCount = visibleMsgs.filter((m) => ['gift', 'subscriber'].includes(normalizeTkaiMessageType(m))).length;
+        const shareCount = visibleMsgs.filter((m) => normalizeTkaiMessageType(m) === 'share').length;
+        const joinCount = visibleMsgs.filter((m) => normalizeTkaiMessageType(m) === 'join').length;
         const totalCoins = userMsgs.reduce((s, m) => s + Number(m.coins || 0), 0);
         html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#60a5fa">${formatNum(chatCount)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">chat</div></div>`;
         html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#fb923c">${formatNum(giftCount)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">giftovi</div></div>`;
         html += `<div style="background:rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;text-align:center"><div style="font-size:15px;font-weight:700;color:#fcd34d">${formatNum(totalCoins)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">🪙</div></div>`;
         html += `</div>`;
+        html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:-6px 0 14px">`;
+        html += `<div style="background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.18);border-radius:7px;padding:7px 10px;text-align:center"><div style="font-size:14px;font-weight:700;color:#f9a8d4">${formatNum(shareCount)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">share</div></div>`;
+        html += `<div style="background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.18);border-radius:7px;padding:7px 10px;text-align:center"><div style="font-size:14px;font-weight:700;color:#5eead4">${formatNum(joinCount)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">join</div></div>`;
+        html += `<div style="background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.18);border-radius:7px;padding:7px 10px;text-align:center"><div style="font-size:14px;font-weight:700;color:#cbd5e1">${formatNum(dbEntry?.sessions || 0)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">sesija</div></div>`;
+        html += `</div>`;
         // DB note
         if (dbEntry?.note) {
             html += `<div style="margin-bottom:10px;padding:8px 10px;background:rgba(163,230,53,.08);border:1px solid rgba(163,230,53,.2);border-radius:7px;font-size:11px;color:#a3e635">📝 ${escHtml(dbEntry.note)}</div>`;
         }
+        if (dbEntry?.legacyTotals && Number(dbEntry.legacyTotals.totalMessages || 0) > Number(dbEntry.totalMessages || 0)) {
+            html += `<div style="margin-bottom:10px;padding:8px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:7px;font-size:11px;color:#fcd34d">Stari sažetak prije arhive: ${formatNum(dbEntry.legacyTotals.totalMessages || 0)} poruka • ${formatNum(dbEntry.legacyTotals.totalGifts || 0)} giftova • ${formatNum(dbEntry.legacyTotals.totalCoins || 0)} 🪙. Detaljni popis ispod prikazuje spremljene evente od nove arhive nadalje.</div>`;
+        }
         // Messages list
         html += `<div style="border-top:1px solid rgba(255,255,255,.08);padding-top:10px">`;
-        html += `<div style="font-size:11px;font-weight:600;color:#9ca3af;margin-bottom:8px">💬 Sve poruke (${formatNum(chatMsgs.length)})</div>`;
-        if (chatMsgs.length) {
+        html += `<div style="font-size:11px;font-weight:600;color:#9ca3af;margin-bottom:8px">💬 Kompletna povijest poruka i eventova (${formatNum(visibleMsgs.length)})</div>`;
+        if (visibleMsgs.length) {
             html += `<div style="display:flex;flex-direction:column;gap:4px">`;
-            chatMsgs.slice(-200).forEach((m) => {
+            visibleMsgs.slice(-500).forEach((m) => {
                 const time = new Date(Number(m.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                const typeIcon = m.type === 'gift' || m.type === 'subscriber' ? '🎁' : m.type === 'share' ? '↗' : m.type === 'join' ? '👋' : '💬';
-                const textColor = m.type === 'gift' || m.type === 'subscriber' ? '#fb923c' : '#e5e7eb';
+                const date = new Date(Number(m.ts || Date.now())).toLocaleDateString('hr-HR');
+                const type = normalizeTkaiMessageType(m);
+                const typeIcon = type === 'gift' || type === 'subscriber' ? '🎁' : type === 'share' ? '↗' : type === 'join' ? '👋' : type === 'listening' ? '🎧' : '💬';
+                const textColor = type === 'gift' || type === 'subscriber' ? '#fb923c' : (type === 'share' ? '#f9a8d4' : (type === 'join' ? '#5eead4' : '#e5e7eb'));
                 const displayText = (m.translatedText && m.translatedText !== m.text)
                     ? `${escHtml(m.text)} <span style="color:#818cf8;font-size:10px">[${escHtml(m.translatedText)}]</span>`
                     : escHtml(m.text || '');
                 html += `<div style="background:rgba(255,255,255,.03);border-radius:5px;padding:5px 8px;font-size:11px">`;
-                html += `<span style="color:#4b5563;font-size:10px;margin-right:6px">${time}</span>`;
+                html += `<span style="color:#4b5563;font-size:10px;margin-right:6px">${date} ${time}</span>`;
                 html += `<span style="margin-right:4px">${typeIcon}</span>`;
                 html += `<span style="color:${textColor}">${displayText}</span>`;
+                if ((type === 'gift' || type === 'subscriber') && m.giftName) html += ` <span style="color:#fcd34d;font-size:10px">(${escHtml(m.giftName)} x${formatNum(m.quantity || 1)})</span>`;
                 if (Number(m.coins || 0) > 0) html += ` <span style="color:#fcd34d;font-size:10px">+${formatNum(m.coins)}🪙</span>`;
                 html += `</div>`;
             });
             html += `</div>`;
         } else {
-            html += `<div style="color:#6b7280;padding:8px 0">Nema chat poruka u ovoj sesiji.</div>`;
+            html += `<div style="color:#6b7280;padding:8px 0">Nema spremljenih poruka za ovog korisnika.</div>`;
         }
         html += `</div>`;
         card.innerHTML = html;
@@ -7632,16 +8114,137 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function saveTkaiUserDB(db) {
         try { localStorage.setItem('tkai_live_users', JSON.stringify(db)); } catch (_) { }
     }
-    function updateTkaiUserDBFromStats(stats) {
-        if (!Array.isArray(stats) || !stats.length) return;
+    function normalizeTkaiUserDbKey(user) {
+        return String(user || '').trim().replace(/^@+/, '').toLowerCase();
+    }
+    function getTkaiUserDbMessages(username) {
+        const clean = String(username || '').trim().replace(/^@+/, '');
+        const key = normalizeTkaiUserDbKey(clean);
+        if (!key) return [];
         const db = getTkaiUserDB();
-        const now = Date.now();
-        stats.forEach((u) => {
-            const key = String(u.user || '').trim().toLowerCase();
-            if (!key) return;
+        const entry = db[key] || {};
+        const archived = Array.isArray(entry.events) ? entry.events : [];
+        const live = (typeof getTkaiSessionMessages === 'function' ? getTkaiSessionMessages() : (Array.isArray(collectedMessages) ? collectedMessages : []))
+            .filter((m) => normalizeTkaiUserDbKey(m?.user) === key);
+        const byId = new Map();
+        const add = (message) => {
+            if (!message) return;
+            const text = String(message.text || message.translatedText || '').trim();
+            const type = normalizeTkaiMessageType(message);
+            const ts = Number(message.ts || message.timestamp || 0) || 0;
+            const id = String(message.id || `${ts}:${type}:${text.slice(0, 80)}`);
+            if (!id || byId.has(id)) return;
+            byId.set(id, {
+                ...message,
+                id,
+                user: clean,
+                type,
+                ts: ts || Date.now(),
+                text,
+                translatedText: message.translatedText || '',
+                translatedLang: message.translatedLang || '',
+                giftName: message.giftName || '',
+                quantity: Number(message.quantity || 0) || undefined,
+                coins: Number(message.coins || 0) || 0,
+                sessionKey: message.sessionKey || ''
+            });
+        };
+        archived.forEach(add);
+        live.forEach(add);
+        return Array.from(byId.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+    }
+    function buildTkaiUserDbEvent(message) {
+        if (!message) return null;
+        const user = String(message.user || '').trim().replace(/^@+/, '');
+        const key = normalizeTkaiUserDbKey(user);
+        if (!key) return null;
+        const type = normalizeTkaiMessageType(message);
+        const text = String(message.text || message.translatedText || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+        const ts = Number(message.ts || message.timestamp || Date.now()) || Date.now();
+        const meta = (type === 'gift' || type === 'subscriber') ? safeResolveGiftMetaFromMessage(message) : null;
+        const giftName = String(message.giftName || meta?.giftName || '').trim().slice(0, 120);
+        const quantity = Math.max(1, Number(message.quantity || meta?.quantity || 1) || 1);
+        const coins = Math.max(0, Number(message.coins || meta?.coins || 0) || 0);
+        const fallbackId = `${ts}:${type}:${text.slice(0, 90)}:${giftName}:${quantity}:${coins}`;
+        return {
+            id: String(message.id || fallbackId),
+            user,
+            ts,
+            type,
+            text,
+            translatedText: String(message.translatedText || '').slice(0, 500),
+            translatedLang: String(message.translatedLang || '').slice(0, 20),
+            giftName,
+            quantity: type === 'gift' || type === 'subscriber' || type === 'like' ? quantity : undefined,
+            coins,
+            level: Number(message.level || message.joinLevel || 0) || undefined,
+            sessionKey: String(sessionStartedAt || message.sessionKey || '').trim()
+        };
+    }
+    function recomputeTkaiUserDbEntry(entry) {
+        const events = Array.isArray(entry.events) ? entry.events.slice().sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)) : [];
+        const giftTypes = {};
+        const sessionKeys = new Set();
+        let totalChat = 0;
+        let totalGifts = 0;
+        let totalCoins = 0;
+        let totalLikes = 0;
+        let totalShares = 0;
+        let totalJoins = 0;
+        let lastMessage = '';
+        events.forEach((event) => {
+            const type = normalizeTkaiMessageType(event);
+            if (event.sessionKey) sessionKeys.add(String(event.sessionKey));
+            if (type === 'gift' || type === 'subscriber') {
+                const qty = Math.max(1, Number(event.quantity || 1) || 1);
+                const name = String(event.giftName || event.text || 'Gift').trim().slice(0, 120);
+                totalGifts += qty;
+                totalCoins += Math.max(0, Number(event.coins || 0) || 0);
+                giftTypes[name] = (giftTypes[name] || 0) + qty;
+            } else if (type === 'like') {
+                totalLikes += Math.max(1, Number(event.quantity || 1) || 1);
+            } else if (type === 'share') {
+                totalShares += 1;
+            } else if (type === 'join') {
+                totalJoins += 1;
+            } else {
+                totalChat += 1;
+            }
+            if (event.text) lastMessage = String(event.text || '').slice(0, 160);
+        });
+        const firstSeen = events.length ? Number(events[0].ts || 0) : (Number(entry.firstSeen || 0) || Date.now());
+        const lastSeen = events.length ? Number(events[events.length - 1].ts || 0) : (Number(entry.lastSeen || 0) || Date.now());
+        entry.events = events;
+        entry.firstSeen = firstSeen || entry.firstSeen || Date.now();
+        entry.lastSeen = lastSeen || Date.now();
+        entry.sessions = Math.max(Number(entry.sessions || 0) || 0, sessionKeys.size || 0, entry.lastSessionKey ? 1 : 0);
+        entry.totalMessages = events.length;
+        entry.totalChat = totalChat;
+        entry.totalGifts = totalGifts;
+        entry.totalCoins = totalCoins;
+        entry.totalLikes = totalLikes;
+        entry.totalShares = totalShares;
+        entry.totalJoins = totalJoins;
+        entry.giftTypes = giftTypes;
+        entry.lastMessage = lastMessage || entry.lastMessage || '';
+        if (firstSeen && lastSeen && lastSeen >= firstSeen) {
+            entry.totalActiveMs = Math.max(Number(entry.totalActiveMs || 0) || 0, lastSeen - firstSeen);
+            entry.totalActiveMinutes = Math.floor((entry.totalActiveMs || 0) / 60000);
+        }
+        return entry;
+    }
+    function updateTkaiUserDBFromMessages(messages) {
+        const source = Array.isArray(messages) ? messages : [];
+        if (!source.length) return;
+        const db = getTkaiUserDB();
+        const maxEventsPerUser = Math.max(200, Math.min(5000, Number(DB.getSettings().tkaiUserArchiveLimit || 1500) || 1500));
+        source.forEach((message) => {
+            const event = buildTkaiUserDbEvent(message);
+            if (!event) return;
+            const key = normalizeTkaiUserDbKey(event.user);
             const existing = db[key] || {
-                user: u.user,
-                firstSeen: now,
+                user: event.user,
+                firstSeen: event.ts,
                 sessions: 0,
                 totalMessages: 0,
                 totalChat: 0,
@@ -7651,63 +8254,58 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 totalShares: 0,
                 totalJoins: 0,
                 totalActiveMs: 0,
-                lastSeen: 0,
+                lastSeen: event.ts,
                 giftTypes: {},
+                events: [],
                 note: ''
             };
-            existing.user = u.user;
-            existing.lastSeen = now;
-            const sessionKey = String(sessionStartedAt || '').trim();
-            if (sessionKey && existing.lastSessionKey !== sessionKey) {
-                existing.sessions = (existing.sessions || 0) + 1;
-                existing.lastSessionKey = sessionKey;
-            } else if (!existing.sessions) {
-                existing.sessions = 1;
+            existing.user = existing.user || event.user;
+            const events = Array.isArray(existing.events) ? existing.events.slice() : [];
+            if (!events.length && !existing.legacyTotals && Number(existing.totalMessages || 0) > 0) {
+                existing.legacyTotals = {
+                    totalMessages: Number(existing.totalMessages || 0) || 0,
+                    totalChat: Number(existing.totalChat || 0) || 0,
+                    totalGifts: Number(existing.totalGifts || 0) || 0,
+                    totalCoins: Number(existing.totalCoins || 0) || 0,
+                    totalLikes: Number(existing.totalLikes || 0) || 0,
+                    totalShares: Number(existing.totalShares || 0) || 0,
+                    totalJoins: Number(existing.totalJoins || 0) || 0,
+                    sessions: Number(existing.sessions || 0) || 0,
+                    firstSeen: existing.firstSeen || 0,
+                    lastSeen: existing.lastSeen || 0
+                };
             }
-            existing.totalMessages = (existing.totalMessages || 0) + (u.total || 0);
-            existing.totalChat = (existing.totalChat || 0) + (u.chat || 0);
-            existing.totalGifts = (existing.totalGifts || 0) + (u.gifts || 0);
-            existing.totalCoins = (existing.totalCoins || 0) + (u.coins || 0);
-            existing.totalLikes = (existing.totalLikes || 0) + (u.likes || 0);
-            existing.totalShares = (existing.totalShares || 0) + (u.shares || 0);
-            existing.totalJoins = (existing.totalJoins || 0) + (u.joins || 0);
-            existing.lastMessage = u.lastMessage || existing.lastMessage || '';
-            if (!existing.firstSeen || now < existing.firstSeen) existing.firstSeen = now;
-
-            const firstTs = Math.max(0, Number(u.firstSeen || 0));
-            const lastTs = Math.max(0, Number(u.lastTs || 0));
-            const prevTrackedTs = Math.max(0, Number(existing.lastActiveFromTs || 0));
-            if (lastTs > 0 && firstTs > 0 && lastTs >= firstTs) {
-                const spanStart = prevTrackedTs > 0 ? Math.max(prevTrackedTs, firstTs) : firstTs;
-                const deltaMs = Math.max(0, lastTs - spanStart);
-                existing.totalActiveMs = (existing.totalActiveMs || 0) + deltaMs;
-                existing.lastActiveFromTs = Math.max(prevTrackedTs, lastTs);
-                existing.totalActiveMinutes = Math.floor((existing.totalActiveMs || 0) / 60000);
-            }
-
-            if (Array.isArray(u.giftTypes)) {
-                u.giftTypes.forEach(([name, qty]) => {
-                    existing.giftTypes[name] = (existing.giftTypes[name] || 0) + qty;
-                });
-            }
-            db[key] = existing;
+            const ids = new Set(events.map((row) => String(row.id || '')).filter(Boolean));
+            if (!ids.has(event.id)) events.push(event);
+            existing.events = events
+                .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
+                .slice(-maxEventsPerUser);
+            db[key] = recomputeTkaiUserDbEntry(existing);
         });
         saveTkaiUserDB(db);
+    }
+    function updateTkaiUserDBFromStats(stats) {
+        if (!Array.isArray(stats) || !stats.length) return;
+        const sessionMessages = typeof getTkaiSessionMessages === 'function' ? getTkaiSessionMessages() : (Array.isArray(collectedMessages) ? collectedMessages : []);
+        updateTkaiUserDBFromMessages(sessionMessages);
     }
 
     function showTkaiUserGiftsModal(username) {
         const clean = String(username || '').trim().replace(/^@+/, '');
         if (!clean) return;
-        // Scan current session collectedMessages for this user's gifts
-        const userMsgs = (Array.isArray(collectedMessages) ? collectedMessages : [])
-            .filter((m) => String(m?.user || '').trim().toLowerCase() === clean.toLowerCase());
-        const giftMsgs = userMsgs.filter((m) => m.type === 'gift' || m.type === 'subscriber');
+        updateTkaiUserDBFromMessages(typeof getTkaiSessionMessages === 'function' ? getTkaiSessionMessages() : (Array.isArray(collectedMessages) ? collectedMessages : []));
+        const userMsgs = getTkaiUserDbMessages(clean);
+        const giftMsgs = userMsgs.filter((m) => {
+            const type = normalizeTkaiMessageType(m);
+            return type === 'gift' || type === 'subscriber';
+        });
         const giftMap = new Map();
         let totalCoins = 0;
         giftMsgs.forEach((m) => {
-            const name = String(m.giftName || m.text || 'Gift').trim().slice(0, 60);
+            const meta = safeResolveGiftMetaFromMessage(m);
+            const name = String(m.giftName || meta?.giftName || m.text || 'Gift').trim().slice(0, 60);
             const qty = Math.max(1, Number(m.quantity || 1));
-            const coins = Math.max(0, Number(m.coins || 0));
+            const coins = Math.max(0, Number(m.coins || meta?.coins || 0));
             totalCoins += coins;
             const row = giftMap.get(name) || { name, qty: 0, coins: 0, events: 0 };
             row.qty += qty;
@@ -7726,7 +8324,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         card.style.cssText = 'background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:20px;min-width:340px;max-width:520px;max-height:80vh;overflow-y:auto;color:#e5e7eb;font-size:13px';
         let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">`;
         html += `<div><div style="font-size:16px;font-weight:700;color:#fb923c">🎁 Darovi: @${escHtml(clean)}</div>`;
-        html += `<div style="font-size:11px;color:var(--text3,#6b7280);margin-top:2px">${formatNum(giftMsgs.length)} gift event(a) • ${formatNum(totalCoins)} 🪙 ova sesija`;
+        html += `<div style="font-size:11px;color:var(--text3,#6b7280);margin-top:2px">${formatNum(giftMsgs.length)} gift event(a) • ${formatNum(totalCoins)} 🪙 sve spremljene sesije`;
         html += ` • <span style="color:${sentiment.color}">${sentiment.emoji} ${escHtml(sentiment.label)}</span></div></div>`;
         html += `<div style="display:flex;gap:6px;align-items:center">`;
         html += `<button id="tkaiGiftModalMessages" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.4);color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">💬 Poruke</button>`;
@@ -7739,7 +8337,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
             html += `</tbody></table>`;
         } else {
-            html += `<div style="color:#6b7280;padding:12px 0">Nema gift podataka za ovog korisnika u ovoj sesiji.</div>`;
+            html += `<div style="color:#6b7280;padding:12px 0">Nema spremljenih gift podataka za ovog korisnika.</div>`;
         }
         if (dbEntry) {
             html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)">`;
@@ -7757,6 +8355,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (dbEntry.firstSeen) html += `<div style="grid-column:1/-1">Prva pojava: ${new Date(dbEntry.firstSeen).toLocaleDateString('hr-HR')}</div>`;
             html += `</div>`;
             if (dbEntry.note) html += `<div style="margin-top:6px;color:#a3e635;font-size:11px">📝 ${escHtml(dbEntry.note)}</div>`;
+            if (dbEntry.legacyTotals && Number(dbEntry.legacyTotals.totalMessages || 0) > Number(dbEntry.totalMessages || 0)) {
+                html += `<div style="margin-top:8px;padding:7px 8px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.18);border-radius:6px;color:#fcd34d;font-size:10px">Stari sažetak prije arhive: ${formatNum(dbEntry.legacyTotals.totalMessages || 0)} poruka • ${formatNum(dbEntry.legacyTotals.totalGifts || 0)} giftova • ${formatNum(dbEntry.legacyTotals.totalCoins || 0)} 🪙</div>`;
+            }
             html += `</div>`;
         }
         html += `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">`;
@@ -7782,6 +8383,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
 
     function showTkaiUserDBModal(username) {
+        updateTkaiUserDBFromMessages(typeof getTkaiSessionMessages === 'function' ? getTkaiSessionMessages() : (Array.isArray(collectedMessages) ? collectedMessages : []));
         const db = getTkaiUserDB();
         const allUsers = Object.values(db).sort((a, b) => (b.totalCoins || 0) - (a.totalCoins || 0) || (b.totalChat || 0) - (a.totalChat || 0));
         const targetUser = username ? String(username).trim().replace(/^@+/, '') : null;
@@ -7792,8 +8394,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const renderUser = (u) => {
             const topGifts = Object.entries(u.giftTypes || {}).sort((a, b) => b[1] - a[1]).slice(0, 4);
             // Compute live-session sentiment for this user
-            const liveMsgs = (Array.isArray(collectedMessages) ? collectedMessages : []).filter((m) => String(m?.user || '').toLowerCase() === String(u.user || '').toLowerCase());
-            const sent = liveMsgs.length ? computeUserSentiment(liveMsgs) : null;
+            const allUserMsgs = getTkaiUserDbMessages(u.user);
+            const sent = allUserMsgs.length ? computeUserSentiment(allUserMsgs) : null;
             let html = `<div style="padding:12px;background:rgba(255,255,255,.04);border-radius:8px;margin-bottom:8px">`;
             html += `<div style="display:flex;justify-content:space-between;align-items:flex-start">`;
             html += `<div><span style="color:${getUserColor(u.user)};font-weight:600;font-size:14px">@${escHtml(u.user)}</span>`;
@@ -7801,7 +8403,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (u.lastMessage) html += `<div style="font-size:11px;color:#9ca3af;margin-top:2px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(u.lastMessage)}</div>`;
             html += `</div>`;
             html += `<div style="display:flex;gap:6px;flex-shrink:0">`;
-            html += `<button data-show-msgs="${escHtml(u.user)}" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.4);color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">💬</button>`;
+            html += `<button data-show-msgs="${escHtml(u.user)}" title="Sve poruke i eventovi" style="background:rgba(96,165,250,.15);border:1px solid rgba(96,165,250,.4);color:#60a5fa;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">💬 Sve</button>`;
+            html += `<button data-show-gifts="${escHtml(u.user)}" title="Svi giftovi" style="background:rgba(251,146,60,.15);border:1px solid rgba(251,146,60,.4);color:#fb923c;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">🎁</button>`;
             html += `<button data-open-profile="${escHtml(u.user)}" style="background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.4);color:#34d399;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer">🔗</button>`;
             html += `</div></div>`;
             html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;font-size:11px;color:#9ca3af">`;
@@ -7814,9 +8417,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             html += `<div>Join: <b style="color:#e5e7eb">${formatNum(u.totalJoins || 0)}</b></div>`;
             html += `<div>Sesija: <b style="color:#e5e7eb">${formatNum(u.sessions || 0)}</b></div>`;
             html += `<div>Aktivan: <b style="color:#22d3ee">${formatDurationHoursMinutes(u.totalActiveMs || 0)}</b></div>`;
+            html += `<div>Eventi: <b style="color:#c4b5fd">${formatNum(Array.isArray(u.events) ? u.events.length : 0)}</b></div>`;
             html += `</div>`;
             if (topGifts.length) {
                 html += `<div style="font-size:10px;color:#6b7280;margin-top:4px">Giftovi: ${topGifts.map(([n, q]) => `${escHtml(n)} x${q}`).join(' • ')}</div>`;
+            }
+            if (u.legacyTotals && Number(u.legacyTotals.totalMessages || 0) > Number(u.totalMessages || 0)) {
+                html += `<div style="font-size:10px;color:#fcd34d;margin-top:4px">Stari sažetak: ${formatNum(u.legacyTotals.totalMessages || 0)} poruka • ${formatNum(u.legacyTotals.totalGifts || 0)} giftova • ${formatNum(u.legacyTotals.totalCoins || 0)} 🪙</div>`;
             }
             if (u.firstSeen) html += `<div style="font-size:10px;color:#6b7280;margin-top:2px">Prva pojava: ${new Date(u.firstSeen).toLocaleDateString('hr-HR')} • Zadnja: ${new Date(u.lastSeen || u.firstSeen).toLocaleDateString('hr-HR')}</div>`;
             // Note field
@@ -7875,6 +8482,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     const user = btn.dataset.showMsgs;
                     modal.remove();
                     showTkaiUserMessagesModal(user);
+                });
+            });
+            container.querySelectorAll('[data-show-gifts]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const user = btn.dataset.showGifts;
+                    modal.remove();
+                    showTkaiUserGiftsModal(user);
                 });
             });
             container.querySelectorAll('[data-open-profile]').forEach((btn) => {
@@ -11125,10 +11739,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
         // ── Nove statistike ──────────────────────────────────────────────
-        const msgsPerMin = elapsedMin > 0 ? (collectedMessages.length / elapsedMin).toFixed(1) : '-';
+        const sessionMessages = getTkaiSessionMessages();
+        const msgsPerMin = elapsedMin > 0 ? (sessionMessages.length / elapsedMin).toFixed(1) : '-';
         const msgsPerMinEl = document.getElementById('tkaiMsgsPerMin');
         if (msgsPerMinEl) msgsPerMinEl.textContent = msgsPerMin;
-        const uniqueUsers = new Set(collectedMessages.map(m => m.user).filter(Boolean)).size;
+        const uniqueUsers = new Set(sessionMessages.map(m => m.user).filter(Boolean)).size;
         const uniqueUsersEl = document.getElementById('tkaiUniqueUsers');
         if (uniqueUsersEl) uniqueUsersEl.textContent = formatNum(uniqueUsers);
         if (giftEventCountEl) giftEventCountEl.textContent = formatNum(giftStats.gifts.length);
@@ -11373,6 +11988,17 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     window.openTkaiListenFeedPopout = openListenFeedPopout;
     window.closeTkaiListenFeedPopout = closeListenFeedPopout;
+    function clearTkaiListenFeed() {
+        listeningMessages = [];
+        whisperPartialText = '';
+        try {
+            const transcriptWrap = document.getElementById('tkaiWhisperTranscript');
+            if (transcriptWrap) transcriptWrap.scrollTop = 0;
+        } catch (_) { }
+        renderListenFeed();
+        syncListenFeedPopout();
+    }
+    window.clearTkaiListenFeed = clearTkaiListenFeed;
     function renderListenFeed() {
         if (!listenFeedEl) return;
         const rows = Array.isArray(listeningMessages) ? listeningMessages.slice(-200) : [];
@@ -13635,6 +14261,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
     function clearConversation() {
         collectedMessages = [];
+        listeningMessages = [];
+        whisperPartialText = '';
         collectedQuestions = [];
         topSupporters = [];
         viewerSamples = [];
@@ -13664,6 +14292,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             repliesEl.innerHTML = '<div class="tkai-empty">Razgovor očišćen.<br>Pokreni skeniranje za nove poruke.</div>';
         }
         updateTkaiLastGiftDebug(null);
+        if (typeof clearTkaiListenFeed === 'function') clearTkaiListenFeed();
         renderMessages();
         renderGiftGallery();
         updateSessionStatsUI();
@@ -13672,31 +14301,34 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     function exportConversation() {
-        if (!collectedMessages.length) {
-            showToast('⚠️ Nema poruka za export.');
+        const sessionMessages = getTkaiSessionMessages();
+        if (!sessionMessages.length) {
+            showToast('⚠️ Nema poruka ili Listen Feed zapisa za export.');
             return;
         }
         const targetLang = readLangEl?.value || 'auto';
         const translateLang = getTranslateTargetLang();
         const replyLang = replyLangEl?.value || 'hr';
         const giftStats = computeGiftStats();
-        const userLimit = Math.max(200, collectedMessages.length);
-        const detailedInsights = computeInsightsSnapshot(collectedMessages);
+        const userLimit = Math.max(200, sessionMessages.length);
+        const detailedInsights = computeInsightsSnapshot(sessionMessages);
         const payload = {
             exportedAt: new Date().toISOString(),
             targetLanguage: targetLang,
             translateLanguage: translateLang,
             replyLanguage: replyLang,
-            messageCount: collectedMessages.length,
+            messageCount: sessionMessages.length,
+            listeningCount: sessionMessages.filter((message) => normalizeTkaiMessageType(message) === 'listening').length,
             sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
             peakViewers: peakViewerCount,
             totalCoins: giftStats.totalCoins,
-            mergedUsers: buildUserStats(collectedMessages, userLimit),
-            dailyStats: buildDailyStats(collectedMessages, userLimit),
+            mergedUsers: buildUserStats(sessionMessages, userLimit),
+            dailyStats: buildDailyStats(sessionMessages, userLimit),
             giftDetails: detailedInsights.giftDetails || {},
-            messages: collectedMessages.map(message => ({
+            messages: sessionMessages.map(message => ({
                 user: message.user,
                 text: message.text,
+                originalText: message.originalText || '',
                 translatedText: message.translatedText || '',
                 translatedLang: message.translatedLang || '',
                 type: message.type || 'chat',
@@ -13721,13 +14353,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     function exportCsvConversation() {
-        if (!collectedMessages.length) { showToast('⚠️ Nema poruka za CSV export.'); return; }
+        const sessionMessages = getTkaiSessionMessages();
+        if (!sessionMessages.length) { showToast('⚠️ Nema poruka ili Listen Feed zapisa za CSV export.'); return; }
         const esc = v => '"' + String(v || '').replace(/"/g, '""') + '"';
-        const rows = [['user', 'text', 'translatedText', 'type', 'coins', 'timestamp'].join(',')];
-        collectedMessages.forEach(m => {
-            rows.push([esc(m.user), esc(m.text), esc(m.translatedText || ''), esc(m.type || 'chat'), m.coins || 0, new Date(m.ts || Date.now()).toISOString()].join(','));
+        const rows = [['user', 'text', 'originalText', 'translatedText', 'translatedLang', 'type', 'coins', 'timestamp'].join(',')];
+        sessionMessages.forEach(m => {
+            rows.push([esc(m.user), esc(m.text), esc(m.originalText || ''), esc(m.translatedText || ''), esc(m.translatedLang || ''), esc(m.type || 'chat'), m.coins || 0, new Date(m.ts || Date.now()).toISOString()].join(','));
         });
-        const merged = buildUserStats(collectedMessages, DB.getSettings().tkaiUserScanLimit || 200);
+        const merged = buildUserStats(sessionMessages, DB.getSettings().tkaiUserScanLimit || 200);
         rows.push('');
         rows.push('MERGED_USERS');
         rows.push(['user', 'total', 'chat', 'gifts', 'joins', 'repeatMax', 'lastTs'].join(','));
@@ -13745,18 +14378,20 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     function saveSessionToHistory() {
-        if (!collectedMessages.length) return;
+        const sessionMessages = getTkaiSessionMessages();
+        if (!sessionMessages.length) return;
         try {
             const giftStats = computeGiftStats();
             const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
             const sessionRecord = {
                 savedAt: new Date().toISOString(),
-                messageCount: collectedMessages.length,
+                messageCount: sessionMessages.length,
+                listeningCount: sessionMessages.filter((message) => normalizeTkaiMessageType(message) === 'listening').length,
                 sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
                 peakViewers: peakViewerCount,
                 totalCoins: giftStats.totalCoins,
                 questions: collectedQuestions.slice(),
-                messages: collectedMessages.slice()
+                messages: sessionMessages.slice()
             };
             sessions.push(sessionRecord);
             if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
@@ -13770,7 +14405,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const autosaveEnabledRaw = DB.getSettings().tkaiAutosaveEnabled;
             const autosaveEnabled = autosaveEnabledRaw !== false && autosaveEnabledRaw !== 'false';
             if (!autosaveEnabled) return;
-            if (!Array.isArray(collectedMessages) || collectedMessages.length === 0) return;
+            const sessionMessages = getTkaiSessionMessages();
+            if (!sessionMessages.length) return;
             const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
             const payload = {
                 version: 1,
@@ -13782,7 +14418,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 topSupporters: Array.isArray(topSupporters) ? topSupporters.slice(0, 20) : [],
                 viewerSamples: Array.isArray(viewerSamples) ? viewerSamples.slice(-200) : [],
                 viewerSamplePoints: Array.isArray(viewerSamplePoints) ? viewerSamplePoints.slice(-200) : [],
-                messages: collectedMessages.slice(-maxKeep),
+                messages: sessionMessages.slice(-maxKeep),
+                listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice(-500) : [],
             };
             localStorage.setItem(TKAI_AUTOSAVE_KEY, JSON.stringify(payload));
         } catch (e) {
@@ -13807,10 +14444,18 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const msgs = Array.isArray(saved?.messages)
                 ? saved.messages.filter((m) => m && String(m.text || '').trim())
                 : [];
-            if (!msgs.length) return;
+            const savedListening = Array.isArray(saved?.listeningMessages)
+                ? saved.listeningMessages.filter((m) => m && String(m.text || '').trim())
+                : [];
+            const listeningRows = savedListening.length
+                ? savedListening
+                : msgs.filter((m) => normalizeTkaiMessageType(m) === 'listening');
+            const chatRows = msgs.filter((m) => normalizeTkaiMessageType(m) !== 'listening');
+            if (!chatRows.length && !listeningRows.length) return;
 
             const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
-            collectedMessages = msgs.slice(-maxKeep);
+            collectedMessages = chatRows.slice(-maxKeep);
+            listeningMessages = listeningRows.slice(-500).map((message) => ({ ...message, type: 'listening', user: message.user || 'Slušanje' }));
             selectedMsgIds.clear();
             sessionStartedAt = Number(saved?.sessionStartedAt || 0) || Date.now();
             liveViewerCount = Number(saved?.liveViewerCount || 0) || 0;
@@ -13820,10 +14465,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             viewerSamplePoints = Array.isArray(saved?.viewerSamplePoints) ? saved.viewerSamplePoints.slice(-200) : [];
 
             renderMessages();
+            renderListenFeed();
             renderGiftGallery();
             updateSessionStatsUI();
-            if (msgCountEl) msgCountEl.textContent = collectedMessages.length + ' poruka';
-            showToast('💾 Autosave učitan (' + collectedMessages.length + ' poruka)');
+            const totalLoaded = collectedMessages.length + listeningMessages.length;
+            if (msgCountEl) msgCountEl.textContent = totalLoaded + ' događaja';
+            showToast('💾 Autosave učitan (' + totalLoaded + ' događaja)');
         } catch (e) {
             console.warn('[TikTokAI] autosave restore failed', e);
         }
@@ -18017,7 +18664,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         try {
             // Force immediate snapshot publish
-            const messages = Array.isArray(collectedMessages) ? collectedMessages.slice(-5000) : [];
+            const messages = getTkaiSessionMessages().slice(-5000);
             if (!messages.length) { showToast('⚠ No TikTok Chat AI data to send.'); return; }
 
             const giftStats = computeGiftStats();
@@ -18068,7 +18715,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 },
             };
             // Also persist to autosave so dashboard can load it without IPC
-            try { localStorage.setItem('ex_tkai_live_autosave', JSON.stringify({ messages, sessionStartedAt, liveViewerCount, peakViewerCount, totalCoins: giftStats.totalCoins })); } catch (_) { }
+            try {
+                localStorage.setItem('ex_tkai_live_autosave', JSON.stringify({
+                    messages,
+                    listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice(-500) : [],
+                    sessionStartedAt,
+                    liveViewerCount,
+                    peakViewerCount,
+                    totalCoins: giftStats.totalCoins
+                }));
+            } catch (_) { }
             await window.etherx.liveos.publishSnapshot(snapshot);
             showToast(`✅ ${messages.length} events sent to LiveOS Dashboard`);
             // Open dashboard
@@ -18317,6 +18973,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     // New context menu item handlers
     document.getElementById('ctx-new-tab').addEventListener('click', () => createTab());
+    document.getElementById('ctx-open-user-db')?.addEventListener('click', () => {
+        try {
+            if (typeof showTkaiUserDBModal === 'function') showTkaiUserDBModal(null);
+        } catch (e) {
+            console.warn('[TikTokAI] open user DB from context menu failed', e);
+            if (typeof showToast === 'function') showToast('⚠️ Baza korisnika se ne može otvoriti.');
+        }
+    });
     document.getElementById('ctx-reload').addEventListener('click', () => document.getElementById('btnReload').click());
     document.getElementById('ctx-find').addEventListener('click', openFind);
     document.getElementById('ctx-devtools').addEventListener('click', toggleDevtools);
@@ -25667,7 +26331,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             try {
                 if (canDeployFromGithub) {
                     if (progressLabel) {
-                        progressLabel.textContent = '⬇️ GitHub pull + deploy.sh...';
+                        progressLabel.textContent = '⬇️ Povlačim najnoviji browser s GitHuba...';
                         progressLabel.style.color = '#7dd3fc';
                     }
                     const deployRes = await window.etherx.update.deployFromGithub();
@@ -25675,22 +26339,23 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                         if (progressBar) progressBar.style.width = '100%';
                         if (progressPct) progressPct.textContent = '100%';
                         if (progressLabel) {
-                            progressLabel.textContent = '✅ GitHub deploy završen. Restartaj aplikaciju.';
+                            const changedText = deployRes.changed ? 'preuzet je novi kod' : 'već je bio najnoviji kod';
+                            progressLabel.textContent = '✅ GitHub update završen (' + changedText + '). Restartaj aplikaciju.';
                             progressLabel.style.color = '#27c93f';
                         }
-                        btn.textContent = '✅ Deploy gotov';
+                        btn.textContent = '✅ GitHub update gotov';
                         btn.disabled = false;
-                        showToast('✅ Ažurirano s GitHuba i deployano. Pokreni aplikaciju ponovno.');
+                        showToast('✅ Ažurirano s GitHuba. Pokreni aplikaciju ponovno.');
                         return;
                     }
                     const deployError = String(deployRes?.error || 'GitHub deploy error');
-                    const canFallbackToAsset = /deploy\.sh|source deploy|git repozitorij/i.test(deployError);
+                    const canFallbackToAsset = /source deploy|git repozitorij|ff-only|fetch|merge|stash/i.test(deployError);
                     if (!canFallbackToAsset) throw new Error(deployError);
                     if (progressLabel) {
-                        progressLabel.textContent = 'ℹ️ Source deploy nije dostupan, preuzimam release paket...';
+                        progressLabel.textContent = 'ℹ️ GitHub source update nije dostupan, preuzimam release paket...';
                         progressLabel.style.color = '#ffbd2e';
                     }
-                    showToast('ℹ️ Source deploy nije dostupan, nastavljam standardni download update.');
+                    showToast('ℹ️ GitHub source update nije dostupan, nastavljam standardni download update.');
                 }
 
                 // Listen for progress

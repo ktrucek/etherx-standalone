@@ -4751,7 +4751,7 @@ function setupIPC() {
     }
   });
 
-  // Source-based update path: pull latest from GitHub and run local deploy.sh
+  // Source-based update path: pull latest from GitHub for unpackaged/server installs.
   ipcMain.handle("update:deployFromGithub", async () => {
     if (app.isPackaged) {
       return {
@@ -4780,8 +4780,17 @@ function setupIPC() {
       if (!root) {
         return {
           ok: false,
-          error: "Nisam pronašao Git repozitorij s deploy.sh za source deploy.",
+          error: "Nisam pronašao Git repozitorij za GitHub source update.",
         };
+      }
+
+      const githubRemoteUrl = "https://github.com/ktrucek/etherx-standalone.git";
+      const remoteRun = await execFileAsync("git", ["-C", root, "remote"]);
+      const remotes = String(remoteRun.stdout || "").split(/\s+/).filter(Boolean);
+      if (remotes.includes("github")) {
+        await execFileAsync("git", ["-C", root, "remote", "set-url", "github", githubRemoteUrl]);
+      } else {
+        await execFileAsync("git", ["-C", root, "remote", "add", "github", githubRemoteUrl]);
       }
 
       const branchRun = await execFileAsync("git", [
@@ -4791,29 +4800,57 @@ function setupIPC() {
         "--abbrev-ref",
         "HEAD",
       ]);
-      const branch = String(branchRun.stdout || "main").trim() || "main";
+      let branch = String(branchRun.stdout || "main").trim() || "main";
+      if (branch === "HEAD") branch = "main";
 
-      await execFileAsync("git", ["-C", root, "fetch", "--tags", "origin"]);
-      await execFileAsync("git", [
-        "-C",
-        root,
-        "pull",
-        "--ff-only",
-        "origin",
-        branch,
-      ]);
+      const statusRun = await execFileAsync("git", ["-C", root, "status", "--porcelain"]);
+      const wasDirty = String(statusRun.stdout || "").trim().length > 0;
+      let stashCreated = false;
+      let stashName = "";
+      if (wasDirty) {
+        stashName = "etherx-github-update-" + Date.now();
+        await execFileAsync("git", ["-C", root, "stash", "push", "--include-untracked", "-m", stashName]);
+        stashCreated = true;
+      }
 
-      await execFileAsync("bash", [path.join(root, "deploy.sh")], { cwd: root });
+      let before = "";
+      let after = "";
+      try {
+        before = String((await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"])).stdout || "").trim();
+        await execFileAsync("git", ["-C", root, "fetch", "--tags", "github", branch]);
+        await execFileAsync("git", [
+          "-C",
+          root,
+          "merge",
+          "--ff-only",
+          "FETCH_HEAD",
+        ]);
+        after = String((await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"])).stdout || "").trim();
+      } finally {
+        if (stashCreated) {
+          try {
+            await execFileAsync("git", ["-C", root, "stash", "pop"]);
+          } catch (stashError) {
+            stashError.message = "GitHub update je povučen, ali lokalne izmjene se nisu mogle automatski vratiti iz stash-a. Ručno riješi stash konflikt. Detalj: " + (stashError.stderr || stashError.message || stashError);
+            throw stashError;
+          }
+        }
+      }
 
       return {
         ok: true,
         root,
         branch,
+        remote: "github",
+        before,
+        after,
+        changed: before && after ? before !== after : false,
+        restoredLocalChanges: stashCreated,
       };
     } catch (e) {
       return {
         ok: false,
-        error: String(e?.message || e),
+        error: String(e?.stderr || e?.message || e),
       };
     }
   });
