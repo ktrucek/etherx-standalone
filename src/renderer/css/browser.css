@@ -4852,7 +4852,7 @@ body.tkai-panel-interacting * {
 
 .tkai-main {
   min-height: 230px;
-  flex: 0 0 clamp(230px, 34vh, 320px);
+  flex: 1 1 clamp(250px, 38vh, 380px);
 }
 
 .tkai-config {
@@ -4952,6 +4952,23 @@ body.tkai-panel-interacting * {
 
 .tkai-feed-section.listen-feed {
   flex: 0.62;
+}
+
+.tkai-listen-under-chat {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(45, 212, 191, 0.18);
+  border-bottom: 1px solid rgba(45, 212, 191, 0.1);
+  background: rgba(45, 212, 191, 0.025);
+}
+
+.tkai-listen-under-chat .tkai-listen-feed {
+  max-height: 128px;
+}
+
+.tkai-gift-gallery-header {
+  border-top: 0;
 }
 
 .tkai-feed-section.gift-feed {

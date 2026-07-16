@@ -3082,6 +3082,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     let active = false;
     let connecting = false;
     let connectionTimer = null;
+    let lastWhisperErrorAt = 0;
     let transcriptLines = [];
     const MAX_LINES = 200;
 
@@ -3116,7 +3117,14 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const badge = document.getElementById('tkaiWhisperLangBadge');
         if (badge) {
             const mode = cfg.task === 'both' ? 'both' : (cfg.task === 'translate' ? 'translate' : 'transcribe');
-            badge.textContent = (cfg.lang === 'auto' ? 'auto' : cfg.lang) + (mode === 'transcribe' ? '' : ' -> ' + getWhisperTargetLang(cfg));
+            const sourceLang = cfg.lang === 'auto' ? 'auto' : cfg.lang.toUpperCase();
+            const targetLang = getWhisperTargetLang(cfg).toUpperCase();
+            badge.textContent = mode === 'transcribe'
+                ? ('src ' + sourceLang)
+                : ('src ' + sourceLang + ' -> ' + targetLang);
+            badge.title = mode === 'transcribe'
+                ? 'Transkripcija bez prijevoda'
+                : 'Jezik prijevoda: ' + targetLang;
         }
     }
 
@@ -3243,7 +3251,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             text: cfg.task === 'translate' && translated ? translated : clean,
             originalText: clean,
             translatedText: translated,
-            translatedLang: translated ? targetLang : '',
+            translatedLang: (cfg.task === 'translate' || cfg.task === 'both') ? targetLang : '',
             task: cfg.task,
             sourceLang: cfg.lang === 'auto' ? '' : cfg.lang,
             source: 'WhisperLive',
@@ -3369,6 +3377,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             try {
                 ws = new WebSocket(wsUrl);
             } catch (e) {
+                connecting = false;
+                clearConnectionTimer();
+                setConnectingBtn(false);
                 setStatus('❌ ' + e.message, '#f87171');
                 if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + e.message);
                 return;
@@ -3377,6 +3388,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             connectionTimer = setTimeout(() => {
                 if (!connecting || wsRef !== ws) return;
                 connecting = false;
+                lastWhisperErrorAt = Date.now();
                 setConnectingBtn(false);
                 setStatus('❌ Timeout spajanja na ' + cfg.host + ':' + cfg.port + ' — WhisperLive server ne odgovara', '#f87171');
                 try { ws.close(); } catch (_) { }
@@ -3466,8 +3478,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
             ws.onerror = () => {
                 const wasConnecting = connecting;
+                if (wsRef === ws) wsRef = null;
                 connecting = false;
+                active = false;
+                lastWhisperErrorAt = Date.now();
                 clearConnectionTimer();
+                stopAudio();
                 setConnectingBtn(false);
                 setStatus('❌ Greška veze — provjeri radi li WhisperLive server na ' + cfg.host + ':' + cfg.port, '#f87171');
                 if (wasConnecting && typeof showToast === 'function') showToast('❌ WhisperLive veza nije uspjela');
@@ -3475,15 +3491,16 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
             ws.onclose = () => {
                 clearConnectionTimer();
+                if (wsRef === ws) wsRef = null;
+                connecting = false;
+                stopAudio();
                 if (active) {
                     active = false;
                     setToggleBtn(false);
-                    stopAudio();
                     setStatus('⏸ Veza prekinuta', '#94a3b8');
-                } else if (connecting) {
-                    connecting = false;
+                } else {
                     setConnectingBtn(false);
-                    setStatus('❌ Veza zatvorena prije spajanja — server nije spreman', '#f87171');
+                    if (Date.now() - lastWhisperErrorAt > 1200) setStatus('⏸ WhisperLive nije spojen', '#94a3b8');
                 }
             };
         } catch (err) {
@@ -25687,7 +25704,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     });
                 }
 
-                const updateAssetUrl = window._pendingUpdateAsset.apiUrl || window._pendingUpdateAsset.url;
+                const updateAssetUrl = window._pendingUpdateAsset.url || window._pendingUpdateAsset.browserUrl || window._pendingUpdateAsset.apiUrl;
                 const result = await window.etherx.update.download(updateAssetUrl, window._pendingUpdateAsset.name);
                 if (!result.ok) throw new Error(result.error || 'Download error');
 

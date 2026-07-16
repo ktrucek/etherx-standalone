@@ -4622,6 +4622,28 @@ function setupIPC() {
       };
       const redirectCodes = new Set([301, 302, 303, 307, 308]);
       const fetchUpdateAsset = async (initialUrl) => {
+        const initialValidatedUrl = normalizeUpdateUrl(initialUrl);
+        if (!initialValidatedUrl) {
+          console.error("[Update] Blocked unsafe URL:", initialUrl);
+          throw new Error("Blocked unsafe update URL");
+        }
+        try {
+          const followedResponse = await net.fetch(initialValidatedUrl, {
+            method: "GET",
+            headers: buildUpdateHeaders(initialValidatedUrl),
+            redirect: "follow",
+          });
+          const finalUrl = normalizeUpdateUrl(followedResponse.url || initialValidatedUrl);
+          if (!finalUrl) {
+            throw new Error("Blocked unsafe update redirect: " + (followedResponse.url || "(unknown final URL)"));
+          }
+          return followedResponse;
+        } catch (followErr) {
+          if (!/redirect|err_aborted|\(-3\)/i.test(String(followErr?.message || followErr))) {
+            throw followErr;
+          }
+          if (ETHERX_DEBUG_LOGS) console.log("[Update] Automatic redirect follow failed, falling back to manual redirect handling:", followErr.message);
+        }
         let requestUrl = initialUrl;
         const visitedUrls = new Set();
         const redirectTrace = [];
