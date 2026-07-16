@@ -3099,7 +3099,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
     function updateSection() {
         const cfg = getCfg();
-        const section = document.getElementById('tkaiSlušanjeSection');
+        const section = document.getElementById('tkaiSlusanjeSection');
         if (section) section.style.display = cfg.enabled ? '' : 'none';
         const badge = document.getElementById('tkaiWhisperLangBadge');
         if (badge) badge.textContent = cfg.lang === 'auto' ? 'auto' : cfg.lang;
@@ -3199,103 +3199,109 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     }
 
     async function start() {
-        if (active) return;
-        const cfg = getCfg();
-        setStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
-
-        const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
-        let ws;
         try {
-            ws = new WebSocket(wsUrl);
-        } catch (e) {
-            setStatus('❌ ' + e.message, '#f87171');
-            if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + e.message);
-            return;
-        }
-        wsRef = ws;
+            if (active) return;
+            const cfg = getCfg();
+            setStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
 
-        ws.onopen = async () => {
-            // Send WhisperLive config message
-            const uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
-            const config = {
-                uid,
-                language: cfg.lang === 'auto' ? null : cfg.lang,
-                task: cfg.task,
-                model: cfg.model,
-                use_vad: cfg.vad,
-                max_clients: 4,
-                max_connection_time: 600,
-                word_timestamps: cfg.wordTs,
-                hotwords: cfg.hotwords || null,
-                initial_prompt: cfg.initialPrompt || null,
-                diarization: cfg.diarize,
-                max_speakers: cfg.maxSpeakers,
-            };
-            ws.send(JSON.stringify(config));
-
-            // Capture microphone
+            const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
+            let ws;
             try {
-                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const source = audioCtx.createMediaStreamSource(mediaStream);
-                const bufferSize = 4096;
-                processorNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
-                processorNode.onaudioprocess = (e) => {
-                    if (!active || ws.readyState !== WebSocket.OPEN) return;
-                    const input = e.inputBuffer.getChannelData(0);
-                    const resampled = resampleBuffer(input, audioCtx.sampleRate);
-                    // Copy to avoid detached buffer issues
-                    const copy = new Float32Array(resampled.length);
-                    copy.set(resampled);
-                    ws.send(copy.buffer);
+                ws = new WebSocket(wsUrl);
+            } catch (e) {
+                setStatus('❌ ' + e.message, '#f87171');
+                if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + e.message);
+                return;
+            }
+            wsRef = ws;
+
+            ws.onopen = async () => {
+                // Send WhisperLive config message
+                const uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+                const config = {
+                    uid,
+                    language: cfg.lang === 'auto' ? null : cfg.lang,
+                    task: cfg.task,
+                    model: cfg.model,
+                    use_vad: cfg.vad,
+                    max_clients: 4,
+                    max_connection_time: 600,
+                    word_timestamps: cfg.wordTs,
+                    hotwords: cfg.hotwords || null,
+                    initial_prompt: cfg.initialPrompt || null,
+                    diarization: cfg.diarize,
+                    max_speakers: cfg.maxSpeakers,
                 };
-                source.connect(processorNode);
-                processorNode.connect(audioCtx.destination);
-                active = true;
-                setToggleBtn(true);
-                setStatus('🔴 Sluša…', '#4ade80');
-            } catch (micErr) {
-                setStatus('❌ Mikrofon: ' + micErr.message, '#f87171');
-                ws.close();
-                active = false;
-                setToggleBtn(false);
-                if (typeof showToast === 'function') showToast('❌ Mikrofon nedostupan: ' + micErr.message);
-            }
-        };
+                ws.send(JSON.stringify(config));
 
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.message === 'WAIT') { setStatus('⏳ Server zauzet…', '#fbbf24'); return; }
-                if (data.message === 'SERVER_READY') { setStatus('🔴 Sluša…', '#4ade80'); return; }
-                if (data.message === 'DISCONNECT') { stop(); if (typeof showToast === 'function') showToast('⚠️ WhisperLive prekinuo vezu'); return; }
-
-                // WhisperLive sends { segments: [{text, completed, ...}, ...] }
-                if (Array.isArray(data.segments)) {
-                    data.segments.forEach(seg => {
-                        const t = String(seg.text || '').trim();
-                        if (!t) return;
-                        appendTranscript(t, !seg.completed);
-                    });
-                    return;
+                // Capture microphone
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 }, video: false });
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioCtx.createMediaStreamSource(mediaStream);
+                    const bufferSize = 4096;
+                    processorNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+                    processorNode.onaudioprocess = (e) => {
+                        if (!active || ws.readyState !== WebSocket.OPEN) return;
+                        const input = e.inputBuffer.getChannelData(0);
+                        const resampled = resampleBuffer(input, audioCtx.sampleRate);
+                        // Copy to avoid detached buffer issues
+                        const copy = new Float32Array(resampled.length);
+                        copy.set(resampled);
+                        ws.send(copy.buffer);
+                    };
+                    source.connect(processorNode);
+                    processorNode.connect(audioCtx.destination);
+                    active = true;
+                    setToggleBtn(true);
+                    setStatus('🔴 Sluša…', '#4ade80');
+                } catch (micErr) {
+                    setStatus('❌ Mikrofon: ' + micErr.message, '#f87171');
+                    ws.close();
+                    active = false;
+                    setToggleBtn(false);
+                    if (typeof showToast === 'function') showToast('❌ Mikrofon nedostupan: ' + micErr.message);
                 }
-                // Fallback: { text, is_partial }
-                if (data.text !== undefined) {
-                    appendTranscript(String(data.text || '').trim(), data.is_partial === true);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.message === 'WAIT') { setStatus('⏳ Server zauzet…', '#fbbf24'); return; }
+                    if (data.message === 'SERVER_READY') { setStatus('🔴 Sluša…', '#4ade80'); return; }
+                    if (data.message === 'DISCONNECT') { stop(); if (typeof showToast === 'function') showToast('⚠️ WhisperLive prekinuo vezu'); return; }
+
+                    // WhisperLive sends { segments: [{text, completed, ...}, ...] }
+                    if (Array.isArray(data.segments)) {
+                        data.segments.forEach(seg => {
+                            const t = String(seg.text || '').trim();
+                            if (!t) return;
+                            appendTranscript(t, !seg.completed);
+                        });
+                        return;
+                    }
+                    // Fallback: { text, is_partial }
+                    if (data.text !== undefined) {
+                        appendTranscript(String(data.text || '').trim(), data.is_partial === true);
+                    }
+                } catch (_) { }
+            };
+
+            ws.onerror = () => { setStatus('❌ Greška veze', '#f87171'); };
+
+            ws.onclose = () => {
+                if (active) {
+                    active = false;
+                    setToggleBtn(false);
+                    stopAudio();
+                    setStatus('⏸ Veza prekinuta', '#94a3b8');
                 }
-            } catch (_) { }
-        };
-
-        ws.onerror = () => { setStatus('❌ Greška veze', '#f87171'); };
-
-        ws.onclose = () => {
-            if (active) {
-                active = false;
-                setToggleBtn(false);
-                stopAudio();
-                setStatus('⏸ Veza prekinuta', '#94a3b8');
-            }
-        };
+            };
+        } catch (err) {
+            console.error('[WhisperLive] start failed:', err);
+            try { stop(); } catch (_) { }
+            setStatus('⚠️ Whisper greška', '#fbbf24');
+        }
     }
 
     async function testConnection() {
@@ -3323,50 +3329,57 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     }
 
     function init() {
-        updateSection();
+        try {
+            updateSection();
 
-        document.getElementById('tkaiWhisperToggleBtn')?.addEventListener('click', () => {
-            if (active) stop(); else start();
-        });
-
-        document.getElementById('tkaiWhisperExportBtn')?.addEventListener('click', () => {
-            if (!transcriptLines.length) { if (typeof showToast === 'function') showToast('Nema transkripta za izvoz'); return; }
-            const content = transcriptLines.map(l => '[' + l.time + '] ' + l.text).join('\n');
-            const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            if (typeof downloadTextFile === 'function') downloadTextFile('whisper-transkript-' + ts + '.txt', content);
-            if (typeof showToast === 'function') showToast('📄 Transkript izvezen');
-        });
-
-        document.getElementById('tkaiWhisperClearBtn')?.addEventListener('click', () => {
-            transcriptLines = [];
-            const el = document.getElementById('tkaiWhisperTranscript');
-            if (el) el.innerHTML = '<div class="tkai-empty" style="font-size:11px;padding:6px 0">Klikni ▶ Start za live transkript govora (DJ, voditelja...).<br><span style="font-size:10px;color:var(--text3)">Potreban: WhisperLive server → Settings → AI Live Chat → 🎙️ WhisperLive</span></div>';
-        });
-
-        document.getElementById('tkaiWhisperCollapseBtn')?.addEventListener('click', () => {
-            const wrap = document.getElementById('tkaiWhisperTranscriptWrap');
-            const btn = document.getElementById('tkaiWhisperCollapseBtn');
-            if (!wrap) return;
-            const hidden = wrap.style.display === 'none';
-            wrap.style.display = hidden ? '' : 'none';
-            if (btn) btn.textContent = hidden ? '−' : '+';
-        });
-
-        document.getElementById('btnTestWhisperConnection')?.addEventListener('click', testConnection);
-
-        // Watch tkaiWhisperEnabled toggle to show/hide Slušanje section
-        document.querySelectorAll('[data-setting="tkaiWhisperEnabled"]').forEach(toggle => {
-            new MutationObserver(updateSection).observe(toggle, { attributes: true, attributeFilter: ['class'] });
-            toggle.addEventListener('change', updateSection);
-        });
-
-        // Update language badge on select change
-        document.querySelectorAll('[data-setting="tkaiWhisperLang"]').forEach(sel => {
-            sel.addEventListener('change', () => {
-                const badge = document.getElementById('tkaiWhisperLangBadge');
-                if (badge) badge.textContent = sel.value === 'auto' ? 'auto' : sel.value;
+            document.getElementById('tkaiWhisperToggleBtn')?.addEventListener('click', () => {
+                if (active) stop(); else start();
             });
-        });
+
+            document.getElementById('tkaiWhisperExportBtn')?.addEventListener('click', () => {
+                if (!transcriptLines.length) { if (typeof showToast === 'function') showToast('Nema transkripta za izvoz'); return; }
+                const content = transcriptLines.map(l => '[' + l.time + '] ' + l.text).join('\n');
+                const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                if (typeof downloadTextFile === 'function') downloadTextFile('whisper-transkript-' + ts + '.txt', content);
+                if (typeof showToast === 'function') showToast('📄 Transkript izvezen');
+            });
+
+            document.getElementById('tkaiWhisperClearBtn')?.addEventListener('click', () => {
+                transcriptLines = [];
+                const el = document.getElementById('tkaiWhisperTranscript');
+                if (el) el.innerHTML = '<div class="tkai-empty" style="font-size:11px;padding:6px 0">Klikni ▶ Start za live transkript govora (DJ, voditelja...).<br><span style="font-size:10px;color:var(--text3)">Potreban: WhisperLive server → Settings → AI Live Chat → 🎙️ WhisperLive</span></div>';
+            });
+
+            document.getElementById('tkaiWhisperCollapseBtn')?.addEventListener('click', () => {
+                const wrap = document.getElementById('tkaiWhisperTranscriptWrap');
+                const btn = document.getElementById('tkaiWhisperCollapseBtn');
+                if (!wrap) return;
+                const hidden = wrap.style.display === 'none';
+                wrap.style.display = hidden ? '' : 'none';
+                if (btn) btn.textContent = hidden ? '−' : '+';
+            });
+
+            document.getElementById('btnTestWhisperConnection')?.addEventListener('click', testConnection);
+
+            // Watch tkaiWhisperEnabled toggle to show/hide Slušanje section
+            document.querySelectorAll('[data-setting="tkaiWhisperEnabled"]').forEach(toggle => {
+                if (typeof MutationObserver === 'function') {
+                    new MutationObserver(updateSection).observe(toggle, { attributes: true, attributeFilter: ['class'] });
+                }
+                toggle.addEventListener('change', updateSection);
+            });
+
+            // Update language badge on select change
+            document.querySelectorAll('[data-setting="tkaiWhisperLang"]').forEach(sel => {
+                sel.addEventListener('change', () => {
+                    const badge = document.getElementById('tkaiWhisperLangBadge');
+                    if (badge) badge.textContent = sel.value === 'auto' ? 'auto' : sel.value;
+                });
+            });
+        } catch (err) {
+            console.error('[WhisperLive] init failed:', err);
+            setStatus('⚠️ Whisper isključen (greška inicijalizacije)', '#fbbf24');
+        }
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(init, 600));
