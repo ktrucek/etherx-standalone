@@ -16,7 +16,7 @@ const path = require("path");
 const fs = require("fs");
 const https = require("https");
 const crypto = require("crypto");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const ETHERX_DEBUG_LOGS = process.env.ETHERX_DEBUG === "1" || process.env.ETHERX_DEBUG_LOGS === "1";
 let AdmZip;
 try {
@@ -1365,6 +1365,173 @@ async function installPythonBridgeDeps() {
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
   }
+}
+
+function resolveWhisperLiveRuntimeRoot() {
+  const baseRoot = app.isPackaged
+    ? app.getPath("userData")
+    : resolvePythonProjectRoot();
+  const runtimeRoot = path.join(baseRoot, "whisperlive-runtime");
+  try {
+    fs.mkdirSync(runtimeRoot, { recursive: true });
+  } catch (_) { }
+  return runtimeRoot;
+}
+
+function getWhisperLiveInstallPlan(requestedMode = "auto") {
+  const platform = process.platform;
+  const mode = String(requestedMode || "auto").trim().toLowerCase();
+  const resolvedMode = mode === "auto"
+    ? (platform === "darwin" ? "docker-cpu" : "docker-cpu")
+    : mode;
+  const dockerCpuArgs = ["run", "-d", "--rm", "--name", "etherx-whisperlive", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
+  const dockerGpuArgs = ["run", "-d", "--rm", "--name", "etherx-whisperlive", "--gpus", "all", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"];
+  const pipCommand = platform === "win32"
+    ? "py -m venv .venv-whisperlive && .venv-whisperlive\\Scripts\\python.exe -m pip install -U pip whisper-live && .venv-whisperlive\\Scripts\\python.exe etherx_whisperlive_server.py"
+    : "python3 -m venv .venv-whisperlive && .venv-whisperlive/bin/python -m pip install -U pip whisper-live && .venv-whisperlive/bin/python etherx_whisperlive_server.py";
+
+  return {
+    platform,
+    mode: resolvedMode,
+    endpoint: "ws://localhost:9090",
+    dockerCpuCommand: "docker " + dockerCpuArgs.join(" "),
+    dockerGpuCommand: "docker " + dockerGpuArgs.join(" "),
+    pipCommand,
+    recommendation: platform === "darwin"
+      ? "macOS: koristi Docker CPU ili pip. Docker GPU nije podrzan na Macu."
+      : platform === "win32"
+        ? "Windows: Docker CPU je najjednostavniji. Docker GPU koristi samo uz NVIDIA driver i Docker GPU runtime; pip koristi lokalni Python venv."
+        : platform === "linux"
+          ? "Linux: Docker CPU, Docker GPU ili pip su dostupni. GPU koristi samo uz NVIDIA runtime."
+          : "Nepoznat OS: koristi Docker CPU ili pip ako su dostupni na sustavu.",
+  };
+}
+
+function writeWhisperLiveServerScript(runtimeRoot) {
+  const serverPath = path.join(runtimeRoot, "etherx_whisperlive_server.py");
+  const content = [
+    "import os",
+    "os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')",
+    "os.environ.setdefault('OMP_NUM_THREADS', '1')",
+    "from whisper_live.server import TranscriptionServer",
+    "server = TranscriptionServer()",
+    "server.run(",
+    "    '0.0.0.0',",
+    "    port=9090,",
+    "    backend='faster_whisper',",
+    "    max_clients=4,",
+    "    max_connection_time=600,",
+    "    cache_path=os.path.expanduser('~/.cache/whisper-live/'),",
+    ")",
+    "",
+  ].join("\n");
+  fs.writeFileSync(serverPath, content, "utf8");
+  return serverPath;
+}
+
+async function startWhisperLivePipServer() {
+  const runtimeRoot = resolveWhisperLiveRuntimeRoot();
+  const serverPath = writeWhisperLiveServerScript(runtimeRoot);
+  const venvDir = path.join(runtimeRoot, ".venv-whisperlive");
+  const venvPython = process.platform === "win32"
+    ? path.join(venvDir, "Scripts", "python.exe")
+    : path.join(venvDir, "bin", "python");
+
+  if (!fs.existsSync(venvPython)) {
+    const candidates = resolvePythonCandidates(runtimeRoot);
+    let lastError = "";
+    for (const py of candidates) {
+      if (path.isAbsolute(py) && !fs.existsSync(py)) continue;
+      const mk = await execFileText(py, ["-m", "venv", venvDir], 300000, { cwd: runtimeRoot });
+      if (mk.ok) {
+        lastError = "";
+        break;
+      }
+      lastError = trimPythonInstallOutput(mk.stderr || mk.stdout || mk.error?.message || "");
+      if (mk.error?.code === "ENOENT") continue;
+    }
+    if (!fs.existsSync(venvPython)) {
+      return { ok: false, error: lastError || "Ne mogu kreirati .venv-whisperlive.", runtimeRoot };
+    }
+  }
+
+  const pipUpgrade = await execFileText(venvPython, ["-m", "pip", "install", "-U", "pip"], 420000, { cwd: runtimeRoot });
+  const pipInstall = await execFileText(venvPython, ["-m", "pip", "install", "-U", "whisper-live"], 900000, { cwd: runtimeRoot });
+  if (!pipInstall.ok) {
+    return {
+      ok: false,
+      error: trimPythonInstallOutput(pipInstall.stderr || pipInstall.stdout || pipInstall.error?.message || "pip install whisper-live nije uspio"),
+      runtimeRoot,
+      python: venvPython,
+      pipUpgrade: !!pipUpgrade.ok,
+    };
+  }
+
+  const out = fs.openSync(path.join(runtimeRoot, "whisperlive-out.log"), "a");
+  const err = fs.openSync(path.join(runtimeRoot, "whisperlive-error.log"), "a");
+  const child = spawn(venvPython, [serverPath], {
+    cwd: runtimeRoot,
+    detached: true,
+    stdio: ["ignore", out, err],
+    env: {
+      ...getAugmentedEnv(),
+      KMP_DUPLICATE_LIB_OK: "TRUE",
+      OMP_NUM_THREADS: "1",
+    },
+    windowsHide: true,
+  });
+  child.unref();
+  try { fs.closeSync(out); } catch (_) { }
+  try { fs.closeSync(err); } catch (_) { }
+  return {
+    ok: true,
+    mode: "pip",
+    endpoint: "ws://localhost:9090",
+    runtimeRoot,
+    python: venvPython,
+    pid: child.pid,
+    pipUpgrade: !!pipUpgrade.ok,
+    stdout: trimPythonInstallOutput(pipInstall.stdout),
+    stderr: trimPythonInstallOutput(pipInstall.stderr),
+  };
+}
+
+async function installWhisperLive(requestedMode = "auto") {
+  const plan = getWhisperLiveInstallPlan(requestedMode);
+  if (plan.mode === "detect") return { ok: true, ...plan };
+  if (plan.mode === "docker-gpu" && process.platform === "darwin") {
+    return {
+      ok: false,
+      platform: plan.platform,
+      mode: plan.mode,
+      endpoint: plan.endpoint,
+      error: "macOS ne podrzava WhisperLive Docker GPU nacin. Koristi Docker CPU ili pip.",
+      dockerCpuCommand: plan.dockerCpuCommand,
+      pipCommand: plan.pipCommand,
+    };
+  }
+  if (plan.mode === "pip") return startWhisperLivePipServer();
+
+  if (plan.mode === "docker-cpu" || plan.mode === "docker-gpu") {
+    const args = plan.mode === "docker-gpu"
+      ? ["run", "-d", "--rm", "--name", "etherx-whisperlive", "--gpus", "all", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"]
+      : ["run", "-d", "--rm", "--name", "etherx-whisperlive", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
+    await execFileText("docker", ["rm", "-f", "etherx-whisperlive"], 60000, { cwd: resolveWhisperLiveRuntimeRoot() });
+    const run = await execFileText("docker", args, 600000, { cwd: resolveWhisperLiveRuntimeRoot() });
+    return {
+      ok: !!run.ok,
+      platform: plan.platform,
+      mode: plan.mode,
+      endpoint: plan.endpoint,
+      command: "docker " + args.join(" "),
+      container: "etherx-whisperlive",
+      stdout: trimPythonInstallOutput(run.stdout),
+      stderr: trimPythonInstallOutput(run.stderr),
+      error: run.ok ? "" : trimPythonInstallOutput(run.stderr || run.stdout || run.error?.message || "Docker pokretanje nije uspjelo"),
+    };
+  }
+
+  return { ok: false, platform: plan.platform, mode: plan.mode, endpoint: plan.endpoint, error: "Nepoznat WhisperLive install mode: " + plan.mode };
 }
 
 async function runOneClickLocalSetup() {
@@ -3057,6 +3224,10 @@ function setupIPC() {
 
   ipcMain.handle("app:runOneClickSetup", async () => {
     return runOneClickLocalSetup();
+  });
+
+  ipcMain.handle("app:installWhisperLive", async (_e, mode) => {
+    return installWhisperLive(mode);
   });
 
   ipcMain.handle("app:getPM2Status", async () => {

@@ -3087,6 +3087,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             port: Number(s.tkaiWhisperPort || 9090),
             lang: String(s.tkaiWhisperLang || 'auto').trim(),
             task: String(s.tkaiWhisperTask || 'transcribe').trim(),
+            translateLang: String(s.tkaiWhisperTranslateLang || 'auto').trim(),
+            textOnlyListening: s.tkaiWhisperTextOnlyListening !== false,
+            writeToChat: s.tkaiWhisperTextOnlyListening !== false ? true : s.tkaiWhisperWriteToChat !== false,
+            muteSpeech: s.tkaiWhisperTextOnlyListening !== false ? true : s.tkaiWhisperMuteSpeech !== false,
             model: String(s.tkaiWhisperModel || 'small').trim(),
             vad: s.tkaiWhisperVad !== false,
             wordTs: s.tkaiWhisperWordTimestamps === true,
@@ -3102,44 +3106,116 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const section = document.getElementById('tkaiSlusanjeSection');
         if (section) section.style.display = cfg.enabled ? '' : 'none';
         const badge = document.getElementById('tkaiWhisperLangBadge');
-        if (badge) badge.textContent = cfg.lang === 'auto' ? 'auto' : cfg.lang;
+        if (badge) {
+            const mode = cfg.task === 'both' ? 'both' : (cfg.task === 'translate' ? 'translate' : 'transcribe');
+            badge.textContent = (cfg.lang === 'auto' ? 'auto' : cfg.lang) + (mode === 'transcribe' ? '' : ' -> ' + getWhisperTargetLang(cfg));
+        }
     }
 
     function escT(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    function appendTranscript(text, isPartial) {
-        const el = document.getElementById('tkaiWhisperTranscript');
-        if (!el) return;
-        const empty = el.querySelector('.tkai-empty');
-        if (empty) empty.remove();
+    function getLangMap() {
+        if (typeof LANGS === 'object' && LANGS) return LANGS;
+        return {
+            hr: { name: 'Hrvatski' },
+            en: { name: 'English' },
+            de: { name: 'Deutsch' },
+            it: { name: 'Italiano' },
+            fr: { name: 'Francais' },
+            es: { name: 'Espanol' },
+            id: { name: 'Indonesian' }
+        };
+    }
+
+    function getWhisperTargetLang(cfg = getCfg()) {
+        const s = (typeof DB !== 'undefined' && DB.getSettings) ? DB.getSettings() : {};
+        const explicit = String(cfg.translateLang || s.tkaiWhisperTranslateLang || 'auto').trim().toLowerCase();
+        if (explicit && explicit !== 'auto') return explicit;
+        const tkaiTranslate = String(s.tkaiTranslateLang || 'auto').trim().toLowerCase();
+        if (tkaiTranslate && tkaiTranslate !== 'auto') return tkaiTranslate;
+        const tkaiRead = String(s.tkaiReadLang || 'auto').trim().toLowerCase();
+        if (tkaiRead && tkaiRead !== 'auto') return tkaiRead;
+        const ui = String(s.uiLanguage || s.language || 'en').trim().toLowerCase();
+        return ui && ui !== 'auto' ? ui : 'en';
+    }
+
+    function populateWhisperTranslateLanguages() {
+        const select = document.querySelector('#stab-ai-live-chat [data-setting="tkaiWhisperTranslateLang"]');
+        if (!select) return;
+        const settings = (typeof DB !== 'undefined' && DB.getSettings) ? DB.getSettings() : {};
+        const current = select.value || settings.tkaiWhisperTranslateLang || 'auto';
+        const langs = getLangMap();
+        const options = Object.entries(langs)
+            .filter(([code]) => code && code !== 'preview')
+            .map(([code, meta]) => '<option value="' + escT(code) + '">' + escT(String(meta?.name || code).trim()) + ' (' + escT(code) + ')</option>')
+            .join('');
+        select.innerHTML = '<option value="auto">Auto (koristi TikTok jezik prijevoda)</option>' + options;
+        select.value = langs[current] || current === 'auto' ? current : 'auto';
+    }
+
+    async function translateWhisperText(text, cfg) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!clean) return '';
+        const targetLang = getWhisperTargetLang(cfg);
+        if (!targetLang || targetLang === 'auto') return '';
+        try {
+            const res = await window.etherx?.ai?.translate?.(clean, targetLang);
+            if (typeof res === 'string') return res.trim();
+            if (res?.ok && res?.translated) return String(res.translated).trim();
+            if (res?.translated) return String(res.translated).trim();
+        } catch (_) { }
+        return '';
+    }
+
+    async function publishToTikTokListeningFeed(text, cfg, translatedText = '') {
+        if (!cfg.writeToChat || typeof window.addTkaiListeningMessage !== 'function') return;
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!clean) return;
+        const targetLang = getWhisperTargetLang(cfg);
+        let translated = String(translatedText || '').trim();
+        if (!translated && (cfg.task === 'translate' || cfg.task === 'both')) {
+            translated = await translateWhisperText(clean, cfg);
+        }
+        window.addTkaiListeningMessage({
+            text: cfg.task === 'translate' && translated ? translated : clean,
+            originalText: clean,
+            translatedText: translated,
+            translatedLang: translated ? targetLang : '',
+            task: cfg.task,
+            sourceLang: cfg.lang === 'auto' ? '' : cfg.lang,
+            source: 'WhisperLive',
+            meta: cfg.task === 'transcribe'
+                ? 'Transkripcija - isti jezik'
+                : (cfg.task === 'both' ? 'Transkripcija + prijevod' : 'Prijevod'),
+        });
+        if (cfg.muteSpeech && 'speechSynthesis' in window && window.speechSynthesis) {
+            try { window.speechSynthesis.cancel(); } catch (_) { }
+        }
+    }
+
+    async function appendTranscript(text, isPartial) {
+        const cfg = getCfg();
         if (isPartial) {
-            let partialEl = el.querySelector('.whisper-partial');
-            if (!partialEl) {
-                partialEl = document.createElement('div');
-                partialEl.className = 'whisper-partial';
-                partialEl.style.cssText = 'color:#94a3b8;font-style:italic;font-size:11px;line-height:1.4;padding:2px 0';
-                el.appendChild(partialEl);
-            }
-            partialEl.textContent = text;
+            whisperPartialText = String(text || '').trim();
+            renderListenFeed();
         } else {
-            el.querySelector('.whisper-partial')?.remove();
+            whisperPartialText = '';
             if (text.trim()) {
                 const time = new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                const line = document.createElement('div');
-                line.style.cssText = 'font-size:11px;line-height:1.45;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.04)';
-                line.innerHTML = '<span style="color:#475569;font-size:9px;margin-right:4px">' + time + '</span><span>' + escT(text) + '</span>';
-                el.appendChild(line);
-                transcriptLines.push({ time, text });
+                let translatedText = '';
+                const targetLang = getWhisperTargetLang(cfg);
+                if (cfg.task === 'translate' || cfg.task === 'both') {
+                    translatedText = await translateWhisperText(text, cfg);
+                }
+                transcriptLines.push({ time, text, translatedText, translatedLang: translatedText ? targetLang : '' });
+                await publishToTikTokListeningFeed(text, cfg, translatedText);
                 if (transcriptLines.length > MAX_LINES) {
                     transcriptLines = transcriptLines.slice(-MAX_LINES);
-                    const children = Array.from(el.children).filter(c => !c.classList.contains('whisper-partial'));
-                    if (children.length > MAX_LINES) children.slice(0, children.length - MAX_LINES).forEach(c => c.remove());
                 }
             }
         }
-        el.scrollTop = el.scrollHeight;
     }
 
     function setStatus(text, color) {
@@ -3218,10 +3294,11 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             ws.onopen = async () => {
                 // Send WhisperLive config message
                 const uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+                const targetLang = getWhisperTargetLang(cfg);
                 const config = {
                     uid,
                     language: cfg.lang === 'auto' ? null : cfg.lang,
-                    task: cfg.task,
+                    task: cfg.task === 'translate' && targetLang === 'en' ? 'translate' : 'transcribe',
                     model: cfg.model,
                     use_vad: cfg.vad,
                     max_clients: 4,
@@ -3331,6 +3408,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function init() {
         try {
             updateSection();
+            renderListenFeed();
 
             document.getElementById('tkaiWhisperToggleBtn')?.addEventListener('click', () => {
                 if (active) stop(); else start();
@@ -3338,7 +3416,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
             document.getElementById('tkaiWhisperExportBtn')?.addEventListener('click', () => {
                 if (!transcriptLines.length) { if (typeof showToast === 'function') showToast('Nema transkripta za izvoz'); return; }
-                const content = transcriptLines.map(l => '[' + l.time + '] ' + l.text).join('\n');
+                const content = transcriptLines.map(l => '[' + l.time + '] ' + l.text + (l.translatedText ? '\n  ' + String(l.translatedLang || '').toUpperCase() + ': ' + l.translatedText : '')).join('\n');
                 const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
                 if (typeof downloadTextFile === 'function') downloadTextFile('whisper-transkript-' + ts + '.txt', content);
                 if (typeof showToast === 'function') showToast('📄 Transkript izvezen');
@@ -3346,8 +3424,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
             document.getElementById('tkaiWhisperClearBtn')?.addEventListener('click', () => {
                 transcriptLines = [];
-                const el = document.getElementById('tkaiWhisperTranscript');
-                if (el) el.innerHTML = '<div class="tkai-empty" style="font-size:11px;padding:6px 0">Klikni ▶ Start za live transkript govora (DJ, voditelja...).<br><span style="font-size:10px;color:var(--text3)">Potreban: WhisperLive server → Settings → AI Live Chat → 🎙️ WhisperLive</span></div>';
+                listeningMessages = [];
+                whisperPartialText = '';
+                renderListenFeed();
             });
 
             document.getElementById('tkaiWhisperCollapseBtn')?.addEventListener('click', () => {
@@ -3360,9 +3439,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             });
 
             document.getElementById('btnTestWhisperConnection')?.addEventListener('click', testConnection);
+            populateWhisperTranslateLanguages();
 
             // Watch tkaiWhisperEnabled toggle to show/hide Slušanje section
-            document.querySelectorAll('[data-setting="tkaiWhisperEnabled"]').forEach(toggle => {
+            document.querySelectorAll('[data-setting="tkaiWhisperEnabled"],[data-setting="tkaiWhisperWriteToChat"],[data-setting="tkaiWhisperTextOnlyListening"],[data-setting="tkaiWhisperMuteSpeech"]').forEach(toggle => {
                 if (typeof MutationObserver === 'function') {
                     new MutationObserver(updateSection).observe(toggle, { attributes: true, attributeFilter: ['class'] });
                 }
@@ -3371,10 +3451,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
             // Update language badge on select change
             document.querySelectorAll('[data-setting="tkaiWhisperLang"]').forEach(sel => {
-                sel.addEventListener('change', () => {
-                    const badge = document.getElementById('tkaiWhisperLangBadge');
-                    if (badge) badge.textContent = sel.value === 'auto' ? 'auto' : sel.value;
-                });
+                sel.addEventListener('change', updateSection);
+            });
+            document.querySelectorAll('[data-setting="tkaiWhisperTask"],[data-setting="tkaiWhisperTranslateLang"]').forEach(sel => {
+                sel.addEventListener('change', updateSection);
             });
         } catch (err) {
             console.error('[WhisperLive] init failed:', err);
@@ -5369,6 +5449,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let scanInterval = null;
     let statsTimerInterval = null;
     let collectedMessages = [];
+    let listeningMessages = [];
     let selectedMsgIds = new Set();
     let targetedChatUser = '';
     let tkaiMsgCtxEl = null;
@@ -5416,6 +5497,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let lastCaptionSpeakAt = 0;
     let lastCaptionMirrorKey = '';
     let lastCaptionMirrorAt = 0;
+    let whisperPartialText = '';
     const translateCache = new Map();
     const nllbTranslateCache = new Map();
     const NLLB_CACHE_MAX = 500;
@@ -5962,6 +6044,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     ];
 
     const messagesEl = document.getElementById('tkaiMessages');
+    const listenFeedEl = document.getElementById('tkaiWhisperTranscript');
+    const listenFeedCountEl = document.getElementById('tkaiListenFeedCount');
     const repliesEl = document.getElementById('tkaiReplies');
     const toggleBtn = document.getElementById('tkaiBtnToggle');
     const audioToggleBtn = document.getElementById('tkaiAudioToggleBtn');
@@ -8308,7 +8392,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return { gifts, totalCoins, supportersCount: byUser.size, leaders };
     }
     function normalizeTkaiMessageType(message) {
-        const known = new Set(['chat', 'gift', 'subscriber', 'caption', 'song', 'join', 'share', 'like']);
+        const known = new Set(['chat', 'gift', 'subscriber', 'caption', 'listening', 'song', 'join', 'share', 'like']);
         const explicit = String(message?.type || '').trim().toLowerCase();
         const text = String(message?.text || message?.giftRawText || '').toLowerCase();
         if (!text) return (known.has(explicit) ? explicit : '') || 'chat';
@@ -9943,7 +10027,75 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         layoutUnfoldBtn.title = 'Prikaži sve; Shift+klik vraća početni redoslijed';
         syncLockState();
     }
+    function initTkaiFeedLayout() {
+        const root = document.querySelector('#tiktokAIPanel .tkai-feed-stack');
+        if (!root || root.dataset.tkaiFeedLayoutInit === '1') return;
+        root.dataset.tkaiFeedLayoutInit = '1';
+        const orderKey = 'ex_tkai_feed_layout_v1';
+        const sections = Array.from(root.querySelectorAll(':scope > .tkai-feed-section')).filter((node) => node instanceof HTMLElement);
+        let draggedSection = null;
+        let dragArmed = false;
+
+        sections.forEach((section, index) => {
+            const key = section.id || `feed-${index}`;
+            section.dataset.tkaiFeedLayoutKey = key;
+            const header = section.querySelector(':scope > .tkai-subheader');
+            if (header && !header.querySelector('.tkai-feed-drag')) {
+                const drag = document.createElement('button');
+                drag.type = 'button';
+                drag.className = 'tkai-feed-drag';
+                drag.textContent = '⠿';
+                drag.title = 'Povuci i premjesti feed';
+                header.insertBefore(drag, header.firstChild);
+                drag.addEventListener('pointerdown', () => { dragArmed = true; });
+                drag.addEventListener('pointerup', () => { dragArmed = false; });
+                drag.addEventListener('pointercancel', () => { dragArmed = false; });
+            }
+            section.draggable = true;
+            section.addEventListener('dragstart', (event) => {
+                if (!dragArmed) {
+                    event.preventDefault();
+                    return;
+                }
+                draggedSection = section;
+                section.classList.add('tkai-feed-dragging');
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', key);
+            });
+            section.addEventListener('dragover', (event) => {
+                if (!draggedSection || draggedSection === section) return;
+                event.preventDefault();
+                section.classList.add('tkai-feed-drag-over');
+                const rect = section.getBoundingClientRect();
+                const insertAfter = event.clientY > rect.top + rect.height / 2;
+                root.insertBefore(draggedSection, insertAfter ? section.nextSibling : section);
+            });
+            section.addEventListener('dragleave', () => section.classList.remove('tkai-feed-drag-over'));
+            section.addEventListener('drop', (event) => {
+                event.preventDefault();
+                section.classList.remove('tkai-feed-drag-over');
+            });
+            section.addEventListener('dragend', () => {
+                sections.forEach((node) => node.classList.remove('tkai-feed-dragging', 'tkai-feed-drag-over'));
+                draggedSection = null;
+                dragArmed = false;
+                const order = Array.from(root.querySelectorAll(':scope > .tkai-feed-section'))
+                    .map((node) => node.dataset?.tkaiFeedLayoutKey)
+                    .filter(Boolean);
+                localStorage.setItem(orderKey, JSON.stringify(order));
+            });
+        });
+
+        try {
+            const order = JSON.parse(localStorage.getItem(orderKey) || '[]');
+            (Array.isArray(order) ? order : []).forEach((key) => {
+                const section = sections.find((node) => node.dataset.tkaiFeedLayoutKey === key);
+                if (section) root.appendChild(section);
+            });
+        } catch (_) { }
+    }
     initTkaiSessionLayout();
+    initTkaiFeedLayout();
     initRecommendationsCardDrag();
     spikeAllBtn?.addEventListener('click', () => { spikeFilter = 'all'; updateSpikeFilterButtons(); updateInsightsUI(); });
     spikeViewersBtn?.addEventListener('click', () => { spikeFilter = 'viewers'; updateSpikeFilterButtons(); updateInsightsUI(); });
@@ -10714,6 +10866,42 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (/^(?:#\s*)?\d{1,3}\s+.{2,60}\s+\d[\d.,\s]*[km]?(?:\s*(?:coins?|diamonds?))?$/i.test(t)) return true;
         return false;
     }
+    function renderListenFeed() {
+        if (!listenFeedEl) return;
+        const rows = Array.isArray(listeningMessages) ? listeningMessages.slice(-200) : [];
+        const nearBottom = listenFeedEl.scrollTop + listenFeedEl.clientHeight >= listenFeedEl.scrollHeight - 36;
+        listenFeedEl.innerHTML = '';
+        if (!rows.length && !whisperPartialText) {
+            listenFeedEl.innerHTML = '<div class="tkai-empty" style="font-size:11px;padding:6px 0">Klikni ▶ Start za live transkript govora (DJ, voditelja...).<br><span style="font-size:10px;color:var(--text3)">Potreban: WhisperLive server → Settings → AI Live Chat → 🎙️ WhisperLive</span></div>';
+            if (listenFeedCountEl) listenFeedCountEl.textContent = '';
+            return;
+        }
+        rows.forEach((message) => {
+            const row = document.createElement('div');
+            row.className = 'tkai-msg tkai-listen-msg';
+            const time = new Date(Number(message.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const translated = message.translatedText
+                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">' + escHtml(String(message.translatedLang || '').toUpperCase() || 'TR') + ':</span> ' + escHtml(message.translatedText) + '</div>'
+                : '';
+            const original = translated && message.originalText
+                ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65"><span style="font-size:10px;opacity:.7">Original:</span> ' + escHtml(message.originalText) + '</div>'
+                : '<div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
+            const meta = '<div class="tkai-msg-text" style="margin-top:3px;font-size:9px;color:#94a3b8">[' + time + '] '
+                + escHtml(message.meta || message.task || 'Transkripcija') + (message.sourceLang ? ' · ' + escHtml(String(message.sourceLang).toUpperCase()) : '') + '</div>';
+            row.innerHTML = '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:#5eead4">Listen Feed</span><span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(45,212,191,.16);color:#5eead4;border:1px solid rgba(45,212,191,.35)">WhisperLive</span></div>'
+                + original + meta + translated;
+            listenFeedEl.appendChild(row);
+        });
+        if (whisperPartialText) {
+            const partial = document.createElement('div');
+            partial.className = 'whisper-partial';
+            partial.style.cssText = 'color:#94a3b8;font-style:italic;font-size:11px;line-height:1.4;padding:2px 0';
+            partial.textContent = whisperPartialText;
+            listenFeedEl.appendChild(partial);
+        }
+        if (listenFeedCountEl) listenFeedCountEl.textContent = rows.length ? rows.length + ' zapisa' : '';
+        if (nearBottom || whisperPartialText) listenFeedEl.scrollTop = listenFeedEl.scrollHeight;
+    }
     function renderMessages() {
         if (!messagesEl) return;
         const settings = DB.getSettings();
@@ -10766,6 +10954,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
                     return owner ? `HOST CC · @${owner}` : 'HOST CC';
                 }
+                if (displayType === 'listening') return 'Slušanje';
                 const u = String(message.user || '').trim();
                 if (u && u.toLowerCase() !== 'unknown') return u;
                 const owner = String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, '');
@@ -10783,8 +10972,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                                 ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(45,212,191,.16);color:#5eead4;border:1px solid rgba(45,212,191,.35)">👋 join</span>'
                                 : (displayType === 'caption'
                                     ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.35)">🎙 CC</span>'
-                                    : '')))));
+                                    : (displayType === 'listening'
+                                        ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(45,212,191,.16);color:#5eead4;border:1px solid rgba(45,212,191,.35)">🎙 Slušanje</span>'
+                                        : ''))))));
             const showCaptionTranslation = displayType === 'caption' && !!message.translatedText;
+            const showListeningTranslation = displayType === 'listening' && !!message.translatedText;
             const nllbShowBoth = DB.getSettings().tkaiNllbShowBoth !== false;
             const showNllbIdHrTranslation = nllbShowBoth
                 && message.type === 'chat'
@@ -10796,8 +10988,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + escHtml(String(message.translatedBy || 'NLLB').replace('facebook/', '').replace('nllb-200-distilled-', 'NLLB-'))
                 + '</span>'
                 : '';
-            const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showNllbIdHrTranslation) && message.translatedText
-                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">HR:</span> ' + escHtml(message.translatedText) + nllbBadge + '</div>'
+            const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showListeningTranslation || showNllbIdHrTranslation) && message.translatedText
+                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">' + escHtml(String(message.translatedLang || 'HR').toUpperCase()) + ':</span> ' + escHtml(message.translatedText) + nllbBadge + '</div>'
                 : '';
             const giftSummary = (() => {
                 if (!giftMeta) return '';
@@ -10840,14 +11032,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + 'Likes × ' + formatNum(Math.max(1, Number(message.quantity || 1))) + '</div>'
                 : '';
             const originalLabel = showNllbIdHrTranslation ? 'ID:' : 'Original:';
+            const originalText = displayType === 'listening' && message.originalText ? message.originalText : message.text;
             const original = translated
-                ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65"><span style="font-size:10px;opacity:.7">' + originalLabel + '</span> ' + escHtml(message.text) + '</div>'
+                ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65"><span style="font-size:10px;opacity:.7">' + originalLabel + '</span> ' + escHtml(originalText) + '</div>'
                 : '<div class="tkai-msg-text">' + escHtml(message.text) + '</div>';
+            const listeningMeta = displayType === 'listening'
+                ? '<div class="tkai-msg-text" style="margin-top:3px;font-size:9px;color:#94a3b8">['
+                + new Date(Number(message.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                + '] ' + escHtml(message.meta || message.task || 'Transkripcija') + (message.sourceLang ? ' · ' + escHtml(String(message.sourceLang).toUpperCase()) : '') + '</div>'
+                : '';
             const userColor = getUserColor(resolvedUser);
             const userRow = typeBadge
                 ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(resolvedUser) + '</span>' + typeBadge + '</div>'
                 : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(resolvedUser) + '</div>';
-            div.innerHTML = userRow + original + giftSummary + likeSummary + translated;
+            div.innerHTML = userRow + original + listeningMeta + giftSummary + likeSummary + translated;
             div.title = 'Klikni za odabir/deodabir';
             div.addEventListener('click', () => {
                 if (selectedMsgIds.has(message.id)) selectedMsgIds.delete(message.id);
@@ -10977,6 +11175,40 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         _tkaiForceScrollBottom = true;
         renderMessages();
         showToast('🎵 Tekst poslan u TikTok Chat AI');
+        return true;
+    };
+    window.addTkaiListeningMessage = function (payload = {}) {
+        const originalText = String(payload.originalText || payload.text || '').replace(/\s+/g, ' ').trim().slice(0, 700);
+        const text = String(payload.text || originalText).replace(/\s+/g, ' ').trim().slice(0, 700);
+        if (!text) return false;
+        const now = Date.now();
+        const recentKey = text.toLowerCase();
+        const duplicate = listeningMessages.slice(-20).some((message) => {
+            if (normalizeTkaiMessageType(message) !== 'listening') return false;
+            const sameText = String(message.text || '').replace(/\s+/g, ' ').trim().toLowerCase() === recentKey;
+            return sameText && now - Number(message.ts || 0) < 6000;
+        });
+        if (duplicate) return false;
+
+        const message = {
+            id: 'listening:' + now + ':' + Math.random().toString(36).slice(2, 8),
+            ts: now,
+            type: 'listening',
+            user: 'Slušanje',
+            text,
+            originalText,
+            translatedText: String(payload.translatedText || '').trim().slice(0, 700),
+            translatedLang: String(payload.translatedLang || '').trim(),
+            sourceLang: String(payload.sourceLang || '').trim(),
+            task: String(payload.task || 'transcribe').trim(),
+            source: String(payload.source || 'WhisperLive').trim(),
+            meta: String(payload.meta || '').trim(),
+        };
+        listeningMessages.push(message);
+        if (listeningMessages.length > 500) listeningMessages = listeningMessages.slice(-500);
+        renderListenFeed();
+        scheduleTkaiAutosave('whisperlive');
+        scheduleLiveOsSnapshotPublish();
         return true;
     };
     async function translateViaGoogle(text, targetLang) {
@@ -22889,6 +23121,116 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             showToast('⚠️ SongRec test gumb nije dostupan u ovom prikazu.');
         }
     });
+
+    (function initHelpWhisperLiveInstallControls() {
+        const statusEl = document.getElementById('helpWhisperInstallStatus');
+        const setStatus = (text) => {
+            if (statusEl) statusEl.textContent = text;
+        };
+        const platformLabel = () => {
+            const ua = String(navigator.userAgent || '').toLowerCase();
+            const platform = String(navigator.platform || '').toLowerCase();
+            if (platform.includes('mac') || ua.includes('mac os')) return 'mac';
+            if (platform.includes('win') || ua.includes('windows')) return 'windows';
+            if (platform.includes('linux') || ua.includes('linux')) return 'linux';
+            return 'other';
+        };
+        const commands = {
+            dockerCpu: 'docker run -d --rm --name etherx-whisperlive -p 9090:9090 ghcr.io/collabora/whisperlive-cpu:latest',
+            dockerGpu: 'docker run -d --rm --name etherx-whisperlive --gpus all -p 9090:9090 ghcr.io/collabora/whisperlive-gpu:latest',
+            pipUnix: 'python3 -m venv .venv-whisperlive && .venv-whisperlive/bin/python -m pip install -U pip whisper-live && .venv-whisperlive/bin/python etherx_whisperlive_server.py',
+            pipWin: 'py -m venv .venv-whisperlive && .venv-whisperlive\\Scripts\\python.exe -m pip install -U pip whisper-live && .venv-whisperlive\\Scripts\\python.exe etherx_whisperlive_server.py',
+        };
+        const formatInstallResult = (res, fallbackCommand = '') => {
+            const lines = [];
+            lines.push((res?.ok ? '✅' : '❌') + ' WhisperLive ' + (res?.mode || '') + ' install');
+            lines.push('Endpoint: ' + (res?.endpoint || 'ws://localhost:9090'));
+            if (res?.platform) lines.push('OS: ' + res.platform);
+            if (res?.container) lines.push('Docker container: ' + res.container);
+            if (res?.pid) lines.push('PID: ' + res.pid);
+            if (res?.runtimeRoot) lines.push('Runtime: ' + res.runtimeRoot);
+            if (res?.command || fallbackCommand) lines.push('', 'Komanda:', res.command || fallbackCommand);
+            if (res?.recommendation) lines.push('', res.recommendation);
+            if (res?.stdout) lines.push('', 'Output:', String(res.stdout).slice(-3000));
+            if (res?.stderr) lines.push('', 'Info:', String(res.stderr).slice(-3000));
+            if (res?.error) lines.push('', 'Greška:', String(res.error).slice(-5000));
+            if (res?.ok) lines.push('', 'Nakon prvog pokretanja model se može skidati/učitavati nekoliko minuta. U TikTok Chat AI klikni Test ili Start.');
+            return lines.join('\n');
+        };
+        const runInstall = async (mode, commandLabel, fallbackCommand) => {
+            if (!window.etherx?.app?.installWhisperLive) {
+                setStatus('Install API nije dostupan u ovom buildu.\n\nKomanda:\n' + fallbackCommand);
+                return;
+            }
+            const buttons = [
+                'helpWhisperAutoInstallBtn',
+                'helpWhisperDockerCpuBtn',
+                'helpWhisperDockerGpuBtn',
+                'helpWhisperPipBtn'
+            ].map(id => document.getElementById(id)).filter(Boolean);
+            buttons.forEach(btn => { btn.disabled = true; btn.style.opacity = '.65'; });
+            setStatus('Pokrećem WhisperLive ' + commandLabel + ' instalaciju...\nEndpoint: ws://localhost:9090\n\nOvo može potrajati, posebno kod prvog Docker pull/pip install.');
+            try {
+                const res = await window.etherx.app.installWhisperLive(mode);
+                setStatus(formatInstallResult(res, fallbackCommand));
+                showToast(res?.ok ? '✅ WhisperLive pokrenut' : '❌ WhisperLive install nije uspio', 5000);
+            } catch (err) {
+                setStatus('WhisperLive install greška:\n' + String(err?.message || err) + '\n\nKomanda:\n' + fallbackCommand);
+                showToast('❌ WhisperLive install greška');
+            } finally {
+                buttons.forEach(btn => { btn.disabled = false; btn.style.opacity = ''; });
+            }
+        };
+        const copyCommand = async (command, label, note = '') => {
+            try {
+                if (window.etherx?.clipboard?.write) await window.etherx.clipboard.write(command);
+                else await navigator.clipboard.writeText(command);
+                setStatus('Kopirano: ' + label + '\n\n' + command + (note ? '\n\n' + note : ''));
+                showToast('📋 WhisperLive komanda kopirana');
+            } catch (err) {
+                setStatus('Kopiranje nije uspjelo. Ručno kopiraj:\n\n' + command + '\n\n' + String(err?.message || err || ''));
+            }
+        };
+
+        document.getElementById('helpWhisperDetectBtn')?.addEventListener('click', () => {
+            const os = platformLabel();
+            const recommendation = os === 'mac'
+                ? 'macOS: koristi Docker CPU ili pip. Docker GPU nije podržan na Macu.'
+                : os === 'windows'
+                    ? 'Windows: Docker CPU radi odmah; Docker GPU koristi samo s NVIDIA driverom i Docker GPU runtimeom. pip koristi PowerShell/CMD komandu.'
+                    : os === 'linux'
+                        ? 'Linux: Docker CPU, Docker GPU ili pip su dostupni. GPU koristi samo s NVIDIA runtimeom.'
+                        : 'Nepoznat OS: koristi Docker CPU ili pip varijantu koju podržava tvoj terminal.';
+            setStatus('Prepoznat OS: ' + os + '\n\n' + recommendation + '\n\nWhisperLive endpoint: ws://localhost:9090');
+            showToast('🧭 OS: ' + os);
+        });
+        document.getElementById('helpWhisperAutoInstallBtn')?.addEventListener('click', () => {
+            const os = platformLabel();
+            const command = os === 'windows' ? commands.dockerCpu : commands.dockerCpu;
+            runInstall('auto', 'preporučena', command);
+        });
+        document.getElementById('helpWhisperDockerCpuBtn')?.addEventListener('click', () => {
+            runInstall('docker-cpu', 'Docker CPU', commands.dockerCpu);
+        });
+        document.getElementById('helpWhisperDockerGpuBtn')?.addEventListener('click', () => {
+            const os = platformLabel();
+            if (os === 'mac') {
+                setStatus('macOS ne podržava WhisperLive Docker GPU način.\n\nKoristi Docker CPU:\n' + commands.dockerCpu + '\n\nIli pip:\n' + commands.pipUnix);
+                showToast('⚠️ Mac: Docker GPU nije podržan');
+                return;
+            }
+            runInstall('docker-gpu', 'Docker GPU', commands.dockerGpu);
+        });
+        document.getElementById('helpWhisperPipBtn')?.addEventListener('click', () => {
+            const os = platformLabel();
+            const command = os === 'windows' ? commands.pipWin : commands.pipUnix;
+            runInstall('pip', os === 'windows' ? 'pip / venv Windows' : 'pip / venv Unix/macOS/Linux', command);
+        });
+        document.getElementById('helpWhisperOpenDocsBtn')?.addEventListener('click', () => {
+            window.open('https://github.com/collabora/WhisperLive', '_blank');
+            showToast('🌐 Otvaram WhisperLive docs');
+        });
+    })();
 
     document.getElementById('helpInstallPythonDepsBtn')?.addEventListener('click', async () => {
         const btn = document.getElementById('helpInstallPythonDepsBtn');
