@@ -3608,6 +3608,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function setToggleBtn(isActive) {
         const btn = document.getElementById('tkaiWhisperToggleBtn');
         if (!btn) return;
+        btn.disabled = false;
         if (isActive) {
             btn.textContent = '⏹ Stop';
             btn.style.background = 'rgba(239,68,68,.2)';
@@ -9991,7 +9992,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<thead><tr style="color:var(--text3);text-align:left"><th style="padding:3px 4px">#</th><th style="padding:3px 4px">User</th><th style="padding:3px 4px">Total</th><th style="padding:3px 4px">Coins</th><th style="padding:3px 4px">Gifts</th><th style="padding:3px 4px">Likes</th><th style="padding:3px 4px">Top gifts</th><th style="padding:3px 4px">First seen</th><th style="padding:3px 4px">Pojav.</th><th style="padding:3px 4px">Last poruka</th></tr></thead>' +
             '<tbody id="tkaiTopUsersRows"></tbody>' +
             '</table></div></div>';
-        root.appendChild(usersRow);
+        root.parentElement?.insertBefore(usersRow, root);
 
         const rangeEl = document.getElementById('tkaiDashRange');
         const searchEl = document.getElementById('tkaiTopUsersSearch');
@@ -10677,7 +10678,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     const TKAI_SESSION_LAYOUT_KEY = 'ex_tkai_session_layout_v1';
     const TKAI_FEED_LAYOUT_KEY = 'ex_tkai_feed_layout_v1';
+    const TKAI_LAYOUT_SCHEMA_KEY = 'ex_tkai_layout_schema_v';
+    const TKAI_LAYOUT_SCHEMA_VERSION = '2026-07-16-tkai-order-v2';
     const TKAI_SESSION_COLLAPSED_PREFIX = 'ex_tkai_session_collapsed_';
+
+    function migrateTkaiLayoutOrderIfNeeded() {
+        if (localStorage.getItem(TKAI_LAYOUT_SCHEMA_KEY) === TKAI_LAYOUT_SCHEMA_VERSION) return;
+        localStorage.removeItem(TKAI_SESSION_LAYOUT_KEY);
+        localStorage.removeItem(TKAI_FEED_LAYOUT_KEY);
+        localStorage.setItem(TKAI_LAYOUT_SCHEMA_KEY, TKAI_LAYOUT_SCHEMA_VERSION);
+    }
 
     function isTkaiInlineLayoutHidden() {
         return DB.getSettings().tkaiHideInlineLayoutControls !== false;
@@ -10735,10 +10745,41 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     function getTkaiLayoutLabel(section, fallback) {
         if (!section) return fallback;
+        const knownLabels = {
+            tkaiGiftGalleryHeaderTitle: 'Gift galerija naslov',
+            tkaiGiftGallerySection: 'Gift galerija',
+            tkaiGiftGallery: 'Gift galerija',
+            tkaiChatFeedSection: 'Chat feed',
+            tkaiSlusanjeSection: 'Listen Feed',
+            tkaiEventFeedSection: 'Događaji',
+            tkaiStatsStrip: 'Session statistika',
+            tkaiTopSupporters: 'Top gifteri',
+            tkaiUserSummary: 'AI Live Chat korisnici',
+            tkaiDashUsersRow: 'Top users detail',
+            tkaiInsights: 'Session dashboard kartice',
+            tkaiTopUsersCard: 'Top korisnici',
+            tkaiGiftStatsCard: 'Gift stats',
+            tkaiJoinsCard: 'Join level / Join feed',
+            tkaiShareEventsCard: 'Share events',
+            tkaiSongsCard: 'Pjesme',
+            tkaiPieCard: 'Raspodjela poruka',
+            tkaiRecommendationsCard: 'AI preporuke',
+            tkaiSpikesCard: 'Spike događaji',
+            tkaiQuestionsCard: 'Pitanja',
+            tkaiShadowbanCard: 'Shadowban provjera',
+            tkaiSentimentLabCard: 'Sentiment lab',
+        };
+        if (section.id && knownLabels[section.id]) return knownLabels[section.id];
+        if (section.classList?.contains('tkai-main')) return 'TikTok Chat + AI prijedlozi';
+        if (section.classList?.contains('tkai-chat-col')) return 'TikTok Chat';
+        if (section.classList?.contains('tkai-reply-col')) return 'AI prijedlozi';
+        if (section.classList?.contains('tkai-gift-gallery-header')) return 'Gift galerija naslov';
+        if (section.classList?.contains('tkai-gift-gallery')) return 'Gift galerija';
         const explicit = section.dataset.tkaiLayoutTitle || section.getAttribute('aria-label') || '';
         if (explicit) return explicit;
         const header = section.querySelector(':scope > .tkai-subheader span:first-child, :scope > .tkai-col-header span:first-child, :scope .tkai-col-header span:first-child, :scope .tkai-stat-label, :scope h3, :scope h4');
         const text = String(header?.textContent || section.id || fallback || '').replace(/\s+/g, ' ').trim();
+        if (!text || text === section.id) return fallback;
         return text || fallback;
     }
 
@@ -11112,6 +11153,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             showToast('↺ Redoslijed kartica vraćen');
         });
     }
+    migrateTkaiLayoutOrderIfNeeded();
+    ensureDetailedDashboardControls();
     initTkaiSessionLayout();
     initTkaiFeedLayout();
     initRecommendationsCardDrag();

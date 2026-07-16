@@ -4951,24 +4951,48 @@ body.tkai-panel-interacting * {
 }
 
 .tkai-feed-section.listen-feed {
-  flex: 0.62;
+  flex: 0 0 auto;
+  min-height: 118px;
 }
 
 .tkai-listen-under-chat {
-  flex: 0 0 auto;
-  margin-top: 8px;
+  margin: 0 8px;
   padding: 8px 10px;
-  border-top: 1px solid rgba(45, 212, 191, 0.18);
-  border-bottom: 1px solid rgba(45, 212, 191, 0.1);
+  border: 1px solid rgba(45, 212, 191, 0.14);
+  border-radius: 10px;
   background: rgba(45, 212, 191, 0.025);
+  overflow: hidden;
+}
+
+#tiktokAIPanel .tkai-main-wrap > .tkai-listen-under-chat {
+  max-height: 220px;
+}
+
+.tkai-feed-stack > .tkai-feed-section.listen-feed {
+  flex: 0.72 1 0;
 }
 
 .tkai-listen-under-chat .tkai-listen-feed {
-  max-height: 128px;
+  flex: 1;
+  max-height: 150px;
+  min-height: 0;
+}
+
+.tkai-listen-under-chat #tkaiWhisperTranscriptWrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .tkai-gift-gallery-header {
   border-top: 0;
+}
+
+.tkai-gift-gallery-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
 }
 
 .tkai-feed-section.gift-feed {
@@ -5014,6 +5038,8 @@ body.tkai-panel-interacting * {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 12;
 }
 
 .tkai-listen-feed {
