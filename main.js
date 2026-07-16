@@ -4480,59 +4480,69 @@ function setupIPC() {
       };
       if (token) headers["Authorization"] = "Bearer " + token;
       const { net } = require("electron");
-      const GITHUB_API =
-        "https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest";
-      const result = await new Promise((resolve, reject) => {
-        const req = net.request({ method: "GET", url: GITHUB_API, headers });
+      const requestJson = (url, reqHeaders = headers) => new Promise((resolve, reject) => {
+        const req = net.request({ method: "GET", url, headers: reqHeaders });
         let body = "";
         req.on("response", (res) => {
-          res.on("data", (chunk) => {
-            body += chunk.toString();
-          });
+          res.on("data", (chunk) => { body += chunk.toString(); });
           res.on("end", () => {
-            if (res.statusCode === 404) {
-              resolve({
-                ok: false,
-                error: "Nema objavljenih verzija na GitHub-u",
-              });
-              return;
-            }
-            if (res.statusCode !== 200) {
-              resolve({
-                ok: false,
-                error: "GitHub API greška: HTTP " + res.statusCode,
-              });
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+              resolve({ ok: false, statusCode: res.statusCode, body });
               return;
             }
             try {
-              const data = JSON.parse(body);
-              const latest = (data.tag_name || "").replace(/^v/, "");
-              const current = app.getVersion();
-              const assets = (data.assets || []).map((a) => ({
-                name: a.name,
-                url: a.browser_download_url || "",
-                browserUrl: a.browser_download_url || "",
-                apiUrl: a.url || "",
-                size: a.size,
-              }));
-              resolve({
-                ok: true,
-                current,
-                latest,
-                isNew: isSemverNewer(latest, current),
-                name: data.name || data.tag_name,
-                body: data.body || "",
-                assets,
-                publishedAt: data.published_at || "",
-              });
+              resolve({ ok: true, statusCode: res.statusCode, data: JSON.parse(body) });
             } catch (e) {
-              resolve({ ok: false, error: "Parse error: " + e.message });
+              resolve({ ok: false, statusCode: res.statusCode, error: "Parse error: " + e.message, body });
             }
           });
         });
         req.on("error", (e) => reject(e));
         req.end();
       });
+
+      const current = app.getVersion();
+      let latestFromServer = "";
+      const ownVersionRes = await requestJson("https://api.kriptoentuzijasti.io/version", {
+        "User-Agent": "EtherX-Browser",
+        Accept: "application/json",
+      }).catch(() => null);
+      if (ownVersionRes?.ok && ownVersionRes.data?.ok && ownVersionRes.data.version) {
+        latestFromServer = String(ownVersionRes.data.version || "").replace(/^v/, "");
+      }
+
+      const GITHUB_API_BASE = "https://api.github.com/repos/ktrucek/etherx-standalone/releases";
+      const githubUrl = latestFromServer
+        ? `${GITHUB_API_BASE}/tags/v${encodeURIComponent(latestFromServer)}`
+        : `${GITHUB_API_BASE}/latest`;
+      const releaseRes = await requestJson(githubUrl);
+      const result = (() => {
+        if (releaseRes.statusCode === 404) {
+          return { ok: false, error: "Nema objavljenih verzija na GitHub-u" };
+        }
+        if (!releaseRes.ok) {
+          return { ok: false, error: releaseRes.error || ("GitHub API greška: HTTP " + releaseRes.statusCode) };
+        }
+        const data = releaseRes.data || {};
+        const latest = latestFromServer || String(data.tag_name || "").replace(/^v/, "");
+        const assets = (data.assets || []).map((a) => ({
+          name: a.name,
+          url: a.browser_download_url || "",
+          browserUrl: a.browser_download_url || "",
+          apiUrl: a.url || "",
+          size: a.size,
+        }));
+        return {
+          ok: true,
+          current,
+          latest,
+          isNew: isSemverNewer(latest, current),
+          name: data.name || data.tag_name,
+          body: data.body || "",
+          assets,
+          publishedAt: data.published_at || "",
+        };
+      })();
       return result;
     } catch (e) {
       return { ok: false, error: e.message };

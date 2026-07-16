@@ -25330,6 +25330,47 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (statusTextEl) statusTextEl.textContent = cleanStatus;
         }
 
+        function mapGithubReleaseAssets(raw) {
+            return (raw?.assets || []).map(a => ({
+                name: a.name,
+                url: a.browser_download_url || a.download_url || '',
+                browserUrl: a.browser_download_url || a.download_url || '',
+                apiUrl: a.url || '',
+                size: a.size,
+            }));
+        }
+
+        async function fetchGithubReleaseDetails(tag = '') {
+            const cleanTag = String(tag || '').replace(/^v/, '').trim();
+            const releaseUrl = cleanTag
+                ? 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/tags/v' + encodeURIComponent(cleanTag)
+                : 'https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest';
+            const res = await fetch(releaseUrl, { headers: { 'Accept': 'application/vnd.github+json' }, cache: 'no-store' });
+            if (!res.ok) throw new Error('GitHub API greška: HTTP ' + res.status);
+            const raw = await res.json();
+            return {
+                latest: (raw.tag_name || '').replace(/^v/, ''),
+                body: raw.body || '',
+                assets: mapGithubReleaseAssets(raw),
+                publishedAt: raw.published_at || '',
+                htmlUrl: raw.html_url || '',
+            };
+        }
+
+        function showUpdateAssetProblem(oneClickBtn, latestTag, platform) {
+            window._pendingUpdateAsset = null;
+            if (oneClickBtn) {
+                oneClickBtn.style.display = 'inline-block';
+                oneClickBtn.disabled = true;
+                oneClickBtn.textContent = '⚠ Nema paketa';
+            }
+            const platformText = platform?.display ? platform.display + ': ' : '';
+            const msg = platformText + 'v' + latestTag + ' je pronađen, ali paket za ovaj sistem nije učitan. Pritisni "Provjeri sada" opet ili otvori GitHub Releases.';
+            setUpdateCompatStatus('⚠ Nema paketa', msg);
+            const notes = document.getElementById('updReleaseNotes');
+            if (notes && !String(notes.textContent || '').trim()) notes.textContent = msg;
+        }
+
         function _applyUpdateResult(data, currentTag) {
             const badge = document.getElementById('updStatusBadge');
             const resultBox = document.getElementById('updResultBox');
@@ -25370,7 +25411,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                                 oneClickBtn.textContent = window.i18n ? window.i18n.t('updateNow') : '⬆️ Ažuriraj sada';
                                 oneClickBtn.disabled = false;
                             }
+                        } else {
+                            showUpdateAssetProblem(oneClickBtn, latestTag, platform);
                         }
+                    } else if (window.etherx?.update?.download) {
+                        showUpdateAssetProblem(oneClickBtn, latestTag, detectPlatform());
                     }
                 } else {
                     if (newLabel) { newLabel.style.color = '#27c93f'; newLabel.textContent = '✓ Browser je ažuran!'; }
@@ -25440,33 +25485,25 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 } else {
                     // ── Web fallback: vlastiti endpoint → GitHub (rezerva) ──
                     let latestTag = null, ghAssets = [], ghBody = '';
+                    let releaseTagFromOwnApi = '';
                     try {
                         const ownRes = await fetch('https://api.kriptoentuzijasti.io/version', { cache: 'no-store' });
                         if (ownRes.ok) {
                             const ownData = await ownRes.json();
-                            if (ownData.ok && ownData.version) latestTag = ownData.version.replace(/^v/, '');
+                            if (ownData.ok && ownData.version) {
+                                latestTag = ownData.version.replace(/^v/, '');
+                                releaseTagFromOwnApi = latestTag;
+                            }
                         }
                     } catch (_) { }
 
                     // Always try to hydrate release details from GitHub so Updates tab can show notes/assets.
                     // If own API fails or returns partial data, GitHub response fills in missing fields.
                     try {
-                        const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest', {
-                            headers: { 'Accept': 'application/vnd.github+json' }
-                        });
-                        if (res.ok) {
-                            const raw = await res.json();
-                            if (raw) {
-                                if (!latestTag) latestTag = (raw.tag_name || '').replace(/^v/, '');
-                                ghBody = raw.body || '';
-                                ghAssets = (raw.assets || []).map(a => ({
-                                    name: a.name,
-                                    url: a.browser_download_url || a.download_url || '',
-                                    browserUrl: a.browser_download_url || a.download_url || '',
-                                    apiUrl: a.url || ''
-                                }));
-                            }
-                        }
+                        const release = await fetchGithubReleaseDetails(releaseTagFromOwnApi || '');
+                        if (!latestTag) latestTag = release.latest;
+                        ghBody = release.body || '';
+                        ghAssets = release.assets || [];
                     } catch (_) { }
 
                     if (!latestTag) throw new Error('Nema dostupnih verzija');
@@ -25528,8 +25565,24 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         // ── One-click auto-update (Electron only) ──────────────────────────────
         document.getElementById('updOneClickBtn')?.addEventListener('click', async function () {
-            if (!window._pendingUpdateAsset || !window.etherx?.update?.download) return;
             const btn = this;
+            if (!window.etherx?.update?.download) {
+                showToast('⚠️ One-click update nije dostupan u ovoj verziji aplikacije.');
+                return;
+            }
+            if (!window._pendingUpdateAsset) {
+                const msg = 'Nema učitanog update paketa za ovaj sistem. Klikni "Provjeri sada" pa pokušaj opet.';
+                setUpdateCompatStatus('⚠ Nema paketa', msg);
+                const progressLabel0 = document.getElementById('updProgressLabel');
+                const progressWrap0 = document.getElementById('updProgressWrap');
+                if (progressWrap0) progressWrap0.style.display = 'block';
+                if (progressLabel0) {
+                    progressLabel0.textContent = '⚠ ' + msg;
+                    progressLabel0.style.color = '#ffbd2e';
+                }
+                showToast('⚠️ ' + msg);
+                return;
+            }
             const redirectRetryCount = Number(btn.dataset.redirectRetryCount || '0');
             const maxRedirectRetries = 3;
             const progressWrap = document.getElementById('updProgressWrap');
@@ -25777,25 +25830,20 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 } else {
                     const currentTag2 = (document.getElementById('helpVersionNum')?.textContent || '0.0.0').replace(/^v/, '');
                     let latestTag2 = null, ghAssets2 = [];
+                    let releaseTagFromOwnApi2 = '';
                     try {
                         const ownRes = await fetch('https://api.kriptoentuzijasti.io/version', { cache: 'no-store' });
                         if (ownRes.ok) {
                             const ownData = await ownRes.json();
-                            if (ownData.ok && ownData.version) latestTag2 = ownData.version.replace(/^v/, '');
+                            if (ownData.ok && ownData.version) {
+                                latestTag2 = ownData.version.replace(/^v/, '');
+                                releaseTagFromOwnApi2 = latestTag2;
+                            }
                         }
                     } catch (_) { }
-                    if (!latestTag2) {
-                        const res = await fetch('https://api.github.com/repos/ktrucek/etherx-standalone/releases/latest');
-                        if (!res.ok) throw new Error('GitHub API greška: ' + res.status);
-                        const raw = await res.json();
-                        latestTag2 = (raw.tag_name || '').replace(/^v/, '');
-                        ghAssets2 = (raw.assets || []).map(a => ({
-                            name: a.name,
-                            url: a.browser_download_url || a.download_url || '',
-                            browserUrl: a.browser_download_url || a.download_url || '',
-                            apiUrl: a.url || ''
-                        }));
-                    }
+                    const release = await fetchGithubReleaseDetails(releaseTagFromOwnApi2 || '');
+                    if (!latestTag2) latestTag2 = release.latest;
+                    ghAssets2 = release.assets || [];
                     data = {
                         ok: true, latest: latestTag2, current: currentTag2,
                         isNew: semverNewer(latestTag2, currentTag2),
