@@ -5038,6 +5038,16 @@ body.tkai-panel-interacting * {
   cursor: grabbing;
 }
 
+.tkai-feed-locked .tkai-feed-drag {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tkai-feed-unlocked .tkai-feed-drag {
+  color: #5eead4;
+  cursor: grab;
+}
+
 .tkai-feed-section.tkai-feed-dragging {
   opacity: 0.45;
   transform: scale(0.99);
