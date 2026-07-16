@@ -3077,6 +3077,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     let audioCtx = null;
     let processorNode = null;
     let active = false;
+    let connecting = false;
+    let connectionTimer = null;
     let transcriptLines = [];
     const MAX_LINES = 200;
 
@@ -3297,6 +3299,25 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         }
     }
 
+    function setConnectingBtn(isConnecting) {
+        const btn = document.getElementById('tkaiWhisperToggleBtn');
+        if (!btn) return;
+        btn.disabled = !!isConnecting;
+        if (isConnecting) {
+            btn.textContent = '⏳...';
+            btn.style.background = 'rgba(251,191,36,.16)';
+            btn.style.borderColor = 'rgba(251,191,36,.38)';
+            btn.style.color = '#fbbf24';
+        } else if (!active) {
+            setToggleBtn(false);
+        }
+    }
+
+    function clearConnectionTimer() {
+        if (connectionTimer) clearTimeout(connectionTimer);
+        connectionTimer = null;
+    }
+
     // Linear interpolation resample Float32Array → 16 kHz
     function resampleBuffer(buffer, sourceRate) {
         if (sourceRate === 16000) return buffer;
@@ -3323,6 +3344,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
     function stop() {
         active = false;
+        connecting = false;
+        clearConnectionTimer();
         setToggleBtn(false);
         stopAudio();
         try { wsRef && wsRef.close(); } catch (_) { }
@@ -3332,8 +3355,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 
     async function start() {
         try {
-            if (active) return;
+            if (active || connecting) return;
             const cfg = getCfg();
+            connecting = true;
+            setConnectingBtn(true);
             setStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
 
             const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
@@ -3346,8 +3371,18 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 return;
             }
             wsRef = ws;
+            connectionTimer = setTimeout(() => {
+                if (!connecting || wsRef !== ws) return;
+                connecting = false;
+                setConnectingBtn(false);
+                setStatus('❌ Timeout spajanja na ' + cfg.host + ':' + cfg.port + ' — WhisperLive server ne odgovara', '#f87171');
+                try { ws.close(); } catch (_) { }
+                if (typeof showToast === 'function') showToast('❌ WhisperLive ne odgovara na ' + wsUrl + '. Pokreni instalaciju/server u Pomoć → WhisperLive.');
+            }, 7000);
 
             ws.onopen = async () => {
+                connecting = false;
+                clearConnectionTimer();
                 // Send WhisperLive config message
                 const uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
                 const targetLang = getWhisperTargetLang(cfg);
@@ -3426,14 +3461,26 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 } catch (_) { }
             };
 
-            ws.onerror = () => { setStatus('❌ Greška veze', '#f87171'); };
+            ws.onerror = () => {
+                const wasConnecting = connecting;
+                connecting = false;
+                clearConnectionTimer();
+                setConnectingBtn(false);
+                setStatus('❌ Greška veze — provjeri radi li WhisperLive server na ' + cfg.host + ':' + cfg.port, '#f87171');
+                if (wasConnecting && typeof showToast === 'function') showToast('❌ WhisperLive veza nije uspjela');
+            };
 
             ws.onclose = () => {
+                clearConnectionTimer();
                 if (active) {
                     active = false;
                     setToggleBtn(false);
                     stopAudio();
                     setStatus('⏸ Veza prekinuta', '#94a3b8');
+                } else if (connecting) {
+                    connecting = false;
+                    setConnectingBtn(false);
+                    setStatus('❌ Veza zatvorena prije spajanja — server nije spreman', '#f87171');
                 }
             };
         } catch (err) {
