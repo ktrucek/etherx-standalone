@@ -46,11 +46,13 @@ app.commandLine.appendSwitch(
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isHeadless =
   process.env.DISPLAY === undefined && process.platform === "linux";
-// Linux-safe default: many driver stacks render a black window with HW acceleration.
-// Set ETHERX_ENABLE_GPU=1 to opt back into GPU acceleration.
+// Linux desktop default: keep GPU enabled. Electron webviews can render as a
+// permanent white/blank surface on some Mint/Ubuntu stacks when GPU is disabled.
+// Use ETHERX_DISABLE_GPU=1 for explicit safe mode; CI/headless still disables it.
 const forceDisableGpu =
   process.env.ETHERX_DISABLE_GPU === "1" ||
-  (process.platform === "linux" && process.env.ETHERX_ENABLE_GPU !== "1");
+  isCI ||
+  isHeadless;
 const forceDisableGpuSandbox = process.env.ETHERX_DISABLE_GPU_SANDBOX === "1";
 const aggressiveGpuFlags = process.env.ETHERX_GPU_AGGRESSIVE === "1";
 const enableLinuxVaapi = process.env.ETHERX_ENABLE_VAAPI === "1";
