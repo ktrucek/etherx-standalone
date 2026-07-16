@@ -1265,7 +1265,7 @@ function resolvePythonProjectRoot(reqLookup = undefined) {
 async function installPythonBridgeDeps() {
   try {
     const reqLookup = resolveRequirementsPath();
-    const fallbackPackages = ["torch", "transformers", "gliclass"];
+    const fallbackPackages = ["torch", "transformers", "accelerate", "gliclass"];
     const projectRoot = resolvePythonProjectRoot(reqLookup);
 
     // If packaged, materialize requirements.txt to the writable directory
@@ -1277,7 +1277,7 @@ async function installPythonBridgeDeps() {
           fs.writeFileSync(destReq, fs.readFileSync(srcReq));
         } else {
           // If not found, write a minimal default requirements.txt
-          fs.writeFileSync(destReq, "torch\ntransformers\ngliclass\n");
+          fs.writeFileSync(destReq, "torch\ntransformers\naccelerate\ngliclass\n");
         }
       } catch (_) { }
     }
@@ -4122,7 +4122,7 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const resolvedProjectRoot = resolvePythonProjectRoot();
-      const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
+      const missingDepRe = /No module named ['\"]?(torch|transformers|accelerate|gliclass)['\"]?|requires `?accelerate`?|pip install accelerate/i;
       const tryRunScan = async () => {
         const allCandidates = resolvePythonCandidates(resolvedProjectRoot);
         const candidates = preferExistingVenvPythonCandidates(allCandidates);
@@ -4195,7 +4195,7 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const resolvedProjectRoot = resolvePythonProjectRoot();
-      const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
+      const missingDepRe = /No module named ['\"]?(torch|transformers|accelerate|gliclass)['\"]?|requires `?accelerate`?|pip install accelerate/i;
       const tryRunScan = async () => {
         const allCandidates = resolvePythonCandidates(resolvedProjectRoot);
         const candidates = preferExistingVenvPythonCandidates(allCandidates);
@@ -4270,7 +4270,7 @@ function setupIPC() {
 
       const encoded = Buffer.from(JSON.stringify(input), "utf8").toString("base64");
       const resolvedProjectRoot = resolvePythonProjectRoot();
-      const missingDepRe = /No module named ['\"]?(torch|transformers|gliclass)['\"]?/i;
+      const missingDepRe = /No module named ['\"]?(torch|transformers|accelerate|gliclass)['\"]?|requires `?accelerate`?|pip install accelerate/i;
       const tryRunTranslate = async () => {
         const allCandidates = resolvePythonCandidates(resolvedProjectRoot);
         const candidates = preferExistingVenvPythonCandidates(allCandidates);
