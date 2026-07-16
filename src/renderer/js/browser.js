@@ -1699,6 +1699,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             document.querySelectorAll('.tkai-settings-toggle').forEach(b => b.classList.remove('active'));
             if (!isOpen) { if (drawer) drawer.style.display = ''; btn.classList.add('active'); }
             if (drawerId === 'tkaiDrawerSessions' && !isOpen) renderTkaiSessionHistory();
+            if (drawerId === 'tkaiDrawerLayout' && !isOpen && typeof window.renderTkaiLayoutVisualEditor === 'function') {
+                setTimeout(() => window.renderTkaiLayoutVisualEditor(), 40);
+            }
             if (drawerId === 'tkaiDrawerAiModel' && !isOpen) {
                 const gname = document.getElementById('tkaiGlobalModelName');
                 if (gname) gname.textContent = (typeof getSelectedAiModel === 'function' ? getSelectedAiModel() : '—') || '—';
@@ -3094,7 +3097,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             task: String(s.tkaiWhisperTask || 'transcribe').trim(),
             translateLang: String(s.tkaiWhisperTranslateLang || 'auto').trim(),
             textOnlyListening: s.tkaiWhisperTextOnlyListening !== false,
-            writeToChat: s.tkaiWhisperTextOnlyListening !== false ? true : s.tkaiWhisperWriteToChat !== false,
+            writeToChat: s.tkaiWhisperWriteToChat !== false,
             muteSpeech: s.tkaiWhisperTextOnlyListening !== false ? true : s.tkaiWhisperMuteSpeech !== false,
             model: String(s.tkaiWhisperModel || 'small').trim(),
             vad: s.tkaiWhisperVad !== false,
@@ -3228,7 +3231,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     }
 
     async function publishToTikTokListeningFeed(text, cfg, translatedText = '') {
-        if (!cfg.writeToChat || typeof window.addTkaiListeningMessage !== 'function') return;
+        if (typeof window.addTkaiListeningMessage !== 'function') return;
         const clean = String(text || '').replace(/\s+/g, ' ').trim();
         if (!clean) return;
         const targetLang = getWhisperTargetLang(cfg);
@@ -10041,12 +10044,164 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             card.dataset.tkaiCardInit = '1';
         });
     }
+    const TKAI_SESSION_LAYOUT_KEY = 'ex_tkai_session_layout_v1';
+    const TKAI_FEED_LAYOUT_KEY = 'ex_tkai_feed_layout_v1';
+    const TKAI_SESSION_COLLAPSED_PREFIX = 'ex_tkai_session_collapsed_';
+
+    function isTkaiInlineLayoutHidden() {
+        return DB.getSettings().tkaiHideInlineLayoutControls !== false;
+    }
+
+    function syncTkaiInlineLayoutControls() {
+        document.getElementById('tiktokAIPanel')?.classList.toggle('tkai-inline-layout-hidden', isTkaiInlineLayoutHidden());
+    }
+
+    function getTkaiFeedLayoutRoot() {
+        return document.querySelector('#tiktokAIPanel .tkai-feed-stack');
+    }
+
+    function getTkaiSessionLayoutRoot() {
+        return document.querySelector('#tiktokAIPanel .tkai-main-wrap');
+    }
+
+    function getTkaiFeedSections() {
+        const root = getTkaiFeedLayoutRoot();
+        if (!root) return [];
+        return Array.from(root.querySelectorAll(':scope > .tkai-feed-section')).filter((node) => node instanceof HTMLElement);
+    }
+
+    function getTkaiSessionSections() {
+        const root = getTkaiSessionLayoutRoot();
+        if (!root) return [];
+        return Array.from(root.children).filter((node) => node instanceof HTMLElement);
+    }
+
+    function applyTkaiLayoutOrder(root, sections, order) {
+        if (!root) return;
+        const known = new Set();
+        (Array.isArray(order) ? order : []).forEach((key) => {
+            const section = sections.find((node) => {
+                const layoutKey = node.dataset?.tkaiLayoutKey || node.dataset?.tkaiFeedLayoutKey || node.id;
+                return layoutKey === key;
+            });
+            if (section) {
+                known.add(section);
+                root.appendChild(section);
+            }
+        });
+        sections.forEach((section) => {
+            if (!known.has(section)) root.appendChild(section);
+        });
+    }
+
+    function saveTkaiSectionOrder(root, selector, keyName, storageKey) {
+        if (!root) return;
+        const order = Array.from(root.querySelectorAll(selector))
+            .map((node) => node.dataset?.[keyName] || node.id)
+            .filter(Boolean);
+        localStorage.setItem(storageKey, JSON.stringify(order));
+    }
+
+    function getTkaiLayoutLabel(section, fallback) {
+        if (!section) return fallback;
+        const explicit = section.dataset.tkaiLayoutTitle || section.getAttribute('aria-label') || '';
+        if (explicit) return explicit;
+        const header = section.querySelector(':scope > .tkai-subheader span:first-child, :scope > .tkai-col-header span:first-child, :scope .tkai-col-header span:first-child, :scope .tkai-stat-label, :scope h3, :scope h4');
+        const text = String(header?.textContent || section.id || fallback || '').replace(/\s+/g, ' ').trim();
+        return text || fallback;
+    }
+
+    function renderTkaiVisualList(containerId, root, sections, options) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+        if (!root || !sections.length) {
+            container.innerHTML = '<div class="tkai-empty" style="font-size:10px;padding:8px">Nema stavki za slaganje.</div>';
+            return;
+        }
+        let draggedRow = null;
+        const persist = () => {
+            const order = Array.from(container.querySelectorAll('.tkai-layout-visual-item'))
+                .map((row) => row.dataset.key)
+                .filter(Boolean);
+            localStorage.setItem(options.storageKey, JSON.stringify(order));
+            applyTkaiLayoutOrder(root, sections, order);
+            if (options.type === 'feed') {
+                saveTkaiSectionOrder(root, ':scope > .tkai-feed-section', 'tkaiFeedLayoutKey', TKAI_FEED_LAYOUT_KEY);
+            } else {
+                saveTkaiSectionOrder(root, ':scope > .tkai-layout-section', 'tkaiLayoutKey', TKAI_SESSION_LAYOUT_KEY);
+            }
+        };
+        sections.forEach((section, index) => {
+            const key = section.dataset?.[options.datasetKey] || section.id || `${options.type}-${index}`;
+            const row = document.createElement('div');
+            row.className = 'tkai-layout-visual-item';
+            row.draggable = true;
+            row.dataset.key = key;
+            const grip = document.createElement('span');
+            grip.className = 'tkai-layout-visual-grip';
+            grip.textContent = '::';
+            const name = document.createElement('div');
+            name.className = 'tkai-layout-visual-name';
+            name.textContent = getTkaiLayoutLabel(section, options.type === 'feed' ? 'Feed' : 'Kartica');
+            const meta = document.createElement('div');
+            meta.className = 'tkai-layout-visual-meta';
+            meta.textContent = section.classList.contains('tkai-section-collapsed') ? 'sakriveno' : '';
+            row.append(grip, name, meta);
+            row.addEventListener('dragstart', (event) => {
+                draggedRow = row;
+                row.classList.add('dragging');
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', key);
+            });
+            row.addEventListener('dragover', (event) => {
+                if (!draggedRow || draggedRow === row) return;
+                event.preventDefault();
+                row.classList.add('drag-over');
+                const rect = row.getBoundingClientRect();
+                container.insertBefore(draggedRow, event.clientY > rect.top + rect.height / 2 ? row.nextSibling : row);
+            });
+            row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+            row.addEventListener('drop', (event) => {
+                event.preventDefault();
+                row.classList.remove('drag-over');
+            });
+            row.addEventListener('dragend', () => {
+                container.querySelectorAll('.tkai-layout-visual-item').forEach((item) => item.classList.remove('dragging', 'drag-over'));
+                draggedRow = null;
+                persist();
+                showToast('✓ Layout spremljen');
+            });
+            container.appendChild(row);
+        });
+    }
+
+    function renderTkaiLayoutVisualEditor() {
+        syncTkaiInlineLayoutControls();
+        const feedRoot = getTkaiFeedLayoutRoot();
+        const feedSections = getTkaiFeedSections();
+        const sessionRoot = getTkaiSessionLayoutRoot();
+        const sessionSections = getTkaiSessionSections();
+        renderTkaiVisualList('tkaiLayoutVisualFeeds', feedRoot, feedSections, {
+            type: 'feed',
+            datasetKey: 'tkaiFeedLayoutKey',
+            storageKey: TKAI_FEED_LAYOUT_KEY,
+        });
+        renderTkaiVisualList('tkaiLayoutVisualCards', sessionRoot, sessionSections, {
+            type: 'session',
+            datasetKey: 'tkaiLayoutKey',
+            storageKey: TKAI_SESSION_LAYOUT_KEY,
+        });
+    }
+    window.renderTkaiLayoutVisualEditor = renderTkaiLayoutVisualEditor;
+    let syncTkaiSessionLayoutState = null;
+
     function initTkaiSessionLayout() {
         const root = document.querySelector('#tiktokAIPanel .tkai-main-wrap');
         if (!root || root.dataset.tkaiLayoutInit === '1') return;
         root.dataset.tkaiLayoutInit = '1';
-        const orderKey = 'ex_tkai_session_layout_v1';
-        const collapsedPrefix = 'ex_tkai_session_collapsed_';
+        const orderKey = TKAI_SESSION_LAYOUT_KEY;
+        const collapsedPrefix = TKAI_SESSION_COLLAPSED_PREFIX;
         const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement);
         const originalOrder = [];
         let draggedSection = null;
@@ -10083,9 +10238,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
             drag.addEventListener('pointerdown', () => { dragArmed = !dashboardLayoutLocked; });
             drag.addEventListener('pointerup', () => { dragArmed = false; });
-            section.draggable = !dashboardLayoutLocked;
+            section.draggable = !dashboardLayoutLocked && !isTkaiInlineLayoutHidden();
             section.addEventListener('dragstart', (event) => {
-                if (dashboardLayoutLocked || !dragArmed) {
+                if (dashboardLayoutLocked || isTkaiInlineLayoutHidden() || !dragArmed) {
                     event.preventDefault();
                     return;
                 }
@@ -10117,6 +10272,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 localStorage.setItem(orderKey, JSON.stringify(order));
             });
         });
+        root.dataset.tkaiOriginalOrder = JSON.stringify(originalOrder);
 
         const applyOrder = (order) => {
             (Array.isArray(order) ? order : []).forEach((key) => {
@@ -10129,9 +10285,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const syncLockState = () => {
             root.classList.toggle('tkai-layout-locked', dashboardLayoutLocked);
             root.classList.toggle('tkai-layout-unlocked', !dashboardLayoutLocked);
-            sections.forEach((section) => { section.draggable = !dashboardLayoutLocked; });
+            const allowInlineDrag = !dashboardLayoutLocked && !isTkaiInlineLayoutHidden();
+            sections.forEach((section) => { section.draggable = allowInlineDrag; });
             if (layoutLockBtn) layoutLockBtn.textContent = dashboardLayoutLocked ? '🔒 Zaključano' : '🔓 Pomicanje ON';
+            syncTkaiInlineLayoutControls();
+            renderTkaiLayoutVisualEditor();
         };
+        syncTkaiSessionLayoutState = syncLockState;
         layoutLockBtn?.addEventListener('click', () => {
             dashboardLayoutLocked = !dashboardLayoutLocked;
             DB.saveSetting('tkaiDashboardLayoutLocked', dashboardLayoutLocked);
@@ -10162,7 +10322,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const root = document.querySelector('#tiktokAIPanel .tkai-feed-stack');
         if (!root || root.dataset.tkaiFeedLayoutInit === '1') return;
         root.dataset.tkaiFeedLayoutInit = '1';
-        const orderKey = 'ex_tkai_feed_layout_v1';
+        const orderKey = TKAI_FEED_LAYOUT_KEY;
         const sections = Array.from(root.querySelectorAll(':scope > .tkai-feed-section')).filter((node) => node instanceof HTMLElement);
         let draggedSection = null;
         let dragArmed = false;
@@ -10180,13 +10340,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 drag.textContent = '⠿';
                 drag.title = 'Povuci i premjesti feed';
                 header.insertBefore(drag, header.firstChild);
-                drag.addEventListener('pointerdown', () => { dragArmed = !feedLayoutLocked; });
+                drag.addEventListener('pointerdown', () => { dragArmed = !feedLayoutLocked && !isTkaiInlineLayoutHidden(); });
                 drag.addEventListener('pointerup', () => { dragArmed = false; });
                 drag.addEventListener('pointercancel', () => { dragArmed = false; });
             }
-            section.draggable = !feedLayoutLocked;
+            section.draggable = !feedLayoutLocked && !isTkaiInlineLayoutHidden();
             section.addEventListener('dragstart', (event) => {
-                if (feedLayoutLocked || !dragArmed) {
+                if (feedLayoutLocked || isTkaiInlineLayoutHidden() || !dragArmed) {
                     event.preventDefault();
                     return;
                 }
@@ -10228,7 +10388,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const syncFeedLockState = () => {
             root.classList.toggle('tkai-feed-locked', feedLayoutLocked);
             root.classList.toggle('tkai-feed-unlocked', !feedLayoutLocked);
-            sections.forEach((section) => { section.draggable = !feedLayoutLocked; });
+            const allowInlineDrag = !feedLayoutLocked && !isTkaiInlineLayoutHidden();
+            sections.forEach((section) => { section.draggable = allowInlineDrag; });
+            syncTkaiInlineLayoutControls();
+            renderTkaiLayoutVisualEditor();
         };
         try { applyOrder(JSON.parse(localStorage.getItem(orderKey) || '[]')); } catch (_) { }
         syncFeedLockState();
@@ -10245,14 +10408,29 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             syncFeedLockState();
             showToast('🔓 Slaganje feedova uključeno');
         });
+        document.querySelector('#stab-ai-live-chat [data-setting="tkaiHideInlineLayoutControls"]')?.addEventListener('click', () => {
+            setTimeout(() => {
+                if (typeof syncTkaiSessionLayoutState === 'function') syncTkaiSessionLayoutState();
+                syncFeedLockState();
+            }, 0);
+        });
+        document.getElementById('btnTkaiLayoutRefreshVisual')?.addEventListener('click', () => {
+            renderTkaiLayoutVisualEditor();
+            showToast('✓ Layout osvježen');
+        });
         document.getElementById('btnTkaiLayoutResetFeeds')?.addEventListener('click', () => {
             localStorage.removeItem(orderKey);
             applyOrder(originalOrder);
+            renderTkaiLayoutVisualEditor();
             showToast('↺ Redoslijed feedova vraćen');
         });
         document.getElementById('btnTkaiLayoutResetCards')?.addEventListener('click', () => {
-            localStorage.removeItem('ex_tkai_session_layout_v1');
-            showToast('↺ Redoslijed kartica vraćen. Zatvori i otvori TikTok Chat AI za puni refresh.');
+            localStorage.removeItem(TKAI_SESSION_LAYOUT_KEY);
+            let initialOrder = [];
+            try { initialOrder = JSON.parse(getTkaiSessionLayoutRoot()?.dataset?.tkaiOriginalOrder || '[]'); } catch (_) { }
+            applyTkaiLayoutOrder(getTkaiSessionLayoutRoot(), getTkaiSessionSections(), initialOrder);
+            renderTkaiLayoutVisualEditor();
+            showToast('↺ Redoslijed kartica vraćen');
         });
     }
     initTkaiSessionLayout();
