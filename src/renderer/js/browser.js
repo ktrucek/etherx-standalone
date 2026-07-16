@@ -10120,6 +10120,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return;
         }
         let draggedRow = null;
+        const refreshRowButtons = () => {
+            const rows = Array.from(container.querySelectorAll('.tkai-layout-visual-item'));
+            rows.forEach((row, index) => {
+                const up = row.querySelector('[data-layout-action="up"]');
+                const down = row.querySelector('[data-layout-action="down"]');
+                if (up) up.disabled = index === 0;
+                if (down) down.disabled = index === rows.length - 1;
+            });
+        };
         const persist = () => {
             const order = Array.from(container.querySelectorAll('.tkai-layout-visual-item'))
                 .map((row) => row.dataset.key)
@@ -10131,6 +10140,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             } else {
                 saveTkaiSectionOrder(root, ':scope > .tkai-layout-section', 'tkaiLayoutKey', TKAI_SESSION_LAYOUT_KEY);
             }
+            refreshRowButtons();
         };
         sections.forEach((section, index) => {
             const key = section.dataset?.[options.datasetKey] || section.id || `${options.type}-${index}`;
@@ -10147,8 +10157,45 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const meta = document.createElement('div');
             meta.className = 'tkai-layout-visual-meta';
             meta.textContent = section.classList.contains('tkai-section-collapsed') ? 'sakriveno' : '';
-            row.append(grip, name, meta);
+            const actions = document.createElement('div');
+            actions.className = 'tkai-layout-visual-actions';
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button';
+            upBtn.className = 'tkai-layout-visual-btn';
+            upBtn.dataset.layoutAction = 'up';
+            upBtn.textContent = 'Gore';
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button';
+            downBtn.className = 'tkai-layout-visual-btn';
+            downBtn.dataset.layoutAction = 'down';
+            downBtn.textContent = 'Dolje';
+            actions.append(upBtn, downBtn);
+            row.append(grip, name, actions);
+            if (meta.textContent) row.title = meta.textContent;
+            const moveRow = (direction) => {
+                const sibling = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
+                if (!sibling || !sibling.classList?.contains('tkai-layout-visual-item')) return;
+                if (direction < 0) container.insertBefore(row, sibling);
+                else container.insertBefore(sibling, row);
+                persist();
+                renderTkaiLayoutVisualEditor();
+                showToast('✓ Layout spremljen');
+            };
+            upBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                moveRow(-1);
+            });
+            downBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                moveRow(1);
+            });
             row.addEventListener('dragstart', (event) => {
+                if (event.target.closest('button')) {
+                    event.preventDefault();
+                    return;
+                }
                 draggedRow = row;
                 row.classList.add('dragging');
                 event.dataTransfer.effectAllowed = 'move';
@@ -10174,6 +10221,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
             container.appendChild(row);
         });
+        refreshRowButtons();
     }
 
     function renderTkaiLayoutVisualEditor() {

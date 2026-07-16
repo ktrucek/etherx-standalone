@@ -5120,6 +5120,34 @@ body.tkai-panel-interacting * {
   color: var(--text3);
 }
 
+.tkai-layout-visual-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tkai-layout-visual-btn {
+  min-width: 44px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text2);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tkai-layout-visual-btn:hover:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.5);
+  color: #5eead4;
+}
+
+.tkai-layout-visual-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .tkai-gift-feed::-webkit-scrollbar {
   width: 7px;
 }
