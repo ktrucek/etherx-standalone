@@ -5117,6 +5117,7 @@ function togglePanel(id) {
     if (!wasOpen) {
         if (id === 'tiktokAIPanel') restoreTikTokPanelLayout();
         panel.classList.add('open');
+        loadPanelFrame(id);
     }
 }
 function openPanel(id) {
@@ -5125,11 +5126,39 @@ function openPanel(id) {
     closeAllPanels();
     if (id === 'tiktokAIPanel') restoreTikTokPanelLayout();
     panel.classList.add('open');
+    loadPanelFrame(id);
     if (id === 'tiktokAIPanel') {
         requestAnimationFrame(() => {
             if (!restoreTikTokPanelLayout()) ensurePanelInViewport(panel);
         });
     }
+}
+function loadPanelFrame(panelId, forceReload = false) {
+    const frameByPanel = {
+        walletPanel: 'walletFrame',
+        bobiaiPanel: 'bobiaiFrame',
+        etherxPanel: 'etherxFrame',
+    };
+    const loadingByPanel = {
+        walletPanel: 'walletLoading',
+        bobiaiPanel: 'bobiaiLoading',
+        etherxPanel: 'etherxLoading',
+    };
+    const frame = document.getElementById(frameByPanel[panelId]);
+    if (!frame) return;
+    const target = frame.dataset.src || frame.getAttribute('data-src') || '';
+    if (!target) return;
+    const allow = frame.dataset.allow || frame.getAttribute('data-allow') || '';
+    if (allow && frame.getAttribute('allow') !== allow) frame.setAttribute('allow', allow);
+    const loading = document.getElementById(loadingByPanel[panelId]);
+    if (loading) loading.style.display = 'flex';
+    if (forceReload) {
+        frame.src = 'about:blank';
+        setTimeout(() => { frame.src = target; }, 50);
+        return;
+    }
+    const current = frame.getAttribute('src') || '';
+    if (!current || current === 'about:blank') frame.src = target;
 }
 function ensurePanelInViewport(panelOrId) {
     const panel = typeof panelOrId === 'string' ? document.getElementById(panelOrId) : panelOrId;
@@ -5213,23 +5242,11 @@ document.getElementById('settingsBackdrop')?.addEventListener('click', () => {
     document.getElementById('settingsBackdrop')?.classList.remove('open');
 });
 document.getElementById('walletReload')?.addEventListener('click', () => {
-    const wl = document.getElementById('walletLoading');
-    const wf = document.getElementById('walletFrame');
-    if (wl) wl.style.display = 'flex';
-    if (wf) {
-        wf.src = '';
-        setTimeout(() => { wf.src = 'https://wallet.kriptoentuzijasti.io'; }, 50);
-    }
+    loadPanelFrame('walletPanel', true);
 });
 document.getElementById('btnWallet').addEventListener('click', () => { togglePanel('walletPanel'); });
 document.getElementById('bobiaiReload')?.addEventListener('click', () => {
-    const bl = document.getElementById('bobiaiLoading');
-    const bf = document.getElementById('bobiaiFrame');
-    if (bl) bl.style.display = 'flex';
-    if (bf) {
-        bf.src = '';
-        setTimeout(() => { bf.src = 'https://bobiai.kriptoentuzijasti.io'; }, 50);
-    }
+    loadPanelFrame('bobiaiPanel', true);
 });
 document.getElementById('btnBobiAI').addEventListener('click', () => togglePanel('bobiaiPanel'));
 
@@ -5729,8 +5746,7 @@ document.getElementById('btnAiInspect')?.addEventListener('click', () => toggleP
 document.getElementById('btnKripto').addEventListener('click', () => togglePanel('kriptoPanel'));
 document.getElementById('btnEtherX').addEventListener('click', () => togglePanel('etherxPanel'));
 document.getElementById('etherxReload')?.addEventListener('click', () => {
-    document.getElementById('etherxLoading').style.display = 'flex';
-    document.getElementById('etherxFrame').src = 'https://etherx.io';
+    loadPanelFrame('etherxPanel', true);
 });
 ['etherxFrame'].forEach(fid => {
     const fr = document.getElementById(fid);
@@ -18192,27 +18208,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (changed) EXT_DB.save(existing);
     })();
 
-    // Seed Reveye bundled extension (unpacked — auto-loaded from app folder at startup)
-    (async function seedReveyeExtension() {
-        if (!window.etherx?.app?.getAppPath) return;
-        try {
-            const appPath = await window.etherx.app.getAppPath();
-            const reveyePath = appPath + '/reveye/src';
-            const existing = EXT_DB.get();
-            const found = existing.find(e => e.path === reveyePath || e.name === 'RevEye Reverse Image Search' || e.id === 'reveye-builtin');
-            if (!found) {
-                existing.push({ id: 'reveye-builtin', name: 'RevEye Reverse Image Search', icon: '🔍', desc: 'Reverse image search — Google, Bing, Yandex, TinEye (built-in extension)', enabled: true, installMode: 'unpacked', path: reveyePath, source: 'builtin', installedAt: Date.now() });
-                EXT_DB.save(existing);
-                renderExtList && renderExtList();
-            } else if (!found.enabled) {
-                // Builtin extension was toggled off — always keep it enabled
-                found.enabled = true;
-                EXT_DB.save(existing);
-                renderExtList && renderExtList();
-            }
-        } catch (e) { console.warn('[Ext] Reveye seed failed:', e); }
-    })();
-
     // Seed bundled LiveOS Plugin extension (unpacked)
     (async function seedLiveOsPluginExtension() {
         if (!window.etherx?.app?.getAppPath) return;
@@ -18875,6 +18870,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         let changed = false;
         for (const ext of exts) {
             if (ext.installMode !== 'unpacked' || !ext.path) continue;
+            if (ext.enabled === false) continue;
+            if (ext.name === 'RevEye Reverse Image Search' || ext.id === 'reveye-builtin') {
+                ext.enabled = false;
+                changed = true;
+                continue;
+            }
             const loaded = await window.etherx?.extensions?.loadUnpacked?.(ext.path);
             if (loaded?.ok) {
                 ext.id = loaded.id;

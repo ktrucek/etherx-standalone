@@ -2055,20 +2055,6 @@ app.whenReady().then(async () => {
     console.warn("[Permissions] persist:tiktok-watcher setup failed:", e.message);
   }
 
-  // Auto-load bundled Reveye Reverse Image Search extension
-  try {
-    const reveyePath = path.join(__dirname, "reveye", "src");
-    if (fs.existsSync(path.join(reveyePath, "manifest.json"))) {
-      session.defaultSession
-        .loadExtension(reveyePath, { allowFileAccess: true })
-        .then((ext) => console.log("[Ext] Reveye loaded:", ext.name, ext.id))
-        .catch((e) => console.warn("[Ext] Reveye load skipped:", e.message));
-    }
-  } catch (e) {
-    console.warn("[Ext] Reveye setup error:", e.message);
-  }
-
-
   // Auto-load bundled LiveOS Plugin Dashboard extension
   try {
     const bundledLiveOsPluginPath = path.join(__dirname, "liveos-plugin-extension");
@@ -2097,7 +2083,9 @@ app.whenReady().then(async () => {
       }));
     }
   } catch (e) {
-    console.warn("[Ext] LiveOS Plugin setup error:", e.message);
+    if (process.env.ETHERX_DEBUG_LOGS === "1" || process.env.ETHERX_DEBUG === "1") {
+      console.warn("[Ext] LiveOS Plugin setup error:", e.message);
+    }
   }
 
   // Setup IPC handlers ONCE before creating any window
@@ -2262,7 +2250,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on("console-message", (_event, level, msg, line, sourceId) => {
-    if (level >= 2) {
+    if (level >= 3 || ((process.env.ETHERX_DEBUG_LOGS === "1" || process.env.ETHERX_DEBUG === "1") && level >= 2)) {
       console.error("[renderer]", msg, "@", sourceId + ":" + line);
     }
   });
@@ -2714,7 +2702,7 @@ function createWindow() {
   mainWindow.webContents.on(
     "console-message",
     (e, level, msg, line, sourceId) => {
-      if (level >= 2)
+      if (level >= 3 || ((process.env.ETHERX_DEBUG_LOGS === "1" || process.env.ETHERX_DEBUG === "1") && level >= 2))
         console.error(`🖥️ Renderer [${level}] ${sourceId}:${line} → ${msg}`);
     },
   );

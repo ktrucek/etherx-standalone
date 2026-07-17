@@ -603,7 +603,7 @@
         </webview>
         <iframe id="browseFrameWeb" class="browse-frame"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-            allow="fullscreen; clipboard-read; clipboard-write" title="Browser Frame" style="display:none"></iframe>
+            title="Browser Frame" style="display:none"></iframe>
         <div id="respWrapper"><iframe id="respFrame" title="Responsive"></iframe></div>
         <div class="blocked-overlay" id="blockedOverlay">
             <div class="bo-icon">⚠️</div>
@@ -3323,7 +3323,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.159</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.160</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -5449,7 +5449,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.159</span></div>
+                                    v<span id="helpVersionNum2">3.0.160</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -5569,9 +5569,9 @@
                     </div>
                 </div>
             </div>
-            <iframe id="walletFrame" src="https://wallet.kriptoentuzijasti.io"
+            <iframe id="walletFrame" src="about:blank" data-src="https://wallet.kriptoentuzijasti.io"
                 style="width:100%;height:100%;border:none;display:block"
-                allow="clipboard-read; clipboard-write; web-share; camera; microphone"
+                data-allow="clipboard-read; clipboard-write; web-share; camera; microphone"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 title="BOBIAI Wallet" onload="document.getElementById('walletLoading').style.display='none'"></iframe>
         </div>
@@ -5600,9 +5600,9 @@
                     </div>
                 </div>
             </div>
-            <iframe id="bobiaiFrame" src="https://bobiai.kriptoentuzijasti.io"
+            <iframe id="bobiaiFrame" src="about:blank" data-src="https://bobiai.kriptoentuzijasti.io"
                 style="width:100%;height:100%;border:none;display:block"
-                allow="clipboard-read; clipboard-write; web-share; camera; microphone"
+                data-allow="clipboard-read; clipboard-write; web-share; camera; microphone"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 title="BobiAI Studio" onload="document.getElementById('bobiaiLoading').style.display='none'"></iframe>
         </div>
@@ -6388,8 +6388,8 @@
                     </div>
                 </div>
             </div>
-            <iframe id="etherxFrame" src="https://etherx.io" style="width:100%;height:100%;border:none;display:block"
-                allow="clipboard-read; clipboard-write"
+            <iframe id="etherxFrame" src="about:blank" data-src="https://etherx.io" style="width:100%;height:100%;border:none;display:block"
+                data-allow="clipboard-read; clipboard-write"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" title="EtherX.io"
                 onload="document.getElementById('etherxLoading').style.display='none'"
                 onerror="var ld=document.getElementById('etherxLoading');if(ld){ld.querySelector('div:nth-child(2)').textContent='⚠️ Could not load EtherX.io';ld.querySelector('div:last-child').style.display='none'}"></iframe>
