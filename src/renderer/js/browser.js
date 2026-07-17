@@ -4565,13 +4565,24 @@ function navigateWebviewToURL(wv, url) {
         }
     } catch (_) { }
 
-    // Keep src assignment as a universal fallback, then try loadURL for
-    // attached guests to improve reliability/history behavior.
-    try { wv.src = url; } catch (_) { }
+    // A newly created webview must receive its first URL through `src`.
+    // Calling `src` and `loadURL` back-to-back starts two navigations; Electron
+    // cancels the first one, which made restored tabs appear only after a second
+    // click. Once a guest already exists, use loadURL for normal navigation.
+    try {
+        const initialUrl = String(wv.src || '');
+        if (!initialUrl || initialUrl === 'about:blank') {
+            wv.src = url;
+            return;
+        }
+    } catch (_) { }
     try {
         const navPromise = wv.loadURL?.(url);
         if (navPromise?.catch) navPromise.catch(() => { });
-    } catch (_) { }
+        else wv.src = url;
+    } catch (_) {
+        try { wv.src = url; } catch (_) { }
+    }
 }
 
 function navigateTo(raw, tabId) {
