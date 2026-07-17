@@ -18177,6 +18177,22 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         } catch (e) { return false; }
     }
 
+    function isYouTubeSafeDomain(url) {
+        try {
+            const u = new URL(url);
+            const host = u.hostname.toLowerCase();
+            return host === 'youtube.com'
+                || host === 'www.youtube.com'
+                || host === 'm.youtube.com'
+                || host === 'youtu.be'
+                || host === 'youtube-nocookie.com'
+                || host.endsWith('.youtube.com')
+                || host.endsWith('.youtube-nocookie.com')
+                || host.endsWith('.googlevideo.com')
+                || host.endsWith('.ytimg.com');
+        } catch (e) { return false; }
+    }
+
     function applyUserAgentForURL(wv, url) {
         if (!wv || !wv.setAttribute) return;
         if (isGoogleLoginDomain(url)) {
@@ -18187,6 +18203,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             // Keep JS navigator.userAgent aligned with main-process TikTok request headers.
             // TikTok QR login is sensitive to UA/header mismatches and popup session moves.
             wv.setAttribute('useragent', TIKTOK_CHROME_UA);
+        } else if (isYouTubeSafeDomain(url)) {
+            // YouTube is sensitive to old/bot/custom UA presets. Always use a
+            // normal Chrome UA for the page and its media/CDN requests.
+            wv.setAttribute('useragent', CHROME_131_UA);
         } else {
             // Use custom UA if set, otherwise default
             const customUA = localStorage.getItem('ex_ua') || activeUA || navigator.userAgent.replace(/EtherX.*?\s/, '');
@@ -25855,6 +25875,20 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         // Wrap: after navigation, check phishing in background
         function afterNavPhishingCheck(url) {
             if (!url || !url.startsWith('http')) return;
+            try {
+                const host = new URL(url).hostname.toLowerCase();
+                const skipKnownSafeHost = [
+                    'youtube.com',
+                    'youtu.be',
+                    'youtube-nocookie.com',
+                    'googlevideo.com',
+                    'ytimg.com',
+                    'tiktok.com',
+                    'tiktokcdn.com',
+                    'tiktokv.com'
+                ].some(suffix => host === suffix || host.endsWith('.' + suffix));
+                if (skipKnownSafeHost) return;
+            } catch (_) { }
             etherx.ai.checkPhishing(url, '').then(result => {
                 if (result && result.isPhishing) {
                     const blockedDiv = document.getElementById('blockedOverlay');

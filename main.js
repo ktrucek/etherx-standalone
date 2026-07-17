@@ -2433,8 +2433,9 @@ function createWindow() {
         // For Google domains and TikTok force clean modern Chrome UA
         const url = details.url || "";
         const isTikTok = /tiktok\.com/i.test(url);
+        const isYouTube = /youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com/i.test(url);
         if (
-          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com/i.test(
+          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com|youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com/i.test(
             url,
           )
         ) {
@@ -2450,6 +2451,12 @@ function createWindow() {
             headers["Sec-Fetch-Mode"] = "navigate";
             headers["Sec-Fetch-Dest"] = "document";
             headers["Sec-Fetch-User"] = "?1";
+          }
+          if (isTikTok || isYouTube) {
+            headers["Sec-CH-UA"] =
+              '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
+            headers["Sec-CH-UA-Mobile"] = "?0";
+            headers["Sec-CH-UA-Platform"] = '"Windows"';
           }
         }
         headers[key] = ua || CLEAN_UA;
@@ -2591,8 +2598,9 @@ function createWindow() {
         // For Google domains and TikTok force clean modern Chrome UA
         const url = details.url || "";
         const isTikTok = /tiktok\.com/i.test(url);
+        const isYouTube = /youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com/i.test(url);
         if (
-          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com/i.test(
+          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com|youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com/i.test(
             url,
           )
         ) {
@@ -2608,7 +2616,7 @@ function createWindow() {
             headers["Sec-Fetch-Dest"] = "document";
             headers["Sec-Fetch-User"] = "?1";
           }
-          if (isTikTok) {
+          if (isTikTok || isYouTube) {
             headers["Sec-CH-UA"] =
               '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
             headers["Sec-CH-UA-Mobile"] = "?0";
@@ -2662,6 +2670,101 @@ function createWindow() {
       }
       // Never combine ACAO:* with AACE:true — CORS spec violation that causes
       // credentialed fetch() calls (used by video players) to be rejected.
+      delete headers["access-control-allow-credentials"];
+      delete headers["Access-Control-Allow-Credentials"];
+      delete headers["x-frame-options"];
+      delete headers["X-Frame-Options"];
+      delete headers["content-security-policy"];
+      delete headers["Content-Security-Policy"];
+      delete headers["content-security-policy-report-only"];
+      callback({ responseHeaders: headers });
+    },
+  );
+
+  // TikTok Isolated Mode uses its own persistent partition. Keep its request
+  // surface aligned with the normal webview session; otherwise TikTok sees a
+  // different UA/header profile and can refuse to open or stay on a blank page.
+  const tikTokWatcherSession = session.fromPartition("persist:tiktok-watcher");
+
+  tikTokWatcherSession.webRequest.onBeforeSendHeaders(
+    { urls: ["*://*/*"] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      if (isTrustedFirstPartyHost(details.url)) {
+        callback({ requestHeaders: headers });
+        return;
+      }
+      const key = Object.keys(headers).find(
+        (k) => k.toLowerCase() === "user-agent",
+      );
+      if (key) {
+        let ua = headers[key]
+          .replace(/\s*Electron\/[\d.]+/gi, "")
+          .replace(/\s*EtherX\/[\d.]+/gi, "")
+          .trim();
+        const url = details.url || "";
+        const isTikTok = /tiktok\.com/i.test(url);
+        const isYouTube = /youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com/i.test(url);
+        if (
+          /google\.com|googleapis\.com|accounts\.google|openrouter\.ai|clerk\.openrouter\.ai|accounts\.openrouter\.ai|\.clerk\.accounts\.dev|\.clerk\.com|auth0\.com|okta\.com|huggingface\.co|openai\.com|anthropic\.com|github\.com\/login|tiktok\.com|youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com/i.test(
+            url,
+          )
+        ) {
+          ua = GOOGLE_UA;
+          delete headers["X-Requested-With"];
+          if (isGoogleAuthRequest(url) && String(details.resourceType || "").toLowerCase() === "mainframe") {
+            headers["Sec-CH-UA"] =
+              '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
+            headers["Sec-CH-UA-Mobile"] = "?0";
+            headers["Sec-CH-UA-Platform"] = '"Windows"';
+            headers["Sec-Fetch-Site"] = "none";
+            headers["Sec-Fetch-Mode"] = "navigate";
+            headers["Sec-Fetch-Dest"] = "document";
+            headers["Sec-Fetch-User"] = "?1";
+          }
+          if (isTikTok || isYouTube) {
+            headers["Sec-CH-UA"] =
+              '"Google Chrome";v="142", "Chromium";v="142", "Not_A Brand";v="24"';
+            headers["Sec-CH-UA-Mobile"] = "?0";
+            headers["Sec-CH-UA-Platform"] = '"Windows"';
+          }
+        }
+        headers[key] = ua || CLEAN_UA;
+      }
+      callback({ requestHeaders: headers });
+    },
+  );
+
+  tikTokWatcherSession.webRequest.onHeadersReceived(
+    { urls: ["*://*/*"] },
+    (details, callback) => {
+      const headers = { ...details.responseHeaders };
+
+      if (isTrustedFirstPartyHost(details.url)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
+
+      if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
+
+      if (!isSecurityHeaderRelaxationTarget(details.url)) {
+        callback({ responseHeaders: headers });
+        return;
+      }
+
+      if (
+        !headers["access-control-allow-origin"] &&
+        !headers["Access-Control-Allow-Origin"]
+      ) {
+        headers["Access-Control-Allow-Origin"] = ["*"];
+        headers["Access-Control-Allow-Methods"] = [
+          "GET, POST, PUT, DELETE, OPTIONS",
+        ];
+        headers["Access-Control-Allow-Headers"] = ["*"];
+      }
       delete headers["access-control-allow-credentials"];
       delete headers["Access-Control-Allow-Credentials"];
       delete headers["x-frame-options"];
