@@ -1955,15 +1955,9 @@ app.whenReady().then(async () => {
     setupDownloadTracking(session.fromPartition("persist:etherx"));
   } catch (_) { }
 
-  // Apply ad blocker to the webview session (persist:etherx) as well
-  try {
-    if (AdBlocker && adBlocker) {
-      const etherxSess = session.fromPartition("persist:etherx");
-      adBlocker.blocker?.enableBlockingInSession(etherxSess);
-    }
-  } catch (e) {
-    console.warn("[AdBlocker] persist:etherx enable failed:", e.message);
-  }
+  // Keep the full-page webview session free of the global adblocker. Aggressive
+  // EasyList/EasyPrivacy rules can block player bootstrap and media handshakes
+  // on YouTube/TikTok, making pages load but never render video.
 
   // Allow media / fullscreen / clipboard permissions in webviews (required for YouTube, TikTok, etc.)
   try {

@@ -88,8 +88,8 @@ try {
     if (!navigator.userAgentData) {
         const uaData = {
             brands: [
-                { brand: 'Chromium', version: '135' },
-                { brand: 'Google Chrome', version: '135' },
+                { brand: 'Chromium', version: '142' },
+                { brand: 'Google Chrome', version: '142' },
                 { brand: 'Not.A/Brand', version: '24' }
             ],
             mobile: false,
@@ -100,14 +100,14 @@ try {
                     bitness: '64',
                     formFactors: ['Desktop'],
                     fullVersionList: [
-                        { brand: 'Chromium', version: '135.0.0.0' },
-                        { brand: 'Google Chrome', version: '135.0.0.0' },
+                        { brand: 'Chromium', version: '142.0.0.0' },
+                        { brand: 'Google Chrome', version: '142.0.0.0' },
                         { brand: 'Not.A/Brand', version: '24.0.0.0' }
                     ],
                     model: '',
                     platform: 'Windows',
                     platformVersion: '10.0.0',
-                    uaFullVersion: '135.0.0.0',
+                    uaFullVersion: '142.0.0.0',
                     wow64: false
                 };
                 const out = {};
