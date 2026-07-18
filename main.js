@@ -2403,13 +2403,6 @@ function createWindow() {
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ["*://*/*"] },
     (details, callback) => {
-      // Video players make many segment requests per second. Their session UA
-      // is already clean, so do not parse or rewrite their CDN headers here.
-      const isDocument = ["mainFrame", "subFrame"].includes(details.resourceType);
-      if (!isDocument && (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details))) {
-        callback({ requestHeaders: details.requestHeaders });
-        return;
-      }
       const headers = { ...details.requestHeaders };
       if (isTrustedFirstPartyHost(details.url)) {
         callback({ requestHeaders: headers });
@@ -2576,12 +2569,6 @@ function createWindow() {
   etherxSession.webRequest.onBeforeSendHeaders(
     { urls: ["*://*/*"] },
     (details, callback) => {
-      // Preserve native headers for player bootstrap and media segments.
-      const isDocument = ["mainFrame", "subFrame"].includes(details.resourceType);
-      if (!isDocument && (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details))) {
-        callback({ requestHeaders: details.requestHeaders });
-        return;
-      }
       const headers = { ...details.requestHeaders };
       if (isTrustedFirstPartyHost(details.url)) {
         callback({ requestHeaders: headers });
@@ -2690,11 +2677,6 @@ function createWindow() {
   tikTokWatcherSession.webRequest.onBeforeSendHeaders(
     { urls: ["*://*/*"] },
     (details, callback) => {
-      // TikTok's player/CDN requests must not be rewritten per segment.
-      if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
-        callback({ requestHeaders: details.requestHeaders });
-        return;
-      }
       const headers = { ...details.requestHeaders };
       if (isTrustedFirstPartyHost(details.url)) {
         callback({ requestHeaders: headers });
