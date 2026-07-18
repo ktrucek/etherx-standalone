@@ -2082,8 +2082,7 @@ app.whenReady().then(async () => {
   }
 
   // 🔥 PERFORMANCE: Session warming - preconnect to popular domains
-  // This loads DNS/TLS handshakes in background → instant navigation.
-  // Keep TikTok here as it has a particularly expensive first-page bootstrap.
+  // This loads DNS/TLS handshakes in background → instant navigation
   try {
     const etherxSess = session.fromPartition("persist:etherx");
     const popularDomains = [
@@ -2094,19 +2093,12 @@ app.whenReady().then(async () => {
       "https://twitter.com",
       "https://wallet.kriptoentuzijasti.io",
       "https://bobiai.kriptoentuzijasti.io",
-      "https://www.tiktok.com",
     ];
 
     // Preconnect to popular domains (DNS + TLS handshake)
     popularDomains.forEach((domain) => {
       etherxSess.preconnect({ url: domain, numSockets: 2 });
     });
-
-    // TikTok Chat AI can deliberately use an isolated cookie/session partition.
-    // Warm that partition too, otherwise its first TikTok tab still starts cold.
-    session
-      .fromPartition("persist:tiktok-watcher")
-      .preconnect({ url: "https://www.tiktok.com", numSockets: 2 });
 
     console.log(
       `[Perf] Session warmed with ${popularDomains.length} preconnects`,
