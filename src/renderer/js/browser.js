@@ -9143,17 +9143,17 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     function extractJoinLevel(message) {
         if (!message || message.type !== 'join') return null;
-        const direct = Number(message.level || message.joinLevel || 0);
+        const direct = Number(message.userLevel || message.level || message.joinLevel || message.badgeLevel || 0);
         if (Number.isFinite(direct) && direct > 0 && direct < 500) return direct;
-        const fromBadge = String(message.badgeText || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
-        if (fromBadge) {
-            const val = Number(fromBadge[1] || 0);
-            if (Number.isFinite(val) && val > 0 && val < 500) return val;
-        }
-        const fromText = String(message.text || '').match(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*(\d{1,3})\b/i);
-        if (fromText) {
-            const val = Number(fromText[1] || 0);
-            if (Number.isFinite(val) && val > 0 && val < 500) return val;
+        const sources = [message.badgeText, message.rawText, message.ariaLabel, message.title, message.text]
+            .map((value) => String(value || ''));
+        for (const source of sources) {
+            // Prefix is intentionally required: "Br. 1" / rank numbers are
+            // not TikTok user levels and must never become a fake join level.
+            const match = source.match(/\b(?:lvl?|level|razina)\.?\s*[:#-]?\s*(\d{1,3})\b/i)
+                || source.match(/💎\s*(\d{1,3})\b/);
+            const value = Number(match?.[1] || 0);
+            if (Number.isFinite(value) && value > 0 && value < 500) return value;
         }
         return null;
     }
@@ -15195,6 +15195,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         || /\b(?:sent|gave|joined|shared|liked|gifted|u[sš]ao|u[sš]la|podijelio|podijelila)\b/i.test(txt);
                     return (hasUserLike && hasTextLike) || (hasExplicitChatMarker && (hasTextLike || hasChatTextShape));
                 }
+                function flattenToIndividualChatRows(candidates) {
+                    const rows = [];
+                    const seen = new Set();
+                    (Array.isArray(candidates) ? candidates : []).forEach((candidate) => {
+                        if (!candidate) return;
+                        // A selector can return the whole virtualized chat
+                        // container. Find its innermost matching descendants,
+                        // otherwise all visible messages are merged into one.
+                        let nested = [];
+                        try {
+                            nested = Array.from(candidate.querySelectorAll('*'))
+                                .filter(isLikelyChatRowElement)
+                                .filter((node) => !Array.from(node.querySelectorAll('*')).some(isLikelyChatRowElement));
+                        } catch (_) { nested = []; }
+                        const source = nested.length ? nested : [candidate];
+                        source.forEach((row) => {
+                            if (!isLikelyChatRowElement(row) || seen.has(row)) return;
+                            seen.add(row);
+                            rows.push(row);
+                        });
+                    });
+                    return rows;
+                }
                 function stripChatMetaBadges(value) {
                     return String(value || '')
                         .replace(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
@@ -15229,7 +15252,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     const patterns = [
                         /^\s*(.{2,80}?)\s*[:\-–—]\s+.{1,}$/u,
                         /^\s*(.{2,80}?)\s+(?:sent|gave|gifted|donated|joined|shared|liked|poklon(?:io|ila)?|darovao|darovala|donirao|donirala|u[sš]ao|u[sš]la|podijelio|podijelila)\b/iu,
-                        /^\s*(.{2,80}?)\s+(?:said|commented|wrote|ka[žz]e|komentira)\b/iu
+                        /^\s*(.{2,80}?)\s+(?:said|commented|wrote|ka[žz]e|komentira)\b/iu,
+                        /^\s*(?:joined|entered|just\s+joined|ulazi|u[sš]ao|u[sš]la|pridru[žz]io|pridru[žz]ila)\s+@?([\p{L}0-9._-]{2,60})\b/iu
                     ];
                     for (const pattern of patterns) {
                         const m = text.match(pattern);
@@ -15691,6 +15715,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
           } catch(_) {}
         }
+        // Convert any selected virtualized container to its individual message
+        // rows before adding the separate gift panel candidates below.
+        items = flattenToIndividualChatRows(items);
+
         // --- Dodatno: skupi gift poruke iz chata koje su možda u posebnim elementima ---
         // TikTok prikazuje poklone kao: "[user] sent [gift-icon] x3" ili "[user] sent a gift"
         const giftItemSelectors = [
@@ -15710,7 +15738,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           } catch(_) {}
         }
         if (giftItemSet.size > items.length) items = Array.from(giftItemSet);
-
         // --- Captions / DJ CC / Song detection ---
         const captionSelectors = [
           '[class*="webcast-caption"]',
@@ -15913,6 +15940,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         return '';
                     })();
           let user = (derivedUser || userHandle || '').slice(0, 60) || null; // null = skip if truly empty
+          // TikTok's normal live layout is two lines: username first, message
+          // second. Prefer that structured extraction over generic child-node
+          // fallbacks, which can otherwise merge the username into the text.
+          if (structuredRow?.user && structuredRow?.text) {
+            const structuredUser = normalizeChatUserName(structuredRow.user);
+            if (structuredUser) user = structuredUser;
+          }
           const textBase = textEl ? textEl.textContent.trim() : '';
           const candidateParts = collectCandidateTextParts(el, user);
           const assembledText = candidateParts.join(' ').trim();
@@ -15925,10 +15959,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           const fullRowText = fallbackText.slice(0, 2400);
           const chatBadgeMeta = extractChatBadgeMeta(el, user);
           const rowFallbackText = extractFullChatTextFromRow(fullRowText, user);
-          const structuredText = structuredRow?.user
-            && normalizeChatUserName(structuredRow.user).toLowerCase() === normalizeChatUserName(user || '').toLowerCase()
-            ? structuredRow.text
-            : '';
+          const structuredText = structuredRow?.text ? String(structuredRow.text).trim() : '';
           let rawText = (structuredText || assembledText || textBase || rowFallbackText || fallbackParts.join(' ') || '').trim().slice(0, 2000);
           rawText = stripKnownChatRowPrefix(rawText, user, chatBadgeMeta).slice(0, 2000);
           if (rowFallbackText && (!rawText || rawText.length < 2 || isAuxiliaryText(rawText))) {
@@ -15977,12 +16008,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const isSubscriber = /\b(sub|subscriber|subscribe|pretplat|member|membership)\b/i.test(low);
             const isJoin = /\b(joined|join|joined\s+the\s+live|joined\s+this\s+live|entered|entered\s+the\s+live|just\s+joined|ulazi|ulazak|u[sš]ao|u[sš]la|pridru[zž]io|pridru[zž]ila)\b/i.test(low);
                         if ((!user || String(user).toLowerCase() === 'unknown') && (isGift || isJoin || isShare)) {
-                            const fromText = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)(?:\b|(?=[a-z0-9]))/i);
+                            const fromText = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)(?:\b|(?=[a-z0-9]))/i)
+                                || text.match(/^\s*(?:joined|entered|just\s+joined|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)\s+@?([\p{L}0-9._-]{2,60})\b/i);
                             if (fromText && fromText[1]) user = fromText[1].trim().slice(0, 60);
                         }
-            let levelHint = chatBadgeMeta.userLevel;
-            if (isJoin) {
-              const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
+            let levelHint = Number(chatBadgeMeta.userLevel || 0) || 0;
+            if (isJoin && !levelHint) {
+              const levelSource = [fullRowText, el.getAttribute('aria-label') || '', el.getAttribute('title') || '', text].join(' ');
+              // Do not read a bare number or "Br. 1" as a level: TikTok uses
+              // those for ranks. A real level has an LV/LVL/Level/Razina or 💎 marker.
+              const levelMatch = levelSource.match(/\b(?:lvl?|level|razina)\.?\s*[:#-]?\s*(\d{1,3})\b/i)
+                || levelSource.match(/💎\s*(\d{1,3})\b/);
               if (levelMatch) {
                 const lvl = parseInt(levelMatch[1], 10);
                 if (Number.isFinite(lvl) && lvl > 0 && lvl < 500) levelHint = lvl;
