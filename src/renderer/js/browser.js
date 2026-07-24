@@ -747,6 +747,46 @@ if (window.electronWebview) {
               return true;
             })()`);
             } catch (_) { }
+            // ── TikTok Live event bridge ─────────────────────────────────────
+            // Observe only DOM additions and notify the renderer in short batches.
+            // Parsing remains in EtherX, so the page's video/network path is never touched.
+            try {
+                await wv.executeJavaScript(`(() => {
+                    if (window.__etherxTikTokLiveObserverInstalled) return true;
+                    window.__etherxTikTokLiveObserverInstalled = true;
+                    if (!/(^|\\.)tiktok\\.com$/i.test(location.hostname || '')) return false;
+                    let pending = false;
+                    let lastEmit = 0;
+                    const looksLikeLiveRow = (node) => {
+                        if (!node || node.nodeType !== 1) return false;
+                        const el = node;
+                        const chatRoot = '[data-e2e*="chatroom" i],[data-e2e*="chat-room" i],[data-e2e*="live-chat" i],.webcast-chatroom,[class*="webcast-chatroom" i],[class*="LiveChat" i],[class*="ChatRoom" i]';
+                        const selector = '[data-e2e*="chat" i],[data-e2e*="comment" i],[data-e2e*="message" i],[data-e2e*="gift" i],[class*="chat" i],[class*="comment" i],[class*="message" i],[class*="gift" i],.webcast-chatroom__message-item';
+                        try {
+                            const inChat = !!(el.closest(chatRoot) || el.parentElement?.closest(chatRoot) || el.querySelector(chatRoot));
+                            return inChat && (el.matches(selector) || !!el.querySelector(selector));
+                        } catch (_) { return false; }
+                    };
+                    const emit = () => {
+                        pending = false;
+                        const now = Date.now();
+                        if (now - lastEmit < 120) return;
+                        lastEmit = now;
+                        console.log('__ETHERX_TKAI_DIRTY__' + now);
+                    };
+                    const observer = new MutationObserver((mutations) => {
+                        for (const mutation of mutations) {
+                            for (const node of mutation.addedNodes || []) {
+                                if (!looksLikeLiveRow(node)) continue;
+                                if (!pending) { pending = true; setTimeout(emit, 90); }
+                                return;
+                            }
+                        }
+                    });
+                    observer.observe(document.documentElement, { childList: true, subtree: true });
+                    return true;
+                })()`);
+            } catch (_) { }
             // ── TikTok live chat right-click interceptor ──────────────────────────────
             // Injected early (dom-ready) so our capture handler is registered BEFORE
             // TikTok's own scripts add their contextmenu listeners. We call
@@ -976,6 +1016,10 @@ if (window.electronWebview) {
         });
         wv.addEventListener('console-message', (e) => {
             const msg = String(e.message || '');
+            if (msg.startsWith('__ETHERX_TKAI_DIRTY__')) {
+                try { window.queueTikTokLiveEventScan?.(); } catch (_) { }
+                return;
+            }
             if (msg === '__ETHERX_PAGE_CLICK__') {
                 if (Number(wv.dataset.tabId) === STATE.activeTabId) {
                     ctxMenu.classList.remove('show');
@@ -6163,6 +6207,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let newMsgsSinceAutoGen = 0;
     let scanActive = false;
     let scanInterval = null;
+    let tkaiScrapeInFlight = false;
+    let tkaiEventScanTimer = null;
     let statsTimerInterval = null;
     let collectedMessages = [];
     let listeningMessages = [];
@@ -9155,6 +9201,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         scanActive = false;
         if (scanInterval) clearTimeout(scanInterval);
         scanInterval = null;
+        if (tkaiEventScanTimer) clearTimeout(tkaiEventScanTimer);
+        tkaiEventScanTimer = null;
         if (statsTimerInterval) clearInterval(statsTimerInterval);
         statsTimerInterval = null;
         if ('speechSynthesis' in window && window.speechSynthesis) {
@@ -14526,9 +14574,38 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         lastSongPerfSampleAt = now;
     }
 
+    async function scanTikTokLiveOnce(source = 'poll') {
+        if (tkaiScrapeInFlight) return 0;
+        tkaiScrapeInFlight = true;
+        try {
+            return await scrapeTikTokChat();
+        } finally {
+            tkaiScrapeInFlight = false;
+        }
+    }
+
+    async function runTikTokEventScan() {
+        if (!scanActive) return;
+        const added = await scanTikTokLiveOnce('event');
+        if (added > 0) {
+            turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
+            trackActiveSongPerformance();
+        }
+    }
+
+    // Called by the lightweight MutationObserver inside the TikTok webview.
+    // A 120 ms debounce batches bursts such as gifts/likes without hammering DOM.
+    window.queueTikTokLiveEventScan = function () {
+        if (!scanActive || tkaiEventScanTimer) return;
+        tkaiEventScanTimer = setTimeout(() => {
+            tkaiEventScanTimer = null;
+            runTikTokEventScan().catch(() => { });
+        }, 120);
+    };
+
     async function runTkaiScanCycle() {
         if (!scanActive) return;
-        const added = await scrapeTikTokChat();
+        const added = await scanTikTokLiveOnce('poll');
         trackActiveSongPerformance();
         const autoSongRecEnabledRaw = DB.getSettings().tkaiAutoSongRecOnScan;
         const autoSongRecEnabled = autoSongRecEnabledRaw !== false && autoSongRecEnabledRaw !== 'false';
