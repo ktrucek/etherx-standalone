@@ -495,6 +495,35 @@ if (window.electronWebview) {
 
     // Track which webviews have fired dom-ready event
     const _readyWebviews = new Set();
+    const _screenShareWebviews = new Set();
+    let _manualTikTokPrivacy = false;
+    const applyTikTokScreenPrivacy = () => {
+        const sharing = _manualTikTokPrivacy || _screenShareWebviews.size > 0;
+        document.documentElement.classList.toggle('etherx-screen-share-privacy', sharing);
+        return sharing;
+    };
+    const setTikTokPrivacyForScreenShare = (tabId, active) => {
+        const key = String(tabId || 'unknown');
+        if (active) _screenShareWebviews.add(key);
+        else _screenShareWebviews.delete(key);
+        const sharing = applyTikTokScreenPrivacy();
+        if (sharing) showToast('🛡️ Dijeljenje zaslona aktivno — TikTok Chat AI je skriven iz dijeljenog prikaza');
+        else showToast('🛡️ Dijeljenje zaslona završeno — TikTok Chat AI je ponovno prikazan');
+    };
+    window.toggleTikTokScreenSharePrivacy = () => {
+        _manualTikTokPrivacy = !_manualTikTokPrivacy;
+        const sharing = applyTikTokScreenPrivacy();
+        showToast(sharing ? '🛡️ Privatni prikaz ON — TikTok Chat AI je skriven' : '🛡️ Privatni prikaz OFF — TikTok Chat AI je prikazan');
+        return sharing;
+    };
+    document.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'h') {
+            const tag = String(event.target?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || event.target?.isContentEditable) return;
+            event.preventDefault();
+            window.toggleTikTokScreenSharePrivacy();
+        }
+    });
 
     // Safe wrapper — delegates to wv.executeJavaScript which is per-instance
     // patched inside setupWebview() to queue calls before dom-ready fires.
@@ -653,6 +682,31 @@ if (window.electronWebview) {
                 const _q = _wvQueue.splice(0);
                 for (const [s, ug, res, rej] of _q) _wvNativeExec(s, ug).then(res, rej);
             }
+            // Wrap the page's screen-share API in its own main world. The
+            // preload relays events back with sendToHost, allowing the host UI
+            // to disappear before a page starts capturing the display.
+            try {
+                await wv.executeJavaScript(`(() => {
+                    const media = navigator.mediaDevices;
+                    if (!media || typeof media.getDisplayMedia !== 'function' || media.__etherxPrivacyShareHook) return;
+                    media.__etherxPrivacyShareHook = true;
+                    const original = media.getDisplayMedia.bind(media);
+                    media.getDisplayMedia = async function (...args) {
+                        const notify = (active) => window.dispatchEvent(new CustomEvent('etherx-screen-share', { detail: { active } }));
+                        notify(true);
+                        try {
+                            const stream = await original(...args);
+                            const sync = () => notify(stream.getTracks().some(track => track.readyState === 'live'));
+                            stream.getTracks().forEach(track => track.addEventListener('ended', sync, { once: true }));
+                            sync();
+                            return stream;
+                        } catch (error) {
+                            notify(false);
+                            throw error;
+                        }
+                    };
+                })()`);
+            } catch (_) { }
 
             // Auto-dismiss cookie consent banners
             try {
@@ -1076,6 +1130,10 @@ if (window.electronWebview) {
             try {
                 maybePromptSavePassword(JSON.parse(msg.slice('__ETHERX_SAVE_PASSWORD__'.length)), 'auto');
             } catch (_) { }
+        });
+        wv.addEventListener('ipc-message', (event) => {
+            if (event.channel !== 'etherx-screen-share') return;
+            setTikTokPrivacyForScreenShare(wv.dataset.tabId || wv.id, event.args?.[0]?.active === true);
         });
         wv.addEventListener('new-window', (e) => {
             // Bug #1/#17/#19: Convert popups to tabs; handle YouTube, Google multi-account
@@ -2675,9 +2733,25 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         tkaiSqliteSyncTimer = setTimeout(async () => {
             if (tkaiSqliteSyncInFlight) return;
             tkaiSqliteSyncInFlight = true;
-            try { await window.etherx.tiktokLive.import(getTkaiSqlitePayload()); } catch (_) { }
+            try {
+                await window.etherx.tiktokLive.import(getTkaiSqlitePayload());
+                refreshTkaiSqliteStatus();
+            } catch (_) { }
             finally { tkaiSqliteSyncInFlight = false; }
         }, 900);
+    }
+
+    function formatTkaiSqliteStatus(data) {
+        const users = Math.max(0, Number(data?.users || 0));
+        const events = Math.max(0, Number(data?.events || 0));
+        const sessions = Math.max(0, Number(data?.sessions || 0));
+        const stats = Math.max(0, Number(data?.stats || 0));
+        const last = Number(data?.lastActivityAt || 0);
+        if (!users && !events && !sessions && !stats) {
+            return '✅ Lokalna SQLite baza je aktivna i spremna. Otvori TikTok Live i uključi Skeniranje ON — prvi korisnici i događaji će se spremiti automatski.';
+        }
+        const lastLabel = last > 0 ? ' · zadnji upis ' + new Date(last).toLocaleString('hr-HR') : '';
+        return `✅ Aktivno lokalno: ${users} korisnika, ${events} događaja, ${sessions} sesija, ${stats} statistika${lastLabel}.`;
     }
     async function installTkaiSqliteStorage() {
         const button = document.getElementById('btnInstallTkaiSqlite');
@@ -2690,9 +2764,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         if (status) status.textContent = 'Pripremam lokalnu bazu i prebacujem postojeće podatke…';
         try {
             const installed = await window.etherx.tiktokLive.install();
-            const result = await window.etherx.tiktokLive.import(getTkaiSqlitePayload());
+            await window.etherx.tiktokLive.import(getTkaiSqlitePayload());
             DB.saveSetting('tkaiSqliteEnabled', true);
-            if (status) status.textContent = `✅ Aktivno lokalno: ${result.users || 0} korisnika, ${result.events || 0} događaja, ${result.sessions || 0} sesija. ${installed.dbPath ? 'Baza je na ovom računalu.' : ''}`;
+            const current = await window.etherx.tiktokLive.getStatus?.();
+            if (status) status.textContent = formatTkaiSqliteStatus(current) + (installed.dbPath ? ' Baza je na ovom računalu.' : '');
             if (button) { button.textContent = '✅ Lokalna baza aktivna'; button.disabled = false; }
             showToast('🗃️ TikTok Live SQLite baza je instalirana lokalno');
         } catch (error) {
@@ -2700,13 +2775,18 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             if (button) { button.textContent = '↻ Pokušaj ponovno'; button.disabled = false; }
         }
     }
-    function refreshTkaiSqliteStatus() {
+    async function refreshTkaiSqliteStatus() {
         const button = document.getElementById('btnInstallTkaiSqlite');
         const status = document.getElementById('tkaiSqliteStatus');
         if (!button || !status) return;
         if (DB.getSettings()?.tkaiSqliteEnabled === true) {
             button.textContent = '✅ Lokalna baza aktivna';
-            status.textContent = '✅ TikTok Live podaci se čuvaju lokalno u SQLite bazi na ovom računalu.';
+            try {
+                const current = await window.etherx?.tiktokLive?.getStatus?.();
+                status.textContent = formatTkaiSqliteStatus(current);
+            } catch (_) {
+                status.textContent = '✅ TikTok Live podaci se čuvaju lokalno u SQLite bazi na ovom računalu.';
+            }
         }
     }
     function getTkaiStatsStorage() {
@@ -4076,6 +4156,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     async function cacheWhisperModel() {
         const cfg = getCfg();
         const statusEl = document.getElementById('tkaiWhisperCacheStatus');
+        const progressEl = document.getElementById('tkaiWhisperCacheProgress');
+        const progressBarEl = document.getElementById('tkaiWhisperCacheProgressBar');
         const btn = document.getElementById('btnCacheWhisperModel');
         const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
         if (active || connecting) {
@@ -4090,20 +4172,60 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             statusEl.style.color = '#fbbf24';
         }
         if (btn) btn.disabled = true;
+        if (progressEl) progressEl.style.display = '';
+        if (progressBarEl) progressBarEl.style.width = '2%';
         try {
             await new Promise((resolve, reject) => {
                 let settled = false;
                 const cacheWs = new WebSocket(wsUrl);
                 const cacheTimeoutMs = 15 * 60 * 1000;
                 const startedAt = Date.now();
-                const showLoadingStatus = () => {
-                    if (!statusEl) return;
+                let lastBytes = 0;
+                let lastProgressAt = startedAt;
+                const modelBytes = {
+                    tiny: 39, 'tiny.en': 39, base: 74, 'base.en': 74,
+                    small: 244, 'small.en': 244, medium: 769, 'medium.en': 769,
+                    'large-v2': 1536, 'large-v3': 1536
+                };
+                const formatCacheBytes = (value) => {
+                    const bytes = Math.max(0, Number(value || 0));
+                    if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                    if (bytes >= 1024 * 1024) return Math.round(bytes / (1024 * 1024)) + ' MB';
+                    if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
+                    return Math.round(bytes) + ' B';
+                };
+                const elapsedLabel = () => {
                     const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
-                    const elapsed = elapsedSeconds >= 60
+                    return elapsedSeconds >= 60
                         ? Math.floor(elapsedSeconds / 60) + ' min ' + (elapsedSeconds % 60) + ' s'
                         : elapsedSeconds + ' s';
-                    statusEl.textContent = 'model cache: učitavam/preuzimam ' + cfg.model + '... (' + elapsed + ', maksimalno 15 min)';
-                    statusEl.style.color = '#fbbf24';
+                };
+                const updateDownloadProgress = async () => {
+                    let entries = [];
+                    try {
+                        const cached = await window.etherx?.app?.getWhisperLiveModelCache?.();
+                        entries = Array.isArray(cached?.entries) ? cached.entries : [];
+                    } catch (_) { }
+                    const bytes = entries.reduce((sum, entry) => sum + Math.max(0, Number(entry?.file_size ?? entry?.fileSize ?? 0)), 0);
+                    const now = Date.now();
+                    const seconds = Math.max(0.5, (now - lastProgressAt) / 1000);
+                    const bytesPerSecond = Math.max(0, (bytes - lastBytes) / seconds);
+                    lastBytes = bytes;
+                    lastProgressAt = now;
+                    const targetMb = modelBytes[cfg.model];
+                    const estimatedPercent = targetMb
+                        ? Math.min(95, Math.max(2, (bytes / (targetMb * 1024 * 1024)) * 100))
+                        : Math.min(90, Math.max(2, 4 + entries.length * 4));
+                    if (progressBarEl) progressBarEl.style.width = estimatedPercent.toFixed(1) + '%';
+                    if (statusEl) {
+                        const speed = bytesPerSecond > 1024 ? ' · ' + formatCacheBytes(bytesPerSecond) + '/s' : '';
+                        const estimate = targetMb ? ' · procjena ' + Math.round(estimatedPercent) + '%' : '';
+                        statusEl.textContent = 'model cache: ' + formatCacheBytes(bytes) + ' · ' + entries.length + ' datoteka' + speed + estimate + ' · ' + elapsedLabel();
+                        statusEl.style.color = '#fbbf24';
+                    }
+                };
+                const showLoadingStatus = () => {
+                    updateDownloadProgress().catch(() => { });
                 };
                 const done = (ok, value) => {
                     if (settled) return;
@@ -4116,7 +4238,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 const timer = setTimeout(() => {
                     done(false, new Error('Cacheiranje modela nije potvrđeno unutar 15 min. Provjeri WhisperLive server i internetsku vezu.'));
                 }, cacheTimeoutMs);
-                const progressTimer = setInterval(showLoadingStatus, 15000);
+                const progressTimer = setInterval(showLoadingStatus, 2500);
                 cacheWs.onopen = () => {
                     const config = {
                         uid: 'cache-' + Math.random().toString(36).slice(2) + Date.now().toString(36),
@@ -4155,19 +4277,24 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                     if (!settled) done(false, new Error('Veza zatvorena prije potvrde modela.'));
                 };
             });
+            const indexed = await refreshWhisperModelCacheIndex();
+            const count = Math.max(0, Number(indexed?.count || indexed?.entries?.length || 0));
+            const bytes = (indexed?.entries || []).reduce((sum, entry) => sum + Math.max(0, Number(entry?.fileSize || 0)), 0);
             if (statusEl) {
-                const indexed = await refreshWhisperModelCacheIndex();
-                const count = Math.max(0, Number(indexed?.count || indexed?.entries?.length || 0));
-                const bytes = (indexed?.entries || []).reduce((sum, entry) => sum + Math.max(0, Number(entry?.fileSize || 0)), 0);
                 const size = bytes >= 1024 * 1024 * 1024
                     ? (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
                     : bytes >= 1024 * 1024
                         ? Math.round(bytes / (1024 * 1024)) + ' MB'
                         : formatNum(bytes) + ' B';
-                statusEl.textContent = 'model cache: gotovo · ' + cfg.model + ' lokalno spremljen · SQLite indeks: ' + count + ' datoteka (' + size + ')';
-                statusEl.style.color = '#4ade80';
+                if (count > 0 && bytes > 0) {
+                    statusEl.textContent = 'model cache: gotovo · ' + cfg.model + ' lokalno spremljen · SQLite indeks: ' + count + ' datoteka (' + size + ')';
+                    statusEl.style.color = '#4ade80';
+                } else {
+                    statusEl.textContent = 'model cache: server je učitao ' + cfg.model + ', ali lokalne datoteke još nisu pronađene. Klikni Instaliraj/pokreni WhisperLive server jednom pa ponovno Cache/preuzmi model.';
+                    statusEl.style.color = '#fbbf24';
+                }
             }
-            if (typeof showToast === 'function') showToast('✅ Whisper model cacheiran: ' + cfg.model);
+            if (typeof showToast === 'function') showToast(count > 0 && bytes > 0 ? '✅ Whisper model cacheiran: ' + cfg.model : '⚠️ Model je učitan, ali cache indeks još nema datoteke');
         } catch (err) {
             const msg = err?.message || String(err);
             if (statusEl) {
@@ -4992,13 +5119,8 @@ frame.addEventListener('load', () => {
         }
         updateTabEl(tab);
         document.getElementById('btnReader').style.display = 'block';
-        const rnd = (a, b) => (Math.random() * (b - a) + a).toFixed(0);
-        document.getElementById('perfFcp').textContent = rnd(80, 250) + 'ms';
-        document.getElementById('perfLcp').textContent = rnd(150, 400) + 'ms';
-        document.getElementById('perfTbt').textContent = rnd(20, 80) + 'ms';
-        document.getElementById('perfCls').textContent = (Math.random() * 0.05).toFixed(3);
-        document.getElementById('perfTti').textContent = rnd(200, 600) + 'ms';
-        document.getElementById('perfLoad').textContent = rnd(300, 900) + 'ms';
+        // Do not invent page-performance values. The Performance panel is
+        // filled only with measured renderer/Electron process data.
     } catch (e) { }
     consoleLog('success', '✓ Loaded: ' + (tab.url || '—'));
 });
@@ -7934,6 +8056,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
             '<button type="button" data-act="paste-send" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#67e8f9;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Zalijepi iz clipboarda</button>' +
             '<button type="button" data-act="send-target-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4b5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 @korisnik + cijela poruka</button>' +
+            '<button type="button" data-act="mark-user" style="display:block;width:100%;text-align:left;background:rgba(245,158,11,.12);border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Označi i istakni korisnika</button>' +
             '<button type="button" data-act="target" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#fde68a;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎯 Pošalji i označi korisnika</button>' +
             '<button type="button" data-act="translate-user-session" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#22d3ee;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🧭 Uvijek prevedi ovog korisnika (sesija)</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
@@ -8092,7 +8215,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiMsgCtxEl.querySelector('[data-act="target"]')?.addEventListener('click', async () => {
             const m = tkaiMsgCtxTarget;
             if (!m) return;
-            targetedChatUser = String(m.user || '');
+            targetedChatUser = String(m.user || '').trim().replace(/^@+/, '');
             m._targetedAt = Date.now();
             const targetText = '@' + targetedChatUser + ' ' + String(m.translatedText || m.text || '').slice(0, 280);
             if (typeof window.pushTextToTikTokAI === 'function') {
@@ -8101,6 +8224,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             renderMessages();
             closeTkaiMsgContextMenu();
             showToast('🎯 Označen korisnik: ' + targetedChatUser);
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="mark-user"]')?.addEventListener('click', () => {
+            const m = tkaiMsgCtxTarget;
+            const user = String(m?.user || '').trim().replace(/^@+/, '');
+            if (!user) {
+                closeTkaiMsgContextMenu();
+                showToast('⚠️ Korisničko ime nije pronađeno');
+                return;
+            }
+            targetedChatUser = user;
+            m._targetedAt = Date.now();
+            renderMessages();
+            closeTkaiMsgContextMenu();
+            showToast('🎯 Označen korisnik: @' + user);
         });
 
         tkaiMsgCtxEl.querySelector('[data-act="translate-user-session"]')?.addEventListener('click', () => {
@@ -8119,8 +8257,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             } else {
                 set.add(user);
                 saveForcedTranslateUsersSet(set);
+                targetedChatUser = String(m.user || '').trim().replace(/^@+/, '');
+                m._targetedAt = Date.now();
+                void translateForcedUsersInPlace(collectedMessages).then(() => renderMessages());
                 showToast('🧭 Uključeno auto-prevođenje za @' + user + ' (sesija)');
             }
+            renderMessages();
             closeTkaiMsgContextMenu();
         });
 
@@ -11424,11 +11566,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function placeFixedTkaiSections(root) {
         const gallery = root?.querySelector(':scope > #tkaiGiftGallerySection[data-tkai-fixed-section]');
         const main = root?.querySelector(':scope > .tkai-main');
-        const listenFeed = root?.querySelector(':scope > #tkaiSlusanjeSection');
-        // Gift galerija je uvijek zadnja u live dijelu: iza Listen Feeda ako je
-        // uključen, inače odmah iza glavnog TikTok/AI sadržaja.
-        const anchor = listenFeed || main;
-        if (gallery && anchor && anchor.nextElementSibling !== gallery) root.insertBefore(gallery, anchor.nextSibling);
+        // Gift galerija mora ostati odmah ispod glavnog TikTok/AI dijela.
+        // Listen Feed je zaseban WhisperLive tok i ne smije je gurati ispod sebe.
+        if (gallery && main && main.nextElementSibling !== gallery) root.insertBefore(gallery, main.nextSibling);
     }
 
     function applyTkaiLayoutOrder(root, sections, order) {
@@ -11610,10 +11750,60 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         refreshRowButtons();
     }
 
+    const TKAI_DASHBOARD_MODULAR_LAYOUT_KEY = 'ex_tkai_dashboard_modular_layout_v1';
+
+    function getTkaiDashboardCards() {
+        return Array.from(document.querySelectorAll('#tkaiInsights > .tkai-insights-row > .tkai-insights-card'));
+    }
+
+    function getTkaiDashboardModularLayout(cards) {
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem(TKAI_DASHBOARD_MODULAR_LAYOUT_KEY) || '{}') || {}; } catch (_) { }
+        const defaults = {};
+        cards.forEach((card, index) => {
+            if (!card.id) card.id = 'tkaiDashboardCard-' + index;
+            const parent = card.parentElement;
+            defaults[card.id] = parent?.classList.contains('triple') ? 2 : parent?.classList.contains('duo') ? 3 : 6;
+        });
+        const known = new Set(cards.map(card => card.id));
+        const order = Array.isArray(saved.order) ? saved.order.filter(id => known.has(id)) : [];
+        cards.forEach(card => { if (!order.includes(card.id)) order.push(card.id); });
+        const spans = {};
+        cards.forEach(card => {
+            const value = Number(saved.spans?.[card.id]);
+            spans[card.id] = [2, 3, 6].includes(value) ? value : defaults[card.id];
+        });
+        return { order, spans };
+    }
+
+    function applyTkaiDashboardModularLayout() {
+        const root = document.getElementById('tkaiInsights');
+        const cards = getTkaiDashboardCards();
+        if (!root || !cards.length) return { cards, layout: { order: [], spans: {} } };
+        const layout = getTkaiDashboardModularLayout(cards);
+        root.classList.add('tkai-modular-dashboard');
+        cards.forEach(card => {
+            const orderIndex = layout.order.indexOf(card.id);
+            const span = layout.spans[card.id] || 3;
+            card.style.setProperty('--tkai-grid-order', String(Math.max(0, orderIndex)));
+            card.style.setProperty('--tkai-grid-span', String(span));
+            card.dataset.tkaiLayoutSpan = String(span);
+        });
+        return { cards: cards.slice().sort((a, b) => layout.order.indexOf(a.id) - layout.order.indexOf(b.id)), layout };
+    }
+
+    function saveTkaiDashboardModularLayout(layout) {
+        localStorage.setItem(TKAI_DASHBOARD_MODULAR_LAYOUT_KEY, JSON.stringify(layout));
+        applyTkaiDashboardModularLayout();
+        window.dispatchEvent(new Event('resize'));
+    }
+
     function renderTkaiDashboardLayoutVisualList() {
         const container = document.getElementById('tkaiLayoutVisualDashboard');
         if (!container) return;
-        const cards = Array.from(document.querySelectorAll('#tkaiInsights .tkai-insights-card'));
+        const applied = applyTkaiDashboardModularLayout();
+        const cards = applied.cards;
+        const layout = applied.layout;
         container.innerHTML = '';
         if (!cards.length) {
             container.innerHTML = '<div class="tkai-empty" style="font-size:10px;padding:8px">Dashboard kartice još nisu učitane.</div>';
@@ -11625,6 +11815,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 .replace(/\s+/g, ' ').trim();
             const row = document.createElement('div');
             row.className = 'tkai-layout-visual-item';
+            row.draggable = true;
+            row.dataset.cardId = card.id;
             const icon = document.createElement('span');
             icon.className = 'tkai-layout-visual-grip';
             icon.textContent = card.classList.contains('tkai-resizable-chart-card') ? '📈' : '▦';
@@ -11647,6 +11839,36 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             resetBtn.className = 'tkai-layout-visual-btn';
             resetBtn.textContent = '↺';
             resetBtn.title = 'Vrati početnu veličinu kartice';
+            const spanSelect = document.createElement('select');
+            spanSelect.className = 'tkai-layout-span-select';
+            spanSelect.title = 'Širina kartice u dashboardu';
+            [[2, '⅓ širine'], [3, '½ širine'], [6, 'Cijeli red']].forEach(([value, label]) => {
+                const option = document.createElement('option');
+                option.value = String(value);
+                option.textContent = label;
+                spanSelect.appendChild(option);
+            });
+            spanSelect.value = String(layout.spans[card.id] || 3);
+            const upBtn = document.createElement('button');
+            upBtn.type = 'button'; upBtn.className = 'tkai-layout-visual-btn'; upBtn.textContent = '↑'; upBtn.title = 'Pomakni ranije';
+            const downBtn = document.createElement('button');
+            downBtn.type = 'button'; downBtn.className = 'tkai-layout-visual-btn'; downBtn.textContent = '↓'; downBtn.title = 'Pomakni kasnije';
+            const saveSpan = () => {
+                layout.spans[card.id] = Number(spanSelect.value);
+                saveTkaiDashboardModularLayout(layout);
+                renderTkaiDashboardLayoutVisualList();
+            };
+            spanSelect.addEventListener('change', saveSpan);
+            const move = (direction) => {
+                const position = layout.order.indexOf(card.id);
+                const next = position + direction;
+                if (position < 0 || next < 0 || next >= layout.order.length) return;
+                [layout.order[position], layout.order[next]] = [layout.order[next], layout.order[position]];
+                saveTkaiDashboardModularLayout(layout);
+                renderTkaiDashboardLayoutVisualList();
+            };
+            upBtn.addEventListener('click', () => move(-1));
+            downBtn.addEventListener('click', () => move(1));
             openBtn.addEventListener('click', () => {
                 if (card.dataset.tkaiLayoutHidden === '1') {
                     card.dataset.tkaiLayoutHidden = '0';
@@ -11677,7 +11899,28 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 card.dataset.tkaiLayoutHidden = '1';
                 card.style.display = 'none';
             }
-            actions.append(openBtn, visibleBtn, resetBtn);
+            row.addEventListener('dragstart', (event) => {
+                row.classList.add('dragging');
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', card.id);
+            });
+            row.addEventListener('dragover', (event) => { event.preventDefault(); row.classList.add('drag-over'); });
+            row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+            row.addEventListener('drop', (event) => {
+                event.preventDefault();
+                const draggedId = event.dataTransfer.getData('text/plain');
+                const from = layout.order.indexOf(draggedId);
+                const to = layout.order.indexOf(card.id);
+                if (from >= 0 && to >= 0 && from !== to) {
+                    layout.order.splice(from, 1);
+                    layout.order.splice(to, 0, draggedId);
+                    saveTkaiDashboardModularLayout(layout);
+                    renderTkaiDashboardLayoutVisualList();
+                }
+                row.classList.remove('drag-over');
+            });
+            row.addEventListener('dragend', () => container.querySelectorAll('.tkai-layout-visual-item').forEach(item => item.classList.remove('dragging', 'drag-over')));
+            actions.append(spanSelect, upBtn, downBtn, openBtn, visibleBtn, resetBtn);
             row.append(icon, name, actions);
             container.appendChild(row);
         });
@@ -11936,9 +12179,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         });
         document.getElementById('btnTkaiLayoutResetCards')?.addEventListener('click', () => {
             localStorage.removeItem(TKAI_SESSION_LAYOUT_KEY);
+            localStorage.removeItem(TKAI_DASHBOARD_MODULAR_LAYOUT_KEY);
             let initialOrder = [];
             try { initialOrder = JSON.parse(getTkaiSessionLayoutRoot()?.dataset?.tkaiOriginalOrder || '[]'); } catch (_) { }
             applyTkaiLayoutOrder(getTkaiSessionLayoutRoot(), getTkaiSessionSections(), initialOrder);
+            applyTkaiDashboardModularLayout();
             renderTkaiLayoutVisualEditor();
             showToast('↺ Redoslijed kartica vraćen');
         });
@@ -11963,6 +12208,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let chatPopoutFilters = { chat: true, gifts: true, likes: true };
     let liveDashboardPopout = null;
     let liveDashboardTimer = null;
+
+    function normalizedTkaiUser(value) {
+        return String(value || '').trim().replace(/^@+/, '').toLowerCase();
+    }
+
+    function isTargetedTkaiUser(value) {
+        return !!targetedChatUser && normalizedTkaiUser(value) === normalizedTkaiUser(targetedChatUser);
+    }
     function initTkaiButtonPressFeedback() {
         const pressSelector = "#tiktokAIPanel button, #tkaiLiveDashboardPopout button";
         const lift = (btn) => {
@@ -12112,10 +12365,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const giftLikeVisibleCount = msgs.reduce((acc, m) => acc + (isTkaiGiftLikeMessage(m) ? 1 : 0), 0);
         if (countEl) countEl.textContent = msgs.length + ' poruka';
         if (giftCountEl) giftCountEl.textContent = '🎁 ' + giftLikeVisibleCount;
-        // Only re-render if count changed
-        const prev = container.dataset.lastCount;
-        if (!options.forceRender && prev === String(msgs.length)) return;
-        container.dataset.lastCount = String(msgs.length);
+        // Include translated text and marked users in the signature: a translation or
+        // right-click selection must immediately appear in the detached chat too.
+        const signature = msgs.slice(-150).map((m) => [m.id, m.text, m.translatedText, m.translatedLang, isTargetedTkaiUser(m.user), getForcedTranslateUsersSet().has(normalizedTkaiUser(m.user))].join('\u0001')).join('\u0002');
+        if (!options.forceRender && container.dataset.lastSignature === signature) return;
+        container.dataset.lastSignature = signature;
         const wasBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 30;
         container.innerHTML = '';
         msgs.slice(-150).forEach(m => {
@@ -12123,17 +12377,40 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const isGiftLike = isTkaiGiftLikeMessage(m);
             const coins = Math.max(0, Number(m?.coins || 0));
             const row = document.createElement('div');
+            const targeted = isTargetedTkaiUser(m.user);
+            const forcedTranslation = getForcedTranslateUsersSet().has(normalizedTkaiUser(m.user));
+            row.dataset.messageId = String(m.id || '');
+            row.dataset.user = String(m.user || '');
+            row.className = 'tkai-popout-msg' + (targeted ? ' targeted' : '') + (forcedTranslation ? ' forced-translation' : '');
             row.style.cssText = 'padding:3px 6px;border-radius:6px;line-height:1.4;' +
                 (type === 'gift' ? 'background:rgba(255,215,0,.1);border-left:2px solid #ffd700;' :
                     type === 'subscriber' ? 'background:rgba(74,222,128,.08);border-left:2px solid #4ade80;' :
                         type === 'like' ? 'background:rgba(244,63,94,.12);border-left:2px solid #fb7185;' :
                             isGiftLike ? 'background:rgba(245,158,11,.14);border-left:2px solid #fbbf24;' :
-                                'background:rgba(255,255,255,.04);');
+                                'background:rgba(255,255,255,.04);') +
+                (targeted ? 'border:1px solid #f59e0b;border-left:4px solid #f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,.28) inset;' : '') +
+                (forcedTranslation && !targeted ? 'border:1px solid rgba(34,211,238,.58);border-left:3px solid #22d3ee;' : '');
             const icon = type === 'gift' ? '🎁 ' : type === 'subscriber' ? '⭐ ' : type === 'like' ? '❤️ ' : (isGiftLike ? '🎁 ' : '');
-            row.innerHTML = '<span style="color:' + getUserColor(m.user || '?') + ';font-weight:600">' + (m.user || '?') + '</span>' +
+            const translation = m.translatedText && m.translatedText !== m.text
+                ? '<div style="margin-top:2px;color:#f6fbff;font-weight:600"><span style="font-size:10px;color:#67e8f9">🌐 ' + escHtml(String(m.translatedLang || 'HR').toUpperCase()) + ':</span> ' + escHtml(m.translatedText) + '</div>'
+                : '';
+            row.innerHTML = '<span style="color:' + getUserColor(m.user || '?') + ';font-weight:700">' + escHtml(m.user || '?') + '</span>' +
+                (targeted ? '<span style="margin-left:5px;font-size:9px;color:#fde68a">🎯 označen</span>' : '') +
+                (forcedTranslation ? '<span style="margin-left:5px;font-size:9px;color:#67e8f9">🌐 prijevod</span>' : '') +
                 '<span style="color:rgba(255,255,255,.35);margin:0 4px">·</span>' +
-                '<span style="color:var(--text,#e2e8f0)">' + icon + (m.translatedText || m.text || '') + '</span>' +
+                '<span style="color:var(--text,#e2e8f0)">' + icon + escHtml(m.text || '') + '</span>' + translation +
                 (coins > 0 ? '<span style="color:#ffd700;font-size:10px;margin-left:4px">🪙' + coins + '</span>' : '');
+            row.title = 'Desni klik: označi, kopiraj ili prevedi korisnika';
+            row.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                selectedMsgIds = new Set([m.id]);
+                openTkaiMsgContextMenu(event.clientX, event.clientY, m);
+            });
+            row.addEventListener('click', () => {
+                selectedMsgIds = new Set([m.id]);
+                renderMessages();
+            });
             container.appendChild(row);
         });
         if (wasBottom) container.scrollTop = container.scrollHeight;
@@ -12145,7 +12422,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         chatPopoutMirrorTimer = setInterval(() => {
             if (!chatPopout || !document.body.contains(chatPopout)) { clearInterval(chatPopoutMirrorTimer); return; }
             mirrorToPopout(collectedMessages);
-        }, 1500);
+        }, 650);
     }
 
     function syncLiveDashboardPopout() {
@@ -12910,9 +13187,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const div = document.createElement('div');
             const displayType = normalizeTkaiMessageType(message);
             div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
-            if (targetedChatUser && String(message.user || '') === targetedChatUser) {
+            const isTargetedUser = isTargetedTkaiUser(message.user);
+            const forcedTranslationUser = getForcedTranslateUsersSet().has(normalizedTkaiUser(message.user));
+            if (isTargetedUser) {
                 div.classList.add('targeted');
             }
+            if (forcedTranslationUser) div.classList.add('forced-translation');
             const isGiftLike = displayType === 'gift' || displayType === 'subscriber';
             const giftMeta = isGiftLike ? safeResolveGiftMetaFromMessage(message) : null;
             // Resolve display username — replace 'unknown/Unknown' with stream owner
@@ -13009,9 +13289,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + '] ' + escHtml(message.meta || message.task || 'Transkripcija') + (message.sourceLang ? ' · ' + escHtml(String(message.sourceLang).toUpperCase()) : '') + '</div>'
                 : '';
             const userColor = getUserColor(resolvedUser);
+            const highlightBadge = isTargetedUser
+                ? '<span class="tkai-user-highlight-badge">🎯 označen</span>'
+                : (forcedTranslationUser ? '<span class="tkai-user-translation-badge">🌐 prijevod</span>' : '');
             const userRow = typeBadge
-                ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(resolvedUser) + '</span>' + typeBadge + '</div>'
-                : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(resolvedUser) + '</div>';
+                ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(resolvedUser) + highlightBadge + '</span>' + typeBadge + '</div>'
+                : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(resolvedUser) + highlightBadge + '</div>';
             div.innerHTML = userRow + original + listeningMeta + giftSummary + likeSummary + translated;
             div.title = 'Klikni za odabir/deodabir';
             div.addEventListener('click', () => {
@@ -13083,6 +13366,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (chatFeedCountEl) chatFeedCountEl.textContent = chatMessages.length + ' poruka';
         if (giftFeedCountEl) giftFeedCountEl.textContent = giftMessages.length + ' događaja';
         renderGiftGallery();
+        if (chatPopout && document.body.contains(chatPopout)) mirrorToPopout(collectedMessages, { forceRender: true });
     }
     function renderReplies(suggestions) {
         if (!repliesEl) return;
@@ -15635,6 +15919,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // ── Apply feature toggles from settings ──────────────────────────────
     function applyTkaiFeatureToggles() {
         const s = DB.getSettings();
+        // Older saved layouts can hide the whole Insights section or cards that
+        // did not exist when that layout was first saved. Reveal these new cards
+        // once without resetting the user's other positions or hidden cards.
+        const analyticsMigrationKey = 'ex_tkai_analytics_cards_visible_v1';
+        if (localStorage.getItem(analyticsMigrationKey) !== '1') {
+            [
+                'tkaiGiftHeatmapCard',
+                'tkaiGifterRaceCard',
+                'tkaiChatGiftComboCard',
+                'tkaiSentimentDonutCard'
+            ].forEach((id) => {
+                localStorage.removeItem('ex_tkai_dashboard_hidden_' + id);
+                const card = document.getElementById(id);
+                if (card) card.style.removeProperty('display');
+            });
+            // The user explicitly asked for the analytics charts, so unhide
+            // their parent section as part of this one-time migration.
+            if (s.tkaiShowInsights === false || s.tkaiShowInsights === 'false') {
+                s.tkaiShowInsights = true;
+                try { DB.saveSetting('tkaiShowInsights', true); } catch (_) { }
+            }
+            localStorage.setItem(analyticsMigrationKey, '1');
+        }
         const vis = (id, settingKey, def = true) => {
             const el = document.getElementById(id);
             if (!el) return;
@@ -17568,7 +17875,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
 
     // ── Performance tab controls
-    const _perfMetricIds = ['perfFcp', 'perfLcp', 'perfTbt', 'perfCls', 'perfTti', 'perfLoad', 'perfMemory', 'perfDomCount'];
+    const _perfMetricIds = ['perfFcp', 'perfLcp', 'perfTbt', 'perfCls', 'perfTti', 'perfLoad', 'perfMemory', 'perfDomCount', 'perfAppCpu', 'perfAppRam', 'perfSleepingTabs'];
+    async function _collectAppProcessMetrics() {
+        try {
+            const metrics = await window.etherx?.app?.getProcessMetrics?.();
+            if (!metrics) return;
+            const cpu = document.getElementById('perfAppCpu');
+            const ram = document.getElementById('perfAppRam');
+            const sleeping = document.getElementById('perfSleepingTabs');
+            if (cpu) cpu.textContent = Number(metrics.totalCpuPercent || 0).toFixed(1) + '%';
+            if (ram) ram.textContent = Number(metrics.totalRamMB || 0).toFixed(0) + ' MB';
+            if (sleeping) sleeping.textContent = STATE.tabs.filter(tab => tab.discarded).length + ' / ' + STATE.tabs.length;
+        } catch (_) { }
+    }
     function _collectPerfMetrics() {
         try {
             const nav = performance.getEntriesByType('navigation')[0];
@@ -17584,6 +17903,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (p.name === 'first-contentful-paint') { const el = document.getElementById('perfFcp'); if (el) el.textContent = p.startTime.toFixed(0) + 'ms'; }
             });
         } catch (e) { }
+        _collectAppProcessMetrics();
         const t = document.getElementById('perfTime'); if (t) t.textContent = new Date().toLocaleTimeString();
     }
     document.getElementById('perfRecord')?.addEventListener('click', function () {
@@ -18069,6 +18389,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const domCount = document.querySelectorAll('*').length;
             const dc = document.getElementById('perfDomCount'); if (dc) dc.textContent = domCount + ' elements';
         } catch (e) { }
+        _collectAppProcessMetrics();
     }
     document.getElementById('mi-new-tab').addEventListener('click', () => createTab());
     document.getElementById('mi-new-window')?.addEventListener('click', () => {

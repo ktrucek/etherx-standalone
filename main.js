@@ -25,20 +25,10 @@ try {
   /* optional — needed only for CWS extension downloads */
 }
 
-// 🔥 PERFORMANCE: V8 Memory & Performance Tuning
-const os = require("os");
-const totalMem = os.totalmem() / 1024 / 1024 / 1024; // GB
-
-// Allocate 25% of system RAM for Electron (max 4GB)
-const maxMem = Math.min(Math.floor(totalMem * 0.25) * 1024, 4096);
-
-app.commandLine.appendSwitch(
-  "js-flags",
-  `--max-old-space-size=${maxMem} ` + // Heap limit
-  "--optimize-for-size " + // Memory over speed
-  "--gc-interval=100 " + // More frequent GC
-  "--expose-gc", // Allow manual GC
-);
+// Let Chromium manage V8 memory on desktop.  Forced size optimisation and a
+// 100 ms GC interval caused visible pauses under multiple webviews/video tabs.
+// Electron's normal memory pressure handling is faster and safer across macOS,
+// Windows and Linux than a global heap cap derived from total system RAM.
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
@@ -1409,19 +1399,37 @@ function resolveWhisperLiveModelCacheRoot() {
 function refreshWhisperLiveModelCacheIndex() {
   const cacheRoot = resolveWhisperLiveModelCacheRoot();
   const entries = [];
-  const walk = (dir) => {
+  // WhisperLive backends do not all honour cache_path consistently. Index the
+  // managed cache and the known legacy Hugging Face/Whisper locations so an
+  // already downloaded local model is never reported as "0 B".
+  const home = require("os").homedir();
+  const candidateRoots = [
+    cacheRoot,
+    path.join(cacheRoot, "huggingface"),
+    path.join(home, ".cache", "whisper-live"),
+    path.join(home, ".cache", "whisper"),
+    path.join(home, ".cache", "huggingface", "hub"),
+  ];
+  if (process.env.HF_HOME) candidateRoots.push(process.env.HF_HOME);
+  const existingRoots = [...new Set(candidateRoots.map(value => path.resolve(value)))].filter(dir => fs.existsSync(dir));
+  const uniqueRoots = existingRoots
+    .sort((a, b) => a.length - b.length)
+    .filter((dir, index, all) => !all.slice(0, index).some(parent => dir.startsWith(parent + path.sep)));
+  const isWhisperModelFile = (fullPath, root) => root === cacheRoot || /(?:whisper|faster-whisper|distil-whisper|systran)/i.test(fullPath);
+  const walk = (dir, root) => {
     let rows = [];
     try { rows = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
     rows.forEach((row) => {
       const fullPath = path.join(dir, row.name);
-      if (row.isDirectory()) return walk(fullPath);
+      if (row.isDirectory()) return walk(fullPath, root);
       if (!row.isFile()) return;
+      if (!isWhisperModelFile(fullPath, root)) return;
       try {
         const stat = fs.statSync(fullPath);
         if (stat.size <= 0) return;
-        const relativePath = path.relative(cacheRoot, fullPath);
+        const relativePath = path.relative(root, fullPath);
         entries.push({
-          cacheKey: `whisperlive:${relativePath.replace(/\\/g, '/')}`,
+          cacheKey: `whisperlive:${Buffer.from(root).toString("base64url")}:${relativePath.replace(/\\/g, '/')}`,
           modelName: path.basename(fullPath),
           filePath: fullPath,
           fileSize: stat.size,
@@ -1431,7 +1439,7 @@ function refreshWhisperLiveModelCacheIndex() {
       } catch (_) { }
     });
   };
-  walk(cacheRoot);
+  uniqueRoots.forEach(root => walk(root, root));
   const result = db ? db.replaceLocalModelCache('whisperlive', entries) : { ok: false, error: 'Database not available' };
   return { ...result, cacheRoot, entries };
 }
@@ -1442,9 +1450,12 @@ function getWhisperLiveInstallPlan(requestedMode = "auto") {
   const resolvedMode = mode === "auto"
     ? (platform === "darwin" ? "docker-cpu" : "docker-cpu")
     : mode;
-  const modelCacheMount = `${resolveWhisperLiveModelCacheRoot()}:/root/.cache/whisper-live`;
-  const dockerCpuArgs = ["run", "-d", "--name", "etherx-whisperlive", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
-  const dockerGpuArgs = ["run", "-d", "--name", "etherx-whisperlive", "--gpus", "all", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"];
+  const modelCacheRoot = resolveWhisperLiveModelCacheRoot();
+  const modelCacheMount = `${modelCacheRoot}:/root/.cache/whisper-live`;
+  const huggingFaceMount = `${modelCacheRoot}:/root/.cache/huggingface`;
+  const dockerCacheArgs = ["-e", "HF_HOME=/root/.cache/huggingface", "-v", modelCacheMount, "-v", huggingFaceMount];
+  const dockerCpuArgs = ["run", "-d", "--name", "etherx-whisperlive", ...dockerCacheArgs, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
+  const dockerGpuArgs = ["run", "-d", "--name", "etherx-whisperlive", "--gpus", "all", ...dockerCacheArgs, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"];
   const pipCommand = platform === "win32"
     ? "py -m venv .venv-whisperlive && .venv-whisperlive\\Scripts\\python.exe -m pip install -U pip whisper-live && .venv-whisperlive\\Scripts\\python.exe etherx_whisperlive_server.py"
     : "python3 -m venv .venv-whisperlive && .venv-whisperlive/bin/python -m pip install -U pip whisper-live && .venv-whisperlive/bin/python etherx_whisperlive_server.py";
@@ -1472,6 +1483,7 @@ function writeWhisperLiveServerScript(runtimeRoot) {
     "import os",
     "os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')",
     "os.environ.setdefault('OMP_NUM_THREADS', '1')",
+    "os.environ.setdefault('HF_HOME', os.path.join(os.environ.get('ETHERX_WHISPER_MODEL_CACHE', os.path.expanduser('~/.cache/whisper-live/')), 'huggingface'))",
     "from whisper_live.server import TranscriptionServer",
     "server = TranscriptionServer()",
     "server.run(",
@@ -1542,6 +1554,7 @@ async function startWhisperLivePipServer() {
       KMP_DUPLICATE_LIB_OK: "TRUE",
       OMP_NUM_THREADS: "1",
       ETHERX_WHISPER_MODEL_CACHE: resolveWhisperLiveModelCacheRoot(),
+      HF_HOME: path.join(resolveWhisperLiveModelCacheRoot(), "huggingface"),
     },
     windowsHide: true,
   });
@@ -1579,16 +1592,19 @@ async function installWhisperLive(requestedMode = "auto") {
   if (plan.mode === "pip") return startWhisperLivePipServer();
 
   if (plan.mode === "docker-cpu" || plan.mode === "docker-gpu") {
-    const modelCacheMount = `${resolveWhisperLiveModelCacheRoot()}:/root/.cache/whisper-live`;
-    const args = plan.mode === "docker-gpu"
-      ? ["run", "-d", "--name", "etherx-whisperlive", "--gpus", "all", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"]
-      : ["run", "-d", "--name", "etherx-whisperlive", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
-    const runtimeRoot = resolveWhisperLiveRuntimeRoot();
     const cacheRoot = resolveWhisperLiveModelCacheRoot();
+    const modelCacheMount = `${cacheRoot}:/root/.cache/whisper-live`;
+    const huggingFaceMount = `${cacheRoot}:/root/.cache/huggingface`;
+    const dockerCacheArgs = ["-e", "HF_HOME=/root/.cache/huggingface", "-v", modelCacheMount, "-v", huggingFaceMount];
+    const args = plan.mode === "docker-gpu"
+      ? ["run", "-d", "--name", "etherx-whisperlive", "--gpus", "all", ...dockerCacheArgs, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"]
+      : ["run", "-d", "--name", "etherx-whisperlive", ...dockerCacheArgs, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
+    const runtimeRoot = resolveWhisperLiveRuntimeRoot();
     const existing = await execFileText("docker", ["start", "etherx-whisperlive"], 60000, { cwd: runtimeRoot });
     if (existing.ok) {
-      const inspect = await execFileText("docker", ["inspect", "-f", "{{range .Mounts}}{{.Source}}|{{end}}", "etherx-whisperlive"], 30000, { cwd: runtimeRoot });
-      if (String(inspect.stdout || '').includes(cacheRoot)) {
+      const inspect = await execFileText("docker", ["inspect", "-f", "{{range .Mounts}}{{.Source}}:{{.Destination}}|{{end}}", "etherx-whisperlive"], 30000, { cwd: runtimeRoot });
+      const mounts = String(inspect.stdout || '');
+      if (mounts.includes(cacheRoot + ':/root/.cache/whisper-live') && mounts.includes(cacheRoot + ':/root/.cache/huggingface')) {
         return { ok: true, platform: plan.platform, mode: plan.mode, endpoint: plan.endpoint, container: "etherx-whisperlive", alreadyInstalled: true, stdout: trimPythonInstallOutput(existing.stdout) };
       }
     }
@@ -4553,6 +4569,9 @@ function setupIPC() {
   );
   ipcMain.handle("db:getTikTokLiveData", () =>
     db ? db.getTikTokLiveData() : noDb(),
+  );
+  ipcMain.handle("db:getTikTokLiveStorageStatus", () =>
+    db ? db.getTikTokLiveStorageStatus() : noDb(),
   );
 
   // ── Notes (SQLite) ─────────────────────────────────────────────────────────

@@ -4850,6 +4850,26 @@ body.tkai-panel-interacting * {
   overflow-y: auto;
 }
 
+/* Gift gallery is a fixed live section: it always follows the main TikTok
+   workspace and cannot be pushed below the Session dashboard by saved layout. */
+#tiktokAIPanel .tkai-main-wrap > .tkai-main { order: 0; }
+#tiktokAIPanel .tkai-main-wrap > #tkaiGiftGallerySection { order: 1; }
+#tiktokAIPanel .tkai-main-wrap > #tkaiSlusanjeSection { order: 2; }
+#tiktokAIPanel .tkai-main-wrap > #tkaiStatsStrip,
+#tiktokAIPanel .tkai-main-wrap > #tkaiTopSupporters,
+#tiktokAIPanel .tkai-main-wrap > #tkaiUserSummary,
+#tiktokAIPanel .tkai-main-wrap > #tkaiInsights,
+#tiktokAIPanel .tkai-main-wrap > #tkaiDashUsersRow { order: 3; }
+
+/* Privacy guard for browser-based screen sharing (Meet, Zoom, Discord, etc.).
+   The panel is removed from painting while getDisplayMedia is active, so it
+   cannot appear in a shared full-screen/window capture. */
+html.etherx-screen-share-privacy #tiktokAIPanel,
+html.etherx-screen-share-privacy #tkaiLiveDashboardPopout,
+html.etherx-screen-share-privacy #tkaiListenFeedPopout {
+  display: none !important;
+}
+
 .tkai-main {
   min-height: 230px;
   flex: 1 1 clamp(250px, 38vh, 380px);
@@ -5167,6 +5187,8 @@ body.tkai-panel-interacting * {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .tkai-layout-visual-btn {
@@ -5189,6 +5211,16 @@ body.tkai-panel-interacting * {
 .tkai-layout-visual-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.tkai-layout-span-select {
+  height: 24px;
+  max-width: 86px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text2);
+  font-size: 10px;
 }
 
 .tkai-gift-feed::-webkit-scrollbar {
@@ -5278,6 +5310,39 @@ body.tkai-panel-interacting * {
     rgba(245, 158, 11, 0.06)
   );
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35) inset;
+}
+
+.tkai-msg.forced-translation {
+  border-color: rgba(34, 211, 238, 0.58);
+  border-left: 3px solid #22d3ee;
+}
+
+.tkai-msg.targeted.forced-translation {
+  border-color: #f59e0b;
+  border-left-color: #f59e0b;
+}
+
+.tkai-user-highlight-badge,
+.tkai-user-translation-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  line-height: 1.25;
+  vertical-align: 1px;
+}
+
+.tkai-user-highlight-badge {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.42);
+}
+
+.tkai-user-translation-badge {
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.14);
+  border: 1px solid rgba(34, 211, 238, 0.36);
 }
 
 .tkai-gift-gallery {
@@ -5443,6 +5508,76 @@ body.tkai-panel-interacting * {
 
 .tkai-insights-row.duo {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Modular dashboard: Settings → Layout controls each chart's order and span.
+   Rows become transparent grid wrappers while the cards remain in their
+   original DOM groups, so saved data and chart bindings stay intact. */
+.tkai-insights.tkai-modular-dashboard {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tkai-insights.tkai-modular-dashboard > .tkai-insights-actions {
+  grid-column: 1 / -1;
+}
+
+.tkai-insights.tkai-modular-dashboard > .tkai-insights-row {
+  display: contents;
+}
+
+.tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card {
+  grid-column: span var(--tkai-grid-span, 3);
+  order: var(--tkai-grid-order, 0);
+}
+
+/* Dashboard charts follow the available panel width. On a narrow browser or
+   resized side panel they stack instead of overflowing or covering each other. */
+.tkai-insights-row > .tkai-insights-card {
+  min-width: 0;
+}
+
+@media (max-width: 1080px) {
+  .tkai-insights-row.triple {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tkai-insights.tkai-modular-dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card {
+    grid-column: span 1;
+  }
+
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card[data-tkai-layout-span="6"] {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .tkai-insights-row,
+  .tkai-insights-row.duo,
+  .tkai-insights-row.triple {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tkai-insights.tkai-modular-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card,
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card[data-tkai-layout-span="6"] {
+    grid-column: span 1;
+  }
+
+  .tkai-resizable-chart-card {
+    width: auto !important;
+    max-width: 100% !important;
+    min-width: 0;
+    resize: vertical;
+  }
 }
 
 .tkai-insights-card.tall {

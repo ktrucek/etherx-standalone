@@ -3323,7 +3323,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.184</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.185</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -5217,6 +5217,9 @@
                                         <button class="s-btn-sm" id="btnCacheWhisperModel">⬇ Cache/preuzmi model</button>
                                         <span id="tkaiWhisperCacheStatus" style="font-size:10px;color:var(--text3)">model cache: nije pokrenuto</span>
                                     </div>
+                                    <div id="tkaiWhisperCacheProgress" style="display:none;height:5px;margin:-4px 0 10px;border-radius:99px;overflow:hidden;background:rgba(148,163,184,.22)" title="Napredak je procjena iz lokalno preuzetih datoteka">
+                                        <div id="tkaiWhisperCacheProgressBar" style="width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc);transition:width .45s ease"></div>
+                                    </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">VAD — Voice Activity Detection</div>
@@ -5331,7 +5334,7 @@
                                     </div>
                                     <div style="margin-top:12px">
                                         <div class="s-row-label" style="font-size:11px;margin-bottom:3px">Grafovi i dashboard kartice</div>
-                                        <div class="s-row-desc" style="margin-bottom:6px">Sve nove kartice su ovdje: možeš ih otvoriti, sakriti ili vratiti na početnu veličinu. Grafove potom ručno rastegni iz donjeg desnog kuta.</div>
+                                        <div class="s-row-desc" style="margin-bottom:6px">Povuci graf za redoslijed, odaberi ⅓, ½ ili cijeli red, sakrij ga ili vrati početnu veličinu. Grafove potom ručno rastegni iz donjeg desnog kuta.</div>
                                         <div id="tkaiLayoutVisualDashboard" class="tkai-layout-visual-list"></div>
                                     </div>
                                 </div>
@@ -5465,7 +5468,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.184</span></div>
+                                    v<span id="helpVersionNum2">3.0.185</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -5918,16 +5921,14 @@
                             <div id="tkaiViewerTrendEcharts" style="height:260px;width:100%"></div>
                         </div>
                     </div>
-                    <div class="tkai-insights-row">
-                        <div class="tkai-insights-card hero" id="tkaiTopGiftersEchartsCard" style="flex:1">
+                    <div class="tkai-insights-row duo" id="tkaiGifterHeatmapRow">
+                        <div class="tkai-insights-card hero" id="tkaiTopGiftersEchartsCard">
                             <div class="tkai-insights-title" title="Top 10 giftera prema broju live poklona">Top 10 giftera — live pokloni<span>🏆</span></div>
-                            <div id="tkaiTopGiftersEcharts" style="height:330px;width:100%"></div>
+                            <div id="tkaiTopGiftersEcharts" style="height:260px;width:100%"></div>
                         </div>
-                    </div>
-                    <div class="tkai-insights-row">
-                        <div class="tkai-insights-card hero" id="tkaiGiftHeatmapCard" style="flex:1">
+                        <div class="tkai-insights-card hero" id="tkaiGiftHeatmapCard">
                             <div class="tkai-insights-title" title="Top giftovi po minuti tijekom livea">Gift Heatmap — kada stižu pokloni<span>🔥</span></div>
-                            <div id="tkaiGiftHeatmapEcharts" style="height:360px;width:100%"></div>
+                            <div id="tkaiGiftHeatmapEcharts" style="height:260px;width:100%"></div>
                         </div>
                     </div>
                     <div class="tkai-insights-row triple">
@@ -6760,6 +6761,18 @@
                     <div class="perf-card">
                         <div class="perf-val" id="perfDomCount">—</div>
                         <div class="perf-label">DOM</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-val" id="perfAppCpu">—</div>
+                        <div class="perf-label">App CPU</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-val" id="perfAppRam">—</div>
+                        <div class="perf-label">App RAM</div>
+                    </div>
+                    <div class="perf-card">
+                        <div class="perf-val" id="perfSleepingTabs">—</div>
+                        <div class="perf-label">Sleeping tabs</div>
                     </div>
                 </div>
                 <div class="perf-bar-section">

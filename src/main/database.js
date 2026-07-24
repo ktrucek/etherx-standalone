@@ -737,6 +737,24 @@ class DatabaseManager {
     return { ok: true, users, sessions: parseRows('tiktok_live_sessions', 500), stats: parseRows('tiktok_live_stats', 500), dbPath: this.dbPath };
   }
 
+  getTikTokLiveStorageStatus() {
+    const count = (table) => Number(this.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count || 0);
+    const latest = this.db.prepare(`
+      SELECT MAX(updated_at) AS user_at FROM tiktok_live_users
+    `).get();
+    const eventLatest = this.db.prepare(`SELECT MAX(event_at) AS event_at FROM tiktok_live_events`).get();
+    const sessionLatest = this.db.prepare(`SELECT MAX(saved_at) AS saved_at FROM tiktok_live_sessions`).get();
+    return {
+      ok: true,
+      users: count('tiktok_live_users'),
+      events: count('tiktok_live_events'),
+      sessions: count('tiktok_live_sessions'),
+      stats: count('tiktok_live_stats'),
+      lastActivityAt: Math.max(Number(latest?.user_at || 0) * 1000, Number(eventLatest?.event_at || 0), Number(sessionLatest?.saved_at || 0)),
+      dbPath: this.dbPath,
+    };
+  }
+
   // ─── Local AI model cache index ─────────────────────────────────────────
 
   replaceLocalModelCache(engine, entries = []) {

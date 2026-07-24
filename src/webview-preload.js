@@ -23,6 +23,16 @@ if (location.protocol === 'chrome-extension:') {
     });
 }
 
+// The page-world wrapper installed by the host dispatches these events around
+// getDisplayMedia(). Relay them safely to the owning BrowserWindow so private
+// TikTok Chat AI UI can be hidden while the user shares their screen.
+window.addEventListener('etherx-screen-share', (event) => {
+    try {
+        const detail = event?.detail && typeof event.detail === 'object' ? event.detail : {};
+        ipcRenderer.sendToHost('etherx-screen-share', { active: detail.active === true });
+    } catch (_) { }
+});
+
 // ── Spoof navigator.webdriver ────────────────────────────────────────────────
 // Electron sets navigator.webdriver = true (inherited from Chromium automation
 // detection). TikTok, TikTok LIVE, Instagram and many other sites check this

@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('etherx', {
     install: () => ipcRenderer.invoke('db:installTikTokLiveStorage'),
     import: (data) => ipcRenderer.invoke('db:importTikTokLiveData', data),
     get: () => ipcRenderer.invoke('db:getTikTokLiveData'),
+    getStatus: () => ipcRenderer.invoke('db:getTikTokLiveStorageStatus'),
   },
 
   // ── Downloads ───────────────────────────────────────────────────────────────
