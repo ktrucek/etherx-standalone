@@ -798,7 +798,7 @@ if (window.electronWebview) {
                                 'span[dir="auto"]'
                             ].join(',');
                             const userSelectors = [
-                                'a[href^="/@"]',
+                                'a[href*="/@"]',
                                 '[data-e2e*="comment-username" i]',
                                 '[data-e2e*="user-name" i]',
                                 '[data-e2e*="nickname" i]',
@@ -839,12 +839,27 @@ if (window.electronWebview) {
                                 if (/(subscribed|subscriber|pretplatio|pretplatila)/i.test(lower)) return 'subscriber';
                                 return 'chat';
                             };
+                            const usernameFromValue = (value) => {
+                                const raw = clean(value);
+                                if (!raw) return '';
+                                const hrefMatch = raw.match(/(?:https?:\\/\\/[^\\s]+)?\\/@([A-Za-z0-9._-]{1,80})/);
+                                const username = hrefMatch ? hrefMatch[1] : raw.replace(/^@+/, '').split(/[\\s,;:!?()[\\]{}]+/, 1)[0];
+                                return clean(username).replace(/^@+/, '').replace(/[^A-Za-z0-9._-].*$/, '');
+                            };
+                            const usernameFromNode = (node) => {
+                                if (!node) return '';
+                                const link = node.matches?.('a[href*="/@"]') ? node : node.querySelector?.('a[href*="/@"]');
+                                const fromLink = usernameFromValue(link?.getAttribute?.('href') || '');
+                                if (fromLink) return fromLink;
+                                const userEl = node.matches?.(userSelectors) ? node : node.querySelector?.(userSelectors);
+                                return usernameFromValue(userEl?.getAttribute?.('href') || userEl?.textContent || '');
+                            };
                             const extractPayload = (row) => {
                                 if (!row) return null;
                                 const userEl = row.querySelector(userSelectors);
                                 const textEl = row.querySelector(textSelectors);
                                 const rowText = clean(row.innerText || row.textContent || '');
-                                const user = clean(userEl?.textContent || userEl?.getAttribute('href')?.split('/@')[1] || '').replace(/^@+/, '').replace(/[,:;].*$/, '');
+                                const user = usernameFromNode(row) || usernameFromValue(userEl?.getAttribute('href') || userEl?.textContent || '');
                                 const candidates = [];
                                 const pushCandidate = (value) => {
                                     const cleaned = clean(value);
@@ -888,10 +903,7 @@ if (window.electronWebview) {
                                 let el = target;
                                 for (let i = 0; i < 7; i++) {
                                     if (!el) break;
-                                    const userEl = el.querySelector ? el.querySelector(userSelectors) : null;
-                                    const user = clean(userEl?.textContent || userEl?.getAttribute('href')?.split('/@')[1] || '')
-                                        .replace(/^@+/, '')
-                                        .replace(/[,:;].*$/, '');
+                                    const user = usernameFromNode(el);
                                     if (user) return user;
                                     el = el.parentElement;
                                 }
@@ -7758,6 +7770,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             '<button type="button" data-act="ai" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#e5e7eb;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🤖 Ponudi AI odgovor</button>' +
             '<button type="button" data-act="push-and-scan" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#7dd3fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🎵 Pošalji u TikTok Chat AI</button>' +
             '<hr style="margin:3px 6px;border:none;border-top:1px solid rgba(255,255,255,.1)">' +
+            '<button type="button" data-act="copy-user" style="display:block;width:100%;text-align:left;background:rgba(96,165,250,.12);border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📋 Kopiraj korisničko ime</button>' +
             '<button type="button" data-act="send-full" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#bfdbfe;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">📨 Pošalji cijelu poruku u TikTok</button>' +
             '<button type="button" data-act="send-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#93c5fd;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 Prevedi poruku</button>' +
             '<button type="button" data-act="send-target-translated" style="display:block;width:100%;text-align:left;background:transparent;border:none;color:#a5b4fc;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:12px">🌐 @korisnik + prijevod</button>' +
@@ -7780,6 +7793,30 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             selectedMsgIds = new Set([m.id]);
             renderMessages();
             generateReplies([m]);
+            closeTkaiMsgContextMenu();
+        });
+
+        tkaiMsgCtxEl.querySelector('[data-act="copy-user"]')?.addEventListener('click', async () => {
+            const user = String(tkaiMsgCtxTarget?.user || '').trim().replace(/^@+/, '');
+            if (!user) {
+                showToast('⚠️ Korisničko ime nije pronađeno');
+                closeTkaiMsgContextMenu();
+                return;
+            }
+            const value = '@' + user;
+            try {
+                await navigator.clipboard.writeText(value);
+                showToast('📋 Kopirano ' + value);
+            } catch (_) {
+                const area = document.createElement('textarea');
+                area.value = value;
+                area.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+                document.body.appendChild(area);
+                area.select();
+                const copied = document.execCommand('copy');
+                area.remove();
+                showToast(copied ? ('📋 Kopirano ' + value) : '⚠️ Kopiranje nije uspjelo');
+            }
             closeTkaiMsgContextMenu();
         });
 
@@ -8581,6 +8618,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function openTkaiMsgContextMenu(x, y, message) {
         const el = ensureTkaiMsgContextMenu();
         tkaiMsgCtxTarget = message || null;
+        const user = String(message?.user || '').trim().replace(/^@+/, '');
+        const copyButton = el.querySelector('[data-act="copy-user"]');
+        if (copyButton) {
+            copyButton.textContent = user ? ('📋 Kopiraj @' + user) : '📋 Kopiraj korisničko ime';
+            copyButton.disabled = !user;
+            copyButton.style.opacity = user ? '1' : '.45';
+            copyButton.style.cursor = user ? 'pointer' : 'not-allowed';
+        }
         el.style.display = 'block';
         const rect = el.getBoundingClientRect();
         const left = Math.min(x, window.innerWidth - rect.width - 8);
