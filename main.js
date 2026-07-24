@@ -14,6 +14,7 @@ const {
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const http = require("http");
 const https = require("https");
 const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
@@ -122,6 +123,113 @@ function isAuthDeepLinkProtocol(protocol) {
     "msauth:",
     "ms-appx-web:",
   ].includes(String(protocol || "").toLowerCase());
+}
+
+// Google OAuth desktop client. Client IDs are public identifiers for installed
+// apps; no client secret or Google password is stored in EtherX.
+const GOOGLE_OAUTH_CLIENT_ID = "1040916328983-qkm8qiqao1sia5m965lh1re2076ab6af.apps.googleusercontent.com";
+let activeGoogleOAuthLogin = null;
+
+function makeGoogleOAuthVerifier() {
+  return crypto.randomBytes(48).toString("base64url");
+}
+
+function googleOAuthChallenge(verifier) {
+  return crypto.createHash("sha256").update(verifier).digest("base64url");
+}
+
+async function startGoogleOAuthLogin() {
+  if (activeGoogleOAuthLogin) return activeGoogleOAuthLogin;
+
+  activeGoogleOAuthLogin = new Promise((resolve) => {
+    const state = crypto.randomBytes(24).toString("base64url");
+    const verifier = makeGoogleOAuthVerifier();
+    let settled = false;
+    let timeout = null;
+    let server = null;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      try { server?.close(); } catch (_) { }
+      activeGoogleOAuthLogin = null;
+      resolve(result);
+    };
+    const page = (title, text) => `<!doctype html><meta charset="utf-8"><title>${title}</title><style>body{font-family:system-ui;background:#101827;color:#e5e7eb;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:440px;padding:28px;text-align:center;border:1px solid #334155;border-radius:14px;background:#111827}p{color:#cbd5e1}</style><main><h2>${title}</h2><p>${text}</p><p>Možeš zatvoriti ovaj prozor i vratiti se u EtherX Browser.</p></main>`;
+
+    server = http.createServer(async (req, res) => {
+      let callbackUrl;
+      try { callbackUrl = new URL(req.url || "/", "http://127.0.0.1"); } catch (_) { callbackUrl = null; }
+      if (!callbackUrl || callbackUrl.pathname !== "/oauth2callback") {
+        res.writeHead(404); res.end("Not found"); return;
+      }
+      const code = String(callbackUrl.searchParams.get("code") || "");
+      const returnedState = String(callbackUrl.searchParams.get("state") || "");
+      const error = String(callbackUrl.searchParams.get("error") || "");
+      if (error || !code || returnedState !== state) {
+        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(page("Google prijava nije dovršena", error === "access_denied" ? "Prijava je otkazana." : "Povratni sigurnosni kod nije valjan."));
+        finish({ ok: false, cancelled: error === "access_denied", error: error || "Google OAuth sigurnosna provjera nije prošla." });
+        return;
+      }
+      try {
+        const redirectUri = `http://127.0.0.1:${server.address().port}/oauth2callback`;
+        const body = new URLSearchParams({
+          code,
+          client_id: GOOGLE_OAUTH_CLIENT_ID,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+          code_verifier: verifier,
+        });
+        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString(),
+        });
+        const token = await tokenResponse.json().catch(() => ({}));
+        if (!tokenResponse.ok || !token.access_token) throw new Error(String(token?.error_description || token?.error || "Google token nije vraćen."));
+        const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+          headers: { Authorization: `Bearer ${token.access_token}` },
+        });
+        const profile = await profileResponse.json().catch(() => ({}));
+        if (!profileResponse.ok || !profile.sub || !profile.email) throw new Error("Google profil nije dostupan.");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(page("Google račun povezan", `Prijavljen je račun ${String(profile.email).replace(/[<>&]/g, "")}.`));
+        // Access token is intentionally discarded. EtherX stores only profile
+        // metadata in its local profile and never stores the Google password.
+        finish({ ok: true, profile: {
+          id: String(profile.sub), email: String(profile.email), name: String(profile.name || profile.email),
+          picture: String(profile.picture || ""), verified: profile.email_verified === true,
+        } });
+      } catch (error) {
+        res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(page("Google prijava nije uspjela", String(error?.message || error).replace(/[<>&]/g, "")));
+        finish({ ok: false, error: String(error?.message || error) });
+      }
+    });
+    server.once("error", (error) => finish({ ok: false, error: String(error?.message || error) }));
+    server.listen(0, "127.0.0.1", async () => {
+      const redirectUri = `http://127.0.0.1:${server.address().port}/oauth2callback`;
+      const authorizationUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authorizationUrl.search = new URLSearchParams({
+        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "openid email profile",
+        state,
+        code_challenge: googleOAuthChallenge(verifier),
+        code_challenge_method: "S256",
+        prompt: "select_account",
+      }).toString();
+      try {
+        await shell.openExternal(authorizationUrl.toString());
+        timeout = setTimeout(() => finish({ ok: false, error: "Isteklo je vrijeme za Google prijavu." }), 5 * 60 * 1000);
+      } catch (error) {
+        finish({ ok: false, error: String(error?.message || error) });
+      }
+    });
+  });
+  return activeGoogleOAuthLogin;
 }
 
 // ─── New modules (wrapped in try/catch — native modules can crash on wrong arch) ─
@@ -3616,6 +3724,7 @@ function setupIPC() {
   });
 
   // ── Navigation helpers ─────────────────────────────────────────────────────
+  ipcMain.handle("googleAuth:login", async () => startGoogleOAuthLogin());
   ipcMain.handle("nav:openExternal", (_e, url) => {
     // Security: only allow http/https/mailto URLs via openExternal
     if (/^https?:\/\/|^mailto:/i.test(url)) return shell.openExternal(url);

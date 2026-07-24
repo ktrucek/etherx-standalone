@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('etherx', {
 
   openExternal: (url) => ipcRenderer.invoke('nav:openExternal', url),
   openAuthWindow: (url) => ipcRenderer.invoke('app:openAuthWindow', url),
+  googleAuth: {
+    login: () => ipcRenderer.invoke('googleAuth:login'),
+  },
 
   // ── Window ──────────────────────────────────────────────────────────────────
   window: {

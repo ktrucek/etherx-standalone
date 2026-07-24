@@ -23687,13 +23687,25 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const uploadBtn = document.getElementById('sUploadAvatarBtn');
             const emojiBtn = document.getElementById('sEmojiAvatarBtn');
             const previewEl = document.getElementById('sProfileAvatarPreview');
+            const googleSignInBtn = document.getElementById('sGoogleSignInBtn');
+            const googleDisconnectBtn = document.getElementById('sGoogleDisconnectBtn');
+            const googleStatusEl = document.getElementById('sGoogleAccountStatus');
             function refreshPreview() {
                 if (!previewEl) return;
                 const u = DB.getUser();
                 if (u.avatarUrl) { previewEl.innerHTML = '<img src="' + u.avatarUrl + '" style="width:40px;height:40px;object-fit:cover;border-radius:50%">'; }
                 else { previewEl.innerHTML = u.avatar || '👤'; }
             }
+            function refreshGoogleAccount() {
+                const account = DB.getUser()?.googleAccount;
+                if (googleStatusEl) googleStatusEl.textContent = account?.email
+                    ? `✅ Povezan: ${account.name || account.email} (${account.email})`
+                    : 'Nije povezan Google račun.';
+                if (googleSignInBtn) googleSignInBtn.textContent = account?.email ? '↻ Promijeni račun' : 'G Prijavi se';
+                if (googleDisconnectBtn) googleDisconnectBtn.style.display = account?.email ? '' : 'none';
+            }
             refreshPreview();
+            refreshGoogleAccount();
             if (uploadBtn) uploadBtn.addEventListener('click', async () => {
                 if (window.etherx?.app?.chooseProfilePicture) {
                     const result = await window.etherx.app.chooseProfilePicture();
@@ -23706,6 +23718,42 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 DB.saveUser({ avatar: nv, avatarUrl: null });
                 refreshPreview();
                 showToast('👤 Avatar updated');
+            });
+            if (googleSignInBtn) googleSignInBtn.addEventListener('click', async () => {
+                if (!window.etherx?.googleAuth?.login) { showToast('⚠️ Google prijava je dostupna samo u desktop aplikaciji'); return; }
+                googleSignInBtn.disabled = true;
+                const oldText = googleSignInBtn.textContent;
+                googleSignInBtn.textContent = '⏳ Otvaram Google…';
+                try {
+                    const result = await window.etherx.googleAuth.login();
+                    if (!result?.ok) {
+                        if (!result?.cancelled) showToast('⚠️ Google prijava: ' + (result?.error || 'nije uspjela'));
+                        return;
+                    }
+                    const profile = result.profile || {};
+                    const current = DB.getUser();
+                    DB.saveUser({
+                        name: current.name || profile.name || '',
+                        email: profile.email || current.email || '',
+                        avatarUrl: profile.picture || current.avatarUrl || '',
+                        googleAccount: { id: profile.id, email: profile.email, name: profile.name, picture: profile.picture, verified: !!profile.verified, connectedAt: Date.now() }
+                    });
+                    const nameInput = document.getElementById('sProfileNameInput');
+                    if (nameInput && !nameInput.value) nameInput.value = profile.name || '';
+                    refreshPreview();
+                    refreshGoogleAccount();
+                    showToast('✅ Google račun povezan: ' + profile.email);
+                } catch (error) {
+                    showToast('⚠️ Google prijava: ' + String(error?.message || error));
+                } finally {
+                    googleSignInBtn.disabled = false;
+                    if (!DB.getUser()?.googleAccount?.email) googleSignInBtn.textContent = oldText || 'G Prijavi se';
+                }
+            });
+            if (googleDisconnectBtn) googleDisconnectBtn.addEventListener('click', () => {
+                DB.saveUser({ googleAccount: null });
+                refreshGoogleAccount();
+                showToast('Google račun je odspojen iz EtherX profila');
             });
         })();
         // UI Font family
