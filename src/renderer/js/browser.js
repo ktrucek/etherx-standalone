@@ -6456,6 +6456,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let _cardiffSentiment = null;   // { label: 'positive'|'neutral'|'negative', score: 0.0..1.0 } | null
     let _cardiffSentimentAt = 0;
     let _cardiffRefreshing = false;
+    const TKAI_MORITZ_MODEL = 'MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7';
+    const tkaiMoritzChatCache = new Map();
+    let _tkaiMoritzLastRequestAt = 0;
     // Questions detected during this session
     let collectedQuestions = []; // [{ user, text, ts }]
     let viewerSamples = [];
@@ -10758,6 +10761,70 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
         } catch (_) { /* fail silently, keyword fallback active */ }
         finally { _cardiffRefreshing = false; }
+    }
+
+    // MoritzLaurer mDeBERTa is used only as a second opinion for low-confidence
+    // DOM rows. The normal DOM parser remains first: an AI model cannot infer
+    // from text alone whether a sentence was visually part of a chat or a page
+    // caption. This keeps latency and HF requests low during a busy live.
+    async function filterTkaiLowConfidenceRowsWithMoritz(messages) {
+        const settings = DB.getSettings();
+        if (settings.tkaiMoritzChatFilter === false || settings.tkaiMoritzChatFilter === 'false') return messages;
+        const token = String(settings.hfApiKey || settings.hf_api_key || '').trim();
+        if (!token || !Array.isArray(messages) || !messages.length) return messages;
+        const now = Date.now();
+        const output = [];
+        for (const message of messages) {
+            if (normalizeTkaiMessageType(message) !== 'chat' || message.chatConfidence !== 'low') {
+                output.push(message);
+                continue;
+            }
+            const key = `${String(message.user || '').toLowerCase()}|${String(message.text || '').toLowerCase()}|${String(message.rawText || '').toLowerCase()}`.slice(0, 900);
+            const cached = tkaiMoritzChatCache.get(key);
+            if (cached && now - cached.at < 5 * 60 * 1000) {
+                if (cached.isChat) output.push(message);
+                continue;
+            }
+            // Keep the scan responsive: at most one ambiguous row per 1.2s.
+            if (now - _tkaiMoritzLastRequestAt < 1200) {
+                output.push(message);
+                continue;
+            }
+            _tkaiMoritzLastRequestAt = Date.now();
+            try {
+                const context = [message.rawText, message.ariaLabel, message.title]
+                    .filter(Boolean).join(' · ').slice(0, 900);
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 4500);
+                const response = await fetch(`https://router.huggingface.co/hf-inference/models/${TKAI_MORITZ_MODEL}`, {
+                    method: 'POST',
+                    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        inputs: `TikTok Live DOM candidate. User: ${String(message.user || 'unknown')}. Text: ${String(message.text || '')}. Context: ${context}`,
+                        parameters: {
+                            candidate_labels: ['viewer chat message', 'TikTok interface, caption, profile or badge', 'viewer ranking or system event'],
+                            hypothesis_template: 'This TikTok Live DOM candidate is a {}.'
+                        }
+                    })
+                });
+                clearTimeout(timeout);
+                if (!response.ok) {
+                    output.push(message); // Never lose a real chat row on API failure.
+                    continue;
+                }
+                const data = await response.json().catch(() => null);
+                const label = String(data?.labels?.[0] || '').toLowerCase();
+                const score = Number(data?.scores?.[0] || 0);
+                const isChat = label === 'viewer chat message' && score >= 0.72;
+                tkaiMoritzChatCache.set(key, { isChat, at: Date.now() });
+                if (tkaiMoritzChatCache.size > 500) tkaiMoritzChatCache.delete(tkaiMoritzChatCache.keys().next().value);
+                if (isChat) output.push(message);
+            } catch (_) {
+                output.push(message); // fallback to deterministic parser
+            }
+        }
+        return output;
     }
     // ────────────────────────────────────────────────────────────────────────
 
@@ -15981,6 +16048,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               title: el.getAttribute('title') || '',
               mid,
               rowIndex: index,
+              chatConfidence: (textEl || structuredText) ? 'high' : 'low',
                                                                                                                 type: isShare ? 'share' : (isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isLike ? 'like' : 'chat')))),
               level: levelHint,
               userLevel: levelHint,
@@ -16110,7 +16178,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const scanLikes = DB.getSettings().tkaiScanLikes !== false;
             const dropUnknownUsers = DB.getSettings().tkaiDropUnknownUsers === true;
 
-            const filteredMessages = messages
+            let filteredMessages = messages
                 .map((m) => ({ ...m, type: normalizeTkaiMessageType(m) }))
                 .map((m) => repairTkaiMessageIdentity(m))
                 .filter((m) => {
@@ -16126,6 +16194,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     if (m.type === 'like' && !scanLikes) return false;
                     return true;
                 });
+
+            filteredMessages = await filterTkaiLowConfidenceRowsWithMoritz(filteredMessages);
 
             if (scanLikes) {
                 const burstCount = Math.max(0, Number(meta?.likeBurstCount || 0));
