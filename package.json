@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "3.0.171",
+  "version": "3.0.172",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {

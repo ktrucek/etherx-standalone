@@ -6749,6 +6749,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const giftStatsListEl = document.getElementById('tkaiGiftStatsList');
     const giftEchartsEl = document.getElementById('tkaiGiftEcharts');
     const sentimentAqiChartEl = document.getElementById('tkaiSentimentAqiChart');
+    const viewerTrendEchartsEl = document.getElementById('tkaiViewerTrendEcharts');
     const shareEventsListEl = document.getElementById('tkaiShareEventsList');
     const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
     const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
@@ -6773,6 +6774,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let lastShadowbanUserStats = [];
     let giftEchartsInstance = null;
     let sentimentAqiEchartsInstance = null;
+    let viewerTrendEchartsInstance = null;
     let echartsResizeBound = false;
     try {
         const eventDefaultsMigrationKey = 'ex_tkai_event_defaults_v2';
@@ -9893,6 +9895,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         };
         giftEchartsInstance = getChart(giftEchartsEl, giftEchartsInstance);
         sentimentAqiEchartsInstance = getChart(sentimentAqiChartEl, sentimentAqiEchartsInstance);
+        viewerTrendEchartsInstance = getChart(viewerTrendEchartsEl, viewerTrendEchartsInstance);
 
         const giftRows = Array.isArray(insights?.giftDetails?.topGiftTypes)
             ? insights.giftDetails.topGiftTypes.slice(0, 50)
@@ -9993,11 +9996,66 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
         }
 
+        if (viewerTrendEchartsInstance) {
+            const samples = (Array.isArray(viewerSamplePoints) ? viewerSamplePoints : [])
+                .slice(-80)
+                .filter((point) => Number(point?.value || 0) > 0);
+            const groupSize = Math.max(1, Math.ceil(samples.length / 12));
+            const groups = [];
+            for (let start = 0; start < samples.length; start += groupSize) {
+                const bucket = samples.slice(start, start + groupSize);
+                const sums = { rast: 0, stabilno: 0, pad: 0 };
+                bucket.forEach((point, index) => {
+                    const globalIndex = start + index;
+                    const previous = samples[globalIndex - 1];
+                    const value = Math.max(0, Number(point.value || 0));
+                    const delta = previous ? value - Number(previous.value || 0) : 0;
+                    const threshold = previous ? Math.max(1, Number(previous.value || 0) * 0.01) : Infinity;
+                    if (delta > threshold) sums.rast += value;
+                    else if (delta < -threshold) sums.pad += value;
+                    else sums.stabilno += value;
+                });
+                const total = sums.rast + sums.stabilno + sums.pad;
+                const last = bucket[bucket.length - 1];
+                groups.push({
+                    label: last?.ts ? new Date(last.ts).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' }) : String(groups.length + 1),
+                    viewers: Number(last?.value || 0),
+                    samples: bucket.length,
+                    rast: total ? Number((sums.rast / total * 100).toFixed(1)) : 0,
+                    stabilno: total ? Number((sums.stabilno / total * 100).toFixed(1)) : 100,
+                    pad: total ? Number((sums.pad / total * 100).toFixed(1)) : 0
+                });
+            }
+            viewerTrendEchartsInstance.setOption({
+                animationDuration: 250,
+                backgroundColor: 'transparent',
+                grid: { left: 38, right: 12, top: 38, bottom: 32 },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (rows) => {
+                        const row = groups[rows?.[0]?.dataIndex || 0] || {};
+                        return `<b>${row.label || ''}</b><br>${formatNum(row.viewers || 0)} gledatelja · ${row.samples || 0} uzoraka<br>Rast ${row.rast || 0}% · Stabilno ${row.stabilno || 0}% · Pad ${row.pad || 0}%`;
+                    }
+                },
+                legend: { top: 2, textStyle: { color: '#cbd5e1', fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+                xAxis: { type: 'category', data: groups.map((group) => group.label), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { lineStyle: { color: '#334155' } }, axisTick: { show: false } },
+                yAxis: { type: 'value', max: 100, axisLabel: { color: '#94a3b8', fontSize: 9, formatter: '{value}%' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } } },
+                series: [
+                    { name: 'Rast', type: 'bar', stack: 'trend', data: groups.map((group) => group.rast), itemStyle: { color: '#34d399' } },
+                    { name: 'Stabilno', type: 'bar', stack: 'trend', data: groups.map((group) => group.stabilno), itemStyle: { color: '#60a5fa' } },
+                    { name: 'Pad', type: 'bar', stack: 'trend', data: groups.map((group) => group.pad), itemStyle: { color: '#fb7185' } }
+                ],
+                graphic: groups.length ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: 'Čekam viewer uzorke…', fill: '#94a3b8', fontSize: 11 } }]
+            }, true);
+        }
+
         if (!echartsResizeBound) {
             echartsResizeBound = true;
             window.addEventListener('resize', () => {
                 giftEchartsInstance?.resize();
                 sentimentAqiEchartsInstance?.resize();
+                viewerTrendEchartsInstance?.resize();
             });
         }
     }
