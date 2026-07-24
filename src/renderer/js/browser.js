@@ -798,7 +798,7 @@ if (window.electronWebview) {
                                 'span[dir="auto"]'
                             ].join(',');
                             const userSelectors = [
-                                'a[href*="/@"]',
+                                'a[href^="/@"]',
                                 '[data-e2e*="comment-username" i]',
                                 '[data-e2e*="user-name" i]',
                                 '[data-e2e*="nickname" i]',
@@ -839,27 +839,12 @@ if (window.electronWebview) {
                                 if (/(subscribed|subscriber|pretplatio|pretplatila)/i.test(lower)) return 'subscriber';
                                 return 'chat';
                             };
-                            const usernameFromValue = (value) => {
-                                const raw = clean(value);
-                                if (!raw) return '';
-                                const hrefMatch = raw.match(/(?:https?:\\/\\/[^\\s]+)?\\/@([A-Za-z0-9._-]{1,80})/);
-                                const username = hrefMatch ? hrefMatch[1] : raw.replace(/^@+/, '').split(/[\\s,;:!?()[\\]{}]+/, 1)[0];
-                                return clean(username).replace(/^@+/, '').replace(/[^A-Za-z0-9._-].*$/, '');
-                            };
-                            const usernameFromNode = (node) => {
-                                if (!node) return '';
-                                const link = node.matches?.('a[href*="/@"]') ? node : node.querySelector?.('a[href*="/@"]');
-                                const fromLink = usernameFromValue(link?.getAttribute?.('href') || '');
-                                if (fromLink) return fromLink;
-                                const userEl = node.matches?.(userSelectors) ? node : node.querySelector?.(userSelectors);
-                                return usernameFromValue(userEl?.getAttribute?.('href') || userEl?.textContent || '');
-                            };
                             const extractPayload = (row) => {
                                 if (!row) return null;
                                 const userEl = row.querySelector(userSelectors);
                                 const textEl = row.querySelector(textSelectors);
                                 const rowText = clean(row.innerText || row.textContent || '');
-                                const user = usernameFromNode(row) || usernameFromValue(userEl?.getAttribute('href') || userEl?.textContent || '');
+                                const user = clean(userEl?.textContent || userEl?.getAttribute('href')?.split('/@')[1] || '').replace(/^@+/, '').replace(/[,:;].*$/, '');
                                 const candidates = [];
                                 const pushCandidate = (value) => {
                                     const cleaned = clean(value);
@@ -903,7 +888,10 @@ if (window.electronWebview) {
                                 let el = target;
                                 for (let i = 0; i < 7; i++) {
                                     if (!el) break;
-                                    const user = usernameFromNode(el);
+                                    const userEl = el.querySelector ? el.querySelector(userSelectors) : null;
+                                    const user = clean(userEl?.textContent || userEl?.getAttribute('href')?.split('/@')[1] || '')
+                                        .replace(/^@+/, '')
+                                        .replace(/[,:;].*$/, '');
                                     if (user) return user;
                                     el = el.parentElement;
                                 }
@@ -998,9 +986,16 @@ if (window.electronWebview) {
             if (msg.startsWith('__ETHERX_TKAI_CTX__')) {
                 try {
                     const payload = JSON.parse(msg.slice('__ETHERX_TKAI_CTX__'.length));
+                    // Keep TikTok DOM parsing minimal. Normalize only after the
+                    // message has safely crossed into EtherX's own renderer.
+                    const rawContextUser = String(payload.user || '').trim();
+                    const contextUser = rawContextUser
+                        .replace(/^@+/, '')
+                        .split(/[?#\s,;:]+/, 1)[0]
+                        .replace(/[^A-Za-z0-9._-].*$/, '');
                     const now = Date.now();
                     const signature = [
-                        String(payload.user || '').trim().toLowerCase(),
+                        contextUser.toLowerCase(),
                         String(payload.text || '').trim().toLowerCase(),
                         String(payload.type || 'chat').trim().toLowerCase(),
                         Math.round(Number(payload.x || 0) / 8),
@@ -1022,7 +1017,7 @@ if (window.electronWebview) {
                         rect.top + Number(payload.y || 0),
                         {
                             id: 'wvctx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-                            user: String(payload.user || '').trim(),
+                            user: contextUser,
                             text: String(payload.text || '').trim(),
                             type: String(payload.type || 'chat').trim() || 'chat',
                             source: 'tiktok-webview',
@@ -12060,9 +12055,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             else closeListenFeedPopout();
         }, 0);
     });
-    if (DB.getSettings().tkaiListenFeedDetached === true) {
-        setTimeout(openListenFeedPopout, 800);
-    }
+    // Never reopen the Whisper/Listen Feed window automatically on browser start.
+    // The saved detached preference is only applied after the user explicitly
+    // opens it from the button or Layout settings in this session.
     expandChatBtn?.addEventListener('click', () => {
         if (chatPopout && document.body.contains(chatPopout)) closeChatPopout();
         else openChatPopout();
