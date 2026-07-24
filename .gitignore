@@ -23,6 +23,8 @@ Thumbs.db
 .env.staging
 .env.*.local
 *.env
+!.env.example
+!**/.env.example
 .venv/
 venv/
 __pycache__/
@@ -44,3 +46,21 @@ tiktok_users_gifts_detailed_clean.csv
 tiktok_chat.md
 tiktok-chat-2026-06-14T14-21-04-284Z.json
 LIVEOS_PLUGIN_DASHBOARD_PLAN.md
+
+# EtherX LIVE server: nikada ne slati tajne, razgovore ni privatne TLS datoteke.
+live-chat-server/.env
+live-chat-server/.env.*
+!live-chat-server/.env.example
+live-chat-server/data/
+live-chat-server/logs/
+live-chat-server/secrets/
+live-chat-server/private/
+live-chat-server/*.log
+live-chat-server/*.pid
+live-chat-server/*.key
+live-chat-server/*.pem
+live-chat-server/*.crt
+live-chat-server/*.p12
+live-chat-server/*.pfx
+live-chat-server/*token*
+live-chat-server/*secret*

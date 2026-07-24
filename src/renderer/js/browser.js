@@ -1473,6 +1473,7 @@ const SENSITIVE_SETTING_KEYS = new Set([
     'local_ai_api_key',
     'translateAiApiKey',
     'tkaiGuardianApiKey',
+    'tkaiLiveServerToken',
     'giteaUpdateToken',
     'githubUpdateToken'
 ]);
@@ -1488,7 +1489,13 @@ function splitSensitiveSettingsObject(settings) {
 }
 function getPublicSettingsSnapshot() {
     try {
-        return JSON.parse(localStorage.getItem('ex_cfg') || '{}');
+        const stored = JSON.parse(localStorage.getItem('ex_cfg') || '{}');
+        if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+        const normalized = {};
+        Object.entries(stored).forEach(([key, value]) => {
+            normalized[key] = parseStoredSettingValue(value);
+        });
+        return normalized;
     } catch (_) {
         return {};
     }
@@ -4183,9 +4190,18 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             statusEl.textContent = 'model cache: spajam se na ' + wsUrl + ' · model ' + cfg.model;
             statusEl.style.color = '#fbbf24';
         }
-        if (btn) btn.disabled = true;
-        if (progressEl) progressEl.style.display = '';
-        if (progressBarEl) progressBarEl.style.width = '2%';
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ Preuzimam model…';
+        }
+        if (progressEl) {
+            progressEl.style.display = '';
+            progressEl.title = 'Preuzimanje i učitavanje modela je u tijeku';
+        }
+        if (progressBarEl) {
+            progressBarEl.style.width = '2%';
+            progressBarEl.style.background = 'linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)';
+        }
         try {
             await new Promise((resolve, reject) => {
                 let settled = false;
@@ -4301,9 +4317,17 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 if (count > 0 && bytes > 0) {
                     statusEl.textContent = 'model cache: gotovo · ' + cfg.model + ' lokalno spremljen · SQLite indeks: ' + count + ' datoteka (' + size + ')';
                     statusEl.style.color = '#4ade80';
+                    if (progressEl) progressEl.title = 'Gotovo — ' + cfg.model + ' je lokalno spremljen';
+                    if (progressBarEl) {
+                        progressBarEl.style.width = '100%';
+                        progressBarEl.style.background = 'linear-gradient(90deg,#22c55e,#4ade80,#86efac)';
+                    }
+                    if (btn) btn.textContent = '✅ Model spremljen';
                 } else {
                     statusEl.textContent = 'model cache: server je učitao ' + cfg.model + ', ali lokalne datoteke još nisu pronađene. Klikni Instaliraj/pokreni WhisperLive server jednom pa ponovno Cache/preuzmi model.';
                     statusEl.style.color = '#fbbf24';
+                    if (progressEl) progressEl.title = 'Model je učitan, ali lokalni cache još nije potvrđen';
+                    if (btn) btn.textContent = '⚠ Provjeri cache';
                 }
             }
             if (typeof showToast === 'function') showToast(count > 0 && bytes > 0 ? '✅ Whisper model cacheiran: ' + cfg.model : '⚠️ Model je učitan, ali cache indeks još nema datoteke');
@@ -4313,6 +4337,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 statusEl.textContent = 'model cache: ❌ ' + msg;
                 statusEl.style.color = '#f87171';
             }
+            if (progressEl) progressEl.title = 'Cacheiranje modela nije uspjelo';
+            if (progressBarEl) progressBarEl.style.background = 'linear-gradient(90deg,#ef4444,#f87171)';
+            if (btn) btn.textContent = '↻ Pokušaj ponovno';
             if (typeof showToast === 'function') showToast('❌ Whisper model cache: ' + msg);
         } finally {
             if (btn) btn.disabled = false;
@@ -6401,6 +6428,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let statsTimerInterval = null;
     let collectedMessages = [];
     let listeningMessages = [];
+    // Cumulative per-session ledger for Top users detail. This is intentionally
+    // independent from collectedMessages because the live message buffer is
+    // trimmed (especially while the remote RAM server is connected).
+    let tkaiSessionUserStats = new Map();
+    let tkaiSessionUserEventIds = new Set();
+    let tkaiSessionUserStatsVersion = 0;
+    let tkaiTopUsersRenderKey = '';
     let selectedMsgIds = new Set();
     let targetedChatUser = '';
     let tkaiMsgCtxEl = null;
@@ -6444,6 +6478,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLastLikeBurstAt = 0;
     let dashboardUserSort = 'total';
     let dashboardControlsInit = false;
+    let tkaiInsightsDirty = true;
+    let tkaiInsightsLastRenderedAt = 0;
+    let tkaiInsightsRenderTimer = null;
     let lastCaptionSpeakKey = '';
     let lastCaptionSpeakAt = 0;
     let lastCaptionMirrorKey = '';
@@ -6456,6 +6493,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const TKAI_FORCED_TRANSLATE_USERS_KEY = 'tkaiForcedTranslateUsers';
     const STORAGE_KEY = 'ex_tkai_cfg';
     let liveOsPublishTimer = null;
+    let tkaiLiveServerSocket = null;
+    let tkaiLiveServerReady = false;
+    let tkaiLiveServerQueue = [];
+    let tkaiLiveServerPending = new Map();
+    let tkaiLiveServerSeq = 0;
+    let tkaiLiveServerFlushTimer = null;
+    let tkaiLiveServerReconnectTimer = null;
+    let tkaiLiveServerSummary = null;
+    const tkaiLiveServerPageRequests = new Map();
 
     function getLiveOsSavedSessionPayload() {
         let savedSessions = [];
@@ -6697,9 +6743,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     },
                     alerts: alertRows,
                     sentiment: {
-                        label: _cardiffSentiment?.label || insightsSnapshot.sentiment || 'neutral',
-                        confidence: _cardiffSentiment ? Math.round(Number(_cardiffSentiment.score || 0) * 100) : null,
+                        label: insightsSnapshot.sentiment || 'neutral',
+                        confidence: null,
                         counts: insightsSnapshot.sentimentCounts || {},
+                        externalModel: _cardiffSentiment ? {
+                            label: _cardiffSentiment.label,
+                            confidence: Math.round(Number(_cardiffSentiment.score || 0) * 100)
+                        } : null,
                     },
                     settings: DB.getSettings(),
                     savedSessions: liveOsSaved.savedSessions,
@@ -7957,6 +8007,138 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }))
             .sort((a, b) => b.coins - a.coins || b.gifts - a.gifts || b.total - a.total || b.lastTs - a.lastTs);
     }
+    function getTkaiSessionUserEventId(message) {
+        const direct = String(message?.id || message?.mid || '').trim();
+        if (direct) return direct;
+        return [
+            Number(message?.ts || message?.timestamp || 0),
+            normalizeTkaiMessageType(message),
+            String(message?.user || '').trim().toLowerCase(),
+            String(message?.text || '').trim().toLowerCase().slice(0, 180)
+        ].join('|');
+    }
+    function ingestTkaiSessionUserMessages(messages) {
+        const source = Array.isArray(messages) ? messages : [];
+        let changed = false;
+        source.forEach((message) => {
+            if (!message) return;
+            const type = normalizeTkaiMessageType(message);
+            // Listen Feed, host captions and SongRec are session analytics, but
+            // they are not TikTok users discovered by the chat scanner.
+            if (type === 'listening' || type === 'caption' || type === 'song') return;
+            const user = String(message.user || '').trim().replace(/^@+/, '');
+            const key = user.toLowerCase();
+            if (!key || ['unknown', 'slušanje', 'live audience', 'chat user'].includes(key) || /^system(?:\s|$)/i.test(user)) return;
+            const eventId = getTkaiSessionUserEventId(message);
+            if (eventId && tkaiSessionUserEventIds.has(eventId)) return;
+            if (eventId) tkaiSessionUserEventIds.add(eventId);
+
+            const ts = Number(message.ts || message.timestamp || Date.now()) || Date.now();
+            const row = tkaiSessionUserStats.get(key) || {
+                user,
+                total: 0,
+                chat: 0,
+                gifts: 0,
+                joins: 0,
+                likes: 0,
+                shares: 0,
+                coins: 0,
+                firstSeen: ts,
+                lastTs: 0,
+                appearances: 0,
+                giftTypes: new Map(),
+                lastMessage: ''
+            };
+            row.user = row.user || user;
+            row.total += 1;
+            row.appearances += 1;
+            row.firstSeen = row.firstSeen ? Math.min(row.firstSeen, ts) : ts;
+            row.lastTs = Math.max(row.lastTs, ts);
+            if (type === 'gift' || type === 'subscriber') {
+                const meta = safeResolveGiftMetaFromMessage(message);
+                const quantity = Math.max(1, Number(message.quantity || meta?.quantity || 1) || 1);
+                const giftName = String(message.giftName || meta?.giftName || message.text || 'Gift').trim().slice(0, 120) || 'Gift';
+                const coins = Math.max(0, Number(message.coins || meta?.coins || parseCoinsFromText(message.text) || 0) || 0);
+                row.gifts += quantity;
+                row.coins += coins;
+                row.giftTypes.set(giftName, Number(row.giftTypes.get(giftName) || 0) + quantity);
+            } else if (type === 'join') {
+                row.joins += 1;
+            } else if (type === 'like') {
+                row.likes += Math.max(1, Number(message.quantity || 1) || 1);
+            } else if (type === 'share') {
+                row.shares += 1;
+            } else {
+                row.chat += 1;
+            }
+            const text = String(message.text || '').replace(/\s+/g, ' ').trim();
+            if (text) row.lastMessage = text.slice(0, 160);
+            tkaiSessionUserStats.set(key, row);
+            changed = true;
+        });
+        if (changed) tkaiSessionUserStatsVersion += 1;
+    }
+    function getTkaiSessionUserStatsRows() {
+        return Array.from(tkaiSessionUserStats.values())
+            .map((row) => ({
+                user: row.user,
+                total: Number(row.total || 0),
+                chat: Number(row.chat || 0),
+                gifts: Number(row.gifts || 0),
+                joins: Number(row.joins || 0),
+                likes: Number(row.likes || 0),
+                shares: Number(row.shares || 0),
+                coins: Number(row.coins || 0),
+                firstSeen: Number(row.firstSeen || 0),
+                lastTs: Number(row.lastTs || 0),
+                appearances: Number(row.appearances || row.total || 0),
+                repeatMax: 0,
+                giftTypes: Array.from(row.giftTypes instanceof Map ? row.giftTypes.entries() : [])
+                    .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0)),
+                lastMessage: String(row.lastMessage || '')
+            }))
+            .sort((a, b) => b.coins - a.coins || b.gifts - a.gifts || b.total - a.total || b.lastTs - a.lastTs);
+    }
+    function serializeTkaiSessionUserStats() {
+        return getTkaiSessionUserStatsRows();
+    }
+    function restoreTkaiSessionUserStats(savedRows, fallbackMessages = []) {
+        tkaiSessionUserStats = new Map();
+        tkaiSessionUserEventIds = new Set();
+        tkaiTopUsersRenderKey = '';
+        const rows = Array.isArray(savedRows) ? savedRows : [];
+        rows.forEach((saved) => {
+            const user = String(saved?.user || '').trim().replace(/^@+/, '');
+            const key = user.toLowerCase();
+            if (!key) return;
+            tkaiSessionUserStats.set(key, {
+                user,
+                total: Math.max(0, Number(saved.total || 0)),
+                chat: Math.max(0, Number(saved.chat || 0)),
+                gifts: Math.max(0, Number(saved.gifts || 0)),
+                joins: Math.max(0, Number(saved.joins || 0)),
+                likes: Math.max(0, Number(saved.likes || 0)),
+                shares: Math.max(0, Number(saved.shares || 0)),
+                coins: Math.max(0, Number(saved.coins || 0)),
+                firstSeen: Math.max(0, Number(saved.firstSeen || 0)),
+                lastTs: Math.max(0, Number(saved.lastTs || 0)),
+                appearances: Math.max(0, Number(saved.appearances || saved.total || 0)),
+                giftTypes: new Map(Array.isArray(saved.giftTypes) ? saved.giftTypes : []),
+                lastMessage: String(saved.lastMessage || '').slice(0, 160)
+            });
+        });
+        if (!rows.length) {
+            ingestTkaiSessionUserMessages(fallbackMessages);
+            return;
+        }
+        // Remember the locally restored events so a redraw cannot add them a
+        // second time on top of the already restored cumulative counters.
+        (Array.isArray(fallbackMessages) ? fallbackMessages : []).forEach((message) => {
+            const id = getTkaiSessionUserEventId(message);
+            if (id) tkaiSessionUserEventIds.add(id);
+        });
+        tkaiSessionUserStatsVersion += 1;
+    }
     function buildDailyStats(messages, limit) {
         const scanLimit = Math.max(30, Math.min(2000, Number(limit || 200)));
         const base = (Array.isArray(messages) ? messages : collectedMessages).slice(-scanLimit);
@@ -8597,6 +8779,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             quantity: type === 'gift' || type === 'subscriber' || type === 'like' ? quantity : undefined,
             coins,
             level: Number(message.level || message.joinLevel || 0) || undefined,
+            userLevel: Number(message.userLevel || message.level || message.joinLevel || 0) || undefined,
+            userBadgeName: String(message.userBadgeName || message.userBadge || '').trim().slice(0, 40),
+            gifterRank: Number(message.gifterRank || message.topGifterRank || 0) || undefined,
             sessionKey: String(sessionStartedAt || message.sessionKey || '').trim()
         };
     }
@@ -9221,6 +9406,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (viewerSamplePoints.length > 200) viewerSamplePoints = viewerSamplePoints.slice(-200);
         lastViewerSampleAt = now;
         lastViewerSampleValue = v;
+        markTkaiInsightsDirty();
     }
     // Extract questions from new messages and accumulate in collectedQuestions
     function extractAndTrackQuestions(messages) {
@@ -9328,6 +9514,390 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .sort((a, b) => Number(b.lastActive || 0) - Number(a.lastActive || 0))[0];
         return rememberTikTokSourceTab(latest || null);
     }
+    function isTkaiLiveServerEnabled() {
+        const value = DB.getSettings().tkaiLiveServerEnabled;
+        return value === true || value === 'true';
+    }
+    function setTkaiLiveServerStatus(text, tone = 'idle') {
+        const statusEl = document.getElementById('tkaiLiveServerStatus');
+        if (!statusEl) return;
+        statusEl.textContent = String(text || '');
+        statusEl.style.color = tone === 'ok'
+            ? '#4ade80'
+            : (tone === 'error' ? '#f87171' : (tone === 'wait' ? '#fbbf24' : 'var(--text3)'));
+    }
+    function getTkaiLiveServerClientId() {
+        const key = 'ex_tkai_live_server_client_id';
+        let id = String(localStorage.getItem(key) || '').trim();
+        if (!id) {
+            id = 'etherx-' + (window.crypto?.randomUUID?.() || (Date.now() + '-' + Math.random().toString(36).slice(2)));
+            localStorage.setItem(key, id);
+        }
+        return id.slice(0, 120);
+    }
+    function getTkaiLiveServerSessionId(manual = false) {
+        if (manual && !scanActive) return 'test-' + Date.now();
+        if (!sessionStartedAt) sessionStartedAt = Date.now();
+        return 'live-' + sessionStartedAt;
+    }
+    function getTkaiLiveServerMetadata() {
+        const tab = getTikTokSourceTab();
+        return {
+            owner: String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, ''),
+            liveUrl: String(tab?.url || ''),
+            startedAt: Number(sessionStartedAt || Date.now())
+        };
+    }
+    function restoreTkaiLiveServerPendingQueue() {
+        if (!tkaiLiveServerPending.size) return;
+        const pending = Array.from(tkaiLiveServerPending.values()).flat();
+        tkaiLiveServerPending.clear();
+        tkaiLiveServerQueue = [...pending, ...tkaiLiveServerQueue].slice(-2000);
+    }
+    function stopTkaiLiveServerTransport(options = {}) {
+        if (tkaiLiveServerReconnectTimer) clearTimeout(tkaiLiveServerReconnectTimer);
+        tkaiLiveServerReconnectTimer = null;
+        if (tkaiLiveServerFlushTimer) clearInterval(tkaiLiveServerFlushTimer);
+        tkaiLiveServerFlushTimer = null;
+        restoreTkaiLiveServerPendingQueue();
+        tkaiLiveServerPageRequests.forEach((request) => {
+            clearTimeout(request.timer);
+            request.reject(new Error('Live server veza je prekinuta.'));
+        });
+        tkaiLiveServerPageRequests.clear();
+        tkaiLiveServerReady = false;
+        const socket = tkaiLiveServerSocket;
+        tkaiLiveServerSocket = null;
+        if (socket) {
+            socket._tkaiIntentionalClose = true;
+            if (options.endSession === true && socket.readyState === WebSocket.OPEN) {
+                try { socket.send(JSON.stringify({ type: 'end_session' })); } catch (_) { }
+            }
+            try { socket.close(1000, options.reason || 'Client disconnect'); } catch (_) { }
+        }
+        if (options.keepStatus !== true) setTkaiLiveServerStatus('Nije spojeno');
+    }
+    function applyTkaiLiveServerSummary(summary) {
+        if (!summary || typeof summary !== 'object') return;
+        tkaiLiveServerSummary = summary;
+        if (Array.isArray(summary.topGifters) && summary.topGifters.length) {
+            topSupporters = summary.topGifters.map((row, index) => ({
+                user: String(row.user || row.userHandle || '').slice(0, 60),
+                coins: Math.max(0, Number(row.coins || 0)),
+                events: Math.max(0, Number(row.gifts || 0)),
+                rank: Math.max(1, Number(row.rank || index + 1))
+            })).filter((row) => row.user);
+        }
+        markTkaiInsightsDirty();
+        scheduleTkaiInsightsUIUpdate();
+    }
+    function requestTkaiLiveServerSummary(force = false) {
+        const socket = tkaiLiveServerSocket;
+        if (!tkaiLiveServerReady || !socket || socket.readyState !== WebSocket.OPEN) return;
+        const now = Date.now();
+        if (!force && now - Number(socket._tkaiSummaryRequestedAt || 0) < 10000) return;
+        socket._tkaiSummaryRequestedAt = now;
+        try { socket.send(JSON.stringify({ type: 'get_summary' })); } catch (_) { }
+    }
+    function requestTkaiLiveServerEventsPage(offset = 0, limit = 1000) {
+        const socket = tkaiLiveServerSocket;
+        if (!tkaiLiveServerReady || !socket || socket.readyState !== WebSocket.OPEN) {
+            return Promise.reject(new Error('Live server nije spojen.'));
+        }
+        const requestId = 'events-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                tkaiLiveServerPageRequests.delete(requestId);
+                reject(new Error('Live server nije odgovorio na vrijeme.'));
+            }, 6000);
+            tkaiLiveServerPageRequests.set(requestId, { resolve, reject, timer });
+            try {
+                socket.send(JSON.stringify({ type: 'get_events', requestId, offset, limit }));
+            } catch (error) {
+                clearTimeout(timer);
+                tkaiLiveServerPageRequests.delete(requestId);
+                reject(error);
+            }
+        });
+    }
+    async function fetchTkaiLiveServerEvents() {
+        if (!tkaiLiveServerReady) return [];
+        const retained = Math.max(0, Number(tkaiLiveServerSummary?.retainedEvents || 0));
+        const maxEvents = Math.max(1000, Math.min(100000, retained || 10000));
+        let offset = 0;
+        let events = [];
+        while (events.length < maxEvents) {
+            const page = await requestTkaiLiveServerEventsPage(offset, Math.min(1000, maxEvents - events.length));
+            const rows = Array.isArray(page?.events) ? page.events : [];
+            if (!rows.length) break;
+            events = [...rows, ...events];
+            if (!page.hasMore || Number(page.nextOffset) <= offset) break;
+            offset = Number(page.nextOffset);
+        }
+        return events;
+    }
+    function requestTkaiLiveServerUsersPage(offset = 0, limit = 1000) {
+        const socket = tkaiLiveServerSocket;
+        if (!tkaiLiveServerReady || !socket || socket.readyState !== WebSocket.OPEN) {
+            return Promise.reject(new Error('Live server nije spojen.'));
+        }
+        const requestId = 'users-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                tkaiLiveServerPageRequests.delete(requestId);
+                reject(new Error('Live server nije odgovorio na vrijeme.'));
+            }, 6000);
+            tkaiLiveServerPageRequests.set(requestId, { resolve, reject, timer });
+            try {
+                socket.send(JSON.stringify({ type: 'get_users', requestId, offset, limit }));
+            } catch (error) {
+                clearTimeout(timer);
+                tkaiLiveServerPageRequests.delete(requestId);
+                reject(error);
+            }
+        });
+    }
+    async function syncTkaiLiveServerUsers() {
+        if (!tkaiLiveServerReady) return;
+        let offset = 0;
+        let changed = false;
+        while (offset < 100000) {
+            const page = await requestTkaiLiveServerUsersPage(offset, 1000);
+            const users = Array.isArray(page?.users) ? page.users : [];
+            users.forEach((remote) => {
+                const user = String(remote?.user || remote?.userHandle || '').trim().replace(/^@+/, '');
+                const key = user.toLowerCase();
+                if (!key) return;
+                const firstSeen = Math.max(0, Number(remote?.firstSeenAt || 0));
+                const lastTs = Math.max(0, Number(remote?.lastSeenAt || 0));
+                const row = tkaiSessionUserStats.get(key) || {
+                    user,
+                    total: 0,
+                    chat: 0,
+                    gifts: 0,
+                    joins: 0,
+                    likes: 0,
+                    shares: 0,
+                    coins: 0,
+                    firstSeen,
+                    lastTs: 0,
+                    appearances: 0,
+                    giftTypes: new Map(),
+                    lastMessage: ''
+                };
+                row.total = Math.max(row.total, Number(remote?.appearances || 0));
+                row.appearances = Math.max(row.appearances, Number(remote?.appearances || 0));
+                row.chat = Math.max(row.chat, Number(remote?.messages || 0));
+                row.gifts = Math.max(row.gifts, Number(remote?.gifts || 0));
+                row.joins = Math.max(row.joins, Number(remote?.joins || 0));
+                row.likes = Math.max(row.likes, Number(remote?.likes || 0));
+                row.shares = Math.max(row.shares, Number(remote?.shares || 0));
+                row.coins = Math.max(row.coins, Number(remote?.coins || 0));
+                row.firstSeen = row.firstSeen && firstSeen ? Math.min(row.firstSeen, firstSeen) : (row.firstSeen || firstSeen);
+                if (lastTs >= Number(row.lastTs || 0) && remote?.lastMessage) {
+                    row.lastMessage = String(remote.lastMessage).slice(0, 160);
+                }
+                row.lastTs = Math.max(row.lastTs, lastTs);
+                Object.entries(remote?.giftTypes || {}).forEach(([name, quantity]) => {
+                    row.giftTypes.set(name, Math.max(Number(row.giftTypes.get(name) || 0), Number(quantity || 0)));
+                });
+                tkaiSessionUserStats.set(key, row);
+                changed = true;
+            });
+            if (!page.hasMore || Number(page.nextOffset) <= offset || !users.length) break;
+            offset = Number(page.nextOffset);
+        }
+        if (changed) {
+            tkaiSessionUserStatsVersion += 1;
+            markTkaiInsightsDirty();
+            scheduleTkaiInsightsUIUpdate();
+        }
+    }
+    function flushTkaiLiveServerQueue() {
+        const socket = tkaiLiveServerSocket;
+        if (!tkaiLiveServerReady || !socket || socket.readyState !== WebSocket.OPEN) return;
+        if (!tkaiLiveServerQueue.length || tkaiLiveServerPending.size >= 4) return;
+        const events = tkaiLiveServerQueue.splice(0, 100);
+        const seq = ++tkaiLiveServerSeq;
+        tkaiLiveServerPending.set(seq, events);
+        try {
+            socket.send(JSON.stringify({
+                type: 'events',
+                seq,
+                sessionId: socket._tkaiSessionId,
+                metadata: getTkaiLiveServerMetadata(),
+                events
+            }));
+        } catch (_) {
+            tkaiLiveServerPending.delete(seq);
+            tkaiLiveServerQueue = [...events, ...tkaiLiveServerQueue].slice(-2000);
+        }
+    }
+    function connectTkaiLiveServer(options = {}) {
+        const manual = options.manual === true;
+        const settings = DB.getSettings();
+        if (!manual && !isTkaiLiveServerEnabled()) return false;
+        const url = String(settings.tkaiLiveServerUrl || 'wss://live.kriptoentuzijasti.io/v1/live').trim();
+        const token = String(settings.tkaiLiveServerToken || '').trim();
+        let parsedUrl = null;
+        try { parsedUrl = new window.URL(url); } catch (_) { }
+        const secureEndpoint = parsedUrl?.protocol === 'wss:';
+        const localEndpoint = parsedUrl?.protocol === 'ws:'
+            && ['127.0.0.1', 'localhost', '::1'].includes(String(parsedUrl.hostname || '').toLowerCase());
+        if (!parsedUrl || (!secureEndpoint && !localEndpoint)) {
+            setTkaiLiveServerStatus('Neispravan WSS endpoint', 'error');
+            return false;
+        }
+        if (token.length < 32) {
+            setTkaiLiveServerStatus('Upiši token od najmanje 32 znaka', 'error');
+            return false;
+        }
+        const sessionId = getTkaiLiveServerSessionId(manual);
+        if (tkaiLiveServerSocket) {
+            const sameSession = tkaiLiveServerSocket._tkaiSessionId === sessionId;
+            const usable = [WebSocket.CONNECTING, WebSocket.OPEN].includes(tkaiLiveServerSocket.readyState);
+            if (sameSession && usable) return true;
+            stopTkaiLiveServerTransport({ keepStatus: true, reason: 'Nova sesija' });
+        }
+
+        setTkaiLiveServerStatus('Spajanje…', 'wait');
+        let socket;
+        try {
+            socket = new WebSocket(url);
+        } catch (error) {
+            setTkaiLiveServerStatus('Greška: ' + String(error?.message || error), 'error');
+            return false;
+        }
+        socket._tkaiSessionId = sessionId;
+        socket._tkaiManual = manual;
+        tkaiLiveServerSocket = socket;
+
+        socket.addEventListener('open', () => {
+            if (tkaiLiveServerSocket !== socket) return;
+            setTkaiLiveServerStatus('Autentikacija…', 'wait');
+            socket.send(JSON.stringify({
+                type: 'auth',
+                token,
+                clientId: getTkaiLiveServerClientId(),
+                sessionId,
+                metadata: getTkaiLiveServerMetadata()
+            }));
+        });
+        socket.addEventListener('message', (event) => {
+            if (tkaiLiveServerSocket !== socket) return;
+            let message;
+            try { message = JSON.parse(String(event.data || '')); } catch (_) { return; }
+            if (message.type === 'ready') {
+                tkaiLiveServerReady = true;
+                applyTkaiLiveServerSummary(message.summary);
+                setTkaiLiveServerStatus('Spojeno · server RAM aktivan', 'ok');
+                if (!tkaiLiveServerFlushTimer) {
+                    tkaiLiveServerFlushTimer = setInterval(flushTkaiLiveServerQueue, 500);
+                }
+                if (scanActive && isTkaiLiveServerEnabled() && !socket._tkaiBackfillDone) {
+                    socket._tkaiBackfillDone = true;
+                    queueTkaiLiveServerEvents(collectedMessages.slice(-2000));
+                }
+                flushTkaiLiveServerQueue();
+                requestTkaiLiveServerSummary(true);
+                setTimeout(() => {
+                    if (tkaiLiveServerSocket === socket && tkaiLiveServerReady) requestTkaiLiveServerSummary(true);
+                }, 1500);
+                setTimeout(() => {
+                    if (tkaiLiveServerSocket === socket && tkaiLiveServerReady && !socket._tkaiUsersSynced) {
+                        socket._tkaiUsersSynced = true;
+                        syncTkaiLiveServerUsers().catch(() => { });
+                    }
+                }, 2000);
+                return;
+            }
+            if (message.type === 'ack') {
+                tkaiLiveServerPending.delete(Number(message.seq || 0));
+                applyTkaiLiveServerSummary(message.summary);
+                setTkaiLiveServerStatus(
+                    'Spojeno · ' + formatNum(message.summary?.retainedEvents || 0) + ' događaja u RAM-u',
+                    'ok'
+                );
+                flushTkaiLiveServerQueue();
+                requestTkaiLiveServerSummary();
+                return;
+            }
+            if (message.type === 'summary' || message.type === 'session_ended') {
+                applyTkaiLiveServerSummary(message.summary);
+                return;
+            }
+            if (message.type === 'events_page' || message.type === 'users_page') {
+                const request = tkaiLiveServerPageRequests.get(String(message.requestId || ''));
+                if (request) {
+                    clearTimeout(request.timer);
+                    tkaiLiveServerPageRequests.delete(String(message.requestId || ''));
+                    request.resolve(message);
+                }
+                return;
+            }
+            if (message.type === 'error') {
+                setTkaiLiveServerStatus('Server: ' + String(message.code || 'greška'), 'error');
+            }
+        });
+        socket.addEventListener('close', (event) => {
+            if (tkaiLiveServerSocket === socket) tkaiLiveServerSocket = null;
+            restoreTkaiLiveServerPendingQueue();
+            tkaiLiveServerPageRequests.forEach((request) => {
+                clearTimeout(request.timer);
+                request.reject(new Error('Live server veza je prekinuta.'));
+            });
+            tkaiLiveServerPageRequests.clear();
+            tkaiLiveServerReady = false;
+            if (tkaiLiveServerFlushTimer) clearInterval(tkaiLiveServerFlushTimer);
+            tkaiLiveServerFlushTimer = null;
+            if (socket._tkaiIntentionalClose) return;
+            setTkaiLiveServerStatus('Prekinuto (' + Number(event.code || 0) + ') · lokalni fallback', 'error');
+            if (scanActive && isTkaiLiveServerEnabled()) {
+                if (tkaiLiveServerReconnectTimer) clearTimeout(tkaiLiveServerReconnectTimer);
+                tkaiLiveServerReconnectTimer = setTimeout(() => {
+                    tkaiLiveServerReconnectTimer = null;
+                    connectTkaiLiveServer();
+                }, 5000);
+            }
+        });
+        socket.addEventListener('error', () => {
+            if (tkaiLiveServerSocket === socket) {
+                setTkaiLiveServerStatus('Veza nije dostupna · lokalni fallback', 'error');
+            }
+        });
+        return true;
+    }
+    function queueTkaiLiveServerEvents(messages) {
+        if (!isTkaiLiveServerEnabled() || !Array.isArray(messages) || !messages.length) return;
+        const outgoing = messages.map((message) => ({
+            id: message.id || message.mid,
+            type: normalizeTkaiMessageType(message),
+            sourceType: message.sourceType || '',
+            user: message.user || 'unknown',
+            userHandle: message.userHandle || '',
+            text: message.text || '',
+            translatedText: message.translatedText || '',
+            translatedLang: message.translatedLang || '',
+            ts: Number(message.ts || Date.now()),
+            giftName: message.giftName || '',
+            quantity: Number(message.quantity || 1),
+            unitCoins: Number(message.unitCoins || 0),
+            coins: Number(message.coins || 0),
+            userLevel: Number(message.userLevel || message.level || 0),
+            userBadgeName: message.userBadgeName || '',
+            gifterRank: Number(message.gifterRank || 0)
+        }));
+        tkaiLiveServerQueue.push(...outgoing);
+        if (tkaiLiveServerQueue.length > 2000) tkaiLiveServerQueue = tkaiLiveServerQueue.slice(-2000);
+        if (!tkaiLiveServerSocket) connectTkaiLiveServer();
+        flushTkaiLiveServerQueue();
+    }
+    function getTkaiEffectiveLocalBuffer() {
+        const settings = DB.getSettings();
+        const normal = Math.max(80, Number(settings.tkaiMsgBuffer) || 2000);
+        if (!tkaiLiveServerReady) return normal;
+        return Math.max(100, Math.min(1000, Number(settings.tkaiLiveServerLocalBuffer) || 300));
+    }
     async function sendTextToActiveTikTokChat(rawText, options = {}) {
         const text = String(rawText || '').replace(/\s+/g, ' ').trim().slice(0, 380);
         if (!text) return false;
@@ -9420,6 +9990,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function stopScanning() {
         saveSessionToHistory();
         scanActive = false;
+        stopTkaiLiveServerTransport({ endSession: true, reason: 'Skeniranje zaustavljeno' });
         try { window.syncBpmDetectionWithTikTokScan?.(false); } catch (_) { }
         if (scanInterval) clearTimeout(scanInterval);
         scanInterval = null;
@@ -9675,16 +10246,29 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function computeInsightsSnapshot(sourceMessages = null) {
         const now = Date.now();
         const source = Array.isArray(sourceMessages) ? sourceMessages : collectedMessages;
-        const messages = source.slice(-200);
+        const messages = source.slice(-5000);
+        const sentimentMessages = messages.filter((message) => normalizeTkaiMessageType(message) === 'chat');
         const stopWords = new Set(['i', 'a', 'the', 'and', 'ili', 'da', 'je', 'sam', 'si', 'su', 'sto', 'sta', 'kako', 'zasto', 'zato', 'ali', 'jer', 'nije', 'ne', 'yes', 'no', 'ovo', 'to', 'ta', 'taj', 'who', 'what', 'why', 'when', 'where', 'how', 'you', 'u', 'na', 'za']);
-        const positiveWords = new Set(['super', 'top', 'bravo', 'odlicno', 'svida', 'love', 'great', 'cool', 'legend', 'wow']);
-        const negativeWords = new Set(['lose', 'los', 'bad', 'losa', 'nevalja', 'smeta', 'boring', 'dosadno']);
+        const positiveWords = new Set(['super', 'top', 'bravo', 'odlicno', 'odlično', 'svida', 'sviđa', 'love', 'great', 'cool', 'legend', 'wow', 'hvala', 'lijepo', 'dobro', 'keren', 'mantap']);
+        const negativeWords = new Set(['lose', 'los', 'loš', 'bad', 'losa', 'loša', 'nevalja', 'smeta', 'boring', 'dosadno', 'mrzim', 'užas', 'uzas']);
         const topicCounts = new Map();
         const questions = [];
-        let sentimentScore = 0;
-        let positiveHits = 0;
-        let negativeHits = 0;
-        messages.forEach((m) => {
+        let positiveMessages = 0;
+        let negativeMessages = 0;
+        let neutralMessages = 0;
+        const scoreSentimentText = (rawText) => {
+            const raw = String(rawText || '').toLowerCase();
+            let score = 0;
+            raw.replace(/[^a-z0-9čćđšž\s]/gi, ' ').split(/\s+/).filter((token) => token.length >= 3)
+                .forEach((token) => {
+                    if (positiveWords.has(token)) score += 1;
+                    if (negativeWords.has(token)) score -= 1;
+                });
+            if (/[❤♥😍🥰😊😁🔥👏💯]/u.test(raw)) score += 1;
+            if (/[😡🤬😠👎💩]/u.test(raw)) score -= 1;
+            return score;
+        };
+        sentimentMessages.forEach((m) => {
             const text = String(m.text || '').toLowerCase();
             if (!text) return;
             if (text.includes('?') || /^(kako|zasto|zato|sto|sta|kada|gdje|ko|who|what|why|when|where|how)\b/.test(text)) {
@@ -9693,22 +10277,20 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }
             const tokens = text.replace(/[^a-z0-9čćđšž\s]/gi, ' ').split(/\s+/).filter((t) => t.length >= 3 && !stopWords.has(t));
             tokens.forEach((t) => topicCounts.set(t, (topicCounts.get(t) || 0) + 1));
-            tokens.forEach((t) => {
-                if (positiveWords.has(t)) {
-                    sentimentScore += 1;
-                    positiveHits += 1;
-                }
-                if (negativeWords.has(t)) {
-                    sentimentScore -= 1;
-                    negativeHits += 1;
-                }
-            });
+            const messageScore = scoreSentimentText(text);
+            if (messageScore > 0) positiveMessages += 1;
+            else if (messageScore < 0) negativeMessages += 1;
+            else neutralMessages += 1;
         });
         const topTopics = Array.from(topicCounts.entries())
             .sort((a, b) => b[1] - a[1])
             .slice(0, 4)
             .map(([term, count]) => ({ term, count }));
-        const sentiment = sentimentScore > 2 ? 'positive' : sentimentScore < -2 ? 'negative' : 'neutral';
+        const sentimentMargin = Math.max(1, Math.ceil(sentimentMessages.length * 0.1));
+        const sentimentBalance = positiveMessages - negativeMessages;
+        const sentiment = sentimentBalance >= sentimentMargin
+            ? 'positive'
+            : (sentimentBalance <= -sentimentMargin ? 'negative' : 'neutral');
         const sessionStart = sessionStartedAt || now;
         const perMinute = new Map();
         const perMinuteSentiment = new Map();
@@ -9716,13 +10298,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const ts = Number(m.ts || m._ts || now);
             const minute = Math.max(0, Math.floor((ts - sessionStart) / 60000));
             perMinute.set(minute, (perMinute.get(minute) || 0) + 1);
-            const text = String(m.text || '').toLowerCase();
-            let score = 0;
-            text.replace(/[^a-z0-9čćđšž\s]/gi, ' ').split(/\s+/).filter((t) => t.length >= 3)
-                .forEach((t) => {
-                    if (positiveWords.has(t)) score += 1;
-                    if (negativeWords.has(t)) score -= 1;
-                });
+        });
+        sentimentMessages.forEach((m) => {
+            const ts = Number(m.ts || m._ts || now);
+            const minute = Math.max(0, Math.floor((ts - sessionStart) / 60000));
+            const score = scoreSentimentText(m.text);
             perMinuteSentiment.set(minute, (perMinuteSentiment.get(minute) || 0) + score);
         });
         const engagementBase = Array.from(perMinute.entries()).sort((a, b) => a[0] - b[0]);
@@ -9749,23 +10329,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         const sentimentTrend = Array.from(perMinuteSentiment.entries()).sort((a, b) => a[0] - b[0]).slice(-12)
             .map(([minute, score]) => ({ minute, score }));
-        if (sentimentTrend.length < 2 && messages.length > 3) {
-            const recentForTrend = messages.slice(-48);
+        if (sentimentTrend.length < 2 && sentimentMessages.length > 3) {
+            const recentForTrend = sentimentMessages.slice(-48);
             const chunkSize = Math.max(2, Math.ceil(recentForTrend.length / 12));
             const rollingTrend = [];
             for (let i = 0; i < recentForTrend.length; i += chunkSize) {
                 const chunk = recentForTrend.slice(i, i + chunkSize);
                 let chunkScore = 0;
                 chunk.forEach((m) => {
-                    String(m.text || '')
-                        .toLowerCase()
-                        .replace(/[^a-z0-9čćđšž\s]/gi, ' ')
-                        .split(/\s+/)
-                        .filter((t) => t.length >= 3)
-                        .forEach((t) => {
-                            if (positiveWords.has(t)) chunkScore += 1;
-                            if (negativeWords.has(t)) chunkScore -= 1;
-                        });
+                    chunkScore += scoreSentimentText(m.text);
                 });
                 rollingTrend.push({ minute: rollingTrend.length, score: chunkScore });
             }
@@ -9773,10 +10345,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 sentimentTrend.splice(0, sentimentTrend.length, ...rollingTrend.slice(-12));
             }
         }
-        const sentimentTotal = Math.max(1, positiveHits + negativeHits);
-        const positivePct = Math.round((positiveHits / sentimentTotal) * 100);
-        const negativePct = Math.round((negativeHits / sentimentTotal) * 100);
-        const neutralPct = Math.max(0, 100 - positivePct - negativePct);
+        const sentimentTotal = Math.max(1, sentimentMessages.length);
+        const positivePct = Math.round((positiveMessages / sentimentTotal) * 100);
+        const negativePct = Math.round((negativeMessages / sentimentTotal) * 100);
+        const neutralPct = sentimentMessages.length
+            ? Math.max(0, 100 - positivePct - negativePct)
+            : 100;
 
         const spikes = [];
         const spikeSensitivity = String(DB.getSettings().tkaiSpikeSensitivity || 'normal').toLowerCase();
@@ -9978,7 +10552,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .slice(-120)
             .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
 
-        const _giftScanLimit = Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 400) || 400);
+        const _giftScanLimit = 5000;
         const giftScanBase = (Array.isArray(source) ? source : messages)
             .filter((m) => {
                 const type = normalizeTkaiMessageType(m);
@@ -10097,8 +10671,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             engagementPeak,
             sentimentTrend,
             sentimentCounts: {
-                positive: positiveHits,
-                negative: negativeHits,
+                positive: positiveMessages,
+                negative: negativeMessages,
+                neutral: neutralMessages,
+                total: sentimentMessages.length,
                 positivePct,
                 negativePct,
                 neutralPct
@@ -10316,13 +10892,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             ? insights.giftDetails.topGiftTypes.slice(0, 50)
             : [];
         if (giftEchartsInstance) {
-            const giftData = giftRows.map((gift) => ({
-                name: String(gift.giftName || 'Nepoznati gift'),
-                value: Math.max(0, Number(gift.coins || 0)) || Math.max(1, Number(gift.quantity || gift.events || 1)),
-                coins: Math.max(0, Number(gift.coins || 0)),
-                quantity: Math.max(0, Number(gift.quantity || 0)),
-                events: Math.max(0, Number(gift.events || 0))
-            }));
+            const giftData = giftRows
+                .map((gift) => ({
+                    name: String(gift.giftName || 'Nepoznati gift'),
+                    value: Math.max(0, Number(gift.coins || 0)),
+                    coins: Math.max(0, Number(gift.coins || 0)),
+                    quantity: Math.max(0, Number(gift.quantity || 0)),
+                    events: Math.max(0, Number(gift.events || 0))
+                }))
+                .filter((gift) => gift.value > 0);
             giftEchartsInstance.setOption({
                 animationDuration: 250,
                 backgroundColor: 'transparent',
@@ -10353,7 +10931,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     avoidLabelOverlap: true,
                     label: { show: false },
                     emphasis: { label: { show: true, color: '#fff', fontSize: 11, fontWeight: 'bold' } },
-                    data: giftData.length ? giftData : [{ name: 'Nema giftova', value: 1, itemStyle: { color: '#334155' } }]
+                    data: giftData.length ? giftData : [{ name: 'Nema giftova s poznatom coin vrijednosti', value: 1, itemStyle: { color: '#334155' } }]
                 }]
             }, true);
         }
@@ -10408,33 +10986,59 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         // The detailed charts use the active dashboard time range, rather than only the
         // compact snapshot used by the smaller KPI cards above.
-        const analyticsMessages = getDashboardRangeFilteredMessages()
-            .slice(-Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 400) || 400));
+        const remoteTimeline = getTkaiRemoteDashboardTimeline();
+        const analyticsMessages = getDashboardRangeFilteredMessages().slice(-5000);
         const analyticsNow = Date.now();
         const timedMessages = analyticsMessages
             .map((message) => ({ ...message, _chartTs: Number(message?.ts || message?._ts || analyticsNow) }))
             .filter((message) => Number.isFinite(message._chartTs))
             .sort((a, b) => a._chartTs - b._chartTs);
-        const timelineStart = timedMessages.length ? timedMessages[0]._chartTs : analyticsNow;
+        const timelineStart = remoteTimeline.length
+            ? Number(remoteTimeline[0].minuteStart)
+            : (timedMessages.length ? timedMessages[0]._chartTs : analyticsNow);
         const minuteLabel = (ts) => new Date(ts).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
         const minuteBucket = (ts) => Math.max(0, Math.floor((Number(ts || timelineStart) - timelineStart) / 60000));
-        const eventGiftRows = timedMessages
-            .filter((message) => {
-                const type = normalizeTkaiMessageType(message);
-                return type === 'gift' || type === 'subscriber';
-            })
-            .map((message) => {
-                const meta = safeResolveGiftMetaFromMessage(message) || {};
-                return {
-                    ...message,
-                    _giftName: String(message.giftName || meta.giftName || message.text || 'Nepoznati gift').trim().slice(0, 50) || 'Nepoznati gift',
-                    _giftUser: String(message.user || 'unknown').trim().replace(/^@+/, '').slice(0, 40) || 'unknown',
-                    _giftQuantity: Math.max(1, Number(message.quantity || meta.quantity || 1) || 1),
-                    _giftCoins: Math.max(0, Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0) || 0)
-                };
-            });
-        const minuteKeys = Array.from(new Set(timedMessages.map((message) => minuteBucket(message._chartTs)))).slice(-20);
-        const chartMinutes = minuteKeys.length ? minuteKeys : [0];
+        const eventGiftRows = remoteTimeline.length
+            ? remoteTimeline.flatMap((bucket) => (Array.isArray(bucket.giftTypes) ? bucket.giftTypes : []).map((gift) => ({
+                _chartTs: Number(bucket.minuteStart),
+                _giftName: String(gift?.name || 'Nepoznati gift').trim().slice(0, 50) || 'Nepoznati gift',
+                _giftUser: 'unknown',
+                _giftQuantity: Math.max(0, Number(gift?.quantity || 0)),
+                _giftCoins: Math.max(0, Number(gift?.coins || 0))
+            })))
+            : timedMessages
+                .filter((message) => {
+                    const type = normalizeTkaiMessageType(message);
+                    return type === 'gift' || type === 'subscriber';
+                })
+                .map((message) => {
+                    const meta = safeResolveGiftMetaFromMessage(message) || {};
+                    return {
+                        ...message,
+                        _giftName: String(message.giftName || meta.giftName || message.text || 'Nepoznati gift').trim().slice(0, 50) || 'Nepoznati gift',
+                        _giftUser: String(message.user || 'unknown').trim().replace(/^@+/, '').slice(0, 40) || 'unknown',
+                        _giftQuantity: Math.max(1, Number(message.quantity || meta.quantity || 1) || 1),
+                        _giftCoins: Math.max(0, Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0) || 0)
+                    };
+                });
+        const raceGiftRows = remoteTimeline.length
+            ? remoteTimeline.flatMap((bucket) => (Array.isArray(bucket.gifters) ? bucket.gifters : []).map((gifter) => ({
+                _chartTs: Number(bucket.minuteStart),
+                _giftUser: String(gifter?.user || 'unknown').trim().replace(/^@+/, '').slice(0, 40) || 'unknown',
+                _giftQuantity: Math.max(0, Number(gifter?.gifts || 0)),
+                _giftCoins: Math.max(0, Number(gifter?.coins || 0))
+            })))
+            : eventGiftRows;
+        const latestMinuteBucket = remoteTimeline.length
+            ? minuteBucket(remoteTimeline[remoteTimeline.length - 1].minuteStart)
+            : (timedMessages.length
+                ? Math.max(0, ...timedMessages.map((message) => minuteBucket(message._chartTs)))
+                : 0);
+        const firstChartMinute = Math.max(0, latestMinuteBucket - 19);
+        const chartMinutes = Array.from(
+            { length: Math.max(1, latestMinuteBucket - firstChartMinute + 1) },
+            (_, index) => firstChartMinute + index
+        );
         const minuteLabels = chartMinutes.map((minute) => minuteLabel(timelineStart + minute * 60000));
 
         if (giftHeatmapEchartsInstance) {
@@ -10485,15 +11089,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
 
         if (gifterRaceEchartsInstance) {
+            const coinGiftRows = raceGiftRows.filter((gift) => gift._giftCoins > 0);
             const userTotals = new Map();
-            eventGiftRows.forEach((gift) => userTotals.set(gift._giftUser, (userTotals.get(gift._giftUser) || 0) + Math.max(1, gift._giftCoins || gift._giftQuantity)));
+            coinGiftRows.forEach((gift) => userTotals.set(gift._giftUser, (userTotals.get(gift._giftUser) || 0) + gift._giftCoins));
             const raceUsers = Array.from(userTotals.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([user]) => user);
             const palette = ['#fb7185', '#f59e0b', '#22d3ee', '#a78bfa', '#34d399'];
-            const running = new Map(raceUsers.map((user) => [user, 0]));
+            const running = new Map(raceUsers.map((user) => {
+                const priorCoins = coinGiftRows
+                    .filter((gift) => gift._giftUser === user && minuteBucket(gift._chartTs) < firstChartMinute)
+                    .reduce((sum, gift) => sum + gift._giftCoins, 0);
+                return [user, priorCoins];
+            }));
             const raceSeries = raceUsers.map((user, index) => {
                 const values = chartMinutes.map((minute) => {
-                    eventGiftRows.filter((gift) => gift._giftUser === user && minuteBucket(gift._chartTs) === minute)
-                        .forEach((gift) => running.set(user, Number(running.get(user) || 0) + Math.max(1, gift._giftCoins || gift._giftQuantity)));
+                    coinGiftRows.filter((gift) => gift._giftUser === user && minuteBucket(gift._chartTs) === minute)
+                        .forEach((gift) => running.set(user, Number(running.get(user) || 0) + gift._giftCoins));
                     return Number(running.get(user) || 0);
                 });
                 return { name: '@' + user, type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 3, color: palette[index] }, areaStyle: { color: `${palette[index]}25` }, data: values };
@@ -10507,12 +11117,23 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 xAxis: { type: 'category', data: minuteLabels, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { lineStyle: { color: '#334155' } }, axisTick: { show: false } },
                 yAxis: { type: 'value', axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (value) => formatNum(value) }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } } },
                 series: raceSeries,
-                graphic: raceUsers.length ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: 'Utrka počinje s prvim giftom…', fill: '#94a3b8', fontSize: 11 } }]
+                graphic: raceUsers.length ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: 'Čekam gift s poznatom coin vrijednosti…', fill: '#94a3b8', fontSize: 11 } }]
             }, true);
         }
 
         if (chatGiftComboEchartsInstance) {
+            const remoteByMinute = new Map(
+                remoteTimeline.map((bucket) => [minuteBucket(bucket.minuteStart), bucket])
+            );
             const activity = chartMinutes.map((minute) => {
+                if (remoteTimeline.length) {
+                    const bucket = remoteByMinute.get(minute) || {};
+                    return {
+                        chat: Math.max(0, Number(bucket.chat || 0)),
+                        coins: Math.max(0, Number(bucket.coins || 0)),
+                        gifts: Math.max(0, Number(bucket.giftQuantity || bucket.gifts || 0))
+                    };
+                }
                 const messages = timedMessages.filter((message) => minuteBucket(message._chartTs) === minute);
                 const chat = messages.filter((message) => normalizeTkaiMessageType(message) === 'chat').length;
                 const gifts = eventGiftRows.filter((gift) => minuteBucket(gift._chartTs) === minute);
@@ -10534,8 +11155,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const counts = insights?.sentimentCounts || {};
             const positive = Math.max(0, Number(counts.positive || 0));
             const negative = Math.max(0, Number(counts.negative || 0));
-            const chatTotal = timedMessages.filter((message) => normalizeTkaiMessageType(message) === 'chat').length;
-            const neutral = Math.max(0, chatTotal - positive - negative);
+            const neutral = Math.max(0, Number(counts.neutral || 0));
             const total = positive + negative + neutral;
             const label = positive > negative ? 'Pozitivno' : negative > positive ? 'Negativno' : 'Neutralno';
             sentimentDonutEchartsInstance.setOption({
@@ -10618,8 +11238,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
 
         if (viewerTrendEchartsInstance) {
+            const viewerRangeStart = dashboardRangeMinutes > 0
+                ? Date.now() - dashboardRangeMinutes * 60000
+                : 0;
             const samples = (Array.isArray(viewerSamplePoints) ? viewerSamplePoints : [])
-                .slice(-80)
+                .filter((point) => !viewerRangeStart || Number(point?.ts || 0) >= viewerRangeStart)
+                .slice(-200)
                 .filter((point) => Number(point?.value || 0) > 0);
             const groupSize = Math.max(1, Math.ceil(samples.length / 12));
             const groups = [];
@@ -10713,9 +11337,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const sentimentCounts = insights.sentimentCounts || {};
         const fallbackBalance = Number(sentimentCounts.positivePct || 0) - Number(sentimentCounts.negativePct || 0);
         const totalHits = Number(sentimentCounts.positive || 0) + Number(sentimentCounts.negative || 0);
-        const activitySeed = Math.min(1.4, Math.max(0.25, Number(insights.engagementAvgPerMin || 0) / 6));
         const fallbackScore = totalHits === 0
-            ? activitySeed
+            ? 0
             : Math.max(-4, Math.min(4, fallbackBalance / 25));
         const fallbackTrend = Array.from({ length: 12 }, (_, i) => ({ minute: i, score: fallbackScore }));
         const hasTrendSignal = rawScores.some((v) => Math.abs(v) > 0.001);
@@ -10795,14 +11418,109 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
 
     function getDashboardRangeFilteredMessages() {
-        // Dashboard analytics must include the separate WhisperLive buffer too.
-        // Listen Feed remains visually separate from TikTok chat, but it belongs
-        // to the same live session and must appear in its dashboard/exports.
-        const base = getTkaiSessionMessages({ includeListening: true });
+        const includeListening = DB.getSettings().tkaiDashboardIncludeListening === true;
+        const base = getTkaiSessionMessages({ includeListening });
         if (!dashboardRangeMinutes || dashboardRangeMinutes <= 0) return base;
         const now = Date.now();
         const fromTs = now - dashboardRangeMinutes * 60000;
         return base.filter((m) => Number(m?.ts || 0) >= fromTs);
+    }
+
+    function getTkaiRemoteDashboardTimeline() {
+        if (!tkaiLiveServerReady || DB.getSettings().tkaiDashboardIncludeListening === true) return [];
+        const timeline = Array.isArray(tkaiLiveServerSummary?.timeline)
+            ? tkaiLiveServerSummary.timeline
+            : [];
+        const valid = timeline
+            .filter((bucket) => Number.isFinite(Number(bucket?.minuteStart)))
+            .sort((a, b) => Number(a.minuteStart) - Number(b.minuteStart));
+        if (!dashboardRangeMinutes || dashboardRangeMinutes <= 0) return valid;
+        const cutoff = Date.now() - dashboardRangeMinutes * 60000;
+        return valid.filter((bucket) => Number(bucket.minuteStart) >= cutoff);
+    }
+
+    function applyTkaiRemoteTimelineToInsights(insights) {
+        const timeline = getTkaiRemoteDashboardTimeline();
+        if (!insights || !timeline.length) return insights;
+        const sessionStart = Number(tkaiLiveServerSummary?.startedAt || sessionStartedAt || timeline[0].minuteStart);
+        const minuteNumber = (bucket) => Math.max(0, Math.floor((Number(bucket.minuteStart) - sessionStart) / 60000));
+        const byMinuteStart = new Map(timeline.map((bucket) => [Number(bucket.minuteStart), bucket]));
+        const latestMinuteStart = Number(timeline[timeline.length - 1].minuteStart);
+        const engagement = Array.from({ length: 12 }, (_, index) => {
+            const bucketStart = latestMinuteStart - (11 - index) * 60000;
+            return {
+                minute: Math.max(0, Math.floor((bucketStart - sessionStart) / 60000)),
+                count: Math.max(0, Number(byMinuteStart.get(bucketStart)?.total || 0))
+            };
+        });
+        const engagementTotal = engagement.reduce((sum, row) => sum + row.count, 0);
+        insights.engagement = engagement.map((row) => ({
+            ...row,
+            percent: engagementTotal > 0 ? Math.round((row.count / engagementTotal) * 100) : 0
+        }));
+        insights.engagementAvgPerMin = Math.round(engagementTotal / Math.max(1, insights.engagement.length));
+        insights.engagementPeak = insights.engagement.reduce(
+            (best, row) => row.count > best.count ? row : best,
+            { minute: 0, count: 0, percent: 0 }
+        );
+
+        const sentiment = timeline.reduce((result, bucket) => {
+            result.positive += Math.max(0, Number(bucket?.sentiment?.positive || 0));
+            result.neutral += Math.max(0, Number(bucket?.sentiment?.neutral || 0));
+            result.negative += Math.max(0, Number(bucket?.sentiment?.negative || 0));
+            return result;
+        }, { positive: 0, neutral: 0, negative: 0 });
+        sentiment.total = sentiment.positive + sentiment.neutral + sentiment.negative;
+        sentiment.positivePct = sentiment.total ? Math.round(sentiment.positive / sentiment.total * 100) : 0;
+        sentiment.negativePct = sentiment.total ? Math.round(sentiment.negative / sentiment.total * 100) : 0;
+        sentiment.neutralPct = sentiment.total ? Math.max(0, 100 - sentiment.positivePct - sentiment.negativePct) : 100;
+        insights.sentimentCounts = sentiment;
+        const margin = Math.max(1, Math.ceil(sentiment.total * 0.1));
+        const balance = sentiment.positive - sentiment.negative;
+        insights.sentiment = balance >= margin ? 'positive' : balance <= -margin ? 'negative' : 'neutral';
+        insights.sentimentTrend = timeline.slice(-24).map((bucket) => ({
+            minute: minuteNumber(bucket),
+            score: Math.max(0, Number(bucket?.sentiment?.positive || 0))
+                - Math.max(0, Number(bucket?.sentiment?.negative || 0))
+        }));
+
+        const giftTypes = new Map();
+        const gifters = new Map();
+        let totalEvents = 0;
+        let totalCoins = 0;
+        timeline.forEach((bucket) => {
+            totalEvents += Math.max(0, Number(bucket.gifts || 0));
+            totalCoins += Math.max(0, Number(bucket.coins || 0));
+            (Array.isArray(bucket.giftTypes) ? bucket.giftTypes : []).forEach((gift) => {
+                const name = String(gift?.name || 'Unknown gift');
+                const row = giftTypes.get(name) || { giftName: name, events: 0, quantity: 0, coins: 0 };
+                row.events += Math.max(0, Number(gift?.events || gift?.quantity || 0));
+                row.quantity += Math.max(0, Number(gift?.quantity || 0));
+                row.coins += Math.max(0, Number(gift?.coins || 0));
+                giftTypes.set(name, row);
+            });
+            (Array.isArray(bucket.gifters) ? bucket.gifters : []).forEach((gifter) => {
+                const user = String(gifter?.user || 'unknown');
+                const row = gifters.get(user) || { user, events: 0, quantity: 0, coins: 0 };
+                row.events += Math.max(0, Number(gifter?.gifts || 0));
+                row.quantity += Math.max(0, Number(gifter?.gifts || 0));
+                row.coins += Math.max(0, Number(gifter?.coins || 0));
+                gifters.set(user, row);
+            });
+        });
+        const topN = Math.max(12, Math.min(1000, Number(DB.getSettings().tkaiPieTopN || 50) || 50));
+        insights.giftDetails = {
+            totalEvents,
+            totalCoins,
+            uniqueGiftTypes: giftTypes.size,
+            topGiftTypes: Array.from(giftTypes.values())
+                .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity)
+                .slice(0, topN),
+            topGifters: Array.from(gifters.values())
+                .sort((a, b) => b.coins - a.coins || b.events - a.events)
+                .slice(0, topN)
+        };
+        return insights;
     }
 
     function ensureDetailedDashboardControls() {
@@ -10866,16 +11584,32 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             updateInsightsUI();
         });
 
-        document.getElementById('tkaiDashExportJson')?.addEventListener('click', () => {
-            const msgs = getDashboardRangeFilteredMessages();
-            const insights = computeInsightsSnapshot(msgs);
-            const users = buildUserStats(msgs, Math.max(100, msgs.length));
-            downloadTextFile('tkai-detailed-dashboard-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json', JSON.stringify({ exportedAt: new Date().toISOString(), rangeMinutes: dashboardRangeMinutes, insights, users }, null, 2), 'application/json;charset=utf-8');
+        document.getElementById('tkaiDashExportJson')?.addEventListener('click', async () => {
+            let msgs = getDashboardRangeFilteredMessages();
+            let source = 'local';
+            if (tkaiLiveServerReady) {
+                try {
+                    const remoteEvents = await fetchTkaiLiveServerEvents();
+                    const includeListening = DB.getSettings().tkaiDashboardIncludeListening === true;
+                    const cutoff = dashboardRangeMinutes > 0 ? Date.now() - dashboardRangeMinutes * 60000 : 0;
+                    msgs = remoteEvents.filter((event) => {
+                        if (Number(event?.ts || 0) < cutoff) return false;
+                        if (includeListening) return true;
+                        return event?.type !== 'caption'
+                            && !/(?:whisper|listen|caption)/i.test(String(event?.sourceType || ''));
+                    });
+                    source = 'live-server';
+                } catch (error) {
+                    showToast('⚠️ Server povijest nije dostupna, izvozim lokalne podatke.');
+                }
+            }
+            const insights = applyTkaiRemoteTimelineToInsights(computeInsightsSnapshot(msgs));
+            const users = getTkaiSessionUserStatsRows();
+            downloadTextFile('tkai-detailed-dashboard-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json', JSON.stringify({ exportedAt: new Date().toISOString(), rangeMinutes: dashboardRangeMinutes, source, userScope: 'full-scanned-session', insights, users, events: msgs }, null, 2), 'application/json;charset=utf-8');
             showToast('⬇️ Detailed dashboard JSON skinut.');
         });
         document.getElementById('tkaiDashExportCsv')?.addEventListener('click', () => {
-            const msgs = getDashboardRangeFilteredMessages();
-            const users = buildUserStats(msgs, Math.max(100, msgs.length));
+            const users = getTkaiSessionUserStatsRows();
             const lines = ['user,total,coins,gifts,likes,topGifts,lastMessage'];
             users.forEach((u) => lines.push([
                 u.user,
@@ -10897,13 +11631,23 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const body = document.getElementById('tkaiTopUsersRows');
         const meta = document.getElementById('tkaiTopUsersMeta');
         if (!body || !meta) return;
-        const users = buildUserStats(messagesForDash, Math.max(120, Number(messagesForDash.length || 0)));
+        if (!tkaiSessionUserStats.size && Array.isArray(messagesForDash) && messagesForDash.length) {
+            ingestTkaiSessionUserMessages(messagesForDash);
+        }
+        const renderKey = [
+            tkaiSessionUserStatsVersion,
+            dashboardUserSearch,
+            dashboardUserSort
+        ].join('|');
+        if (renderKey === tkaiTopUsersRenderKey) return;
+        tkaiTopUsersRenderKey = renderKey;
+        const users = getTkaiSessionUserStatsRows();
         let rows = users.slice();
         if (dashboardUserSearch) rows = rows.filter((u) => String(u.user || '').toLowerCase().includes(dashboardUserSearch));
         const key = dashboardUserSort || 'total';
         rows.sort((a, b) => Number(b[key] || 0) - Number(a[key] || 0) || Number(b.total || 0) - Number(a.total || 0));
         body.innerHTML = '';
-        rows.slice(0, 180).forEach((u, rowIdx) => {
+        rows.forEach((u, rowIdx) => {
             const tr = document.createElement('tr');
             const topGiftStr = (u.giftTypes || []).slice(0, 3).map((entry) => `${entry[0]} x${entry[1]}`).join(', ');
             const firstSeenStr = u.firstSeen ? new Date(u.firstSeen).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
@@ -10922,14 +11666,22 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             tr.addEventListener('click', () => { navigator.clipboard.writeText('@' + u.user + ' ').then(() => showToast('📋 Kopirano @' + u.user)).catch(() => { }); });
             body.appendChild(tr);
         });
-        meta.textContent = formatNum(rows.length) + ' users • range ' + (dashboardRangeMinutes > 0 ? (dashboardRangeMinutes + 'm') : 'all');
+        meta.textContent = dashboardUserSearch
+            ? formatNum(rows.length) + ' / ' + formatNum(users.length) + ' users • cijela skenirana sesija'
+            : formatNum(users.length) + ' users • cijela skenirana sesija';
     }
 
     function updateInsightsUI() {
         if (!insightsListEl || !engagementBarsEl || !spikeListEl || !recommendationsEl) return;
+        if (tkaiInsightsRenderTimer) {
+            clearTimeout(tkaiInsightsRenderTimer);
+            tkaiInsightsRenderTimer = null;
+        }
+        tkaiInsightsDirty = false;
+        tkaiInsightsLastRenderedAt = Date.now();
         ensureDetailedDashboardControls();
         const dashboardMessages = getDashboardRangeFilteredMessages();
-        const insights = computeInsightsSnapshot(dashboardMessages);
+        const insights = applyTkaiRemoteTimelineToInsights(computeInsightsSnapshot(dashboardMessages));
         insightsListEl.innerHTML = '';
         const items = [];
         if (insights.topTopics.length) {
@@ -11215,6 +11967,27 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 });
             }
         }
+    }
+    function markTkaiInsightsDirty() {
+        tkaiInsightsDirty = true;
+    }
+    function scheduleTkaiInsightsUIUpdate(force = false) {
+        if (force) {
+            updateInsightsUI();
+            return;
+        }
+        if (!tkaiInsightsDirty) return;
+        const minIntervalMs = 6000;
+        const waitMs = Math.max(0, minIntervalMs - (Date.now() - tkaiInsightsLastRenderedAt));
+        if (waitMs === 0) {
+            updateInsightsUI();
+            return;
+        }
+        if (tkaiInsightsRenderTimer) return;
+        tkaiInsightsRenderTimer = setTimeout(() => {
+            tkaiInsightsRenderTimer = null;
+            if (tkaiInsightsDirty) updateInsightsUI();
+        }, waitMs);
     }
     function updateSpikeFilterButtons() {
         const syncById = (id, isActive) => {
@@ -11542,7 +12315,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const TKAI_SESSION_LAYOUT_KEY = 'ex_tkai_session_layout_v1';
     const TKAI_FEED_LAYOUT_KEY = 'ex_tkai_feed_layout_v1';
     const TKAI_LAYOUT_SCHEMA_KEY = 'ex_tkai_layout_schema_v';
-    const TKAI_LAYOUT_SCHEMA_VERSION = '2026-07-24-tkai-drag-enabled-v4';
+    const TKAI_LAYOUT_SCHEMA_VERSION = '2026-07-24-whisper-above-gallery-v5';
     const TKAI_SESSION_COLLAPSED_PREFIX = 'ex_tkai_session_collapsed_';
 
     function migrateTkaiLayoutOrderIfNeeded() {
@@ -11584,15 +12357,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function getTkaiSessionSections() {
         const root = getTkaiSessionLayoutRoot();
         if (!root) return [];
-        return Array.from(root.children).filter((node) => node instanceof HTMLElement && !node.dataset?.tkaiFixedSection);
-    }
-
-    function placeFixedTkaiSections(root) {
-        const gallery = root?.querySelector(':scope > #tkaiGiftGallerySection[data-tkai-fixed-section]');
-        const main = root?.querySelector(':scope > .tkai-main');
-        // Gift galerija mora ostati odmah ispod glavnog TikTok/AI dijela.
-        // Listen Feed je zaseban WhisperLive tok i ne smije je gurati ispod sebe.
-        if (gallery && main && main.nextElementSibling !== gallery) root.insertBefore(gallery, main.nextSibling);
+        return Array.from(root.children).filter((node) => node instanceof HTMLElement);
     }
 
     function applyTkaiLayoutOrder(root, sections, order) {
@@ -11628,7 +12393,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             tkaiGiftGallerySection: 'Gift galerija',
             tkaiGiftGallery: 'Gift galerija',
             tkaiChatFeedSection: 'Chat feed',
-            tkaiSlusanjeSection: 'Listen Feed',
+            tkaiSlusanjeSection: 'WhisperLive / Listen Feed',
             tkaiEventFeedSection: 'Događaji',
             tkaiStatsStrip: 'Session statistika',
             tkaiTopSupporters: 'Top gifteri',
@@ -11991,12 +12756,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function initTkaiSessionLayout() {
         const root = document.querySelector('#tiktokAIPanel .tkai-main-wrap');
         if (!root) return;
-        placeFixedTkaiSections(root);
         if (root.dataset.tkaiLayoutInit === '1') return;
         root.dataset.tkaiLayoutInit = '1';
         const orderKey = TKAI_SESSION_LAYOUT_KEY;
         const collapsedPrefix = TKAI_SESSION_COLLAPSED_PREFIX;
-        const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement && !node.dataset?.tkaiFixedSection);
+        const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement);
         const originalOrder = [];
         let draggedSection = null;
         let dragArmed = false;
@@ -12075,7 +12839,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
         };
         try { applyOrder(JSON.parse(localStorage.getItem(orderKey) || '[]')); } catch (_) { }
-        placeFixedTkaiSections(root);
 
         const syncLockState = () => {
             root.classList.toggle('tkai-layout-locked', dashboardLayoutLocked);
@@ -12862,10 +13625,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function updateSessionStatsUI() {
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         const giftStats = computeGiftStats();
-        const likesTotal = collectedMessages
+        const remoteSummary = tkaiLiveServerReady && tkaiLiveServerSummary ? tkaiLiveServerSummary : null;
+        const remoteCounts = remoteSummary?.counts || null;
+        const localLikesTotal = collectedMessages
             .filter((message) => message && String(message.type || '').toLowerCase() === 'like')
             .reduce((sum, message) => sum + Math.max(1, Number(message?.quantity || 1)), 0);
-        const topCoinSender = Array.isArray(giftStats.leaders) && giftStats.leaders.length > 0 ? giftStats.leaders[0] : null;
+        const likesTotal = remoteCounts ? Number(remoteCounts.likes || 0) : localLikesTotal;
+        const remoteTopCoinSender = Array.isArray(remoteSummary?.topGifters) ? remoteSummary.topGifters[0] : null;
+        const topCoinSender = remoteTopCoinSender
+            || (Array.isArray(giftStats.leaders) && giftStats.leaders.length > 0 ? giftStats.leaders[0] : null);
         if (sessionInfoEl) sessionInfoEl.textContent = elapsedMin + 'm';
         if (sessionLikesMetaEl) sessionLikesMetaEl.textContent = 'Likes: ' + formatNum(likesTotal);
         if (viewerCountEl) {
@@ -12889,16 +13657,24 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 viewerCoinsMetaEl.textContent = 'Top coin sender: -';
             }
         }
-        if (coinTotalEl) coinTotalEl.textContent = formatNum(giftStats.totalCoins);
+        if (coinTotalEl) coinTotalEl.textContent = formatNum(remoteCounts ? remoteCounts.coins : giftStats.totalCoins);
         // ── Nove statistike ──────────────────────────────────────────────
         const sessionMessages = getTkaiSessionMessages();
-        const msgsPerMin = elapsedMin > 0 ? (sessionMessages.length / elapsedMin).toFixed(1) : '-';
+        const sessionMessageCount = remoteCounts ? Number(remoteCounts.total || 0) : sessionMessages.length;
+        const msgsPerMin = elapsedMin > 0 ? (sessionMessageCount / elapsedMin).toFixed(1) : '-';
         const msgsPerMinEl = document.getElementById('tkaiMsgsPerMin');
         if (msgsPerMinEl) msgsPerMinEl.textContent = msgsPerMin;
-        const uniqueUsers = new Set(sessionMessages.map(m => m.user).filter(Boolean)).size;
+        const uniqueUsers = remoteSummary
+            ? Number(remoteSummary.uniqueUsers || 0)
+            : new Set(sessionMessages.map(m => m.user).filter(Boolean)).size;
         const uniqueUsersEl = document.getElementById('tkaiUniqueUsers');
         if (uniqueUsersEl) uniqueUsersEl.textContent = formatNum(uniqueUsers);
-        if (giftEventCountEl) giftEventCountEl.textContent = formatNum(giftStats.gifts.length);
+        if (giftEventCountEl) {
+            const giftEvents = remoteCounts
+                ? Number(remoteCounts.gifts || 0) + Number(remoteCounts.subscribers || 0)
+                : giftStats.gifts.length;
+            giftEventCountEl.textContent = formatNum(giftEvents);
+        }
         // Use the running collectedQuestions count (all unique questions this session)
         const questionCountEl = document.getElementById('tkaiQuestionCount');
         if (questionCountEl) questionCountEl.textContent = formatNum(collectedQuestions.length);
@@ -12916,12 +13692,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const sentimentBadgeEl = document.getElementById('tkaiSentimentBadge');
         const sentimentMiniGraphEl = document.getElementById('tkaiSentimentMiniGraph');
         if (sentimentBadgeEl) {
-            // Prefer Cardiff NLP result (async); fall back to keyword scoring
             const sentimentSnapshot = computeInsightsSnapshot();
-            const sentLabel = _cardiffSentiment ? _cardiffSentiment.label : sentimentSnapshot.sentiment;
-            const isCardiff = !!_cardiffSentiment;
-            const scoreStr = isCardiff ? ' ' + Math.round(_cardiffSentiment.score * 100) + '%' : '';
-            const indicator = isCardiff ? ' 🤗' : '';
+            // Keep the badge aligned with the same per-message classifier used
+            // by AQI, momentum and donut. Cardiff remains optional diagnostics.
+            const sentLabel = sentimentSnapshot.sentiment;
+            const scoreStr = '';
+            const indicator = '';
             if (sentLabel === 'positive') {
                 sentimentBadgeEl.textContent = '😊 +' + scoreStr + indicator;
                 sentimentBadgeEl.style.color = '#4ade80';
@@ -12979,7 +13755,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const mergedSupporters = Array.from(supporterMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events);
         updateTopSupportersUI(mergedSupporters, Math.max(giftStats.supportersCount || 0, mergedSupporters.length));
         renderViewerSparkline();
-        updateInsightsUI();
+        scheduleTkaiInsightsUIUpdate();
         scheduleLiveOsSnapshotPublish();
     }
     function renderGiftGallery() {
@@ -13188,12 +13964,48 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (nearBottom || whisperPartialText) listenFeedEl.scrollTop = listenFeedEl.scrollHeight;
         if (listenFeedPopoutEl && document.body.contains(listenFeedPopoutEl)) syncListenFeedPopout();
     }
-    function renderMessages() {
+    function getTkaiChatUserLevel(message) {
+        const direct = Number(message?.userLevel || message?.level || message?.joinLevel || 0);
+        if (Number.isFinite(direct) && direct > 0 && direct < 500) return Math.round(direct);
+        const source = [message?.badgeText, message?.ariaLabel, message?.title, message?.rawText]
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+            .join(' ');
+        const match = source.match(/\b(?:lvl|lv|level|grade|razina)\s*[:#-]?\s*(\d{1,3})\b/i)
+            || source.match(/💎\s*(\d{1,3})\b/);
+        const level = Number(match?.[1] || 0);
+        return Number.isFinite(level) && level > 0 && level < 500 ? level : 0;
+    }
+    function getTkaiChatUserBadgeName(message, resolvedUser) {
+        const value = String(message?.userBadgeName || message?.userBadge || message?.clubName || '').replace(/\s+/g, ' ').trim();
+        if (!value || value.length > 40 || !/\p{L}/u.test(value)) return '';
+        if (/^(?:badge|fan|club|team|title|tag|member|subscriber|gifter|gift)$/i.test(value)) return '';
+        if (/\b(?:lvl|lv|level|grade|razina|no\.?|rank|top)\s*[:#-]?\s*\d{1,3}\b/i.test(value)) return '';
+        if (normalizedTkaiUser(value) === normalizedTkaiUser(resolvedUser)) return '';
+        return value.slice(0, 40);
+    }
+    function getTkaiChatGifterRank(message, resolvedUser) {
+        const direct = Number(message?.gifterRank || message?.topGifterRank || 0);
+        if (Number.isInteger(direct) && direct >= 1 && direct <= 3) return direct;
+        const userKey = normalizedTkaiUser(resolvedUser);
+        if (!userKey) return 0;
+        const index = (Array.isArray(topSupporters) ? topSupporters : [])
+            .findIndex((row) => normalizedTkaiUser(row?.user) === userKey);
+        if (index < 0) return 0;
+        const rank = Number(topSupporters[index]?.rank || index + 1);
+        return Number.isInteger(rank) && rank >= 1 && rank <= 3 ? rank : 0;
+    }
+    function renderMessages(options = {}) {
         if (!messagesEl) return;
         const settings = DB.getSettings();
         const showTextInFeed = settings.tkaiShowFeedChat !== false;
         const showGiftsInFeed = settings.tkaiShowFeedGifts !== false;
         const showLikesInFeed = settings.tkaiShowFeedLikes !== false;
+        const incrementalMessages = Array.isArray(options.incrementalMessages)
+            ? options.incrementalMessages.filter((message) => message && String(message.id || '').trim())
+            : [];
+        const incremental = incrementalMessages.length > 0
+            && messagesEl.dataset.tkaiIncrementalReady === '1';
         const allMessages = Array.isArray(collectedMessages) ? collectedMessages.slice(-1000) : [];
         const chatMessages = allMessages.filter((message) => {
             const type = normalizeTkaiMessageType(message);
@@ -13211,6 +14023,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (msgCountEl) msgCountEl.textContent = '';
             if (chatFeedCountEl) chatFeedCountEl.textContent = '';
             if (giftFeedCountEl) giftFeedCountEl.textContent = '';
+            delete messagesEl.dataset.tkaiIncrementalReady;
             renderGiftGallery();
             return;
         }
@@ -13221,13 +14034,16 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const giftPrevTop = giftFeedEl ? giftFeedEl.scrollTop : 0;
         const giftPrevHeight = giftFeedEl ? giftFeedEl.scrollHeight : 0;
         const giftNearBottom = giftFeedEl ? (giftPrevTop + giftFeedEl.clientHeight >= giftPrevHeight - 36) : true;
-        messagesEl.innerHTML = '';
-        if (giftFeedEl) giftFeedEl.innerHTML = '';
+        if (!incremental) {
+            messagesEl.innerHTML = '';
+            if (giftFeedEl) giftFeedEl.innerHTML = '';
+        }
         const targetLang = getTranslateTargetLang();
         const showTranslated = targetLang !== 'auto';
-        const renderRow = (message, container) => {
+        const renderRow = (message, container, beforeNode = null) => {
             const div = document.createElement('div');
             const displayType = normalizeTkaiMessageType(message);
+            div.dataset.tkaiMessageId = String(message.id || '');
             div.className = 'tkai-msg' + (selectedMsgIds.has(message.id) ? ' selected' : '');
             const isTargetedUser = isTargetedTkaiUser(message.user);
             const forcedTranslationUser = getForcedTranslateUsersSet().has(normalizedTkaiUser(message.user));
@@ -13334,9 +14150,29 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const highlightBadge = isTargetedUser
                 ? '<span class="tkai-user-highlight-badge">🎯 označen</span>'
                 : (forcedTranslationUser ? '<span class="tkai-user-translation-badge">🌐 prijevod</span>' : '');
-            const userRow = typeBadge
-                ? '<div class="tkai-msg-user" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:' + userColor + '">' + escHtml(resolvedUser) + highlightBadge + '</span>' + typeBadge + '</div>'
-                : '<div class="tkai-msg-user" style="color:' + userColor + '">' + escHtml(resolvedUser) + highlightBadge + '</div>';
+            const showUserMeta = !['caption', 'listening', 'song'].includes(displayType);
+            const userLevel = showUserMeta ? getTkaiChatUserLevel(message) : 0;
+            const userBadgeName = showUserMeta ? getTkaiChatUserBadgeName(message, resolvedUser) : '';
+            const gifterRank = showUserMeta ? getTkaiChatGifterRank(message, resolvedUser) : 0;
+            const levelBadge = userLevel
+                ? '<span class="tkai-msg-level-badge">💎 ' + formatNum(userLevel) + '</span>'
+                : '';
+            const clubBadge = userBadgeName
+                ? '<span class="tkai-msg-club-badge" title="' + escHtml(userBadgeName) + '">' + escHtml(userBadgeName) + '</span>'
+                : '';
+            const rankBadge = gifterRank
+                ? '<span class="tkai-msg-rank-badge">No.' + gifterRank + '</span>'
+                : '';
+            const userRow = '<div class="tkai-msg-user tkai-msg-user-row">'
+                + '<div class="tkai-msg-identity">'
+                + levelBadge
+                + clubBadge
+                + '<span class="tkai-msg-user-name" style="color:' + userColor + '">' + escHtml(resolvedUser) + '</span>'
+                + rankBadge
+                + highlightBadge
+                + '</div>'
+                + typeBadge
+                + '</div>';
             div.innerHTML = userRow + original + listeningMeta + giftSummary + likeSummary + translated;
             div.title = 'Klikni za odabir/deodabir';
             div.addEventListener('click', () => {
@@ -13358,18 +14194,59 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 renderMessages();
                 openTkaiMsgContextMenu(event.clientX, event.clientY, message);
             });
-            container.appendChild(div);
+            if (beforeNode && beforeNode.parentNode === container) container.insertBefore(div, beforeNode);
+            else container.appendChild(div);
         };
-        if (showTextInFeed) chatMessages.slice(-300).forEach((message) => renderRow(message, messagesEl));
-        else messagesEl.innerHTML = '<div class="tkai-empty">Tekst feed je sakriven filterom.</div>';
-        if (showTextInFeed && !chatMessages.length && collectedMessages.length) {
+        const incrementalChatMessages = incrementalMessages.filter((message) => {
+            const type = normalizeTkaiMessageType(message);
+            if (!(type === 'chat' || type === 'caption' || type === 'song')) return false;
+            return type !== 'chat' || !isTkaiViewerNoiseText(message.text);
+        });
+        const incrementalGiftMessages = incrementalMessages.filter((message) => {
+            const type = normalizeTkaiMessageType(message);
+            if (!['gift', 'subscriber', 'share', 'join', 'like'].includes(type)) return false;
+            if (type === 'like') return showLikesInFeed;
+            if (type === 'gift' || type === 'subscriber') return showGiftsInFeed;
+            return true;
+        });
+        const renderIncrementalRows = (container, messages) => {
+            if (!container || !messages.length) return;
+            const renderedById = new Map();
+            container.querySelectorAll(':scope > .tkai-msg[data-tkai-message-id]').forEach((row) => {
+                const id = String(row.dataset.tkaiMessageId || '');
+                if (id) renderedById.set(id, row);
+            });
+            container.querySelectorAll(':scope > .tkai-empty').forEach((row) => row.remove());
+            messages.forEach((message) => {
+                const existing = renderedById.get(String(message.id || '')) || null;
+                renderRow(message, container, existing);
+                if (existing) existing.remove();
+            });
+        };
+        const trimRenderedRows = (container, maxRows) => {
+            if (!container) return;
+            const rows = Array.from(container.querySelectorAll(':scope > .tkai-msg'));
+            rows.slice(0, Math.max(0, rows.length - maxRows)).forEach((row) => row.remove());
+        };
+
+        if (incremental) {
+            if (showTextInFeed && incrementalChatMessages.length) {
+                renderIncrementalRows(messagesEl, incrementalChatMessages);
+                trimRenderedRows(messagesEl, 300);
+            }
+        } else if (showTextInFeed) {
+            chatMessages.slice(-300).forEach((message) => renderRow(message, messagesEl));
+        } else {
+            messagesEl.innerHTML = '<div class="tkai-empty">Tekst feed je sakriven filterom.</div>';
+        }
+        if (!incremental && showTextInFeed && !chatMessages.length && collectedMessages.length) {
             const nonChatCount = collectedMessages.length;
             const types = [...new Set(collectedMessages.map(m => m.type).filter(Boolean))].join(', ');
             messagesEl.innerHTML = '<div class="tkai-empty" style="font-size:11px;opacity:.75">Chat poruke nisu pronađene.<br>'
                 + 'Skupljeno ' + nonChatCount + ' event(a) (' + (types || 'nepoznato') + ').<br>'
                 + 'TikTok možda koristi novi DOM — provjeri Settings → Debug ili otvori live stranicu.</div>';
         }
-        if (giftFeedEl) {
+        if (giftFeedEl && !incremental) {
             const filteredGiftEvents = giftMessages.filter((message) => {
                 const type = String(message.type || '');
                 if (type === 'like') return showLikesInFeed;
@@ -13381,6 +14258,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             } else {
                 filteredGiftEvents.slice(-20).forEach((message) => renderRow(message, giftFeedEl));
             }
+        } else if (giftFeedEl && incrementalGiftMessages.length) {
+            renderIncrementalRows(giftFeedEl, incrementalGiftMessages);
+            trimRenderedRows(giftFeedEl, 20);
         }
         if (targetedChatUser) {
             const targetedRows = messagesEl.querySelectorAll('.tkai-msg.targeted');
@@ -13407,8 +14287,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (msgCountEl) msgCountEl.textContent = chatMessages.length + ' chat • ' + giftMessages.length + ' događaja';
         if (chatFeedCountEl) chatFeedCountEl.textContent = chatMessages.length + ' poruka';
         if (giftFeedCountEl) giftFeedCountEl.textContent = giftMessages.length + ' događaja';
-        renderGiftGallery();
-        if (chatPopout && document.body.contains(chatPopout)) mirrorToPopout(collectedMessages, { forceRender: true });
+        messagesEl.dataset.tkaiIncrementalReady = '1';
+        if (!incremental || incrementalGiftMessages.length) renderGiftGallery();
+        if (chatPopout && document.body.contains(chatPopout)) {
+            mirrorToPopout(collectedMessages, { forceRender: !incremental });
+        }
     }
     function renderReplies(suggestions) {
         if (!repliesEl) return;
@@ -13449,7 +14332,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const fallbackName = parseTikTokOwnerFromUrl(getActiveTab()?.url || '') || 'TikTok user';
         const user = sourceName && sourceName.toLowerCase() !== 'desni klik' ? sourceName : fallbackName;
         const id = 'ctx:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
-        collectedMessages.push({ user, text, id, ts: Date.now(), type: 'chat' });
+        const pushedMessage = { user, text, id, ts: Date.now(), type: 'chat' };
+        collectedMessages.push(pushedMessage);
+        ingestTkaiSessionUserMessages([pushedMessage]);
         extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
         const forceTranslate = options && (options.forceTranslate === true || options.forceTranslate === 'true');
@@ -13499,6 +14384,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         };
         listeningMessages.push(message);
         if (listeningMessages.length > 500) listeningMessages = listeningMessages.slice(-500);
+        markTkaiInsightsDirty();
         renderListenFeed();
         scheduleTkaiAutosave('whisperlive');
         scheduleLiveOsSnapshotPublish();
@@ -14284,7 +15170,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     return value.slice(0, 2000);
                 }
         function collectCandidateTextParts(root, user) {
-          const selector = [
+          const explicitSelector = [
             '[data-e2e="chat-message-text"]',
             '[data-e2e="message-text"]',
             '[data-e2e="webcast-live-comment"]',
@@ -14296,23 +15182,45 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             '[class*="message-content"]',
             '[class*="chat-content"]',
             '[class*="SpanMessage"]',
-            '[class*="comment-text"]',
-            'p',
-            'span'
+            '[class*="comment-text"]'
           ].join(',');
-          const parts = [];
-          try {
-            root.querySelectorAll(selector).forEach((node) => {
+          const semantic = (node) => [
+            node?.getAttribute?.('data-e2e') || '',
+            node?.getAttribute?.('class') || '',
+            node?.getAttribute?.('aria-label') || '',
+            node?.getAttribute?.('title') || ''
+          ].join(' ').toLowerCase();
+          const isMetaNode = (node, txt) => {
+            const kind = semantic(node);
+            if (/(?:user|username|displayname|nickname|author|avatar|badge|level|grade|rank|fan|club|medal|supporter|gifter)/i.test(kind)) return true;
+            if (user && txt.toLowerCase() === String(user).trim().toLowerCase()) return true;
+            return isAuxiliaryText(txt);
+          };
+          const readParts = (nodes) => {
+            const parts = [];
+            nodes.forEach((node) => {
               if (!node || !isVisibleNode(node)) return;
-              if (node.querySelector(selector)) return;
               const txt = String(node.textContent || '').replace(/\s+/g, ' ').trim();
               if (!txt) return;
-              if (user && txt.toLowerCase() === String(user).trim().toLowerCase()) return;
-              if (isAuxiliaryText(txt)) return;
+              if (isMetaNode(node, txt)) return;
               parts.push(txt);
             });
-          } catch (_) {}
-          return parts.filter((part, idx, arr) => arr.indexOf(part) === idx);
+            return parts.filter((part, idx, arr) => arr.indexOf(part) === idx);
+          };
+          try {
+            const explicitNodes = Array.from(root.querySelectorAll(explicitSelector))
+              .filter((node) => !node.querySelector(explicitSelector));
+            const explicitParts = readParts(explicitNodes);
+            if (explicitParts.length) return explicitParts;
+
+            // Last-resort fallback for a changed TikTok DOM: inspect leaf text
+            // nodes only, never every parent span/div that contains the whole row.
+            const leafNodes = Array.from(root.querySelectorAll('p, span'))
+              .filter((node) => !node.querySelector('p, span'));
+            return readParts(leafNodes);
+          } catch (_) {
+            return [];
+          }
         }
         function getTopSupportersFromPage() {
           const rows = [];
@@ -14416,6 +15324,124 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           return Array.from(dedupe.values())
             .sort((a, b) => b.coins - a.coins || a.rank - b.rank)
                         .slice(0, 12);
+        }
+        function extractChatBadgeMeta(row, user) {
+          const result = { userLevel: null, userBadgeName: '', gifterRank: null };
+          if (!row) return result;
+          const clean = (value) => String(value || '')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const readNode = (node) => {
+            const parts = [
+              node?.textContent || '',
+              node?.getAttribute?.('aria-label') || '',
+              node?.getAttribute?.('alt') || '',
+              node?.getAttribute?.('title') || '',
+              node?.getAttribute?.('data-badge-name') || '',
+              node?.getAttribute?.('data-title') || ''
+            ].map(clean).filter(Boolean);
+            return parts.filter((part, index) => parts.indexOf(part) === index).join(' ');
+          };
+          const semantic = (node) => clean([
+            node?.getAttribute?.('data-e2e') || '',
+            node?.getAttribute?.('class') || '',
+            node?.getAttribute?.('aria-label') || '',
+            node?.getAttribute?.('alt') || '',
+            node?.getAttribute?.('title') || ''
+          ].join(' ')).toLowerCase();
+          const explicitLevel = Number(
+            row.getAttribute('data-user-level')
+            || row.getAttribute('data-level')
+            || row.getAttribute('data-grade')
+            || 0
+          );
+          if (Number.isFinite(explicitLevel) && explicitLevel > 0 && explicitLevel < 500) {
+            result.userLevel = explicitLevel;
+          }
+          const rowMetaText = clean([
+            row.getAttribute('aria-label') || '',
+            row.getAttribute('title') || ''
+          ].join(' '));
+          const rowRank = rowMetaText.match(/\b(?:no\.?|rank|top)\s*#?\s*([1-3])\b/i);
+          if (rowRank) result.gifterRank = Number(rowRank[1]);
+          const candidates = Array.from(row.querySelectorAll(
+            '[data-e2e*="level" i],'
+            + '[data-e2e*="grade" i],'
+            + '[data-e2e*="badge" i],'
+            + '[data-e2e*="fan" i],'
+            + '[data-e2e*="club" i],'
+            + '[data-e2e*="rank" i],'
+            + '[class*="Level"],[class*="level"],'
+            + '[class*="Grade"],[class*="grade"],'
+            + '[class*="Badge"],[class*="badge"],'
+            + '[class*="Fan"],[class*="fan"],'
+            + '[class*="Club"],[class*="club"],'
+            + '[class*="Rank"],[class*="rank"],'
+            + 'img[alt],img[aria-label],img[title]'
+          ));
+          const normalizedUser = clean(user).replace(/^@+/, '').toLowerCase();
+          for (const node of candidates) {
+            const value = readNode(node);
+            if (!value) continue;
+            const kind = semantic(node);
+            if (!result.userLevel) {
+              const levelMatch = value.match(/\b(?:lvl|lv|level|grade|razina)\s*[:#-]?\s*(\d{1,3})\b/i)
+                || value.match(/💎\s*(\d{1,3})\b/);
+              const compactLevel = /(?:level|grade)/i.test(kind) ? value.match(/^\D*(\d{1,3})\D*$/) : null;
+              const level = Number(levelMatch?.[1] || compactLevel?.[1] || 0);
+              if (Number.isFinite(level) && level > 0 && level < 500) result.userLevel = level;
+            }
+            if (!result.gifterRank) {
+              const rankMatch = value.match(/\b(?:no\.?|rank|top)\s*#?\s*([1-3])\b/i);
+              if (rankMatch) result.gifterRank = Number(rankMatch[1]);
+            }
+            if (result.userBadgeName) continue;
+            if (!/(badge|fan|club|team|title|tag)/i.test(kind)) continue;
+            const badgeName = value
+              .replace(/\b(?:lvl|lv|level|grade|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
+              .replace(/\b(?:no\.?|rank|top)\s*#?\s*\d{1,3}\b/gi, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const normalizedBadge = badgeName.replace(/^@+/, '').toLowerCase();
+            if (!badgeName || badgeName.length > 32 || !/\p{L}/u.test(badgeName)) continue;
+            if (normalizedBadge === normalizedUser) continue;
+            if (/^(?:badge|fan|club|team|title|tag|member|subscriber|gifter|gift)$/i.test(badgeName)) continue;
+            result.userBadgeName = badgeName.slice(0, 32);
+          }
+          return result;
+        }
+        function stripKnownChatRowPrefix(value, user, badgeMeta) {
+          let text = String(value || '').replace(/\s+/g, ' ').trim();
+          if (!text) return '';
+          const escapeRe = (token) => String(token || '').replace(/[|{}()[\]\\^$+*?.-]/g, '\\$&');
+          const patterns = [];
+          const level = Number(badgeMeta?.userLevel || 0);
+          if (level > 0) {
+            patterns.push(new RegExp('^\\s*(?:💎\\s*)?(?:(?:lvl|lv|level|grade|razina)\\s*[:#-]?\\s*)?' + level + '\\s*[·•|:\\-–—]?\\s*', 'i'));
+          } else {
+            patterns.push(/^\s*💎\s*\d{1,3}\s*[·•|:\-–—]?\s*/i);
+            patterns.push(/^\s*(?:lvl|lv|level|grade|razina)\s*[:#-]?\s*\d{1,3}\s*[·•|:\-–—]?\s*/i);
+          }
+          if (badgeMeta?.userBadgeName) {
+            patterns.push(new RegExp('^\\s*' + escapeRe(badgeMeta.userBadgeName) + '\\s*[·•|:\\-–—]?\\s*', 'i'));
+          }
+          const normalizedUser = normalizeChatUserName(user || '');
+          if (normalizedUser) {
+            patterns.push(new RegExp('^\\s*@?' + escapeRe(normalizedUser) + '\\s*[·•|:\\-–—]?\\s*', 'i'));
+          }
+          patterns.push(/^\s*(?:no\.?|rank|top)\s*#?\s*[1-3]\s*[·•|:\-–—]?\s*/i);
+
+          // TikTok can render these fields as separate nodes without separators.
+          // Re-run the known prefix patterns a few times, but never remove them
+          // from the middle of the actual message.
+          for (let pass = 0; pass < 3; pass += 1) {
+            const before = text;
+            patterns.forEach((pattern) => { text = text.replace(pattern, ''); });
+            text = text.trim();
+            if (text === before) break;
+          }
+          return text;
         }
         // Primary selectors — TikTok Live chat (updated for 2026 DOM)
         const primarySelectors = [
@@ -14645,6 +15671,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             + '[class*="AuthorName"],'
             + '[class*="NickName"],'
             + '[class*="nickname"],'
+            + 'a[href*="/@"],'
             + 'strong, b'
           );
           const textEl = el.querySelector(
@@ -14662,8 +15689,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             + '[class*="GiftMessage"],'
             + '[class*="Subscribe"],'
             + '[class*="SpanMessage"],'
-            + '[class*="comment-text"],'
-            + 'p, span'
+            + '[class*="comment-text"]'
           );
           const textNodes = Array.from(el.querySelectorAll(
             '[data-e2e="chat-message-text"],'
@@ -14695,7 +15721,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     };
                     const structuredRow = extractStructuredChatFromRow(el);
           const derivedUser = (() => {
-                        if (structuredRow?.user) return structuredRow.user;
             // 1) Explicit userEl text
                         const direct = normalizeChatUserName(userEl ? userEl.textContent.trim() : '');
             if (direct && direct.length > 0) return direct;
@@ -14719,7 +15744,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             // 5) First <strong> or <b> is usually the username in TikTok chat
             const boldEl = el.querySelector('strong, b');
                         if (boldEl) { const t = normalizeChatUserName(boldEl.textContent.trim()); if (t && t.length <= 60) return t; }
-            // 6) Regex on full text: "Username: message" or "Username sent gift"
+            // 6) Structured multi-line row, only after explicit username nodes.
+                        if (structuredRow?.user) return structuredRow.user;
+            // 7) Regex on full text: "Username: message" or "Username sent gift"
             const colMatch = fallbackText.match(/^\s*([^:\-\n]{2,40}?)\s*[:\-]\s+\S/);
                         if (colMatch && colMatch[1]) return normalizeChatUserName(colMatch[1]);
             const sentMatch = fallbackText.match(/^\s*(.{2,40}?)\s+(?:sent|gave|joined|shared)(?:\b|(?=[a-z0-9]))/i);
@@ -14749,10 +15776,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             .filter(part => !isAuxiliaryText(part))
             .filter(part => !(user && part.toLowerCase() === String(user).trim().toLowerCase()));
           const fullRowText = fallbackText.slice(0, 2400);
+          const chatBadgeMeta = extractChatBadgeMeta(el, user);
           const rowFallbackText = extractFullChatTextFromRow(fullRowText, user);
-          let rawText = (structuredRow?.text || assembledText || textBase || fallbackParts.join(' ') || rowFallbackText || el.textContent || '').trim().slice(0, 2000);
+          const structuredText = structuredRow?.user
+            && normalizeChatUserName(structuredRow.user).toLowerCase() === normalizeChatUserName(user || '').toLowerCase()
+            ? structuredRow.text
+            : '';
+          let rawText = (structuredText || assembledText || textBase || rowFallbackText || fallbackParts.join(' ') || '').trim().slice(0, 2000);
+          rawText = stripKnownChatRowPrefix(rawText, user, chatBadgeMeta).slice(0, 2000);
           if (rowFallbackText && (!rawText || rawText.length < 2 || isAuxiliaryText(rawText))) {
-            rawText = rowFallbackText;
+            rawText = stripKnownChatRowPrefix(rowFallbackText, user, chatBadgeMeta).slice(0, 2000);
           }
           
           // Hvati nagrade, emotikone, specijalne znakove
@@ -14800,7 +15833,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             const fromText = text.match(/^\s*([^:\-\n]{2,40}?)\s+(?:sent|gave|joined|shared|ulazi|u[šs]ao|u[šs]la|pridru[žz]io|pridru[žz]ila)(?:\b|(?=[a-z0-9]))/i);
                             if (fromText && fromText[1]) user = fromText[1].trim().slice(0, 60);
                         }
-            let levelHint = null;
+            let levelHint = chatBadgeMeta.userLevel;
             if (isJoin) {
               const levelMatch = String(text || '').match(/\b(?:lvl|lv|level|razina)?\s*[:#-]?\s*(\d{1,3})\b/i);
               if (levelMatch) {
@@ -14859,7 +15892,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               title: el.getAttribute('title') || '',
               mid,
                                                                                                                 type: isShare ? 'share' : (isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isLike ? 'like' : 'chat')))),
-              level: levelHint
+              level: levelHint,
+              userLevel: levelHint,
+              userBadgeName: chatBadgeMeta.userBadgeName,
+              gifterRank: chatBadgeMeta.gifterRank
             });
           }
         });
@@ -14968,7 +16004,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     topSupporters = meta.topSupporters
                         .map((row) => ({
                             user: String(row.user || '').slice(0, 40),
-                            coins: Number(row.coins || 0)
+                            coins: Number(row.coins || 0),
+                            rank: Number(row.rank || 0) || undefined
                         }))
                         .filter((row) => row.user && Number.isFinite(row.coins));
                 }
@@ -15144,7 +16181,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }
             });
             if (lastAddedGiftMessage) updateTkaiLastGiftDebug(lastAddedGiftMessage);
-            const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 2000;
+            if (incomingAddedMessages.length) {
+                ingestTkaiSessionUserMessages(incomingAddedMessages);
+                markTkaiInsightsDirty();
+            }
+            if (incomingAddedMessages.length) queueTkaiLiveServerEvents(incomingAddedMessages);
+            const _msgBuf = getTkaiEffectiveLocalBuffer();
             if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
             if (!sessionStartedAt) sessionStartedAt = Date.now();
             if (added > 0) extractAndTrackQuestions(collectedMessages.slice(-added));
@@ -15154,14 +16196,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             // look as if it had stopped reading after the first batch.
             if (targetLang !== 'auto' && incomingAddedMessages.length) {
                 void translateMessagesInPlace(incomingAddedMessages, targetLang)
-                    .then(() => renderMessages())
+                    .then(() => renderMessages({ incrementalMessages: incomingAddedMessages }))
                     .catch(() => { });
             }
             if (incomingAddedMessages.length) {
                 void Promise.all([
                     translateIndonesianMessagesInPlace(incomingAddedMessages),
                     translateForcedUsersInPlace(incomingAddedMessages)
-                ]).then(() => renderMessages()).catch(() => { });
+                ]).then(() => renderMessages({ incrementalMessages: incomingAddedMessages })).catch(() => { });
             }
             if (incomingCaptions.length && isCcReadEnabled()) {
                 void Promise.all(incomingCaptions.map((message) => handleIncomingCaption(message).catch(() => { })));
@@ -15172,7 +16214,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (incomingChatsForCcRead.length && isCcReadEnabled()) {
                 void Promise.all(incomingChatsForCcRead.map((message) => handleIncomingChatForCcRead(message).catch(() => { })));
             }
-            renderMessages();
+            if (incomingAddedMessages.length) {
+                renderMessages({ incrementalMessages: incomingAddedMessages });
+            }
             updateSessionStatsUI();
             setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : (added ? '✅ Dodano ' + added : '✓ Sinkronizirano'));
             // Auto-suggest: trigger generateReplies after N new messages
@@ -15474,6 +16518,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     function clearConversation() {
         collectedMessages = [];
         listeningMessages = [];
+        tkaiSessionUserStats = new Map();
+        tkaiSessionUserEventIds = new Set();
+        tkaiSessionUserStatsVersion += 1;
+        tkaiTopUsersRenderKey = '';
+        markTkaiInsightsDirty();
         whisperPartialText = '';
         collectedQuestions = [];
         topSupporters = [];
@@ -15534,7 +16583,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
             peakViewers: peakViewerCount,
             totalCoins: giftStats.totalCoins,
-            mergedUsers: buildUserStats(sessionMessages, userLimit),
+            mergedUsers: getTkaiSessionUserStatsRows(),
             dailyStats: buildDailyStats(sessionMessages, userLimit),
             giftDetails: detailedInsights.giftDetails || {},
             messages: sessionMessages.map(message => ({
@@ -15572,7 +16621,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         sessionMessages.forEach(m => {
             rows.push([esc(m.user), esc(m.text), esc(m.originalText || ''), esc(m.translatedText || ''), esc(m.translatedLang || ''), esc(m.type || 'chat'), m.coins || 0, new Date(m.ts || Date.now()).toISOString()].join(','));
         });
-        const merged = buildUserStats(sessionMessages, DB.getSettings().tkaiUserScanLimit || 200);
+        const merged = getTkaiSessionUserStatsRows();
         rows.push('');
         rows.push('MERGED_USERS');
         rows.push(['user', 'total', 'chat', 'gifts', 'joins', 'repeatMax', 'lastTs'].join(','));
@@ -15603,6 +16652,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 peakViewers: peakViewerCount,
                 totalCoins: giftStats.totalCoins,
                 questions: collectedQuestions.slice(),
+                sessionUsers: serializeTkaiSessionUserStats(),
                 messages: sessionMessages.slice()
             };
             sessions.push(sessionRecord);
@@ -15630,6 +16680,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 topSupporters: Array.isArray(topSupporters) ? topSupporters.slice(0, 20) : [],
                 viewerSamples: Array.isArray(viewerSamples) ? viewerSamples.slice(-200) : [],
                 viewerSamplePoints: Array.isArray(viewerSamplePoints) ? viewerSamplePoints.slice(-200) : [],
+                sessionUsers: serializeTkaiSessionUserStats(),
                 messages: sessionMessages.slice(-maxKeep),
                 listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice(-500) : [],
             };
@@ -15668,6 +16719,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
             collectedMessages = chatRows.slice(-maxKeep);
             listeningMessages = listeningRows.slice(-500).map((message) => ({ ...message, type: 'listening', user: message.user || 'Slušanje' }));
+            restoreTkaiSessionUserStats(saved?.sessionUsers, chatRows);
+            markTkaiInsightsDirty();
             selectedMsgIds.clear();
             sessionStartedAt = Number(saved?.sessionStartedAt || 0) || Date.now();
             liveViewerCount = Number(saved?.liveViewerCount || 0) || 0;
@@ -15821,6 +16874,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (configArrow) configArrow.textContent = hidden ? '▼' : '▶';
     });
 
+    document.getElementById('tkaiLiveServerTestBtn')?.addEventListener('click', () => {
+        stopTkaiLiveServerTransport({ keepStatus: true, reason: 'Ručni test' });
+        connectTkaiLiveServer({ manual: true });
+    });
+    document.querySelector('#stab-ai-live-chat [data-setting="tkaiLiveServerEnabled"]')?.addEventListener('click', () => {
+        setTimeout(() => {
+            if (isTkaiLiveServerEnabled()) {
+                if (scanActive) connectTkaiLiveServer();
+                else setTkaiLiveServerStatus('Uključeno · čeka Skeniranje ON', 'wait');
+            } else {
+                stopTkaiLiveServerTransport({ reason: 'Server način isključen' });
+            }
+        }, 0);
+    });
+
     toggleBtn?.addEventListener('click', () => {
         if (scanActive) {
             stopScanning();
@@ -15843,6 +16911,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         toggleBtn.style.boxShadow = '0 0 0 1px rgba(34,197,94,.45) inset, 0 0 10px rgba(34,197,94,.35)';
         setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
         showToast('▶ Skeniranje uključeno');
+        if (isTkaiLiveServerEnabled()) connectTkaiLiveServer();
         runTkaiScanCycle();
         statsTimerInterval = setInterval(function () {
             if (scanActive) {
@@ -16012,7 +17081,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const el = document.getElementById(id);
             if (!el) return;
             const on = s[settingKey] !== undefined ? s[settingKey] !== false && s[settingKey] !== 'false' : def;
-            el.style.display = on ? '' : 'none';
+            const layoutHidden = el.classList.contains('tkai-insights-card')
+                && localStorage.getItem('ex_tkai_dashboard_hidden_' + id) === '1';
+            el.dataset.tkaiLayoutHidden = layoutHidden ? '1' : '0';
+            el.style.display = on && !layoutHidden ? '' : 'none';
         };
         // Apply custom gift gallery header title
         const giftHeaderTitle = document.getElementById('tkaiGiftGalleryHeaderTitle');
@@ -16022,7 +17094,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         vis('tkaiStatsStrip', 'tkaiShowStats');
         vis('tkaiInsights', 'tkaiShowInsights');
-        vis('tkaiGiftGallery', 'tkaiShowGiftGallery');
+        vis('tkaiGiftGallerySection', 'tkaiShowGiftGallery');
         vis('tkaiTopSupporters', 'tkaiShowTopSupporters');
         vis('tkaiUserSummary', 'tkaiShowTopSupporters');
         vis('tkaiShadowbanCard', 'tkaiShowShadowban');
@@ -16031,8 +17103,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         vis('tkaiJoinsCard', 'tkaiScanJoins');
         vis('tkaiQuestionsCard', 'tkaiShowQuestions');
         vis('tkaiPieCard', 'tkaiShowPieBreakdown');
-        const songCard = document.getElementById('tkaiSongsCard');
-        if (songCard) songCard.style.display = '';
+        vis('tkaiSongsCard', 'tkaiShowSongSection');
         if (recJumpBtn) {
             const popEnabled = s.tkaiRecommendationsPopoutEnabled === true;
             const jumpEnabled = s.tkaiRecommendationJumpPulseEnabled === true;
@@ -16042,18 +17113,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
         }
 
-        // Safety net: if every insights card ended hidden (bad saved state), bring core cards back.
-        const insightsRoot = document.getElementById('tkaiInsights');
-        if (insightsRoot) {
-            const cards = Array.from(insightsRoot.querySelectorAll('.tkai-insights-card'));
-            const visibleCards = cards.filter(c => c.style.display !== 'none');
-            if (cards.length > 0 && visibleCards.length === 0) {
-                ['tkaiSpikesCard', 'tkaiRecommendationsCard', 'tkaiPieCard', 'tkaiSongsCard'].forEach((id) => {
-                    const el = document.getElementById(id);
-                    if (el) el.style.display = '';
-                });
-            }
-        }
     }
 
     function normalizeTkaiHexColor(value, fallback) {
@@ -16116,6 +17175,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const t = e.target.closest('.toggle[data-setting]');
         if (t && t.dataset.setting && t.dataset.setting.startsWith('tkaiShow')) setTimeout(applyTkaiFeatureToggles, 30);
         if (t && t.dataset.setting === 'tkaiAutosaveEnabled') setTimeout(initTkaiAutosave, 10);
+        if (t && t.dataset.setting === 'tkaiDashboardIncludeListening') {
+            setTimeout(() => {
+                markTkaiInsightsDirty();
+                scheduleTkaiInsightsUIUpdate(true);
+            }, 30);
+        }
     });
     document.getElementById('settingsPanel')?.addEventListener('input', e => {
         const t = e.target.closest('[data-setting]');
@@ -19967,7 +21032,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 analytics: analyticsSummary,
                 music: { currentTrack: songHistory[0] || insightsSnapshot.songs?.[0] || null, history: songHistory.length ? songHistory : (insightsSnapshot.songs || []) },
                 alerts: alertRows,
-                sentiment: { label: _cardiffSentiment?.label || insightsSnapshot.sentiment || 'neutral', confidence: _cardiffSentiment ? Math.round(Number(_cardiffSentiment.score || 0) * 100) : null, counts: insightsSnapshot.sentimentCounts || {} },
+                sentiment: {
+                    label: insightsSnapshot.sentiment || 'neutral',
+                    confidence: null,
+                    counts: insightsSnapshot.sentimentCounts || {},
+                    externalModel: _cardiffSentiment ? {
+                        label: _cardiffSentiment.label,
+                        confidence: Math.round(Number(_cardiffSentiment.score || 0) * 100)
+                    } : null
+                },
                 settings: DB.getSettings(),
                 savedSessions: liveOsSaved.savedSessions,
                 statsStorage: liveOsSaved.statsStorage,
@@ -20619,6 +21692,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         });
 
         if (!added) return { added: 0, acceptedRows: [] };
+        ingestTkaiSessionUserMessages(collectedMessages.slice(-added));
+        markTkaiInsightsDirty();
         const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 2000;
         if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
         if (!sessionStartedAt) sessionStartedAt = Date.now();

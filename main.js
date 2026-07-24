@@ -467,6 +467,7 @@ const SECRET_SETTING_KEYS = new Set([
   "local_ai_api_key",
   "translateAiApiKey",
   "tkaiGuardianApiKey",
+  "tkaiLiveServerToken",
   "giteaUpdateToken",
   "githubUpdateToken",
 ]);
@@ -565,8 +566,102 @@ function _persistRendererStorage() {
   }
 }
 
+function _parseRendererStorageJson(value, fallback) {
+  try {
+    const parsed = JSON.parse(String(value ?? ""));
+    if (Array.isArray(fallback)) {
+      return Array.isArray(parsed) ? parsed : fallback;
+    }
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function _normalizeHistoryTimestamp(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return Date.now();
+  // SQLite stores Unix seconds while the renderer stores JavaScript milliseconds.
+  return numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+}
+
 function _getRendererStorageSnapshot() {
-  return { ..._loadRendererStorage() };
+  const store = _loadRendererStorage();
+  let repaired = false;
+
+  // renderer-storage.json is the renderer's fast, synchronous cache. SQLite is
+  // the durable fallback. Restore both settings and history before the renderer
+  // starts so the UI never initializes from empty/default values after restart.
+  if (db) {
+    try {
+      const sqliteSettings = splitSensitiveSettings(db.getSettings() || {}).publicSettings;
+      const localSettings = _parseRendererStorageJson(store.ex_cfg, {});
+      const mergedSettings = { ...sqliteSettings, ...localSettings };
+      const serializedSettings = JSON.stringify(mergedSettings);
+      if (store.ex_cfg !== serializedSettings) {
+        store.ex_cfg = serializedSettings;
+        repaired = true;
+      }
+    } catch (error) {
+      console.warn("Renderer settings recovery failed:", error.message);
+    }
+
+    try {
+      const sqliteHistory = db.getHistory({ limit: 500 }) || [];
+      const localHistory = _parseRendererStorageJson(store.ex_hist, []);
+      const historyByUrl = new Map();
+
+      sqliteHistory.forEach((entry) => {
+        const url = String(entry?.url || "").trim();
+        if (!url) return;
+        historyByUrl.set(url, {
+          url,
+          title: String(entry?.title || url),
+          favicon: String(entry?.favicon || ""),
+          ts: _normalizeHistoryTimestamp(entry?.last_visited ?? entry?.created_at),
+          visit_count: Math.max(1, Number(entry?.visit_count) || 1),
+        });
+      });
+
+      // The synchronous renderer cache may contain a newer entry than SQLite
+      // when the app was closed immediately after navigation.
+      localHistory.forEach((entry) => {
+        const url = String(entry?.url || "").trim();
+        if (!url) return;
+        const sqliteEntry = historyByUrl.get(url);
+        historyByUrl.set(url, {
+          ...(sqliteEntry || {}),
+          ...entry,
+          url,
+          title: String(entry?.title || sqliteEntry?.title || url),
+          favicon: String(entry?.favicon || sqliteEntry?.favicon || ""),
+          ts: _normalizeHistoryTimestamp(
+            entry?.ts ?? entry?.last_visited ?? sqliteEntry?.ts,
+          ),
+          visit_count: Math.max(
+            1,
+            Number(entry?.visit_count ?? sqliteEntry?.visit_count) || 1,
+          ),
+        });
+      });
+
+      const mergedHistory = Array.from(historyByUrl.values())
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 500);
+      const serializedHistory = JSON.stringify(mergedHistory);
+      if (store.ex_hist !== serializedHistory) {
+        store.ex_hist = serializedHistory;
+        repaired = true;
+      }
+    } catch (error) {
+      console.warn("Renderer history recovery failed:", error.message);
+    }
+  }
+
+  if (repaired) _persistRendererStorage();
+  return { ...store };
 }
 
 function _setRendererStorageItem(key, value) {

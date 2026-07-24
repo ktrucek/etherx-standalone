@@ -4850,17 +4850,6 @@ body.tkai-panel-interacting * {
   overflow-y: auto;
 }
 
-/* Gift gallery is a fixed live section: it always follows the main TikTok
-   workspace and cannot be pushed below the Session dashboard by saved layout. */
-#tiktokAIPanel .tkai-main-wrap > .tkai-main { order: 0; }
-#tiktokAIPanel .tkai-main-wrap > #tkaiGiftGallerySection { order: 1; }
-#tiktokAIPanel .tkai-main-wrap > #tkaiSlusanjeSection { order: 2; }
-#tiktokAIPanel .tkai-main-wrap > #tkaiStatsStrip,
-#tiktokAIPanel .tkai-main-wrap > #tkaiTopSupporters,
-#tiktokAIPanel .tkai-main-wrap > #tkaiUserSummary,
-#tiktokAIPanel .tkai-main-wrap > #tkaiInsights,
-#tiktokAIPanel .tkai-main-wrap > #tkaiDashUsersRow { order: 3; }
-
 /* Privacy guard for browser-based screen sharing (Meet, Zoom, Discord, etc.).
    The panel is removed from painting while getDisplayMedia is active, so it
    cannot appear in a shared full-screen/window capture. */
@@ -4976,7 +4965,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
 }
 
 .tkai-listen-under-chat {
-  margin: 0 8px;
+  margin: 8px;
   padding: 8px 10px;
   border: 1px solid rgba(45, 212, 191, 0.14);
   border-radius: 10px;
@@ -5290,6 +5279,65 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
   color: var(--accent);
   font-size: 10px;
   margin-bottom: 2px;
+}
+
+.tkai-msg-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tkai-msg-identity {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.tkai-msg-user-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tkai-msg-level-badge,
+.tkai-msg-club-badge,
+.tkai-msg-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.tkai-msg-level-badge {
+  color: #eff6ff;
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  border: 1px solid rgba(147, 197, 253, 0.72);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.28);
+}
+
+.tkai-msg-club-badge {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fef3c7;
+  background: linear-gradient(135deg, #78350f, #a16207);
+  border: 1px solid rgba(217, 119, 6, 0.68);
+}
+
+.tkai-msg-rank-badge {
+  color: #fff7ed;
+  background: rgba(234, 88, 12, 0.2);
+  border: 1px solid rgba(251, 146, 60, 0.5);
 }
 
 .tkai-msg-text {

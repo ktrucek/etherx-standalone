@@ -1,0 +1,17 @@
+node_modules/
+data/
+logs/
+secrets/
+private/
+.env
+.env.*
+!.env.example
+*.log
+*.pid
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*token*
+*secret*

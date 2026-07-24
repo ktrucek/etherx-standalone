@@ -1,0 +1,14 @@
+{
+  "name": "etherx-live-chat-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RAM-backed WebSocket aggregation service for EtherX TikTok LIVE chat",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "ws": "^8.21.0"
+  }
+}

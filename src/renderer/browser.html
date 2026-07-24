@@ -3338,7 +3338,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.190</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.191</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -4306,6 +4306,49 @@
                                         <button class="s-btn-sm" id="tkaiPresetTextOnly">📝 Samo tekst</button>
                                     </div>
                                     <div
+                                        style="margin-bottom:12px;padding:10px;border:1px solid rgba(56,189,248,.25);border-radius:9px;background:rgba(14,165,233,.06)">
+                                        <div class="s-row">
+                                            <div class="s-row-left">
+                                                <div class="s-row-label">🌐 Kriptoentuzijasti LIVE server</div>
+                                                <div class="s-row-desc">Nove poruke šalji serveru; cijelu sesiju i
+                                                    statistiku drži u serverskom RAM-u</div>
+                                            </div>
+                                            <div class="toggle" data-setting="tkaiLiveServerEnabled"></div>
+                                        </div>
+                                        <div class="s-row" style="margin-top:8px">
+                                            <div class="s-row-left">
+                                                <div class="s-row-label">WebSocket endpoint</div>
+                                            </div>
+                                            <input type="text" class="s-input" data-setting="tkaiLiveServerUrl"
+                                                value="wss://live.kriptoentuzijasti.io/v1/live"
+                                                placeholder="wss://live.kriptoentuzijasti.io/v1/live"
+                                                style="width:58%">
+                                        </div>
+                                        <div class="s-row" style="margin-top:8px">
+                                            <div class="s-row-left">
+                                                <div class="s-row-label">Pristupni token</div>
+                                                <div class="s-row-desc">Čuva se u sigurnoj lokalnoj pohrani</div>
+                                            </div>
+                                            <input type="password" class="s-input" data-setting="tkaiLiveServerToken"
+                                                autocomplete="new-password" placeholder="najmanje 32 znaka"
+                                                style="width:58%">
+                                        </div>
+                                        <div class="s-row" style="margin-top:8px">
+                                            <div class="s-row-left">
+                                                <div class="s-row-label">Lokalni buffer dok je server spojen</div>
+                                                <div class="s-row-desc">Server čuva cijelu sesiju; browser samo zadnje
+                                                    poruke</div>
+                                            </div>
+                                            <input type="number" class="s-input" data-setting="tkaiLiveServerLocalBuffer"
+                                                min="100" max="1000" value="300" style="width:76px">
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
+                                            <button class="s-btn-sm" id="tkaiLiveServerTestBtn">🧪 Spoji/testiraj</button>
+                                            <span id="tkaiLiveServerStatus"
+                                                style="font-size:10px;color:var(--text3)">Nije spojeno</span>
+                                        </div>
+                                    </div>
+                                    <div
                                         style="margin-bottom:12px;border-bottom:1px dashed rgba(255,255,255,.1);padding-bottom:12px">
                                         <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Što skenirati
                                         </div>
@@ -4845,6 +4888,13 @@
                                             <option value="bars">Bars</option>
                                             <option value="wave">Wave</option>
                                         </select>
+                                    </div>
+                                    <div class="s-row" style="margin-top:8px">
+                                        <div class="s-row-left">
+                                            <div class="s-row-label">🎙 Uključi Listen Feed u dashboard</div>
+                                            <div class="s-row-desc">Isključeno: grafovi prikazuju samo TikTok događaje</div>
+                                        </div>
+                                        <div class="toggle" data-setting="tkaiDashboardIncludeListening"></div>
                                     </div>
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
@@ -5483,7 +5533,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.190</span></div>
+                                    v<span id="helpVersionNum2">3.0.191</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -5790,19 +5840,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="tkai-gift-gallery-section" id="tkaiGiftGallerySection" data-tkai-fixed-section="gallery">
-                    <div class="tkai-col-header tkai-gift-gallery-header" style="border-bottom:1px solid var(--border)">
-                        <span id="tkaiGiftGalleryHeaderTitle">🎁 Gift Galerija</span>
-                        <div style="display:flex;align-items:center;gap:8px">
-                            <span id="tkaiGiftCount" style="font-size:9px;color:var(--text3)"></span>
-                            <button id="tkaiGiftToggle" class="tkai-gen-btn"
-                                style="font-size:10px;padding:2px 6px">Sakrij</button>
-                        </div>
-                    </div>
-                    <div class="tkai-gift-gallery" id="tkaiGiftGallery">
-                        <div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>
-                    </div>
-                </div>
                 <div class="tkai-feed-section listen-feed tkai-listen-under-chat" id="tkaiSlusanjeSection" style="display:none">
                     <div class="tkai-subheader">
                         <span>Listen Feed <span id="tkaiWhisperLangBadge"
@@ -5830,6 +5867,19 @@
                                     Settings → AI Live Chat → 🎙️ WhisperLive</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+                <div class="tkai-gift-gallery-section" id="tkaiGiftGallerySection">
+                    <div class="tkai-col-header tkai-gift-gallery-header" style="border-bottom:1px solid var(--border)">
+                        <span id="tkaiGiftGalleryHeaderTitle">🎁 Gift Galerija</span>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <span id="tkaiGiftCount" style="font-size:9px;color:var(--text3)"></span>
+                            <button id="tkaiGiftToggle" class="tkai-gen-btn"
+                                style="font-size:10px;padding:2px 6px">Sakrij</button>
+                        </div>
+                    </div>
+                    <div class="tkai-gift-gallery" id="tkaiGiftGallery">
+                        <div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>
                     </div>
                 </div>
                 <div class="tkai-stats-strip" id="tkaiStatsStrip">
@@ -6031,6 +6081,9 @@
                                 <button class="tkai-insights-btn active" id="tkaiSpikeAll" type="button">All</button>
                                 <button class="tkai-insights-btn" id="tkaiSpikeViewers" type="button">Viewers</button>
                                 <button class="tkai-insights-btn" id="tkaiSpikeGifts" type="button">Gifts</button>
+                                <button class="tkai-insights-btn" id="tkaiSpikeJoin" type="button">Join</button>
+                                <button class="tkai-insights-btn" id="tkaiSpikeShare" type="button">Share</button>
+                                <button class="tkai-insights-btn" id="tkaiSpikeChat" type="button">Chat</button>
                             </div>
                         </div>
                         <ul class="tkai-insights-list" id="tkaiSpikeList">
