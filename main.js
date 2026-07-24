@@ -54,7 +54,9 @@ if (forceDisableGpu) {
 
 if (process.platform !== "darwin") {
   app.commandLine.appendSwitch("no-sandbox");
-  app.commandLine.appendSwitch("disable-dev-shm-usage");
+  // Desktop Chromium is faster when it can use shared memory. Keep this
+  // workaround only for CI/headless containers where /dev/shm is tiny.
+  if (isCI || isHeadless) app.commandLine.appendSwitch("disable-dev-shm-usage");
 
   // Disable GPU only in CI/headless environments — on desktop keep GPU enabled for performance
   if (isCI || isHeadless || forceDisableGpu) {
@@ -125,10 +127,18 @@ function isAuthDeepLinkProtocol(protocol) {
   ].includes(String(protocol || "").toLowerCase());
 }
 
-// Google OAuth desktop client. Client IDs are public identifiers for installed
-// apps; no client secret or Google password is stored in EtherX.
-const GOOGLE_OAUTH_CLIENT_ID = "1040916328983-qkm8qiqao1sia5m965lh1re2076ab6af.apps.googleusercontent.com";
+// Google OAuth is configurable locally so packaged Windows builds can use the
+// application's own Desktop OAuth client instead of a web-client fallback.
+const GOOGLE_OAUTH_DEFAULT_CLIENT_ID = "1040916328983-qkm8qiqao1sia5m965lh1re2076ab6af.apps.googleusercontent.com";
 let activeGoogleOAuthLogin = null;
+
+function getGoogleOAuthConfig() {
+  const local = typeof _readEnvLocalMap === "function" ? _readEnvLocalMap() : {};
+  return {
+    clientId: String(process.env.ETHERX_GOOGLE_OAUTH_CLIENT_ID || local.ETHERX_GOOGLE_OAUTH_CLIENT_ID || GOOGLE_OAUTH_DEFAULT_CLIENT_ID).trim(),
+    clientSecret: String(process.env.ETHERX_GOOGLE_OAUTH_CLIENT_SECRET || local.ETHERX_GOOGLE_OAUTH_CLIENT_SECRET || "").trim(),
+  };
+}
 
 function makeGoogleOAuthVerifier() {
   return crypto.randomBytes(48).toString("base64url");
@@ -140,6 +150,10 @@ function googleOAuthChallenge(verifier) {
 
 async function startGoogleOAuthLogin() {
   if (activeGoogleOAuthLogin) return activeGoogleOAuthLogin;
+  const googleOAuth = getGoogleOAuthConfig();
+  if (!googleOAuth.clientId) {
+    return { ok: false, error: "Google OAuth client ID nije konfiguriran." };
+  }
 
   activeGoogleOAuthLogin = new Promise((resolve) => {
     const state = crypto.randomBytes(24).toString("base64url");
@@ -176,18 +190,25 @@ async function startGoogleOAuthLogin() {
         const redirectUri = `http://127.0.0.1:${server.address().port}/oauth2callback`;
         const body = new URLSearchParams({
           code,
-          client_id: GOOGLE_OAUTH_CLIENT_ID,
+          client_id: googleOAuth.clientId,
           redirect_uri: redirectUri,
           grant_type: "authorization_code",
           code_verifier: verifier,
         });
+        if (googleOAuth.clientSecret) body.set("client_secret", googleOAuth.clientSecret);
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: body.toString(),
         });
         const token = await tokenResponse.json().catch(() => ({}));
-        if (!tokenResponse.ok || !token.access_token) throw new Error(String(token?.error_description || token?.error || "Google token nije vraćen."));
+        if (!tokenResponse.ok || !token.access_token) {
+          const tokenError = String(token?.error_description || token?.error || "Google token nije vraćen.");
+          if (/client_secret is missing/i.test(tokenError)) {
+            throw new Error("Google OAuth client je postavljen kao Web application. U .env.local postavi ETHERX_GOOGLE_OAUTH_CLIENT_ID za Desktop client (preporučeno), ili dodaj ETHERX_GOOGLE_OAUTH_CLIENT_SECRET za svoj Web client.");
+          }
+          throw new Error(tokenError);
+        }
         const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
           headers: { Authorization: `Bearer ${token.access_token}` },
         });
@@ -212,7 +233,7 @@ async function startGoogleOAuthLogin() {
       const redirectUri = `http://127.0.0.1:${server.address().port}/oauth2callback`;
       const authorizationUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authorizationUrl.search = new URLSearchParams({
-        client_id: GOOGLE_OAUTH_CLIENT_ID,
+        client_id: googleOAuth.clientId,
         redirect_uri: redirectUri,
         response_type: "code",
         scope: "openid email profile",
@@ -617,8 +638,8 @@ function _writeEnvLocalFile(filePath, map) {
   fs.writeFileSync(filePath, lines.join("\n"), "utf8");
 }
 
-function _ensureRuntimeEnvLocals() {
-  if (_envBootstrapDone) return;
+function _ensureRuntimeEnvLocals(force = false) {
+  if (_envBootstrapDone && !force) return;
   _envBootstrapDone = true;
 
   const defaults = {
@@ -700,17 +721,25 @@ function _saveRuntimeLicenseConfig({ apiKey = "", apiUrl = "", validHashes = "" 
     patch.ETHERX_TKAI_VALID_HASHES = String(validHashes || "").trim();
   }
 
+  const writeErrors = [];
+  let written = 0;
   targets.forEach((target) => {
     try {
       const cur = _readEnvLocalFile(target);
       const next = { ...cur, ...patch };
       _writeEnvLocalFile(target, next);
-    } catch (_) {
-      // ignore
+      written += 1;
+    } catch (error) {
+      writeErrors.push(`${target}: ${String(error?.message || error)}`);
     }
   });
 
-  return _getRuntimeEnvStatus();
+  return {
+    ..._getRuntimeEnvStatus(),
+    ok: written > 0,
+    written,
+    error: writeErrors.length ? writeErrors.join("; ") : "",
+  };
 }
 
 function _getRuntimeEnvStatus() {
@@ -718,7 +747,8 @@ function _getRuntimeEnvStatus() {
   const targets = _getRuntimeEnvTargetPaths();
   const files = targets.map((target) => {
     const map = _readEnvLocalFile(target);
-    const hasKey = !!String(map.ETHERX_TKAI_LICENSE_API_KEY || "").trim();
+    const apiKey = String(map.ETHERX_TKAI_LICENSE_API_KEY || "").trim();
+    const hasKey = !!apiKey;
     const hasUrl = !!String(map.ETHERX_TKAI_LICENSE_API_URL || "").trim();
     const keyLen = String(map.ETHERX_TKAI_LICENSE_API_KEY || "").trim().length;
     return {
@@ -727,6 +757,9 @@ function _getRuntimeEnvStatus() {
       hasKey,
       hasUrl,
       keyLen,
+      // The setup screen only needs confirmation that the stored key survived.
+      // Never send the full API secret back to the renderer.
+      keyPreview: hasKey ? `${"•".repeat(Math.min(12, Math.max(4, keyLen - 4)))}${apiKey.slice(-4)}` : "",
       url: String(map.ETHERX_TKAI_LICENSE_API_URL || "").trim(),
     };
   });
@@ -2254,6 +2287,18 @@ app.whenReady().then(async () => {
     console.warn("[Permissions] persist:tiktok-watcher setup failed:", e.message);
   }
 
+  // The window and its IPC bridge must not wait for extension disk I/O or two
+  // extension-session loads. Those can continue while the browser is visible.
+  if (!_ipcSetupDone) {
+    setupIPC();
+    _ipcSetupDone = true;
+  }
+  createWindow();
+
+  // Yield once so Chromium can paint the shell before optional extension work
+  // performs file copies or session initialisation on the main process.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
   // Auto-load bundled LiveOS Plugin Dashboard extension
   try {
     const bundledLiveOsPluginPath = path.join(__dirname, "liveos-plugin-extension");
@@ -2287,12 +2332,6 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Setup IPC handlers ONCE before creating any window
-  if (!_ipcSetupDone) {
-    setupIPC();
-    _ipcSetupDone = true;
-  }
-
   // 🔥 PERFORMANCE: Session warming - preconnect to popular domains
   // This loads DNS/TLS handshakes in background → instant navigation
   try {
@@ -2318,8 +2357,6 @@ app.whenReady().then(async () => {
   } catch (e) {
     console.warn("[Perf] Session warming failed:", e.message);
   }
-
-  createWindow();
 
   // Register etherx:// protocol for settings
   protocol.registerHttpProtocol("etherx", (request, callback) => {
@@ -2378,7 +2415,9 @@ function createWindow() {
     titleBarStyle: isMac ? "hiddenInset" : "hidden", // hiddenInset on macOS keeps traffic lights visible + content below
     trafficLightPosition: { x: 16, y: 16 }, // macOS: traffic lights on LEFT (like Safari)
     backgroundColor: "#1a1a2e", // deep navy/purple — matches UI theme
-    show: false, // 🔥 PERFORMANCE: Don't show until ready (prevents white flash)
+    // The background colour already prevents a white flash. Showing immediately
+    // makes the browser feel responsive while the renderer completes startup.
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -2395,35 +2434,6 @@ function createWindow() {
     },
     icon: path.join(__dirname, "src", "logo_novi.png"),
   });
-
-  // 🔥 PERFORMANCE: Show window only when ready (smooth fade-in)
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
-    // Optional: smooth fade-in effect
-    if (mainWindow.setOpacity) {
-      mainWindow.setOpacity(0);
-      let opacity = 0;
-      const fadeIn = setInterval(() => {
-        opacity += 0.1;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.setOpacity(opacity);
-        }
-        if (opacity >= 1) {
-          clearInterval(fadeIn);
-        }
-      }, 16); // 60fps
-    }
-  });
-
-  // Fallback: avoid permanent black/hidden window if ready-to-show never fires.
-  setTimeout(() => {
-    try {
-      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-        console.warn("⚠️ ready-to-show timeout — forcing window show");
-        mainWindow.show();
-      }
-    } catch (_) { }
-  }, 3500);
 
   // Save bounds on change
   const saveBounds = () => {
@@ -3271,7 +3281,9 @@ function setupIPC() {
   ipcMain.handle("license:getTkaiValidHashes", () => _getTkaiRuntimeHashes());
   ipcMain.handle("license:getRuntimeEnvStatus", () => _getRuntimeEnvStatus());
   ipcMain.handle("license:bootstrapRuntimeEnv", () => {
-    _ensureRuntimeEnvLocals();
+    // The Help wizard is an explicit repair action: run it again even if the
+    // startup bootstrap ran earlier or a user deleted an env file afterwards.
+    _ensureRuntimeEnvLocals(true);
     return _getRuntimeEnvStatus();
   });
   ipcMain.handle("license:saveTkaiApiConfig", (_e, payload = {}) =>

@@ -750,6 +750,7 @@ if (window.electronWebview) {
                 wv.executeJavaScript(`(() => {
                   if (!/(^|\\.)tiktok\\.com$/i.test(location.hostname || '') || window.__etherxTikTokPlaybackInstalled) return;
                   window.__etherxTikTokPlaybackInstalled = true;
+                  let playbackObserver = null;
                   const start = video => {
                     if (!video || video.dataset.etherxPlaybackBound) return;
                     video.dataset.etherxPlaybackBound = '1';
@@ -759,13 +760,24 @@ if (window.electronWebview) {
                     video.addEventListener('canplay', play, { once: true });
                     setTimeout(play, 350);
                     setTimeout(play, 1400);
+                    // Once the first player is bound, observing TikTok's entire
+                    // dynamic page gives no playback benefit and is expensive.
+                    playbackObserver?.disconnect();
+                    playbackObserver = null;
                   };
-                  document.querySelectorAll('video').forEach(start);
-                  new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
-                    if (node.nodeType !== 1) return;
-                    if (node.tagName === 'VIDEO') start(node);
-                    node.querySelectorAll?.('video').forEach(start);
-                  }))).observe(document.documentElement, { childList: true, subtree: true });
+                  const existing = document.querySelector('video');
+                  if (existing) { start(existing); return; }
+                  // A player can be added after TikTok's initial skeleton. Watch
+                  // only during that short startup window, then release it.
+                  playbackObserver = new MutationObserver(records => {
+                    for (const record of records) for (const node of record.addedNodes) {
+                      if (node.nodeType !== 1) continue;
+                      const video = node.tagName === 'VIDEO' ? node : node.querySelector?.('video');
+                      if (video) { start(video); return; }
+                    }
+                  });
+                  playbackObserver.observe(document.documentElement, { childList: true, subtree: true });
+                  setTimeout(() => { playbackObserver?.disconnect(); playbackObserver = null; }, 12000);
                 })()`).catch(() => { });
             } catch (_) { }
             try {
@@ -7086,7 +7098,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let recommendationsPopoutAutoCloseTimer = null;
     let listenFeedPopoutEl = null;
     let listenFeedPopoutTimer = null;
-    let dashboardLayoutLocked = DB.getSettings().tkaiDashboardLayoutLocked !== false;
+    // Dragging is enabled by default. Users can still explicitly lock it after
+    // arranging their cards, but a new layout must be usable immediately.
+    let dashboardLayoutLocked = DB.getSettings().tkaiDashboardLayoutLocked === true;
     let dashboardLayoutFolded = DB.getSettings().tkaiDashboardLayoutFolded === true;
     let lastShadowbanUserStats = [];
     let giftEchartsInstance = null;
@@ -11360,6 +11374,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         scheduleRecommendationsPopoutAutoClose();
     }
     function initRecommendationsCardDrag() {
+        // Recommendations are now part of the common dashboard grid; the old
+        // free-floating drag behaviour would override that saved grid layout.
+        if (document.getElementById('tkaiRecommendationsCard')?.closest('#tkaiInsights')) return;
         const card = document.getElementById("tkaiRecommendationsCard");
         const insightsRoot = document.getElementById("tkaiInsights");
         if (!card || !insightsRoot || card.dataset.tkaiDragInit === "1") return;
@@ -11525,18 +11542,25 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const TKAI_SESSION_LAYOUT_KEY = 'ex_tkai_session_layout_v1';
     const TKAI_FEED_LAYOUT_KEY = 'ex_tkai_feed_layout_v1';
     const TKAI_LAYOUT_SCHEMA_KEY = 'ex_tkai_layout_schema_v';
-    const TKAI_LAYOUT_SCHEMA_VERSION = '2026-07-16-tkai-order-v2';
+    const TKAI_LAYOUT_SCHEMA_VERSION = '2026-07-24-tkai-drag-enabled-v4';
     const TKAI_SESSION_COLLAPSED_PREFIX = 'ex_tkai_session_collapsed_';
 
     function migrateTkaiLayoutOrderIfNeeded() {
         if (localStorage.getItem(TKAI_LAYOUT_SCHEMA_KEY) === TKAI_LAYOUT_SCHEMA_VERSION) return;
         localStorage.removeItem(TKAI_SESSION_LAYOUT_KEY);
         localStorage.removeItem(TKAI_FEED_LAYOUT_KEY);
+        localStorage.removeItem(TKAI_DASHBOARD_MODULAR_LAYOUT_KEY);
+        localStorage.removeItem('ex_tkai_recommendations_card_pos_v1');
+        // Earlier defaults hid the handles and locked card movement, which
+        // made a freshly opened Layout appear draggable but do nothing.
+        DB.saveSetting('tkaiDashboardLayoutLocked', false);
+        DB.saveSetting('tkaiHideInlineLayoutControls', false);
+        dashboardLayoutLocked = false;
         localStorage.setItem(TKAI_LAYOUT_SCHEMA_KEY, TKAI_LAYOUT_SCHEMA_VERSION);
     }
 
     function isTkaiInlineLayoutHidden() {
-        return DB.getSettings().tkaiHideInlineLayoutControls !== false;
+        return DB.getSettings().tkaiHideInlineLayoutControls === true;
     }
 
     function syncTkaiInlineLayoutControls() {
@@ -11752,7 +11776,24 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     const TKAI_DASHBOARD_MODULAR_LAYOUT_KEY = 'ex_tkai_dashboard_modular_layout_v1';
 
+    function normalizeTkaiDashboardCards() {
+        const root = document.getElementById('tkaiInsights');
+        if (!root) return;
+        // A nested card is not a direct layout item. Give it a dedicated row so
+        // every dashboard card uses the same persisted order and size controls.
+        Array.from(root.querySelectorAll('.tkai-insights-card .tkai-insights-card')).forEach((card) => {
+            if (card.parentElement?.classList.contains('tkai-insights-row')) return;
+            const row = document.createElement('div');
+            row.className = 'tkai-insights-row triple';
+            const ownerRow = card.parentElement?.closest('.tkai-insights-row');
+            root.insertBefore(row, ownerRow?.nextSibling || null);
+            row.appendChild(card);
+            ['position', 'z-index', 'left', 'top', 'width', 'max-width', 'margin-top'].forEach((property) => card.style.removeProperty(property));
+        });
+    }
+
     function getTkaiDashboardCards() {
+        normalizeTkaiDashboardCards();
         return Array.from(document.querySelectorAll('#tkaiInsights > .tkai-insights-row > .tkai-insights-card'));
     }
 
@@ -11949,9 +11990,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     function initTkaiSessionLayout() {
         const root = document.querySelector('#tiktokAIPanel .tkai-main-wrap');
-        if (!root || root.dataset.tkaiLayoutInit === '1') return;
-        root.dataset.tkaiLayoutInit = '1';
+        if (!root) return;
         placeFixedTkaiSections(root);
+        if (root.dataset.tkaiLayoutInit === '1') return;
+        root.dataset.tkaiLayoutInit = '1';
         const orderKey = TKAI_SESSION_LAYOUT_KEY;
         const collapsedPrefix = TKAI_SESSION_COLLAPSED_PREFIX;
         const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement && !node.dataset?.tkaiFixedSection);
@@ -14759,7 +14801,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (Number.isFinite(lvl) && lvl > 0 && lvl < 500) levelHint = lvl;
               }
             }
-            const mid = el.getAttribute('data-id') || el.getAttribute('data-message-id') || el.id || '';
+            // TikTok virtualizes chat rows and can reuse an element id for a
+            // later message. Only data attributes are message identities.
+            const mid = el.getAttribute('data-message-id') || el.getAttribute('data-id') || '';
                         const messageType = isShare ? 'share' : (isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isLike ? 'like' : 'chat'))));
                         if (TKAI_PARSER_DEBUG) {
                             const likelyMention = /^\s*@/.test(text) || /(^|\s)@[a-z0-9._]{2,40}\b/i.test(text);
@@ -15048,7 +15092,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     if (lastGiftSeenTs > 0 && (nowTs - lastGiftSeenTs) <= giftDedupWindowMs) return;
                 }
 
-                const id = message.mid ? `mid:${message.mid}` : baseKey;
+                // Text-only rows have no durable TikTok message id. Keep their
+                // short dedup window, but do not suppress the same real chat
+                // message forever just because a virtualized DOM row was reused.
+                const id = message.mid ? `mid:${message.mid}` : `${baseKey}:${nowTs}`;
                 const recentKey = `${type}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
                 const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
                 if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
@@ -15089,22 +15136,28 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (!sessionStartedAt) sessionStartedAt = Date.now();
             if (added > 0) extractAndTrackQuestions(collectedMessages.slice(-added));
             const targetLang = getTranslateTargetLang();
-            if (targetLang !== 'auto' && added > 0) {
-                await translateMessagesInPlace(collectedMessages, targetLang);
+            // Never make live polling wait for a translation request. A slow
+            // provider previously held this whole scan cycle, making TikTok
+            // look as if it had stopped reading after the first batch.
+            if (targetLang !== 'auto' && incomingAddedMessages.length) {
+                void translateMessagesInPlace(incomingAddedMessages, targetLang)
+                    .then(() => renderMessages())
+                    .catch(() => { });
             }
             if (incomingAddedMessages.length) {
-                await translateIndonesianMessagesInPlace(incomingAddedMessages);
-                await translateForcedUsersInPlace(incomingAddedMessages);
+                void Promise.all([
+                    translateIndonesianMessagesInPlace(incomingAddedMessages),
+                    translateForcedUsersInPlace(incomingAddedMessages)
+                ]).then(() => renderMessages()).catch(() => { });
             }
             if (incomingCaptions.length && isCcReadEnabled()) {
-                await Promise.all(incomingCaptions.map((message) => handleIncomingCaption(message).catch(() => { })));
+                void Promise.all(incomingCaptions.map((message) => handleIncomingCaption(message).catch(() => { })));
             }
             if (incomingCaptions.length) {
-                const latestCaption = incomingCaptions[incomingCaptions.length - 1];
-                await mirrorCaptionToTikTokAiFeed(latestCaption).catch(() => { });
+                void mirrorCaptionToTikTokAiFeed(incomingCaptions[incomingCaptions.length - 1]).catch(() => { });
             }
             if (incomingChatsForCcRead.length && isCcReadEnabled()) {
-                await Promise.all(incomingChatsForCcRead.map((message) => handleIncomingChatForCcRead(message).catch(() => { })));
+                void Promise.all(incomingChatsForCcRead.map((message) => handleIncomingChatForCcRead(message).catch(() => { })));
             }
             renderMessages();
             updateSessionStatsUI();
@@ -18769,13 +18822,26 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     function loadSourceIntoPane(url, codeEl) {
         if (!codeEl) return;
         if (window.electronWebview) {
-            const wv = document.getElementById('browseFrame');
-            if (wv && typeof wv.executeJavaScript === 'function') {
+            const activeTab = getActiveTab();
+            const wv = getTabWebview(activeTab?.id || STATE.activeTabId)
+                || document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`);
+            if (wv && wv.tagName === 'WEBVIEW' && !wv.isConnected) {
+                codeEl.innerHTML = '<div style="color:#858585;padding:12px">⏳ WebView se još priključuje — čekam izvor stranice…</div>';
+                wv.addEventListener('dom-ready', () => loadSourceIntoPane(url, codeEl), { once: true });
+                return;
+            }
+            if (wv && wv.tagName === 'WEBVIEW' && typeof wv.executeJavaScript === 'function') {
                 try {
-                    wv.executeJavaScript('document.documentElement.outerHTML').then(src => {
+                    const execute = typeof window.safeExecuteJS === 'function'
+                        ? window.safeExecuteJS(wv, 'document.documentElement.outerHTML')
+                        : wv.executeJavaScript('document.documentElement.outerHTML');
+                    execute.then(src => {
                         const esc = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         codeEl.innerHTML = '<pre style="white-space:pre-wrap;color:#d4d4d4;font-size:12px;padding:12px">' + esc + '</pre>';
-                    }).catch(() => { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable in Electron mode</div>'; });
+                    }).catch((error) => {
+                        const message = String(error?.message || error || '');
+                        codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable in Electron mode' + (message ? ': ' + escHtml(message) : '') + '</div>';
+                    });
                 } catch (_) { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable</div>'; }
             } else { codeEl.innerHTML = '<div style="color:#e06c75;padding:12px">Source unavailable</div>'; }
             return;
@@ -22709,13 +22775,20 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 return;
             }
             hashInput.value = String(res.deviceId || '');
+            const storedKey = res.files.find((f) => f && f.hasKey);
+            if (keyInput) {
+                keyInput.value = '';
+                keyInput.placeholder = storedKey
+                    ? `Spremljen ključ: ${storedKey.keyPreview || '••••'} (upiši novi samo za promjenu)`
+                    : 'Upiši TKAI API key';
+            }
             const lines = [];
             lines.push('Device hash: ' + (res.deviceId || 'n/a'));
             lines.push('');
             res.files.forEach((f) => {
                 const ok = f.hasKey && f.hasUrl;
                 lines.push((ok ? '✅ ' : '⚠️ ') + f.path);
-                lines.push('  key: ' + (f.hasKey ? ('set (' + (f.keyLen || 0) + ')') : 'missing'));
+                lines.push('  key: ' + (f.hasKey ? ('set ' + (f.keyPreview || '••••') + ' (' + (f.keyLen || 0) + ')') : 'missing'));
                 lines.push('  url: ' + (f.hasUrl ? (f.url || 'set') : 'missing'));
             });
             statusEl.textContent = lines.join('\n');
@@ -22723,6 +22796,9 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         async function refreshStatus() {
             try {
+                if (typeof window.etherx?.license?.getRuntimeEnvStatus !== 'function') {
+                    throw new Error('License setup je dostupan samo u desktop EtherX aplikaciji.');
+                }
                 const res = await window.etherx?.license?.getRuntimeEnvStatus?.();
                 renderStatus(res);
             } catch (e) {
@@ -22734,6 +22810,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         btnBootstrap?.addEventListener('click', async () => {
             try {
                 const res = await window.etherx?.license?.bootstrapRuntimeEnv?.();
+                if (!res?.ok) throw new Error(res?.error || 'Env datoteke nisu stvorene');
                 renderStatus(res);
                 showToast('🛠 Runtime env datoteke su pripremljene');
             } catch (e) {
@@ -22749,6 +22826,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             }
             try {
                 const res = await window.etherx?.license?.saveTkaiApiConfig?.({ apiKey, apiUrl });
+                if (!res?.ok) throw new Error(res?.error || 'Ključ nije spremljen u runtime env');
                 renderStatus(res);
                 showToast('✅ Ključ spremljen u runtime env');
                 if (keyInput) keyInput.value = '';
@@ -25183,16 +25261,23 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         const wv = getTabWebview?.(tab?.id || STATE.activeTabId)
             || document.querySelector(`webview[data-tab-id="${STATE.activeTabId}"]`)
             || document.getElementById('browseFrame');
+        const isWebview = !!wv && wv.tagName === 'WEBVIEW';
+        const isAttached = isWebview && wv.isConnected && document.documentElement.contains(wv);
         let webviewUrl = '';
-        try { webviewUrl = typeof wv?.getURL === 'function' ? wv.getURL() : ''; } catch (_) { webviewUrl = ''; }
+        // Electron throws before an element has entered the DOM. Diagnostics
+        // should report that transitional state, never fail the whole report.
+        if (isAttached) {
+            try { webviewUrl = typeof wv?.getURL === 'function' ? wv.getURL() : ''; } catch (_) { webviewUrl = ''; }
+        }
         return {
             tab,
-            webview: wv && wv.tagName === 'WEBVIEW' ? wv : null,
+            webview: isAttached ? wv : null,
             url: webviewUrl || tab?.url || '',
             title: tab?.title || '',
             partition: wv?.getAttribute?.('partition') || '',
             useragent: wv?.getAttribute?.('useragent') || '',
-            isLoading: typeof wv?.isLoading === 'function' ? !!wv.isLoading() : false,
+            isLoading: isAttached && typeof wv?.isLoading === 'function' ? !!wv.isLoading() : false,
+            attached: isAttached,
         };
     }
 
@@ -25267,6 +25352,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             partition: active.partition || '',
             useragent: active.useragent || '',
             isLoading: active.isLoading,
+            attached: active.attached,
         };
         const local = diagCountStorage(localStorage);
         const session = diagCountStorage(sessionStorage);

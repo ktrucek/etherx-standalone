@@ -95,45 +95,45 @@ try {
 } catch (_) { }
 
 try {
-    if (!navigator.userAgentData) {
-        const uaData = {
-            brands: [
-                { brand: 'Chromium', version: '135' },
-                { brand: 'Google Chrome', version: '135' },
-                { brand: 'Not.A/Brand', version: '24' }
-            ],
-            mobile: false,
-            platform: 'Windows',
-            getHighEntropyValues: async (hints = []) => {
-                const values = {
-                    architecture: 'x86',
-                    bitness: '64',
-                    formFactors: ['Desktop'],
-                    fullVersionList: [
-                        { brand: 'Chromium', version: '135.0.0.0' },
-                        { brand: 'Google Chrome', version: '135.0.0.0' },
-                        { brand: 'Not.A/Brand', version: '24.0.0.0' }
-                    ],
-                    model: '',
-                    platform: 'Windows',
-                    platformVersion: '10.0.0',
-                    uaFullVersion: '135.0.0.0',
-                    wow64: false
-                };
-                const out = {};
-                for (const key of hints) {
-                    if (Object.prototype.hasOwnProperty.call(values, key)) {
-                        out[key] = values[key];
-                    }
-                }
-                return out;
+    // Electron 39 exposes a real userAgentData on some platforms. Leaving that
+    // value intact leaks Linux while the request headers and user agent say
+    // Windows Chrome, which TikTok can reject before its first page load.
+    // Keep every exposed fingerprint value aligned with the 142 Chrome headers.
+    const uaData = {
+        brands: [
+            { brand: 'Chromium', version: '142' },
+            { brand: 'Google Chrome', version: '142' },
+            { brand: 'Not.A/Brand', version: '24' }
+        ],
+        mobile: false,
+        platform: 'Windows',
+        getHighEntropyValues: async (hints = []) => {
+            const values = {
+                architecture: 'x86',
+                bitness: '64',
+                formFactors: ['Desktop'],
+                fullVersionList: [
+                    { brand: 'Chromium', version: '142.0.0.0' },
+                    { brand: 'Google Chrome', version: '142.0.0.0' },
+                    { brand: 'Not.A/Brand', version: '24.0.0.0' }
+                ],
+                model: '',
+                platform: 'Windows',
+                platformVersion: '10.0.0',
+                uaFullVersion: '142.0.0.0',
+                wow64: false
+            };
+            const out = {};
+            for (const key of hints) {
+                if (Object.prototype.hasOwnProperty.call(values, key)) out[key] = values[key];
             }
-        };
-        Object.defineProperty(navigator, 'userAgentData', {
-            get: () => uaData,
-            configurable: true,
-        });
-    }
+            return out;
+        }
+    };
+    Object.defineProperty(navigator, 'userAgentData', {
+        get: () => uaData,
+        configurable: true,
+    });
 } catch (_) { }
 
 // ── 🔥 PERFORMANCE: Auto-inject resource hints for common CDNs ───────────────
