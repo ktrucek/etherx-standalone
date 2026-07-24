@@ -639,7 +639,7 @@ function _writeEnvLocalFile(filePath, map) {
 }
 
 function _ensureRuntimeEnvLocals(force = false) {
-  if (_envBootstrapDone && !force) return;
+  if (_envBootstrapDone && !force) return { skipped: true, written: 0, errors: [] };
   _envBootstrapDone = true;
 
   const defaults = {
@@ -670,6 +670,8 @@ function _ensureRuntimeEnvLocals(force = false) {
     // app path may be unavailable very early; static targets still cover runtime.
   }
 
+  const errors = [];
+  let written = 0;
   targets.forEach((target) => {
     try {
       const cur = _readEnvLocalFile(target);
@@ -689,10 +691,14 @@ function _ensureRuntimeEnvLocals(force = false) {
       }
 
       _writeEnvLocalFile(target, next);
-    } catch (_) {
-      // Never crash startup due to bootstrap helper.
+      written += 1;
+    } catch (error) {
+      // Do not crash startup, but return the path/error when this was an
+      // explicit Help wizard repair action.
+      errors.push(`${target}: ${String(error?.message || error)}`);
     }
   });
+  return { skipped: false, written, errors };
 }
 
 function _getRuntimeEnvTargetPaths() {
@@ -3283,8 +3289,13 @@ function setupIPC() {
   ipcMain.handle("license:bootstrapRuntimeEnv", () => {
     // The Help wizard is an explicit repair action: run it again even if the
     // startup bootstrap ran earlier or a user deleted an env file afterwards.
-    _ensureRuntimeEnvLocals(true);
-    return _getRuntimeEnvStatus();
+    const bootstrap = _ensureRuntimeEnvLocals(true);
+    return {
+      ..._getRuntimeEnvStatus(),
+      ok: bootstrap.written > 0,
+      written: bootstrap.written,
+      error: bootstrap.errors.join("; "),
+    };
   });
   ipcMain.handle("license:saveTkaiApiConfig", (_e, payload = {}) =>
     _saveRuntimeLicenseConfig({

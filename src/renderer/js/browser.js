@@ -14443,17 +14443,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           '[class*="DivComment"][class*="Item"]'
         ];
         let items = [];
+        let bestPrimaryItems = [];
         for (const sel of primarySelectors) {
           try {
             const found = document.querySelectorAll(sel);
             if (found.length > 0) {
               const foundItems = Array.from(found);
               const chatLikeFound = foundItems.filter(isLikelyChatRowElement);
-              items = chatLikeFound.length ? chatLikeFound : foundItems.filter((el) => !isViewerOrLeaderboardText(el.textContent || ''));
-              break;
+              const usable = chatLikeFound.length
+                ? chatLikeFound
+                : foundItems.filter((el) => !isViewerOrLeaderboardText(el.textContent || ''));
+              // TikTok often leaves an old/small chat container in the DOM.
+              // Do not stop at the first selector: keep the selector that sees
+              // the most real rows in the currently rendered live chat.
+              if (usable.length > bestPrimaryItems.length) bestPrimaryItems = usable;
             }
           } catch(_) {}
         }
+        items = bestPrimaryItems;
         // Deep DOM scan fallback: find container with many child divs that look like chat
         if (items.length === 0) {
           const chatContainerSelectors = [
@@ -14891,6 +14898,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     likeBurstUser: String(likeBurst?.user || TKAI_LIKE_BURST_USER || '').trim(),
                     likeBurstText: String(likeBurst?.text || '').trim(),
                     topSupporters: topSupporters,
+                    candidateCount: items.length,
                     streamOwner: streamOwner,
                     giftCatalog: giftCatalog
                 });
@@ -15034,7 +15042,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
             if (!filteredMessages.length) {
                 updateSessionStatsUI();
-                setStatus('📭 Nema novih poruka (filter)');
+                const candidateCount = Math.max(0, Number(meta?.candidateCount || 0));
+                if (candidateCount > 0) {
+                    setStatus(`📭 TikTok redovi: ${candidateCount} • izdvojeno: ${messages.length} • nakon filtera: 0`);
+                } else {
+                    setStatus('📭 TikTok nije pronašao chat redove — otvori Live chat i pričekaj poruku');
+                }
                 return 0;
             }
             const existing = new Set(collectedMessages.map(message => message.id));
@@ -22809,12 +22822,17 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         btnCheck?.addEventListener('click', refreshStatus);
         btnBootstrap?.addEventListener('click', async () => {
             try {
+                if (typeof window.etherx?.license?.bootstrapRuntimeEnv !== 'function') {
+                    throw new Error('Nedostaje desktop License bridge. Potpuno zatvori EtherX i pokreni novu verziju aplikacije.');
+                }
                 const res = await window.etherx?.license?.bootstrapRuntimeEnv?.();
                 if (!res?.ok) throw new Error(res?.error || 'Env datoteke nisu stvorene');
                 renderStatus(res);
                 showToast('🛠 Runtime env datoteke su pripremljene');
             } catch (e) {
-                showToast('❌ Bootstrap nije uspio');
+                const message = String(e?.message || e || 'nepoznata greška');
+                statusEl.textContent = '❌ Bootstrap greška:\n' + message;
+                showToast('❌ Bootstrap nije uspio: ' + message.slice(0, 90));
             }
         });
         btnSave?.addEventListener('click', async () => {
