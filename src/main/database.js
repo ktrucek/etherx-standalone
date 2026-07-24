@@ -210,6 +210,44 @@ class DatabaseManager {
     // Some users have schema_version >= 3 but an older downloads table layout.
     // In that case, add the missing column lazily instead of failing DB init.
     this._ensureDownloadsStatusColumn();
+
+    // ── Migration v4: TikTok Live Chat AI local archive ────────────────────
+    if (currentVersion < 4) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS tiktok_live_users (
+          username TEXT PRIMARY KEY,
+          data_json TEXT NOT NULL DEFAULT '{}',
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE TABLE IF NOT EXISTS tiktok_live_events (
+          id TEXT PRIMARY KEY,
+          session_key TEXT DEFAULT '',
+          username TEXT NOT NULL DEFAULT '',
+          event_type TEXT NOT NULL DEFAULT 'chat',
+          event_at INTEGER NOT NULL,
+          text TEXT DEFAULT '',
+          gift_name TEXT DEFAULT '',
+          quantity INTEGER DEFAULT 0,
+          coins INTEGER DEFAULT 0,
+          payload_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_tiktok_events_user_time ON tiktok_live_events(username, event_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_tiktok_events_session_time ON tiktok_live_events(session_key, event_at ASC);
+        CREATE TABLE IF NOT EXISTS tiktok_live_sessions (
+          id TEXT PRIMARY KEY,
+          saved_at INTEGER NOT NULL,
+          label TEXT DEFAULT '',
+          payload_json TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE TABLE IF NOT EXISTS tiktok_live_stats (
+          id TEXT PRIMARY KEY,
+          saved_at INTEGER NOT NULL,
+          label TEXT DEFAULT '',
+          payload_json TEXT NOT NULL DEFAULT '{}'
+        );
+        INSERT OR REPLACE INTO schema_version (version) VALUES (4);
+      `);
+    }
   }
 
   _ensureDownloadsStatusColumn() {
@@ -611,6 +649,72 @@ class DatabaseManager {
     return this.db.prepare(
       'SELECT * FROM history ORDER BY visit_count DESC, last_visited DESC LIMIT ?'
     ).all(limit);
+  }
+
+  // ─── TikTok Live Chat AI (local SQLite archive) ──────────────────────────
+
+  installTikTokLiveStorage() {
+    // v4 migration creates the schema; this setting marks it enabled for the UI.
+    this.saveSettings({ tkai_sqlite_enabled: 'true' });
+    return { ok: true, dbPath: this.dbPath };
+  }
+
+  importTikTokLiveData({ users = {}, sessions = [], stats = [] } = {}) {
+    const upsertUser = this.db.prepare(`
+      INSERT INTO tiktok_live_users (username, data_json, updated_at) VALUES (?, ?, strftime('%s','now'))
+      ON CONFLICT(username) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at
+    `);
+    const upsertEvent = this.db.prepare(`
+      INSERT INTO tiktok_live_events (id, session_key, username, event_type, event_at, text, gift_name, quantity, coins, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json
+    `);
+    const upsertSession = this.db.prepare(`
+      INSERT INTO tiktok_live_sessions (id, saved_at, label, payload_json) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET saved_at = excluded.saved_at, label = excluded.label, payload_json = excluded.payload_json
+    `);
+    const upsertStats = this.db.prepare(`
+      INSERT INTO tiktok_live_stats (id, saved_at, label, payload_json) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET saved_at = excluded.saved_at, label = excluded.label, payload_json = excluded.payload_json
+    `);
+    let userCount = 0, eventCount = 0, sessionCount = 0, statsCount = 0;
+    const tx = this.db.transaction(() => {
+      Object.entries(users && typeof users === 'object' ? users : {}).forEach(([key, value]) => {
+        const user = String(value?.user || key || '').replace(/^@+/, '').trim().toLowerCase();
+        if (!user) return;
+        upsertUser.run(user, JSON.stringify(value || {}));
+        userCount++;
+        (Array.isArray(value?.events) ? value.events : []).forEach((event, index) => {
+          const at = Number(event?.ts || event?.timestamp || Date.now()) || Date.now();
+          const id = String(event?.id || `${user}:${at}:${index}`);
+          upsertEvent.run(id, String(event?.sessionKey || ''), user, String(event?.type || 'chat'), at, String(event?.text || '').slice(0, 500), String(event?.giftName || '').slice(0, 120), Number(event?.quantity || 0) || 0, Number(event?.coins || 0) || 0, JSON.stringify(event || {}));
+          eventCount++;
+        });
+      });
+      (Array.isArray(sessions) ? sessions : []).forEach((row, index) => {
+        const savedAt = Number(row?.savedAt || row?.updatedAt || Date.now()) || Date.now();
+        upsertSession.run(String(row?.id || `session:${savedAt}:${index}`), savedAt, String(row?.label || row?.name || ''), JSON.stringify(row || {}));
+        sessionCount++;
+      });
+      (Array.isArray(stats) ? stats : []).forEach((row, index) => {
+        const savedAt = Number(new Date(row?.savedAt || Date.now()).getTime()) || Date.now();
+        upsertStats.run(String(row?.id || `stats:${savedAt}:${index}`), savedAt, String(row?.label || ''), JSON.stringify(row || {}));
+        statsCount++;
+      });
+    });
+    tx();
+    return { ok: true, users: userCount, events: eventCount, sessions: sessionCount, stats: statsCount, dbPath: this.dbPath };
+  }
+
+  getTikTokLiveData() {
+    const users = {};
+    this.db.prepare('SELECT username, data_json FROM tiktok_live_users').all().forEach((row) => {
+      try { users[row.username] = JSON.parse(row.data_json); } catch (_) { }
+    });
+    const parseRows = (table, limit) => this.db.prepare(`SELECT payload_json FROM ${table} ORDER BY saved_at DESC LIMIT ?`).all(limit).map((row) => {
+      try { return JSON.parse(row.payload_json); } catch (_) { return null; }
+    }).filter(Boolean).reverse();
+    return { ok: true, users, sessions: parseRows('tiktok_live_sessions', 500), stats: parseRows('tiktok_live_stats', 500), dbPath: this.dbPath };
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────

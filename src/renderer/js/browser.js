@@ -1907,6 +1907,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     document.getElementById('btnTkaiOpenUserDB2')?.addEventListener('click', () => {
         showTkaiUserDBModal(null);
     });
+    document.getElementById('btnInstallTkaiSqlite')?.addEventListener('click', installTkaiSqliteStorage);
+    setTimeout(refreshTkaiSqliteStatus, 0);
     const openLiveDashboardSafely = () => {
         const openFn = (typeof openLiveDashboardPopout === 'function')
             ? openLiveDashboardPopout
@@ -2605,6 +2607,55 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     }
 
     const TKAI_STATS_STORAGE_KEY = 'ex_tkai_stats_storage';
+    let tkaiSqliteSyncTimer = null;
+    let tkaiSqliteSyncInFlight = false;
+    function getTkaiSqlitePayload() {
+        let users = {}, sessions = [], stats = [];
+        try { users = JSON.parse(localStorage.getItem('tkai_live_users') || '{}'); } catch (_) { }
+        try { sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]'); } catch (_) { }
+        try { stats = JSON.parse(localStorage.getItem(TKAI_STATS_STORAGE_KEY) || '[]'); } catch (_) { }
+        return { users, sessions, stats };
+    }
+    function queueTkaiSqliteSync() {
+        if (DB.getSettings()?.tkaiSqliteEnabled !== true || !window.etherx?.tiktokLive?.import) return;
+        clearTimeout(tkaiSqliteSyncTimer);
+        tkaiSqliteSyncTimer = setTimeout(async () => {
+            if (tkaiSqliteSyncInFlight) return;
+            tkaiSqliteSyncInFlight = true;
+            try { await window.etherx.tiktokLive.import(getTkaiSqlitePayload()); } catch (_) { }
+            finally { tkaiSqliteSyncInFlight = false; }
+        }, 900);
+    }
+    async function installTkaiSqliteStorage() {
+        const button = document.getElementById('btnInstallTkaiSqlite');
+        const status = document.getElementById('tkaiSqliteStatus');
+        if (!window.etherx?.tiktokLive?.install || !window.etherx?.tiktokLive?.import) {
+            if (status) status.textContent = '⚠️ SQLite je dostupan samo u instaliranoj EtherX aplikaciji.';
+            return;
+        }
+        if (button) { button.disabled = true; button.textContent = '⏳ Instaliram…'; }
+        if (status) status.textContent = 'Pripremam lokalnu bazu i prebacujem postojeće podatke…';
+        try {
+            const installed = await window.etherx.tiktokLive.install();
+            const result = await window.etherx.tiktokLive.import(getTkaiSqlitePayload());
+            DB.saveSetting('tkaiSqliteEnabled', true);
+            if (status) status.textContent = `✅ Aktivno lokalno: ${result.users || 0} korisnika, ${result.events || 0} događaja, ${result.sessions || 0} sesija. ${installed.dbPath ? 'Baza je na ovom računalu.' : ''}`;
+            if (button) { button.textContent = '✅ Lokalna baza aktivna'; button.disabled = false; }
+            showToast('🗃️ TikTok Live SQLite baza je instalirana lokalno');
+        } catch (error) {
+            if (status) status.textContent = '⚠️ Instalacija nije uspjela: ' + String(error?.message || error);
+            if (button) { button.textContent = '↻ Pokušaj ponovno'; button.disabled = false; }
+        }
+    }
+    function refreshTkaiSqliteStatus() {
+        const button = document.getElementById('btnInstallTkaiSqlite');
+        const status = document.getElementById('tkaiSqliteStatus');
+        if (!button || !status) return;
+        if (DB.getSettings()?.tkaiSqliteEnabled === true) {
+            button.textContent = '✅ Lokalna baza aktivna';
+            status.textContent = '✅ TikTok Live podaci se čuvaju lokalno u SQLite bazi na ovom računalu.';
+        }
+    }
     function getTkaiStatsStorage() {
         try {
             const list = JSON.parse(localStorage.getItem(TKAI_STATS_STORAGE_KEY) || '[]');
@@ -2616,6 +2667,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function saveTkaiStatsStorage(list) {
         try {
             localStorage.setItem(TKAI_STATS_STORAGE_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+            queueTkaiSqliteSync();
         } catch (_) { }
     }
     function saveTkaiStatsSnapshot(session, label = '') {
@@ -8214,7 +8266,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         try { return JSON.parse(localStorage.getItem('tkai_live_users') || '{}'); } catch (_) { return {}; }
     }
     function saveTkaiUserDB(db) {
-        try { localStorage.setItem('tkai_live_users', JSON.stringify(db)); } catch (_) { }
+        try {
+            localStorage.setItem('tkai_live_users', JSON.stringify(db));
+            queueTkaiSqliteSync();
+        } catch (_) { }
     }
     function normalizeTkaiUserDbKey(user) {
         return String(user || '').trim().replace(/^@+/, '').toLowerCase();

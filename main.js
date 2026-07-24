@@ -4460,6 +4460,17 @@ function setupIPC() {
     db ? db.deleteSession(id) : noDb(),
   );
 
+  // ── TikTok Live Chat AI local SQLite archive ─────────────────────────────
+  ipcMain.handle("db:installTikTokLiveStorage", () =>
+    db ? db.installTikTokLiveStorage() : noDb(),
+  );
+  ipcMain.handle("db:importTikTokLiveData", (_e, data) =>
+    db ? db.importTikTokLiveData(data) : noDb(),
+  );
+  ipcMain.handle("db:getTikTokLiveData", () =>
+    db ? db.getTikTokLiveData() : noDb(),
+  );
+
   // ── Notes (SQLite) ─────────────────────────────────────────────────────────
   ipcMain.handle("db:addNote", (_e, data) => (db ? db.addNote(data) : noDb()));
   ipcMain.handle("db:getNotes", () => (db ? db.getNotes() : []));

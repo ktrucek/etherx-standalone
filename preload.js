@@ -42,6 +42,13 @@ contextBridge.exposeInMainWorld('etherx', {
     delete: (id) => ipcRenderer.invoke('db:deleteSession', id),
   },
 
+  // ── TikTok Live Chat AI local SQLite archive ───────────────────────────────
+  tiktokLive: {
+    install: () => ipcRenderer.invoke('db:installTikTokLiveStorage'),
+    import: (data) => ipcRenderer.invoke('db:importTikTokLiveData', data),
+    get: () => ipcRenderer.invoke('db:getTikTokLiveData'),
+  },
+
   // ── Downloads ───────────────────────────────────────────────────────────────
   downloads: {
     add: (data) => ipcRenderer.invoke('db:addDownload', data),
