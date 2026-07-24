@@ -6806,6 +6806,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let sentimentAqiEchartsInstance = null;
     let viewerTrendEchartsInstance = null;
     let echartsResizeBound = false;
+    let echartsResizeObserver = null;
     try {
         const eventDefaultsMigrationKey = 'ex_tkai_event_defaults_v2';
         if (localStorage.getItem(eventDefaultsMigrationKey) !== '1') {
@@ -9926,6 +9927,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         giftEchartsInstance = getChart(giftEchartsEl, giftEchartsInstance);
         sentimentAqiEchartsInstance = getChart(sentimentAqiChartEl, sentimentAqiEchartsInstance);
         viewerTrendEchartsInstance = getChart(viewerTrendEchartsEl, viewerTrendEchartsInstance);
+        if (!echartsResizeObserver && window.ResizeObserver) {
+            echartsResizeObserver = new ResizeObserver(() => {
+                giftEchartsInstance?.resize();
+                sentimentAqiEchartsInstance?.resize();
+                viewerTrendEchartsInstance?.resize();
+            });
+            [giftEchartsEl, sentimentAqiChartEl, viewerTrendEchartsEl].filter(Boolean).forEach((el) => echartsResizeObserver.observe(el));
+        }
 
         const giftRows = Array.isArray(insights?.giftDetails?.topGiftTypes)
             ? insights.giftDetails.topGiftTypes.slice(0, 50)
@@ -10859,6 +10868,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (card.dataset.tkaiCardInit === '1') return;
             const title = card.querySelector(':scope > .tkai-insights-title');
             if (!title) return;
+            if (card.querySelector('#tkaiEngagementArea, #tkaiSentimentTrend, #tkaiPieChart, #tkaiGiftEcharts, #tkaiSentimentAqiChart, #tkaiViewerTrendEcharts')) {
+                card.classList.add('tkai-resizable-chart-card');
+            }
             const head = document.createElement('div');
             head.className = 'tkai-card-head';
             card.insertBefore(head, title);

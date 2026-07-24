@@ -5454,7 +5454,32 @@ body.tkai-panel-interacting * {
 }
 
 #tkaiSentimentLabCard {
-  min-height: 220px;
+  min-height: 330px;
+}
+
+/* Graf kartice korisnik može ručno rastegnuti iz donjeg desnog kuta. */
+.tkai-resizable-chart-card {
+  resize: both;
+  overflow: auto;
+  min-width: 280px;
+  min-height: 230px;
+  max-width: 100%;
+}
+
+#tkaiDashUsersRow {
+  display: block;
+  width: 100%;
+}
+
+#tkaiTopUsersCard {
+  width: 100%;
+  min-width: 100%;
+  min-height: 340px;
+}
+
+#tkaiTopUsersCard > div[style*="max-height"] {
+  max-height: min(58vh, 620px) !important;
+  min-height: 260px;
 }
 
 .tkai-insights-row > .tkai-insights-card:only-child {
@@ -5608,10 +5633,12 @@ body.tkai-panel-interacting * {
 }
 
 .tkai-sentiment-bars {
-  display: block;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
   width: 100%;
   max-width: 520px;
-  height: 64px;
+  height: 210px;
   border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 8px;
   background: linear-gradient(
@@ -5626,7 +5653,7 @@ body.tkai-panel-interacting * {
 .tkai-sentiment-wave {
   width: 100%;
   max-width: 520px;
-  height: 64px;
+  height: 150px;
   border: 1px solid rgba(94, 234, 212, 0.24);
   border-radius: 8px;
   background: linear-gradient(
@@ -5686,8 +5713,9 @@ body.tkai-panel-interacting * {
 
 .tkai-sentiment-bar {
   flex: 1;
+  height: 100%;
   border-radius: 3px;
-  min-height: 3px;
+  min-height: 12px;
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
   display: flex;
