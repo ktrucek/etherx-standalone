@@ -107,7 +107,7 @@
   },
   "dependencies": {
     "@cliqz/adblocker-electron": "^1.26.8",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "crypto-js": "^4.2.0",
