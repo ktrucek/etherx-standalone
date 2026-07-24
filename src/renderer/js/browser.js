@@ -10965,7 +10965,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function getTkaiSessionSections() {
         const root = getTkaiSessionLayoutRoot();
         if (!root) return [];
-        return Array.from(root.children).filter((node) => node instanceof HTMLElement);
+        return Array.from(root.children).filter((node) => node instanceof HTMLElement && !node.dataset?.tkaiFixedSection);
+    }
+
+    function placeFixedTkaiSections(root) {
+        const gallery = root?.querySelector(':scope > #tkaiGiftGallerySection[data-tkai-fixed-section]');
+        const main = root?.querySelector(':scope > .tkai-main');
+        if (gallery && main && main.nextElementSibling !== gallery) root.insertBefore(gallery, main.nextSibling);
     }
 
     function applyTkaiLayoutOrder(root, sections, order) {
@@ -11171,9 +11177,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const root = document.querySelector('#tiktokAIPanel .tkai-main-wrap');
         if (!root || root.dataset.tkaiLayoutInit === '1') return;
         root.dataset.tkaiLayoutInit = '1';
+        placeFixedTkaiSections(root);
         const orderKey = TKAI_SESSION_LAYOUT_KEY;
         const collapsedPrefix = TKAI_SESSION_COLLAPSED_PREFIX;
-        const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement);
+        const sections = Array.from(root.children).filter((node) => node instanceof HTMLElement && !node.dataset?.tkaiFixedSection);
         const originalOrder = [];
         let draggedSection = null;
         let dragArmed = false;
@@ -11252,6 +11259,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
         };
         try { applyOrder(JSON.parse(localStorage.getItem(orderKey) || '[]')); } catch (_) { }
+        placeFixedTkaiSections(root);
 
         const syncLockState = () => {
             root.classList.toggle('tkai-layout-locked', dashboardLayoutLocked);
