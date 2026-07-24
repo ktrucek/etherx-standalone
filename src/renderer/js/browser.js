@@ -3919,16 +3919,29 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             await new Promise((resolve, reject) => {
                 let settled = false;
                 const cacheWs = new WebSocket(wsUrl);
+                const cacheTimeoutMs = 15 * 60 * 1000;
+                const startedAt = Date.now();
+                const showLoadingStatus = () => {
+                    if (!statusEl) return;
+                    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+                    const elapsed = elapsedSeconds >= 60
+                        ? Math.floor(elapsedSeconds / 60) + ' min ' + (elapsedSeconds % 60) + ' s'
+                        : elapsedSeconds + ' s';
+                    statusEl.textContent = 'model cache: učitavam/preuzimam ' + cfg.model + '... (' + elapsed + ', maksimalno 15 min)';
+                    statusEl.style.color = '#fbbf24';
+                };
                 const done = (ok, value) => {
                     if (settled) return;
                     settled = true;
                     clearTimeout(timer);
+                    clearInterval(progressTimer);
                     try { cacheWs.close(); } catch (_) { }
                     ok ? resolve(value) : reject(value);
                 };
                 const timer = setTimeout(() => {
-                    done(false, new Error('Timeout cacheiranja modela (90s). Server možda još preuzima veliki model.'));
-                }, 90000);
+                    done(false, new Error('Cacheiranje modela nije potvrđeno unutar 15 min. Provjeri WhisperLive server i internetsku vezu.'));
+                }, cacheTimeoutMs);
+                const progressTimer = setInterval(showLoadingStatus, 15000);
                 cacheWs.onopen = () => {
                     const config = {
                         uid: 'cache-' + Math.random().toString(36).slice(2) + Date.now().toString(36),
@@ -3937,7 +3950,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                         model: cfg.model,
                         use_vad: cfg.vad,
                         max_clients: 4,
-                        max_connection_time: 120,
+                        max_connection_time: 900,
                         word_timestamps: false,
                         hotwords: cfg.hotwords || null,
                         initial_prompt: cfg.initialPrompt || null,
@@ -3945,10 +3958,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                         max_speakers: cfg.maxSpeakers,
                     };
                     cacheWs.send(JSON.stringify(config));
-                    if (statusEl) {
-                        statusEl.textContent = 'model cache: učitavam/preuzimam ' + cfg.model + '...';
-                        statusEl.style.color = '#fbbf24';
-                    }
+                    showLoadingStatus();
                 };
                 cacheWs.onmessage = (event) => {
                     let data = null;
