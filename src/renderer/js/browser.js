@@ -748,9 +748,10 @@ if (window.electronWebview) {
             })()`);
             } catch (_) { }
             // ── TikTok Live event bridge ─────────────────────────────────────
-            // Observe only DOM additions and notify the renderer in short batches.
-            // Parsing remains in EtherX, so the page's video/network path is never touched.
-            try {
+            // This high-frequency observer is opt-in. TikTok mutates a large DOM
+            // while a video is loading; polling is the stable default and avoids
+            // competing with the media player on every page mutation.
+            if (DB.getSettings().tkaiEventObserverEnabled === true) try {
                 await wv.executeJavaScript(`(() => {
                     if (window.__etherxTikTokLiveObserverInstalled) return true;
                     window.__etherxTikTokLiveObserverInstalled = true;
@@ -1400,6 +1401,8 @@ const SENSITIVE_SETTING_KEYS = new Set([
     'groq_api_key',
     'localAiApiKey',
     'local_ai_api_key',
+    'translateAiApiKey',
+    'tkaiGuardianApiKey',
     'giteaUpdateToken',
     'githubUpdateToken'
 ]);
@@ -1426,10 +1429,8 @@ function writePublicSettingsSnapshot(settings) {
 async function persistSensitiveSettings(settings) {
     if (!window.etherx?.secrets) return;
     const { secretSettings } = splitSensitiveSettingsObject(settings);
-    const keysToDelete = Array.from(SENSITIVE_SETTING_KEYS).filter((key) => !(key in (settings || {})));
-    if (keysToDelete.length && window.etherx.secrets.deleteSettings) {
-        await window.etherx.secrets.deleteSettings(keysToDelete).catch(() => { });
-    }
+    // The renderer hydrates settings asynchronously.  Missing values here only
+    // mean "not loaded yet", never "delete this saved credential".
     if (Object.keys(secretSettings).length && window.etherx.secrets.saveSettings) {
         await window.etherx.secrets.saveSettings(secretSettings).catch(() => { });
     }
@@ -2515,6 +2516,18 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             .sort((a, b) => b.coins - a.coins || b.quantity - a.quantity || b.events - a.events)
             .slice(0, 80);
         const coinsTotal = derivedCoinsTotal > 0 ? derivedCoinsTotal : sessionCoinsTotal;
+        const listening = sorted
+            .filter((message) => (typeof normalizeTkaiMessageType === 'function' ? normalizeTkaiMessageType(message) : String(message?.type || '')) === 'listening')
+            .map((message) => ({
+                text: String(message?.text || '').trim(),
+                originalText: String(message?.originalText || '').trim(),
+                translatedText: String(message?.translatedText || '').trim(),
+                translatedLang: String(message?.translatedLang || '').trim(),
+                task: String(message?.task || 'transcribe').trim(),
+                source: String(message?.source || 'WhisperLive').trim(),
+                ts: normalizeTs(message) || nowTs
+            }))
+            .filter((message) => message.text);
         return {
             messages: sorted,
             typeCounts,
@@ -2532,7 +2545,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             peakViewers,
             timeline,
             songs,
-            songPerformance
+            songPerformance,
+            listening
         };
     }
     function renderTkaiSessionTimelineSvg(timeline) {
@@ -2761,7 +2775,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             answers: analytics.answers,
             timeline: analytics.timeline,
             songs: analytics.songs,
-            songPerformance: analytics.songPerformance
+            songPerformance: analytics.songPerformance,
+            listening: analytics.listening
         });
         const buildCsvText = () => {
             const esc = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -2794,6 +2809,11 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 lines.push(['share_events', event.user, event.text || '', new Date(Number(event.ts || Date.now())).toISOString()].map(esc).join(','));
             });
             lines.push(['', '', ''].map(esc).join(','));
+            lines.push(['whisper_live', 'text', 'original_text', 'translation', 'language', 'task', 'timestamp'].map(esc).join(','));
+            (analytics.listening || []).forEach((message) => {
+                lines.push(['whisper_live', message.text, message.originalText || '', message.translatedText || '', message.translatedLang || '', message.task || '', new Date(Number(message.ts || Date.now())).toISOString()].map(esc).join(','));
+            });
+            lines.push(['', '', '', '', '', '', ''].map(esc).join(','));
             lines.push(['users', 'user', 'total', 'chat', 'gifts', 'coins', 'joins'].map(esc).join(','));
             analytics.usersByMessages.forEach((u) => {
                 lines.push(['users', u.user, u.total, u.chat, u.gifts, u.coins, u.joins].map(esc).join(','));
@@ -2842,6 +2862,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             rows.push(`Join rate/min: ${analytics.joinLevelStats?.ratePerMin || 0}`);
             rows.push(`Share events: ${analytics.shareStats?.total || 0}`);
             rows.push(`Share rate/min: ${analytics.shareStats?.ratePerMin || 0}`);
+            rows.push(`WhisperLive transkripti: ${(analytics.listening || []).length}`);
             rows.push('');
             rows.push('Type counts:');
             Object.entries(analytics.typeCounts || {}).forEach(([k, v]) => rows.push(`- ${k}: ${v}`));
@@ -2854,6 +2875,11 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             rows.push('Share events:');
             (analytics.shareStats?.events || []).slice(0, 80).forEach((event, i) => {
                 rows.push(`${i + 1}. @${event.user} | ${new Date(Number(event.ts || Date.now())).toLocaleTimeString('hr-HR')} | ${event.text || ''}`);
+            });
+            rows.push('');
+            rows.push('WhisperLive transkripti:');
+            (analytics.listening || []).slice(-200).forEach((message, i) => {
+                rows.push(`${i + 1}. [${new Date(Number(message.ts || Date.now())).toLocaleTimeString('hr-HR')}] ${message.text}${message.translatedText ? ` | ${message.translatedLang || 'TR'}: ${message.translatedText}` : ''}`);
             });
             rows.push('');
             rows.push('Top users:');
@@ -2974,6 +3000,16 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const answersHtml = analytics.answers.slice(-50).reverse().map((a) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#86efac">${escHtml(a.user)}</span>: ${escHtml(a.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema system/AI odgovora u sesiji.</div>';
+        const listeningHtml = (analytics.listening || []).slice(-200).reverse().map((message) => {
+            const time = new Date(Number(message.ts || Date.now())).toLocaleTimeString('hr-HR');
+            const translation = message.translatedText
+                ? `<div style="margin-top:3px;color:#f8fafc"><span style="font-size:9px;color:#5eead4">${escHtml((message.translatedLang || 'TR').toUpperCase())}:</span> ${escHtml(message.translatedText)}</div>`
+                : '';
+            const original = message.originalText && message.originalText !== message.text
+                ? `<div style="margin-top:2px;color:#94a3b8;font-size:10px">Original: ${escHtml(message.originalText)}</div>`
+                : '';
+            return `<div style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="font-size:9px;color:#5eead4">🎙 WhisperLive · ${escHtml(time)} · ${escHtml(message.task || 'transcribe')}</div><div style="color:#e2e8f0">${escHtml(message.text)}</div>${original}${translation}</div>`;
+        }).join('') || '<div style="color:#94a3b8">Nema WhisperLive transkripata u ovoj sesiji.</div>';
         const timelineSvg = renderTkaiSessionTimelineSvg(analytics.timeline);
 
         modal.innerHTML =
@@ -2987,6 +3023,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessGifts">Gifts</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessJoinLevels">Join level</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessShares">Share events</button>`
+            + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessWhisper">WhisperLive</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessQuestions">Questions</button>`
             + `<button class="s-btn-sm tkai-sess-nav" data-target="tkaiSessSongs">Songs</button>`
             + `</div>`
@@ -3018,6 +3055,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<div id="tkaiSessGifts" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Gift breakdown</div><div style="max-height:220px;overflow:auto;font-size:11px">${giftTypesHtml}</div></div>`
             + `<div id="tkaiSessJoinLevels" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Join level</div><div style="font-size:10px;color:#cbd5e1;margin-bottom:6px">${joinBucketsHtml}</div><div style="max-height:180px;overflow:auto;font-size:11px">${joinLevelsHtml}</div></div>`
             + `<div id="tkaiSessShares" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Share events</div><div style="max-height:180px;overflow:auto;font-size:11px">${shareEventsHtml}</div></div>`
+            + `<div id="tkaiSessWhisper" style="background:rgba(20,184,166,.07);border:1px solid rgba(45,212,191,.22);border-radius:8px;padding:10px"><div style="font-size:11px;color:#99f6e4;margin-bottom:6px">WhisperLive transkripti · ${formatNum((analytics.listening || []).length)}</div><div style="max-height:260px;overflow:auto;font-size:11px">${listeningHtml}</div></div>`
             + `<div id="tkaiSessSongs" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Songs list</div><div style="max-height:180px;overflow:auto;font-size:11px">${songsHtml}</div></div>`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Song performance (engagement/sentiment)</div><div style="max-height:180px;overflow:auto;font-size:11px">${songPerfHtml}</div></div>`
             + `<div id="tkaiSessQuestions" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Pitanja iz chata</div><div style="max-height:220px;overflow:auto;font-size:11px">${questionsHtml}</div></div>`
@@ -3992,6 +4030,15 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         }
     }
 
+    async function refreshWhisperModelCacheIndex() {
+        if (!window.etherx?.app?.refreshWhisperLiveModelCache) return null;
+        try {
+            return await window.etherx.app.refreshWhisperLiveModelCache();
+        } catch (_) {
+            return null;
+        }
+    }
+
     async function ensureWhisperLiveServer() {
         const btn = document.getElementById('btnEnsureWhisperLiveServer');
         if (!window.etherx?.app?.installWhisperLive) {
@@ -4109,7 +4156,15 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 };
             });
             if (statusEl) {
-                statusEl.textContent = 'model cache: gotovo · ' + cfg.model + ' lokalno spreman na WhisperLive serveru';
+                const indexed = await refreshWhisperModelCacheIndex();
+                const count = Math.max(0, Number(indexed?.count || indexed?.entries?.length || 0));
+                const bytes = (indexed?.entries || []).reduce((sum, entry) => sum + Math.max(0, Number(entry?.fileSize || 0)), 0);
+                const size = bytes >= 1024 * 1024 * 1024
+                    ? (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+                    : bytes >= 1024 * 1024
+                        ? Math.round(bytes / (1024 * 1024)) + ' MB'
+                        : formatNum(bytes) + ' B';
+                statusEl.textContent = 'model cache: gotovo · ' + cfg.model + ' lokalno spremljen · SQLite indeks: ' + count + ' datoteka (' + size + ')';
                 statusEl.style.color = '#4ade80';
             }
             if (typeof showToast === 'function') showToast('✅ Whisper model cacheiran: ' + cfg.model);
@@ -6885,6 +6940,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const giftEchartsEl = document.getElementById('tkaiGiftEcharts');
     const sentimentAqiChartEl = document.getElementById('tkaiSentimentAqiChart');
     const viewerTrendEchartsEl = document.getElementById('tkaiViewerTrendEcharts');
+    const topGiftersEchartsEl = document.getElementById('tkaiTopGiftersEcharts');
+    const giftHeatmapEchartsEl = document.getElementById('tkaiGiftHeatmapEcharts');
+    const gifterRaceEchartsEl = document.getElementById('tkaiGifterRaceEcharts');
+    const chatGiftComboEchartsEl = document.getElementById('tkaiChatGiftComboEcharts');
+    const sentimentDonutEchartsEl = document.getElementById('tkaiSentimentDonutEcharts');
     const shareEventsListEl = document.getElementById('tkaiShareEventsList');
     const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
     const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
@@ -6910,6 +6970,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let giftEchartsInstance = null;
     let sentimentAqiEchartsInstance = null;
     let viewerTrendEchartsInstance = null;
+    let topGiftersEchartsInstance = null;
+    let giftHeatmapEchartsInstance = null;
+    let gifterRaceEchartsInstance = null;
+    let chatGiftComboEchartsInstance = null;
+    let sentimentDonutEchartsInstance = null;
     let echartsResizeBound = false;
     let echartsResizeObserver = null;
     try {
@@ -9199,6 +9264,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function stopScanning() {
         saveSessionToHistory();
         scanActive = false;
+        try { window.syncBpmDetectionWithTikTokScan?.(false); } catch (_) { }
         if (scanInterval) clearTimeout(scanInterval);
         scanInterval = null;
         if (tkaiEventScanTimer) clearTimeout(tkaiEventScanTimer);
@@ -10070,13 +10136,24 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         giftEchartsInstance = getChart(giftEchartsEl, giftEchartsInstance);
         sentimentAqiEchartsInstance = getChart(sentimentAqiChartEl, sentimentAqiEchartsInstance);
         viewerTrendEchartsInstance = getChart(viewerTrendEchartsEl, viewerTrendEchartsInstance);
+        topGiftersEchartsInstance = getChart(topGiftersEchartsEl, topGiftersEchartsInstance);
+        giftHeatmapEchartsInstance = getChart(giftHeatmapEchartsEl, giftHeatmapEchartsInstance);
+        gifterRaceEchartsInstance = getChart(gifterRaceEchartsEl, gifterRaceEchartsInstance);
+        chatGiftComboEchartsInstance = getChart(chatGiftComboEchartsEl, chatGiftComboEchartsInstance);
+        sentimentDonutEchartsInstance = getChart(sentimentDonutEchartsEl, sentimentDonutEchartsInstance);
         if (!echartsResizeObserver && window.ResizeObserver) {
             echartsResizeObserver = new ResizeObserver(() => {
                 giftEchartsInstance?.resize();
                 sentimentAqiEchartsInstance?.resize();
                 viewerTrendEchartsInstance?.resize();
+                topGiftersEchartsInstance?.resize();
+                giftHeatmapEchartsInstance?.resize();
+                gifterRaceEchartsInstance?.resize();
+                chatGiftComboEchartsInstance?.resize();
+                sentimentDonutEchartsInstance?.resize();
             });
-            [giftEchartsEl, sentimentAqiChartEl, viewerTrendEchartsEl].filter(Boolean).forEach((el) => echartsResizeObserver.observe(el));
+            [giftEchartsEl, sentimentAqiChartEl, viewerTrendEchartsEl, topGiftersEchartsEl, giftHeatmapEchartsEl, gifterRaceEchartsEl, chatGiftComboEchartsEl, sentimentDonutEchartsEl]
+                .filter(Boolean).forEach((el) => echartsResizeObserver.observe(el));
         }
 
         const giftRows = Array.isArray(insights?.giftDetails?.topGiftTypes)
@@ -10125,6 +10202,196 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             }, true);
         }
 
+        if (topGiftersEchartsInstance) {
+            const palette = ['#f97316', '#fb7185', '#f59e0b', '#a78bfa', '#22d3ee', '#34d399', '#60a5fa', '#e879f9', '#facc15', '#94a3b8'];
+            const gifters = (Array.isArray(insights?.giftDetails?.topGifters) ? insights.giftDetails.topGifters : [])
+                .slice(0, 10)
+                .sort((a, b) => Number(a.quantity || 0) - Number(b.quantity || 0) || Number(a.coins || 0) - Number(b.coins || 0));
+            topGiftersEchartsInstance.setOption({
+                animationDuration: 280,
+                backgroundColor: 'transparent',
+                grid: { left: 105, right: 72, top: 16, bottom: 22 },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (rows) => {
+                        const row = rows?.[0]?.data || {};
+                        return `<b>@${escHtml(row.user || '')}</b><br>🎁 ${formatNum(row.quantity || 0)} poklona<br>🪙 ${formatNum(row.coins || 0)} coins · ${formatNum(row.events || 0)} događaja`;
+                    }
+                },
+                xAxis: {
+                    type: 'value',
+                    minInterval: 1,
+                    axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (value) => formatNum(value) },
+                    axisLine: { lineStyle: { color: '#334155' } },
+                    splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: gifters.length ? gifters.map((row) => '@' + String(row.user || 'unknown').slice(0, 18)) : ['Nema giftova'],
+                    axisLabel: { color: '#cbd5e1', fontSize: 10, width: 92, overflow: 'truncate' },
+                    axisLine: { show: false },
+                    axisTick: { show: false }
+                },
+                series: [{
+                    name: 'Live pokloni',
+                    type: 'bar',
+                    barMaxWidth: 24,
+                    data: gifters.length ? gifters.map((row, index) => ({
+                        value: Math.max(0, Number(row.quantity || 0)),
+                        user: String(row.user || 'unknown'),
+                        quantity: Math.max(0, Number(row.quantity || 0)),
+                        coins: Math.max(0, Number(row.coins || 0)),
+                        events: Math.max(0, Number(row.events || 0)),
+                        itemStyle: { color: palette[index % palette.length], borderRadius: [0, 6, 6, 0] }
+                    })) : [{ value: 0, user: 'Nema giftova', quantity: 0, coins: 0, events: 0, itemStyle: { color: '#334155' } }],
+                    label: { show: true, position: 'right', color: '#e2e8f0', fontSize: 10, formatter: (item) => item.value ? `${formatNum(item.value)} 🎁` : '' }
+                }]
+            }, true);
+        }
+
+        // The detailed charts use the active dashboard time range, rather than only the
+        // compact snapshot used by the smaller KPI cards above.
+        const analyticsMessages = getDashboardRangeFilteredMessages()
+            .slice(-Math.max(400, Number(DB.getSettings().tkaiMsgBuffer || 400) || 400));
+        const analyticsNow = Date.now();
+        const timedMessages = analyticsMessages
+            .map((message) => ({ ...message, _chartTs: Number(message?.ts || message?._ts || analyticsNow) }))
+            .filter((message) => Number.isFinite(message._chartTs))
+            .sort((a, b) => a._chartTs - b._chartTs);
+        const timelineStart = timedMessages.length ? timedMessages[0]._chartTs : analyticsNow;
+        const minuteLabel = (ts) => new Date(ts).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' });
+        const minuteBucket = (ts) => Math.max(0, Math.floor((Number(ts || timelineStart) - timelineStart) / 60000));
+        const eventGiftRows = timedMessages
+            .filter((message) => {
+                const type = normalizeTkaiMessageType(message);
+                return type === 'gift' || type === 'subscriber';
+            })
+            .map((message) => {
+                const meta = safeResolveGiftMetaFromMessage(message) || {};
+                return {
+                    ...message,
+                    _giftName: String(message.giftName || meta.giftName || message.text || 'Nepoznati gift').trim().slice(0, 50) || 'Nepoznati gift',
+                    _giftUser: String(message.user || 'unknown').trim().replace(/^@+/, '').slice(0, 40) || 'unknown',
+                    _giftQuantity: Math.max(1, Number(message.quantity || meta.quantity || 1) || 1),
+                    _giftCoins: Math.max(0, Number(message.coins || meta.coins || parseCoinsFromText(message.text) || 0) || 0)
+                };
+            });
+        const minuteKeys = Array.from(new Set(timedMessages.map((message) => minuteBucket(message._chartTs)))).slice(-20);
+        const chartMinutes = minuteKeys.length ? minuteKeys : [0];
+        const minuteLabels = chartMinutes.map((minute) => minuteLabel(timelineStart + minute * 60000));
+
+        if (giftHeatmapEchartsInstance) {
+            const giftTotals = new Map();
+            eventGiftRows.forEach((gift) => {
+                const current = giftTotals.get(gift._giftName) || { quantity: 0, coins: 0 };
+                current.quantity += gift._giftQuantity;
+                current.coins += gift._giftCoins;
+                giftTotals.set(gift._giftName, current);
+            });
+            const heatmapGifts = Array.from(giftTotals.entries())
+                .sort((a, b) => b[1].coins - a[1].coins || b[1].quantity - a[1].quantity)
+                .slice(0, 8)
+                .map(([name]) => name)
+                .reverse();
+            const heatmapCells = new Map();
+            eventGiftRows.forEach((gift) => {
+                const x = chartMinutes.indexOf(minuteBucket(gift._chartTs));
+                const y = heatmapGifts.indexOf(gift._giftName);
+                if (x < 0 || y < 0) return;
+                const key = `${x}:${y}`;
+                const current = heatmapCells.get(key) || { quantity: 0, coins: 0 };
+                current.quantity += gift._giftQuantity;
+                current.coins += gift._giftCoins;
+                heatmapCells.set(key, current);
+            });
+            const heatmapData = Array.from(heatmapCells.entries()).map(([key, value]) => {
+                const [x, y] = key.split(':').map(Number);
+                return [x, y, value.quantity, value.coins];
+            });
+            giftHeatmapEchartsInstance.setOption({
+                animationDuration: 250,
+                backgroundColor: 'transparent',
+                grid: { left: 112, right: 24, top: 26, bottom: 62 },
+                tooltip: {
+                    position: 'top',
+                    formatter: (row) => {
+                        const value = row?.data || [];
+                        return `<b>${escHtml(heatmapGifts[value[1]] || '')}</b><br>${minuteLabels[value[0]] || ''}<br>🎁 ${formatNum(value[2] || 0)} kom · 🪙 ${formatNum(value[3] || 0)} coins`;
+                    }
+                },
+                xAxis: { type: 'category', data: minuteLabels, axisLabel: { color: '#94a3b8', fontSize: 9, rotate: 32 }, axisLine: { lineStyle: { color: '#334155' } }, axisTick: { show: false } },
+                yAxis: { type: 'category', data: heatmapGifts.length ? heatmapGifts : ['Čekam giftove…'], axisLabel: { color: '#cbd5e1', fontSize: 10, width: 98, overflow: 'truncate' }, axisLine: { show: false }, axisTick: { show: false } },
+                visualMap: { min: 0, max: Math.max(1, ...heatmapData.map((row) => Number(row[2] || 0))), calculable: true, orient: 'horizontal', left: 'center', bottom: 4, textStyle: { color: '#94a3b8', fontSize: 9 }, inRange: { color: ['#172554', '#0e7490', '#22d3ee', '#facc15', '#f97316', '#ec4899'] } },
+                series: [{ type: 'heatmap', data: heatmapData, label: { show: true, color: '#fff', fontSize: 9, formatter: (row) => row.value?.[2] ? `🎁${row.value[2]}` : '' }, itemStyle: { borderColor: '#0f172a', borderWidth: 2, borderRadius: 4 } }],
+                graphic: heatmapGifts.length ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: 'Čekam prve live giftove…', fill: '#94a3b8', fontSize: 12 } }]
+            }, true);
+        }
+
+        if (gifterRaceEchartsInstance) {
+            const userTotals = new Map();
+            eventGiftRows.forEach((gift) => userTotals.set(gift._giftUser, (userTotals.get(gift._giftUser) || 0) + Math.max(1, gift._giftCoins || gift._giftQuantity)));
+            const raceUsers = Array.from(userTotals.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([user]) => user);
+            const palette = ['#fb7185', '#f59e0b', '#22d3ee', '#a78bfa', '#34d399'];
+            const running = new Map(raceUsers.map((user) => [user, 0]));
+            const raceSeries = raceUsers.map((user, index) => {
+                const values = chartMinutes.map((minute) => {
+                    eventGiftRows.filter((gift) => gift._giftUser === user && minuteBucket(gift._chartTs) === minute)
+                        .forEach((gift) => running.set(user, Number(running.get(user) || 0) + Math.max(1, gift._giftCoins || gift._giftQuantity)));
+                    return Number(running.get(user) || 0);
+                });
+                return { name: '@' + user, type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 3, color: palette[index] }, areaStyle: { color: `${palette[index]}25` }, data: values };
+            });
+            gifterRaceEchartsInstance.setOption({
+                animationDuration: 280,
+                backgroundColor: 'transparent',
+                grid: { left: 42, right: 14, top: 44, bottom: 32 },
+                legend: { type: 'scroll', top: 4, textStyle: { color: '#cbd5e1', fontSize: 9 }, itemWidth: 11, itemHeight: 8 },
+                tooltip: { trigger: 'axis', valueFormatter: (value) => `${formatNum(value)} coin bodova` },
+                xAxis: { type: 'category', data: minuteLabels, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { lineStyle: { color: '#334155' } }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (value) => formatNum(value) }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } } },
+                series: raceSeries,
+                graphic: raceUsers.length ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: 'Utrka počinje s prvim giftom…', fill: '#94a3b8', fontSize: 11 } }]
+            }, true);
+        }
+
+        if (chatGiftComboEchartsInstance) {
+            const activity = chartMinutes.map((minute) => {
+                const messages = timedMessages.filter((message) => minuteBucket(message._chartTs) === minute);
+                const chat = messages.filter((message) => normalizeTkaiMessageType(message) === 'chat').length;
+                const gifts = eventGiftRows.filter((gift) => minuteBucket(gift._chartTs) === minute);
+                return { chat, coins: gifts.reduce((sum, gift) => sum + gift._giftCoins, 0), gifts: gifts.reduce((sum, gift) => sum + gift._giftQuantity, 0) };
+            });
+            chatGiftComboEchartsInstance.setOption({
+                animationDuration: 250,
+                backgroundColor: 'transparent',
+                grid: { left: 40, right: 42, top: 42, bottom: 32 },
+                legend: { top: 4, textStyle: { color: '#cbd5e1', fontSize: 10 }, data: ['💬 Chat', '🪙 Gift coins'] },
+                tooltip: { trigger: 'axis', formatter: (rows) => { const point = activity[rows?.[0]?.dataIndex || 0] || {}; return `<b>${rows?.[0]?.axisValueLabel || ''}</b><br>💬 ${formatNum(point.chat || 0)} poruka<br>🎁 ${formatNum(point.gifts || 0)} giftova · 🪙 ${formatNum(point.coins || 0)} coins`; } },
+                xAxis: { type: 'category', data: minuteLabels, axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { lineStyle: { color: '#334155' } }, axisTick: { show: false } },
+                yAxis: [{ type: 'value', name: 'chat', nameTextStyle: { color: '#60a5fa', fontSize: 9 }, axisLabel: { color: '#94a3b8', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } } }, { type: 'value', name: 'coins', nameTextStyle: { color: '#fbbf24', fontSize: 9 }, axisLabel: { color: '#94a3b8', fontSize: 9 }, splitLine: { show: false } }],
+                series: [{ name: '💬 Chat', type: 'bar', barMaxWidth: 24, data: activity.map((point) => point.chat), itemStyle: { color: new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#60a5fa' }, { offset: 1, color: '#2563eb' }]), borderRadius: [5, 5, 0, 0] } }, { name: '🪙 Gift coins', type: 'line', yAxisIndex: 1, smooth: true, symbol: 'circle', symbolSize: 6, data: activity.map((point) => point.coins), lineStyle: { width: 3, color: '#fbbf24' }, itemStyle: { color: '#f97316' }, areaStyle: { color: 'rgba(249,115,22,.18)' } }]
+            }, true);
+        }
+
+        if (sentimentDonutEchartsInstance) {
+            const counts = insights?.sentimentCounts || {};
+            const positive = Math.max(0, Number(counts.positive || 0));
+            const negative = Math.max(0, Number(counts.negative || 0));
+            const chatTotal = timedMessages.filter((message) => normalizeTkaiMessageType(message) === 'chat').length;
+            const neutral = Math.max(0, chatTotal - positive - negative);
+            const total = positive + negative + neutral;
+            const label = positive > negative ? 'Pozitivno' : negative > positive ? 'Negativno' : 'Neutralno';
+            sentimentDonutEchartsInstance.setOption({
+                animationDuration: 300,
+                backgroundColor: 'transparent',
+                tooltip: { trigger: 'item', formatter: (row) => `${row.marker}<b>${row.name}</b><br>${formatNum(row.value)} poruka · ${Math.round(row.percent || 0)}%` },
+                legend: { bottom: 2, textStyle: { color: '#cbd5e1', fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+                title: { text: total ? `{main|${label}}\n{sub|${formatNum(total)} poruka}` : '{main|Čekam chat}\n{sub|za sentiment}', left: 'center', top: '35%', textStyle: { rich: { main: { color: '#f8fafc', fontSize: 13, fontWeight: 700, lineHeight: 20 }, sub: { color: '#94a3b8', fontSize: 10, lineHeight: 15 } } } },
+                series: [{ type: 'pie', radius: ['54%', '75%'], center: ['50%', '47%'], avoidLabelOverlap: true, label: { show: false }, itemStyle: { borderColor: '#0f172a', borderWidth: 3, borderRadius: 8 }, data: total ? [{ name: 'Pozitivno', value: positive, itemStyle: { color: '#22c55e' } }, { name: 'Neutralno', value: neutral, itemStyle: { color: '#38bdf8' } }, { name: 'Negativno', value: negative, itemStyle: { color: '#f43f5e' } }] : [{ name: 'Čekam poruke', value: 1, itemStyle: { color: '#334155' } }] }]
+            }, true);
+        }
+
         if (sentimentAqiEchartsInstance) {
             const sourceTrend = Array.isArray(insights?.sentimentTrend) ? insights.sentimentTrend.slice(-24) : [];
             const fallbackScore = Number(insights?.sentimentCounts?.positivePct || 0) - Number(insights?.sentimentCounts?.negativePct || 0);
@@ -10165,7 +10432,23 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     barMaxWidth: 24,
                     data: scoreData.map((value) => ({
                         value,
-                        itemStyle: { color: value > 15 ? '#34d399' : value < -15 ? '#fb7185' : '#94a3b8', borderRadius: value >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4] }
+                        itemStyle: {
+                            color: value > 15
+                                ? new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#86efac' }, { offset: 1, color: '#16a34a' }])
+                                : value < -15
+                                    ? new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#fb7185' }, { offset: 1, color: '#dc2626' }])
+                                    : new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#67e8f9' }, { offset: 1, color: '#2563eb' }]),
+                            borderColor: value > 15 ? '#bbf7d0' : value < -15 ? '#fecdd3' : '#bae6fd',
+                            borderWidth: 1,
+                            borderRadius: value >= 0 ? [5, 5, 0, 0] : [0, 0, 5, 5]
+                        },
+                        label: {
+                            show: true,
+                            position: value >= 0 ? 'top' : 'bottom',
+                            color: '#e2e8f0',
+                            fontSize: 9,
+                            formatter: `${value > 0 ? '+' : ''}${value}`
+                        }
                     })),
                     markLine: { silent: true, symbol: 'none', lineStyle: { color: '#64748b', type: 'dashed' }, data: [{ yAxis: 0 }] }
                 }]
@@ -10220,13 +10503,32 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                         return `<b>${row.label || ''}</b><br>${formatNum(row.viewers || 0)} gledatelja · ${row.samples || 0} uzoraka<br>Rast ${row.rast || 0}% · Stabilno ${row.stabilno || 0}% · Pad ${row.pad || 0}%`;
                     }
                 },
-                legend: { top: 2, textStyle: { color: '#cbd5e1', fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
-                xAxis: { type: 'category', data: groups.map((group) => group.label), axisLabel: { color: '#94a3b8', fontSize: 9 }, axisLine: { lineStyle: { color: '#334155' } }, axisTick: { show: false } },
+                legend: {
+                    top: 4,
+                    textStyle: { color: '#e2e8f0', fontSize: 11, fontWeight: 600 },
+                    itemWidth: 12,
+                    itemHeight: 12,
+                    itemGap: 16,
+                    data: ['📈 Rast', '➖ Stabilno', '📉 Pad']
+                },
+                xAxis: { type: 'category', data: groups.map((group) => group.label), axisLabel: { color: '#cbd5e1', fontSize: 10, margin: 10 }, axisLine: { lineStyle: { color: '#475569' } }, axisTick: { show: false } },
                 yAxis: { type: 'value', max: 100, axisLabel: { color: '#94a3b8', fontSize: 9, formatter: '{value}%' }, splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } } },
                 series: [
-                    { name: 'Rast', type: 'bar', stack: 'trend', data: groups.map((group) => group.rast), itemStyle: { color: '#34d399' } },
-                    { name: 'Stabilno', type: 'bar', stack: 'trend', data: groups.map((group) => group.stabilno), itemStyle: { color: '#60a5fa' } },
-                    { name: 'Pad', type: 'bar', stack: 'trend', data: groups.map((group) => group.pad), itemStyle: { color: '#fb7185' } }
+                    {
+                        name: '📈 Rast', type: 'bar', stack: 'trend', barMaxWidth: 32,
+                        data: groups.map((group) => ({ value: group.rast, itemStyle: { color: new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#bbf7d0' }, { offset: 1, color: '#16a34a' }]) } })),
+                        label: { show: true, position: 'inside', color: '#ecfdf5', fontSize: 9, fontWeight: 700, formatter: (row) => Number(row.value || 0) >= 12 ? `${Math.round(row.value)}%` : '' }
+                    },
+                    {
+                        name: '➖ Stabilno', type: 'bar', stack: 'trend', barMaxWidth: 32,
+                        data: groups.map((group) => ({ value: group.stabilno, itemStyle: { color: new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#67e8f9' }, { offset: 1, color: '#2563eb' }]) } })),
+                        label: { show: true, position: 'inside', color: '#eff6ff', fontSize: 9, fontWeight: 700, formatter: (row) => Number(row.value || 0) >= 12 ? `${Math.round(row.value)}%` : '' }
+                    },
+                    {
+                        name: '📉 Pad', type: 'bar', stack: 'trend', barMaxWidth: 32,
+                        data: groups.map((group) => ({ value: group.pad, itemStyle: { color: new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#fda4af' }, { offset: 1, color: '#dc2626' }]) } })),
+                        label: { show: true, position: 'inside', color: '#fff1f2', fontSize: 9, fontWeight: 700, formatter: (row) => Number(row.value || 0) >= 12 ? `${Math.round(row.value)}%` : '' }
+                    }
                 ],
                 graphic: groups.length ? [] : [{ type: 'text', left: 'center', top: 'middle', style: { text: 'Čekam viewer uzorke…', fill: '#94a3b8', fontSize: 11 } }]
             }, true);
@@ -10238,6 +10540,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 giftEchartsInstance?.resize();
                 sentimentAqiEchartsInstance?.resize();
                 viewerTrendEchartsInstance?.resize();
+                topGiftersEchartsInstance?.resize();
+                giftHeatmapEchartsInstance?.resize();
+                gifterRaceEchartsInstance?.resize();
+                chatGiftComboEchartsInstance?.resize();
+                sentimentDonutEchartsInstance?.resize();
             });
         }
     }
@@ -10332,7 +10639,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
 
     function getDashboardRangeFilteredMessages() {
-        const base = Array.isArray(collectedMessages) ? collectedMessages.slice() : [];
+        // Dashboard analytics must include the separate WhisperLive buffer too.
+        // Listen Feed remains visually separate from TikTok chat, but it belongs
+        // to the same live session and must appear in its dashboard/exports.
+        const base = getTkaiSessionMessages({ includeListening: true });
         if (!dashboardRangeMinutes || dashboardRangeMinutes <= 0) return base;
         const now = Date.now();
         const fromTs = now - dashboardRangeMinutes * 60000;
@@ -11011,7 +11321,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (card.dataset.tkaiCardInit === '1') return;
             const title = card.querySelector(':scope > .tkai-insights-title');
             if (!title) return;
-            if (card.querySelector('#tkaiEngagementArea, #tkaiSentimentTrend, #tkaiPieChart, #tkaiGiftEcharts, #tkaiSentimentAqiChart, #tkaiViewerTrendEcharts')) {
+            if (card.querySelector('#tkaiEngagementArea, #tkaiSentimentTrend, #tkaiPieChart, #tkaiGiftEcharts, #tkaiSentimentAqiChart, #tkaiViewerTrendEcharts, #tkaiTopGiftersEcharts, #tkaiGiftHeatmapEcharts, #tkaiGifterRaceEcharts, #tkaiChatGiftComboEcharts, #tkaiSentimentDonutEcharts')) {
                 card.classList.add('tkai-resizable-chart-card');
             }
             const head = document.createElement('div');
@@ -11114,7 +11424,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function placeFixedTkaiSections(root) {
         const gallery = root?.querySelector(':scope > #tkaiGiftGallerySection[data-tkai-fixed-section]');
         const main = root?.querySelector(':scope > .tkai-main');
-        if (gallery && main && main.nextElementSibling !== gallery) root.insertBefore(gallery, main.nextSibling);
+        const listenFeed = root?.querySelector(':scope > #tkaiSlusanjeSection');
+        // Gift galerija je uvijek zadnja u live dijelu: iza Listen Feeda ako je
+        // uključen, inače odmah iza glavnog TikTok/AI sadržaja.
+        const anchor = listenFeed || main;
+        if (gallery && anchor && anchor.nextElementSibling !== gallery) root.insertBefore(gallery, anchor.nextSibling);
     }
 
     function applyTkaiLayoutOrder(root, sections, order) {
@@ -15168,6 +15482,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             return;
         }
         scanActive = true;
+        try { window.syncBpmDetectionWithTikTokScan?.(true); } catch (_) { }
         turboScanFastUntilTs = Date.now() + TKAI_SCAN_FAST_WINDOW_MS;
         if (!sessionStartedAt) sessionStartedAt = Date.now();
         toggleBtn.textContent = '⏹ Skeniranje OFF';
@@ -28180,6 +28495,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         }
 
         async function _bpmDetectOnce() {
+            if (!scanActive) {
+                _bpmSetStatus('Čeka Skeniranje ON — BPM ne koristi mikrofon u mirovanju');
+                return;
+            }
             if (_bpmDetecting) return;
             _bpmDetecting = true;
             _bpmSetStatus('Pokrećem mikrofon...');
@@ -28297,7 +28616,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             _bpmDetecting = false;
         }
 
-        function _bpmStop() {
+        function _bpmStop(waitForScan = false) {
             if (_bpmIntervalId) { clearInterval(_bpmIntervalId); _bpmIntervalId = null; }
             if (_bpmStream) { _bpmStream.getTracks().forEach(t => t.stop()); _bpmStream = null; }
             if (_bpmAudioCtx && _bpmAudioCtx.state !== 'closed') {
@@ -28305,7 +28624,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 _bpmAudioCtx = null;
             }
             _bpmSetDisplay(0);
-            _bpmSetStatus('Isključeno');
+            _bpmSetStatus(waitForScan ? 'Čeka Skeniranje ON — mikrofon je zaustavljen' : 'Isključeno');
             const titleEl = document.getElementById('titleBpmStatus');
             if (titleEl) {
                 titleEl.textContent = '';
@@ -28314,12 +28633,16 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             const row = document.getElementById('bpmIntervalRow');
             const durRow = document.getElementById('bpmListenDurRow');
             const statusRow = document.getElementById('bpmStatusRow');
-            if (row) row.style.display = 'none';
-            if (durRow) durRow.style.display = 'none';
-            if (statusRow) statusRow.style.display = 'none';
+            if (row) row.style.display = waitForScan ? 'flex' : 'none';
+            if (durRow) durRow.style.display = waitForScan ? 'flex' : 'none';
+            if (statusRow) statusRow.style.display = waitForScan ? 'flex' : 'none';
         }
 
         function _bpmStart() {
+            if (!scanActive) {
+                _bpmStop(true);
+                return;
+            }
             _bpmStop(); // clean up first
             const intervalSec = parseInt(DB.getSettings().bpmDetectIntervalSec || 120, 10);
             const row = document.getElementById('bpmIntervalRow');
@@ -28380,6 +28703,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     if (typeof showToast === 'function') showToast('Uključi BPM detekciju u postavkama.');
                     return;
                 }
+                if (!scanActive) {
+                    if (typeof showToast === 'function') showToast('▶ BPM radi samo dok je TikTok skeniranje uključeno.');
+                    _bpmStop(true);
+                    return;
+                }
                 _bpmDetectOnce();
             });
 
@@ -28413,6 +28741,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
         // Expose BPM start so the global keyboard shortcut can trigger it.
         window.startBpmDetection = _bpmStart;
+        window.syncBpmDetectionWithTikTokScan = function (isScanning) {
+            const enabled = DB.getSettings().bpmDetectEnabled === true;
+            if (isScanning && enabled) _bpmStart();
+            else _bpmStop(enabled);
+        };
 
         // Init after DOM ready
         if (document.readyState === 'loading') {

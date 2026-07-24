@@ -248,6 +248,26 @@ class DatabaseManager {
         INSERT OR REPLACE INTO schema_version (version) VALUES (4);
       `);
     }
+
+    // ── Migration v5: local AI model cache index ──────────────────────────
+    // Model binaries remain on disk for fast loading. SQLite only stores a
+    // compact searchable index, avoiding slow/fragile multi-GB database blobs.
+    if (currentVersion < 5) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS local_model_cache (
+          cache_key TEXT PRIMARY KEY,
+          engine TEXT NOT NULL DEFAULT 'whisperlive',
+          model_name TEXT NOT NULL DEFAULT '',
+          file_path TEXT NOT NULL DEFAULT '',
+          file_size INTEGER NOT NULL DEFAULT 0,
+          modified_at INTEGER NOT NULL DEFAULT 0,
+          last_seen_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+          status TEXT NOT NULL DEFAULT 'ready'
+        );
+        CREATE INDEX IF NOT EXISTS idx_local_model_cache_engine_seen ON local_model_cache(engine, last_seen_at DESC);
+        INSERT OR REPLACE INTO schema_version (version) VALUES (5);
+      `);
+    }
   }
 
   _ensureDownloadsStatusColumn() {
@@ -715,6 +735,49 @@ class DatabaseManager {
       try { return JSON.parse(row.payload_json); } catch (_) { return null; }
     }).filter(Boolean).reverse();
     return { ok: true, users, sessions: parseRows('tiktok_live_sessions', 500), stats: parseRows('tiktok_live_stats', 500), dbPath: this.dbPath };
+  }
+
+  // ─── Local AI model cache index ─────────────────────────────────────────
+
+  replaceLocalModelCache(engine, entries = []) {
+    const source = String(engine || 'whisperlive').trim() || 'whisperlive';
+    const rows = Array.isArray(entries) ? entries : [];
+    const remove = this.db.prepare('DELETE FROM local_model_cache WHERE engine = ?');
+    const upsert = this.db.prepare(`
+      INSERT INTO local_model_cache (cache_key, engine, model_name, file_path, file_size, modified_at, last_seen_at, status)
+      VALUES (@cache_key, @engine, @model_name, @file_path, @file_size, @modified_at, strftime('%s','now'), @status)
+      ON CONFLICT(cache_key) DO UPDATE SET
+        model_name = excluded.model_name,
+        file_path = excluded.file_path,
+        file_size = excluded.file_size,
+        modified_at = excluded.modified_at,
+        last_seen_at = strftime('%s','now'),
+        status = excluded.status
+    `);
+    const tx = this.db.transaction(() => {
+      remove.run(source);
+      rows.forEach((entry) => upsert.run({
+        cache_key: String(entry.cacheKey || `${source}:${entry.filePath || entry.modelName || Math.random()}`),
+        engine: source,
+        model_name: String(entry.modelName || ''),
+        file_path: String(entry.filePath || ''),
+        file_size: Math.max(0, Number(entry.fileSize || 0) || 0),
+        modified_at: Math.max(0, Number(entry.modifiedAt || 0) || 0),
+        status: String(entry.status || 'ready')
+      }));
+    });
+    tx();
+    return { ok: true, engine: source, count: rows.length, dbPath: this.dbPath };
+  }
+
+  getLocalModelCache(engine = 'whisperlive') {
+    const source = String(engine || 'whisperlive').trim() || 'whisperlive';
+    return {
+      ok: true,
+      engine: source,
+      entries: this.db.prepare('SELECT * FROM local_model_cache WHERE engine = ? ORDER BY modified_at DESC, file_path ASC').all(source),
+      dbPath: this.dbPath
+    };
   }
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────

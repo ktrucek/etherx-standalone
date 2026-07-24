@@ -345,6 +345,8 @@ const SECRET_SETTING_KEYS = new Set([
   "groq_api_key",
   "localAiApiKey",
   "local_ai_api_key",
+  "translateAiApiKey",
+  "tkaiGuardianApiKey",
   "giteaUpdateToken",
   "githubUpdateToken",
 ]);
@@ -376,9 +378,9 @@ function saveSettingsSecurely(settings = {}) {
   const { publicSettings, secretSettings } = splitSensitiveSettings(settings);
   const store = getSecretStore();
   if (store) {
-    const currentSecrets = store.getNamespace("settings");
-    const keysToDelete = Object.keys(currentSecrets).filter((key) => !(key in secretSettings));
-    if (keysToDelete.length) store.deleteKeys("settings", keysToDelete);
+    // Settings can be saved by the renderer before its async SQLite/secret
+    // hydration completes. Never treat omitted keys as a user request to erase
+    // credentials: merge only the keys explicitly supplied by this save.
     if (Object.keys(secretSettings).length) store.mergeNamespace("settings", secretSettings);
   }
   return db.saveSettings(publicSettings);
@@ -966,8 +968,10 @@ function resolvePythonCandidates(preferredRoot = "") {
   };
 
   const roots = resolveProjectRoots();
+  const persistentRuntimeRoot = resolvePersistentPythonRuntimeRoot();
+  if (!roots.includes(persistentRuntimeRoot)) roots.unshift(persistentRuntimeRoot);
   if (preferredRoot && fs.existsSync(preferredRoot)) {
-    roots.unshift(preferredRoot);
+    if (!roots.includes(preferredRoot)) roots.push(preferredRoot);
   }
 
   if (process.platform === "win32") {
@@ -1262,35 +1266,52 @@ function resolvePythonProjectRoot(reqLookup = undefined) {
   return fallbackRoot;
 }
 
+// Python packages and downloaded models must never live beside a versioned app
+// bundle or checkout. This directory is kept by Electron's stable userData
+// location across application updates.
+function resolvePersistentPythonRuntimeRoot() {
+  const runtimeRoot = path.join(app.getPath("userData"), "python-runtime");
+  try { fs.mkdirSync(runtimeRoot, { recursive: true }); } catch (_) { }
+  return runtimeRoot;
+}
+
+function migrateLegacyPythonVenv(targetVenvDir) {
+  if (fs.existsSync(targetVenvDir)) return false;
+  for (const root of resolveProjectRoots()) {
+    const legacyVenv = path.join(root, ".venv");
+    if (!fs.existsSync(legacyVenv) || path.resolve(legacyVenv) === path.resolve(targetVenvDir)) continue;
+    try {
+      fs.cpSync(legacyVenv, targetVenvDir, { recursive: true, errorOnExist: false });
+      return fs.existsSync(targetVenvDir);
+    } catch (_) { }
+  }
+  return false;
+}
+
 async function installPythonBridgeDeps() {
   try {
     const reqLookup = resolveRequirementsPath();
     const fallbackPackages = ["torch", "transformers", "accelerate", "gliclass"];
-    const projectRoot = resolvePythonProjectRoot(reqLookup);
+    const projectRoot = resolvePersistentPythonRuntimeRoot();
 
-    // If packaged, materialize requirements.txt to the writable directory
-    if (app.isPackaged) {
-      const srcReq = path.join(app.getAppPath(), "requirements.txt");
-      const destReq = path.join(projectRoot, "requirements.txt");
-      try {
-        if (fs.existsSync(srcReq)) {
-          fs.writeFileSync(destReq, fs.readFileSync(srcReq));
-        } else {
-          // If not found, write a minimal default requirements.txt
-          fs.writeFileSync(destReq, "torch\ntransformers\naccelerate\ngliclass\n");
-        }
-      } catch (_) { }
-    }
-
-    const requirementsPath = app.isPackaged
-      ? path.join(projectRoot, "requirements.txt")
-      : reqLookup.path;
+    // Keep a durable copy so packaged and development updates share the same
+    // environment instead of rebuilding it in a new app folder.
+    const requirementsPath = path.join(projectRoot, "requirements.txt");
+    try {
+      const sourceRequirements = reqLookup.path || path.join(app.getAppPath(), "requirements.txt");
+      if (sourceRequirements && fs.existsSync(sourceRequirements)) {
+        fs.writeFileSync(requirementsPath, fs.readFileSync(sourceRequirements));
+      } else if (!fs.existsSync(requirementsPath)) {
+        fs.writeFileSync(requirementsPath, "torch\ntransformers\naccelerate\ngliclass\n");
+      }
+    } catch (_) { }
 
     const venvDir = path.join(projectRoot, ".venv");
     const venvPython =
       process.platform === "win32"
         ? path.join(venvDir, "Scripts", "python.exe")
         : path.join(venvDir, "bin", "python");
+    const migratedLegacyVenv = migrateLegacyPythonVenv(venvDir);
 
     let createdVenv = false;
     let venvCreateError = "";
@@ -1341,6 +1362,7 @@ async function installPythonBridgeDeps() {
         ok: false,
         error: trimPythonInstallOutput(install.stderr || install.stdout || install.error?.message || "pip install nije uspio"),
         createdVenv,
+        migratedLegacyVenv,
         requirementsPath: requirementsPath || "",
         requirementsFallback: !requirementsPath,
         projectRoot,
@@ -1355,6 +1377,7 @@ async function installPythonBridgeDeps() {
     return {
       ok: true,
       createdVenv,
+      migratedLegacyVenv,
       requirementsPath: requirementsPath || "",
       requirementsFallback: !requirementsPath,
       projectRoot,
@@ -1370,14 +1393,47 @@ async function installPythonBridgeDeps() {
 }
 
 function resolveWhisperLiveRuntimeRoot() {
-  const baseRoot = app.isPackaged
-    ? app.getPath("userData")
-    : resolvePythonProjectRoot();
-  const runtimeRoot = path.join(baseRoot, "whisperlive-runtime");
+  const runtimeRoot = path.join(app.getPath("userData"), "whisperlive-runtime");
   try {
     fs.mkdirSync(runtimeRoot, { recursive: true });
   } catch (_) { }
   return runtimeRoot;
+}
+
+function resolveWhisperLiveModelCacheRoot() {
+  const cacheRoot = path.join(resolveWhisperLiveRuntimeRoot(), "model-cache");
+  try { fs.mkdirSync(cacheRoot, { recursive: true }); } catch (_) { }
+  return cacheRoot;
+}
+
+function refreshWhisperLiveModelCacheIndex() {
+  const cacheRoot = resolveWhisperLiveModelCacheRoot();
+  const entries = [];
+  const walk = (dir) => {
+    let rows = [];
+    try { rows = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+    rows.forEach((row) => {
+      const fullPath = path.join(dir, row.name);
+      if (row.isDirectory()) return walk(fullPath);
+      if (!row.isFile()) return;
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.size <= 0) return;
+        const relativePath = path.relative(cacheRoot, fullPath);
+        entries.push({
+          cacheKey: `whisperlive:${relativePath.replace(/\\/g, '/')}`,
+          modelName: path.basename(fullPath),
+          filePath: fullPath,
+          fileSize: stat.size,
+          modifiedAt: Math.floor(stat.mtimeMs),
+          status: 'ready'
+        });
+      } catch (_) { }
+    });
+  };
+  walk(cacheRoot);
+  const result = db ? db.replaceLocalModelCache('whisperlive', entries) : { ok: false, error: 'Database not available' };
+  return { ...result, cacheRoot, entries };
 }
 
 function getWhisperLiveInstallPlan(requestedMode = "auto") {
@@ -1386,8 +1442,9 @@ function getWhisperLiveInstallPlan(requestedMode = "auto") {
   const resolvedMode = mode === "auto"
     ? (platform === "darwin" ? "docker-cpu" : "docker-cpu")
     : mode;
-  const dockerCpuArgs = ["run", "-d", "--rm", "--name", "etherx-whisperlive", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
-  const dockerGpuArgs = ["run", "-d", "--rm", "--name", "etherx-whisperlive", "--gpus", "all", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"];
+  const modelCacheMount = `${resolveWhisperLiveModelCacheRoot()}:/root/.cache/whisper-live`;
+  const dockerCpuArgs = ["run", "-d", "--name", "etherx-whisperlive", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
+  const dockerGpuArgs = ["run", "-d", "--name", "etherx-whisperlive", "--gpus", "all", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"];
   const pipCommand = platform === "win32"
     ? "py -m venv .venv-whisperlive && .venv-whisperlive\\Scripts\\python.exe -m pip install -U pip whisper-live && .venv-whisperlive\\Scripts\\python.exe etherx_whisperlive_server.py"
     : "python3 -m venv .venv-whisperlive && .venv-whisperlive/bin/python -m pip install -U pip whisper-live && .venv-whisperlive/bin/python etherx_whisperlive_server.py";
@@ -1423,7 +1480,7 @@ function writeWhisperLiveServerScript(runtimeRoot) {
     "    backend='faster_whisper',",
     "    max_clients=4,",
     "    max_connection_time=600,",
-    "    cache_path=os.path.expanduser('~/.cache/whisper-live/'),",
+    "    cache_path=os.environ.get('ETHERX_WHISPER_MODEL_CACHE', os.path.expanduser('~/.cache/whisper-live/')),",
     ")",
     "",
   ].join("\n");
@@ -1457,8 +1514,13 @@ async function startWhisperLivePipServer() {
     }
   }
 
-  const pipUpgrade = await execFileText(venvPython, ["-m", "pip", "install", "-U", "pip"], 420000, { cwd: runtimeRoot });
-  const pipInstall = await execFileText(venvPython, ["-m", "pip", "install", "-U", "whisper-live"], 900000, { cwd: runtimeRoot });
+  const installedCheck = await execFileText(venvPython, ["-c", "import whisper_live"], 30000, { cwd: runtimeRoot });
+  let pipUpgrade = { ok: true, stdout: "", stderr: "" };
+  let pipInstall = { ok: true, stdout: "", stderr: "" };
+  if (!installedCheck.ok) {
+    pipUpgrade = await execFileText(venvPython, ["-m", "pip", "install", "-U", "pip"], 420000, { cwd: runtimeRoot });
+    pipInstall = await execFileText(venvPython, ["-m", "pip", "install", "-U", "whisper-live"], 900000, { cwd: runtimeRoot });
+  }
   if (!pipInstall.ok) {
     return {
       ok: false,
@@ -1479,6 +1541,7 @@ async function startWhisperLivePipServer() {
       ...getAugmentedEnv(),
       KMP_DUPLICATE_LIB_OK: "TRUE",
       OMP_NUM_THREADS: "1",
+      ETHERX_WHISPER_MODEL_CACHE: resolveWhisperLiveModelCacheRoot(),
     },
     windowsHide: true,
   });
@@ -1492,6 +1555,7 @@ async function startWhisperLivePipServer() {
     runtimeRoot,
     python: venvPython,
     pid: child.pid,
+    alreadyInstalled: !!installedCheck.ok,
     pipUpgrade: !!pipUpgrade.ok,
     stdout: trimPythonInstallOutput(pipInstall.stdout),
     stderr: trimPythonInstallOutput(pipInstall.stderr),
@@ -1515,11 +1579,22 @@ async function installWhisperLive(requestedMode = "auto") {
   if (plan.mode === "pip") return startWhisperLivePipServer();
 
   if (plan.mode === "docker-cpu" || plan.mode === "docker-gpu") {
+    const modelCacheMount = `${resolveWhisperLiveModelCacheRoot()}:/root/.cache/whisper-live`;
     const args = plan.mode === "docker-gpu"
-      ? ["run", "-d", "--rm", "--name", "etherx-whisperlive", "--gpus", "all", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"]
-      : ["run", "-d", "--rm", "--name", "etherx-whisperlive", "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
-    await execFileText("docker", ["rm", "-f", "etherx-whisperlive"], 60000, { cwd: resolveWhisperLiveRuntimeRoot() });
-    const run = await execFileText("docker", args, 600000, { cwd: resolveWhisperLiveRuntimeRoot() });
+      ? ["run", "-d", "--name", "etherx-whisperlive", "--gpus", "all", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-gpu:latest"]
+      : ["run", "-d", "--name", "etherx-whisperlive", "-v", modelCacheMount, "-p", "9090:9090", "ghcr.io/collabora/whisperlive-cpu:latest"];
+    const runtimeRoot = resolveWhisperLiveRuntimeRoot();
+    const cacheRoot = resolveWhisperLiveModelCacheRoot();
+    const existing = await execFileText("docker", ["start", "etherx-whisperlive"], 60000, { cwd: runtimeRoot });
+    if (existing.ok) {
+      const inspect = await execFileText("docker", ["inspect", "-f", "{{range .Mounts}}{{.Source}}|{{end}}", "etherx-whisperlive"], 30000, { cwd: runtimeRoot });
+      if (String(inspect.stdout || '').includes(cacheRoot)) {
+        return { ok: true, platform: plan.platform, mode: plan.mode, endpoint: plan.endpoint, container: "etherx-whisperlive", alreadyInstalled: true, stdout: trimPythonInstallOutput(existing.stdout) };
+      }
+    }
+    // An invalid/partially-created old container must not block a clean install.
+    await execFileText("docker", ["rm", "-f", "etherx-whisperlive"], 60000, { cwd: runtimeRoot });
+    const run = await execFileText("docker", args, 600000, { cwd: runtimeRoot });
     return {
       ok: !!run.ok,
       platform: plan.platform,
@@ -3321,6 +3396,15 @@ function setupIPC() {
 
   ipcMain.handle("app:installWhisperLive", async (_e, mode) => {
     return installWhisperLive(mode);
+  });
+
+  ipcMain.handle("app:refreshWhisperLiveModelCache", async () => {
+    return refreshWhisperLiveModelCacheIndex();
+  });
+
+  ipcMain.handle("app:getWhisperLiveModelCache", async () => {
+    const indexed = refreshWhisperLiveModelCacheIndex();
+    return db ? db.getLocalModelCache('whisperlive') : indexed;
   });
 
   ipcMain.handle("app:getPM2Status", async () => {

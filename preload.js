@@ -274,6 +274,8 @@ contextBridge.exposeInMainWorld('etherx', {
     chooseProfilePicture: () => ipcRenderer.invoke('app:chooseProfilePicture'),
     runOneClickSetup: () => ipcRenderer.invoke('app:runOneClickSetup'),
     installWhisperLive: (mode) => ipcRenderer.invoke('app:installWhisperLive', mode),
+    refreshWhisperLiveModelCache: () => ipcRenderer.invoke('app:refreshWhisperLiveModelCache'),
+    getWhisperLiveModelCache: () => ipcRenderer.invoke('app:getWhisperLiveModelCache'),
     getPM2Status: () => ipcRenderer.invoke('app:getPM2Status'),
     getPM2Logs: () => ipcRenderer.invoke('app:getPM2Logs'),
     clearPM2Logs: () => ipcRenderer.invoke('app:clearPM2Logs'),
