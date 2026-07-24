@@ -13,6 +13,7 @@ const {
   Menu,
 } = require("electron");
 const path = require("path");
+const os = require("os");
 const fs = require("fs");
 const http = require("http");
 const https = require("https");
