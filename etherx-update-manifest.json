@@ -1,10 +1,10 @@
 {
-  "version": "3.0.173",
+  "version": "3.0.174",
   "minVersion": "2.0.0",
   "channel": "stable",
   "releaseDate": "2026-07-24",
-  "downloadUrl": "https://github.com/ktrucek/etherx-standalone/releases/download/v3.0.173/EtherX.Browser-3.0.173-mac-arm64.zip",
-  "changelog": "- v3.0.172: Viewer trend normalizirani stacked bar graf.",
+  "downloadUrl": "https://github.com/ktrucek/etherx-standalone/releases/download/v3.0.174/EtherX.Browser-3.0.174-mac-arm64.zip",
+  "changelog": "- v3.0.174: TikTok player navigation i autoplay oporavak.",
   "sha256": "",
   "notes": "Upload this file to: https://kriptoentuzijasti.io/etherx-update/manifest.json"
 }

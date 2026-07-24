@@ -689,6 +689,31 @@ if (window.electronWebview) {
               setTimeout(tryDismiss, 2500);
             })()`).catch(() => { });
             } catch (_) { }
+            // TikTok occasionally leaves its newly inserted video element paused
+            // after a renderer navigation. Retry once the player has media data;
+            // do not force mute or replace the user's audio preference.
+            try {
+                wv.executeJavaScript(`(() => {
+                  if (!/(^|\\.)tiktok\\.com$/i.test(location.hostname || '') || window.__etherxTikTokPlaybackInstalled) return;
+                  window.__etherxTikTokPlaybackInstalled = true;
+                  const start = video => {
+                    if (!video || video.dataset.etherxPlaybackBound) return;
+                    video.dataset.etherxPlaybackBound = '1';
+                    video.playsInline = true;
+                    const play = () => { if (video.paused) video.play().catch(() => {}); };
+                    video.addEventListener('loadeddata', play, { once: true });
+                    video.addEventListener('canplay', play, { once: true });
+                    setTimeout(play, 350);
+                    setTimeout(play, 1400);
+                  };
+                  document.querySelectorAll('video').forEach(start);
+                  new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
+                    if (node.nodeType !== 1) return;
+                    if (node.tagName === 'VIDEO') start(node);
+                    node.querySelectorAll?.('video').forEach(start);
+                  }))).observe(document.documentElement, { childList: true, subtree: true });
+                })()`).catch(() => { });
+            } catch (_) { }
             try {
                 await wv.executeJavaScript(`(() => {
               if (window.__etherxPwdWatcherInstalled) return true;
@@ -4545,9 +4570,14 @@ function navigateWebviewToURL(wv, url) {
         }
     } catch (_) { }
 
-    // Keep src assignment as a universal fallback, then try loadURL for
-    // attached guests to improve reliability/history behavior.
-    try { wv.src = url; } catch (_) { }
+    // A fresh guest must receive its first navigation exactly once. Issuing both
+    // src and loadURL starts two document loads; TikTok can then leave the video
+    // player stuck while its initial media request is cancelled by the second load.
+    const currentUrl = (() => { try { return wv.getURL?.() || ''; } catch (_) { return ''; } })();
+    if (!currentUrl || currentUrl === 'about:blank') {
+        try { wv.src = url; } catch (_) { }
+        return;
+    }
     try {
         const navPromise = wv.loadURL?.(url);
         if (navPromise?.catch) navPromise.catch(() => { });
