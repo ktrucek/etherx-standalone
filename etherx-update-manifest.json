@@ -1,10 +1,10 @@
 {
-  "version": "3.0.170",
+  "version": "3.0.171",
   "minVersion": "2.0.0",
   "channel": "stable",
   "releaseDate": "2026-07-24",
-  "downloadUrl": "https://github.com/ktrucek/etherx-standalone/releases/download/v3.0.170/EtherX.Browser-3.0.170-mac-arm64.zip",
-  "changelog": "- v3.0.169: WhisperLive cache modela sada \u010deka do 15 minuta pri prvom preuzimanju velikog modela.",
+  "downloadUrl": "https://github.com/ktrucek/etherx-standalone/releases/download/v3.0.171/EtherX.Browser-3.0.171-mac-arm64.zip",
+  "changelog": "- v3.0.171: ECharts grafovi za TikTok Chat AI: giftovi i sentiment AQI.",
   "sha256": "",
   "notes": "Upload this file to: https://kriptoentuzijasti.io/etherx-update/manifest.json"
 }

@@ -6747,6 +6747,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const joinLevelListEl = document.getElementById('tkaiJoinLevelList');
     const giftStatsMetaEl = document.getElementById('tkaiGiftStatsMeta');
     const giftStatsListEl = document.getElementById('tkaiGiftStatsList');
+    const giftEchartsEl = document.getElementById('tkaiGiftEcharts');
+    const sentimentAqiChartEl = document.getElementById('tkaiSentimentAqiChart');
     const shareEventsListEl = document.getElementById('tkaiShareEventsList');
     const shadowbanUserFilterEl = document.getElementById('tkaiShadowbanUserFilter');
     const shadowbanUserCountEl = document.getElementById('tkaiShadowbanUserCount');
@@ -6769,6 +6771,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let dashboardLayoutLocked = DB.getSettings().tkaiDashboardLayoutLocked !== false;
     let dashboardLayoutFolded = DB.getSettings().tkaiDashboardLayoutFolded === true;
     let lastShadowbanUserStats = [];
+    let giftEchartsInstance = null;
+    let sentimentAqiEchartsInstance = null;
+    let echartsResizeBound = false;
     try {
         const eventDefaultsMigrationKey = 'ex_tkai_event_defaults_v2';
         if (localStorage.getItem(eventDefaultsMigrationKey) !== '1') {
@@ -9878,6 +9883,125 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
     }
 
+    function renderTkaiEcharts(insights) {
+        const echartsApi = window.echarts;
+        if (!echartsApi) return;
+
+        const getChart = (el, previous) => {
+            if (!el) return null;
+            return previous || echartsApi.getInstanceByDom(el) || echartsApi.init(el, null, { renderer: 'canvas' });
+        };
+        giftEchartsInstance = getChart(giftEchartsEl, giftEchartsInstance);
+        sentimentAqiEchartsInstance = getChart(sentimentAqiChartEl, sentimentAqiEchartsInstance);
+
+        const giftRows = Array.isArray(insights?.giftDetails?.topGiftTypes)
+            ? insights.giftDetails.topGiftTypes.slice(0, 50)
+            : [];
+        if (giftEchartsInstance) {
+            const giftData = giftRows.map((gift) => ({
+                name: String(gift.giftName || 'Nepoznati gift'),
+                value: Math.max(0, Number(gift.coins || 0)) || Math.max(1, Number(gift.quantity || gift.events || 1)),
+                coins: Math.max(0, Number(gift.coins || 0)),
+                quantity: Math.max(0, Number(gift.quantity || 0)),
+                events: Math.max(0, Number(gift.events || 0))
+            }));
+            giftEchartsInstance.setOption({
+                animationDuration: 250,
+                backgroundColor: 'transparent',
+                tooltip: {
+                    trigger: 'item',
+                    formatter: (item) => {
+                        const row = item.data || {};
+                        return `<b>${escHtml(item.name)}</b><br>${formatNum(row.coins || 0)} coins · ${formatNum(row.quantity || 0)} kom · ${formatNum(row.events || 0)} događaja`;
+                    }
+                },
+                legend: {
+                    type: 'scroll',
+                    orient: 'vertical',
+                    right: 0,
+                    top: 8,
+                    bottom: 8,
+                    width: '38%',
+                    textStyle: { color: '#cbd5e1', fontSize: 10 },
+                    pageTextStyle: { color: '#94a3b8' },
+                    pageIconColor: '#22d3ee',
+                    pageIconInactiveColor: '#475569'
+                },
+                series: [{
+                    name: 'Giftovi',
+                    type: 'pie',
+                    radius: ['34%', '68%'],
+                    center: ['30%', '50%'],
+                    avoidLabelOverlap: true,
+                    label: { show: false },
+                    emphasis: { label: { show: true, color: '#fff', fontSize: 11, fontWeight: 'bold' } },
+                    data: giftData.length ? giftData : [{ name: 'Nema giftova', value: 1, itemStyle: { color: '#334155' } }]
+                }]
+            }, true);
+        }
+
+        if (sentimentAqiEchartsInstance) {
+            const sourceTrend = Array.isArray(insights?.sentimentTrend) ? insights.sentimentTrend.slice(-24) : [];
+            const fallbackScore = Number(insights?.sentimentCounts?.positivePct || 0) - Number(insights?.sentimentCounts?.negativePct || 0);
+            const points = sourceTrend.length ? sourceTrend : [{ minute: 0, score: fallbackScore / 25 }];
+            const scoreData = points.map((point) => Math.max(-100, Math.min(100, Math.round(Number(point.score || 0) * 25))));
+            const option = {
+                animationDuration: 250,
+                backgroundColor: 'transparent',
+                grid: { left: 38, right: 12, top: 24, bottom: 32 },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: (rows) => {
+                        const row = rows?.[0];
+                        const value = Number(row?.value || 0);
+                        const label = value > 15 ? 'pozitivno' : value < -15 ? 'negativno' : 'neutralno';
+                        return `${row?.axisValueLabel || ''}<br><b>${value > 0 ? '+' : ''}${value}</b> · ${label}`;
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: points.map((point) => `${point.minute}m`),
+                    axisLabel: { color: '#94a3b8', fontSize: 9 },
+                    axisLine: { lineStyle: { color: '#334155' } },
+                    axisTick: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    min: -100,
+                    max: 100,
+                    interval: 50,
+                    breaks: [{ start: -15, end: 15, gap: '9%' }],
+                    axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (value) => value > 0 ? `+${value}` : value },
+                    splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } }
+                },
+                series: [{
+                    name: 'Sentiment AQI',
+                    type: 'bar',
+                    barMaxWidth: 24,
+                    data: scoreData.map((value) => ({
+                        value,
+                        itemStyle: { color: value > 15 ? '#34d399' : value < -15 ? '#fb7185' : '#94a3b8', borderRadius: value >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4] }
+                    })),
+                    markLine: { silent: true, symbol: 'none', lineStyle: { color: '#64748b', type: 'dashed' }, data: [{ yAxis: 0 }] }
+                }]
+            };
+            try {
+                sentimentAqiEchartsInstance.setOption(option, true);
+            } catch (_) {
+                delete option.yAxis.breaks;
+                sentimentAqiEchartsInstance.setOption(option, true);
+            }
+        }
+
+        if (!echartsResizeBound) {
+            echartsResizeBound = true;
+            window.addEventListener('resize', () => {
+                giftEchartsInstance?.resize();
+                sentimentAqiEchartsInstance?.resize();
+            });
+        }
+    }
+
     function renderSentimentDualCharts(insights) {
         const trend = Array.isArray(insights.sentimentTrend) ? insights.sentimentTrend.slice(-24) : [];
         const rawScores = trend.map((s) => Number(s.score || 0));
@@ -10137,6 +10261,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
 
         renderSentimentDualCharts(insights);
+        renderTkaiEcharts(insights);
 
         if (sentimentTopEl) {
             const sc = insights.sentimentCounts || {};
