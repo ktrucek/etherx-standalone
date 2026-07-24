@@ -101,7 +101,7 @@
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
     "electron": "^39.8.5",
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^26.15.3",
     "picomatch": "^4.0.4",
     "ws": "^8.21.0"
   },
