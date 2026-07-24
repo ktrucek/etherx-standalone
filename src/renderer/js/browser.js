@@ -518,23 +518,6 @@ if (window.electronWebview) {
         let _wvNativeExec = null;
         const _wvQueue = [];
         let _wvReady = _readyWebviews.has(wv.id);
-        let _wvLoadFinishTimer = null;
-        const _isActiveWebview = () => Number(wv.dataset.tabId) === STATE.activeTabId;
-        const _finishWebviewLoading = (delay = 0) => {
-            if (!_isActiveWebview()) return;
-            if (_wvLoadFinishTimer) {
-                clearTimeout(_wvLoadFinishTimer);
-                _wvLoadFinishTimer = null;
-            }
-            setTimeout(() => {
-                if (_isActiveWebview()) {
-                    setLoading(100);
-                    updateAutofillBtnState();
-                    const sbUrl = document.getElementById('sbUrl');
-                    if (sbUrl) sbUrl.textContent = '';
-                }
-            }, delay);
-        };
         try {
             // Find the real native function: own property first, then prototype chain
             const _own = Object.getOwnPropertyDescriptor(wv, 'executeJavaScript');
@@ -561,23 +544,13 @@ if (window.electronWebview) {
             }
         } catch (_e) { /* patch failed — calls before dom-ready may still error */ }
 
-        wv.addEventListener('did-start-loading', () => {
-            if (!_isActiveWebview()) return;
-            setLoading(30);
-            if (_wvLoadFinishTimer) clearTimeout(_wvLoadFinishTimer);
-            _wvLoadFinishTimer = setTimeout(() => _finishWebviewLoading(), 12000);
-        });
-        wv.addEventListener('did-stop-loading', () => _finishWebviewLoading());
-        wv.addEventListener('did-finish-load', () => _finishWebviewLoading());
-        wv.addEventListener('update-target-url', (e) => { if (_isActiveWebview()) document.getElementById('sbUrl').textContent = e.url || ''; });
+        wv.addEventListener('did-start-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(30); });
+        wv.addEventListener('did-stop-loading', () => { if (Number(wv.dataset.tabId) === STATE.activeTabId) { setLoading(100); updateAutofillBtnState(); document.getElementById('sbUrl').textContent = ''; } });
+        wv.addEventListener('update-target-url', (e) => { if (Number(wv.dataset.tabId) === STATE.activeTabId) document.getElementById('sbUrl').textContent = e.url || ''; });
         wv.addEventListener('did-fail-load', (e) => {
             const errDesc = String(e.errorDescription || '').toLowerCase();
             if (e.errorCode === -3 || errDesc.includes('err_aborted') || errDesc.includes('redirect was cancelled')) return;
-            if (_wvLoadFinishTimer) {
-                clearTimeout(_wvLoadFinishTimer);
-                _wvLoadFinishTimer = null;
-            }
-            if (_isActiveWebview()) setLoading(0);
+            if (Number(wv.dataset.tabId) === STATE.activeTabId) setLoading(0);
             const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
             const failedUrl = e.validatedURL || (tab ? tab.url : '');
             const errMsg = e.errorDescription || 'Failed to load page';
@@ -609,7 +582,6 @@ if (window.electronWebview) {
         wv.addEventListener('page-title-updated', (e) => {
             const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId));
             if (tab) { tab.title = e.title; updateTabEl(tab); }
-            if (e.title) _finishWebviewLoading(500);
         });
         wv.addEventListener('page-favicon-updated', (e) => {
             if (e.favicons?.length) { const tab = STATE.tabs.find(t => t.id === Number(wv.dataset.tabId)); if (tab) { tab.faviconUrl = e.favicons[0]; updateTabEl(tab); } }
@@ -635,7 +607,6 @@ if (window.electronWebview) {
                     updateUrlIcon(e.url);
                     updateNavBtns(tab);
                 }
-                _finishWebviewLoading(700);
                 // Set favicon from Google S2 API as fallback
                 if (!tab.faviconUrl || tab.faviconUrl.includes('s2/favicons')) {
                     tab.faviconUrl = `https://www.google.com/s2/favicons?sz=32&domain_url=${encodeURIComponent(e.url)}`;
@@ -678,7 +649,6 @@ if (window.electronWebview) {
             // Mark ready and flush any executeJavaScript calls queued before dom-ready
             _wvReady = true;
             if (wv.id) _readyWebviews.add(wv.id);
-            _finishWebviewLoading(900);
             if (_wvNativeExec && _wvQueue.length) {
                 const _q = _wvQueue.splice(0);
                 for (const [s, ug, res, rej] of _q) _wvNativeExec(s, ug).then(res, rej);
@@ -4565,24 +4535,13 @@ function navigateWebviewToURL(wv, url) {
         }
     } catch (_) { }
 
-    // A newly created webview must receive its first URL through `src`.
-    // Calling `src` and `loadURL` back-to-back starts two navigations; Electron
-    // cancels the first one, which made restored tabs appear only after a second
-    // click. Once a guest already exists, use loadURL for normal navigation.
-    try {
-        const initialUrl = String(wv.src || '');
-        if (!initialUrl || initialUrl === 'about:blank') {
-            wv.src = url;
-            return;
-        }
-    } catch (_) { }
+    // Keep src assignment as a universal fallback, then try loadURL for
+    // attached guests to improve reliability/history behavior.
+    try { wv.src = url; } catch (_) { }
     try {
         const navPromise = wv.loadURL?.(url);
         if (navPromise?.catch) navPromise.catch(() => { });
-        else wv.src = url;
-    } catch (_) {
-        try { wv.src = url; } catch (_) { }
-    }
+    } catch (_) { }
 }
 
 function navigateTo(raw, tabId) {
@@ -18119,7 +18078,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (fromMeta !== undefined) {
                 _secCspCache.set(url, { csp: fromMeta, ts: Date.now() });
                 if (fromMeta) { set('secCsp', fromMeta.slice(0, 120) + (fromMeta.length > 120 ? '…' : '')); badge('secCspBadge', 'sec-ok', 'Present'); }
-                else { set('secCsp', 'N/A — header nije dostupan iz webviewa'); badge('secCspBadge', 'sec-warn', 'N/A'); }
+                else { set('secCsp', 'N/A — nije dostupno (proxy mode)'); badge('secCspBadge', 'sec-warn', 'N/A'); }
             } else if (wv && wv.executeJavaScript) {
                 set('secCsp', '…'); badge('secCspBadge', 'sec-warn', '…');
                 try {

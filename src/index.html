@@ -611,9 +611,9 @@
             <div class="bo-url" id="boUrl"></div>
             <div style="font-size:12px;color:var(--text3);text-align:center;max-width:380px">The server returned an
                 error or
-                the browser session could not reach this site.</div>
+                the proxy could not reach this site.</div>
             <button class="bo-btn" id="boOpen">Open Directly ↗</button>
-            <button class="bo-btn" style="background:var(--bg3)" id="boRetry">Retry</button>
+            <button class="bo-btn" style="background:var(--bg3)" id="boRetry">Retry via Proxy</button>
         </div>
         <div class="reader" id="readerMode">
             <div class="reader-toolbar">
@@ -3323,7 +3323,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.166</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.167</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -5449,7 +5449,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.166</span></div>
+                                    v<span id="helpVersionNum2">3.0.167</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -6505,8 +6505,9 @@
                         class="csrc">devtools.js:1</span></div>
                 <div class="cl success"><span class="cp">log</span><span class="cm">⬡ Web3 provider: window.ethereum
                         injected</span><span class="csrc">web3.js:1</span></div>
-                <div class="cl log"><span class="cp">log</span><span class="cm">Electron webview navigation active —
-                        requests use the active tab session</span><span class="csrc">webview:1</span></div>
+                <div class="cl log"><span class="cp">log</span><span class="cm">Proxy navigation active — all requests
+                        via
+                        /src/index.html</span><span class="csrc">index.html:1</span></div>
             </div>
             <div class="console-in">
                 <span class="console-prompt">❯</span>

@@ -25,9 +25,20 @@ try {
   /* optional — needed only for CWS extension downloads */
 }
 
-// Let Chromium manage its V8 heap and garbage collector. The previous
-// size-optimized profile forced a collection every 100 ms, which noticeably
-// stalled pages with heavy JavaScript and video playback.
+// 🔥 PERFORMANCE: V8 Memory & Performance Tuning
+const os = require("os");
+const totalMem = os.totalmem() / 1024 / 1024 / 1024; // GB
+
+// Allocate 25% of system RAM for Electron (max 4GB)
+const maxMem = Math.min(Math.floor(totalMem * 0.25) * 1024, 4096);
+
+app.commandLine.appendSwitch(
+  "js-flags",
+  `--max-old-space-size=${maxMem} ` + // Heap limit
+  "--optimize-for-size " + // Memory over speed
+  "--gc-interval=100 " + // More frequent GC
+  "--expose-gc", // Allow manual GC
+);
 
 // ─── Command-line switches ─────────────────────────────────────────────────────
 // disable-gpu kills rendering on macOS (blank window on Apple Silicon + Intel Rosetta)
@@ -52,11 +63,7 @@ if (forceDisableGpu) {
 
 if (process.platform !== "darwin") {
   app.commandLine.appendSwitch("no-sandbox");
-  // /dev/shm is substantially faster than disk-backed temporary storage on a
-  // desktop. The fallback is only needed for constrained CI/container runs.
-  if (isCI || isHeadless) {
-    app.commandLine.appendSwitch("disable-dev-shm-usage");
-  }
+  app.commandLine.appendSwitch("disable-dev-shm-usage");
 
   // Disable GPU only in CI/headless environments — on desktop keep GPU enabled for performance
   if (isCI || isHeadless || forceDisableGpu) {
@@ -1948,9 +1955,15 @@ app.whenReady().then(async () => {
     setupDownloadTracking(session.fromPartition("persist:etherx"));
   } catch (_) { }
 
-  // Keep the full-page webview session free of the global adblocker. Aggressive
-  // EasyList/EasyPrivacy rules can block player bootstrap and media handshakes
-  // on YouTube/TikTok, making pages load but never render video.
+  // Apply ad blocker to the webview session (persist:etherx) as well
+  try {
+    if (AdBlocker && adBlocker) {
+      const etherxSess = session.fromPartition("persist:etherx");
+      adBlocker.blocker?.enableBlockingInSession(etherxSess);
+    }
+  } catch (e) {
+    console.warn("[AdBlocker] persist:etherx enable failed:", e.message);
+  }
 
   // Allow media / fullscreen / clipboard permissions in webviews (required for YouTube, TikTok, etc.)
   try {
@@ -2484,8 +2497,7 @@ function createWindow() {
 
       // Keep video/CDN responses untouched. Rewriting CORS/CSP headers globally
       // can break MSE/segment playback on TikTok/YouTube and similar platforms.
-      const isDocument = ["mainFrame", "subFrame"].includes(details.resourceType);
-      if (!isDocument && (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details))) {
+      if (isKnownVideoHost(details.url) || isVideoOrMediaRequest(details)) {
         callback({ responseHeaders: headers });
         return;
       }
