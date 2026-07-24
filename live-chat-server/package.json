@@ -4,6 +4,9 @@
   "private": true,
   "description": "RAM-backed WebSocket aggregation service for EtherX TikTok LIVE chat",
   "main": "server.js",
+  "scripts": {
+    "smoke": "node smoke-test.js"
+  },
   "engines": {
     "node": ">=20.0.0"
   },

@@ -9,8 +9,9 @@ Dashboard od servera dohvaća kompaktne minutne sažetke, pa za grafove ne mora
 držati cijeli chat u rendereru. Cijela zadržana sesija dohvaća se stranicama
 samo kada korisnik pokrene Detailed dashboard JSON export.
 
-Poddomena je pripremljena, ali dodavanje ovih datoteka ne pokreće servis i ne
-radi deploy. Prije prvog pokretanja obavezno pročitati
+Produkcijski servis postavljen je 25. srpnja 2026. PM2 i Apache/WSS proxy rade
+na serveru `135.181.51.25`. Javni DNS još mora biti prebačen s IONOS parking
+adresa na taj A zapis. Prije održavanja obavezno pročitati
 [SECURITY-SETUP.md](./SECURITY-SETUP.md).
 
 ## Mrežni raspored
@@ -32,17 +33,41 @@ lokalnoj pohrani vlasnikove instalacije EtherX browsera. Nikada se ne upisuje u
 `server.js`, `ecosystem.config.cjs`, `.env.example`, dokumentaciju, issue, commit
 ili GitHub Actions log.
 
-## Kasnije pokretanje
+## PM2 održavanje
 
-Kada poddomena i proxy budu spremni, u ovoj mapi treba instalirati samo
-produkcijsku `ws` ovisnost, postaviti `LIVE_AUTH_TOKEN`, pokrenuti
-`ecosystem.config.cjs` kroz PM2 te spremiti PM2 stanje. Token koji se postavi na
-serveru upisuje se i u EtherX postavku **Pristupni token**.
+Servis radi pod korisnikom `kriptoen` i njegovim postojećim PM2 daemon procesom:
+
+```bash
+export PM2_HOME=/var/www/vhosts/kriptoentuzijasti.io/.pm2
+pm2 status etherx-live-chat
+pm2 logs etherx-live-chat --lines 50 --nostream
+pm2 restart etherx-live-chat
+pm2 save
+```
+
+Ove naredbe izvršavaju se kao `kriptoen`, ne kao root. Privatni health check:
+
+```bash
+curl http://127.0.0.1:8791/health
+```
 
 Nemoj pokretati više PM2 instanci ovog procesa dok se sesije drže samo u RAM-u.
 Za cluster način prvo treba dodati Redis ili drugi zajednički session store.
 
-## Plesk dodatne nginx direktive
+## Plesk proxy
+
+Na ovom serveru javni TLS vhost poslužuje Apache, a nginx servis nije aktivan.
+Zato se koristi [apache-vhost.conf.example](./apache-vhost.conf.example) kroz
+Pleskove `vhost.conf` i `vhost_ssl.conf` datoteke. Nakon promjene:
+
+```bash
+plesk sbin httpdmng --reconfigure-domain live.kriptoentuzijasti.io
+apache2ctl configtest
+systemctl reload apache2
+```
+
+Ako se kasnije aktivira nginx kao Pleskov reverse proxy, ekvivalentne dodatne
+nginx direktive su:
 
 ```nginx
 location = /health {
@@ -66,4 +91,4 @@ location /v1/live {
 }
 ```
 
-Servis nije pokrenut niti deployan samim dodavanjem ovih datoteka.
+Stvarni `.env`, snapshoti i PM2 logovi ostaju izvan Gita.

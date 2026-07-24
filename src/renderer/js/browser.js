@@ -10293,6 +10293,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             : (sentimentBalance <= -sentimentMargin ? 'negative' : 'neutral');
         const sessionStart = sessionStartedAt || now;
         const perMinute = new Map();
+        // Keep both the balance and the number of messages in a minute.  A raw
+        // sum makes a busy minute look more positive/negative than a quiet one.
         const perMinuteSentiment = new Map();
         messages.forEach((m) => {
             const ts = Number(m.ts || m._ts || now);
@@ -10303,7 +10305,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const ts = Number(m.ts || m._ts || now);
             const minute = Math.max(0, Math.floor((ts - sessionStart) / 60000));
             const score = scoreSentimentText(m.text);
-            perMinuteSentiment.set(minute, (perMinuteSentiment.get(minute) || 0) + score);
+            const bucket = perMinuteSentiment.get(minute) || { score: 0, positive: 0, negative: 0, neutral: 0 };
+            bucket.score += score;
+            if (score > 0) bucket.positive += 1;
+            else if (score < 0) bucket.negative += 1;
+            else bucket.neutral += 1;
+            perMinuteSentiment.set(minute, bucket);
         });
         const engagementBase = Array.from(perMinute.entries()).sort((a, b) => a[0] - b[0]);
         const latestMinute = engagementBase.length
@@ -10328,7 +10335,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         );
 
         const sentimentTrend = Array.from(perMinuteSentiment.entries()).sort((a, b) => a[0] - b[0]).slice(-12)
-            .map(([minute, score]) => ({ minute, score }));
+            .map(([minute, bucket]) => {
+                const total = bucket.positive + bucket.negative + bucket.neutral;
+                return {
+                    minute,
+                    score: bucket.score,
+                    positive: bucket.positive,
+                    negative: bucket.negative,
+                    neutral: bucket.neutral,
+                    total,
+                    // AQI is a normalized -100..100 balance, comparable between minutes.
+                    aqi: total ? Math.round(((bucket.positive - bucket.negative) / total) * 100) : 0
+                };
+            });
         if (sentimentTrend.length < 2 && sentimentMessages.length > 3) {
             const recentForTrend = sentimentMessages.slice(-48);
             const chunkSize = Math.max(2, Math.ceil(recentForTrend.length / 12));
@@ -10336,10 +10355,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             for (let i = 0; i < recentForTrend.length; i += chunkSize) {
                 const chunk = recentForTrend.slice(i, i + chunkSize);
                 let chunkScore = 0;
+                let positive = 0;
+                let negative = 0;
+                let neutral = 0;
                 chunk.forEach((m) => {
-                    chunkScore += scoreSentimentText(m.text);
+                    const score = scoreSentimentText(m.text);
+                    chunkScore += score;
+                    if (score > 0) positive += 1;
+                    else if (score < 0) negative += 1;
+                    else neutral += 1;
                 });
-                rollingTrend.push({ minute: rollingTrend.length, score: chunkScore });
+                const total = positive + negative + neutral;
+                rollingTrend.push({ minute: rollingTrend.length, score: chunkScore, positive, negative, neutral, total, aqi: total ? Math.round(((positive - negative) / total) * 100) : 0 });
             }
             if (rollingTrend.length) {
                 sentimentTrend.splice(0, sentimentTrend.length, ...rollingTrend.slice(-12));
@@ -10554,10 +10581,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         const _giftScanLimit = 5000;
         const giftScanBase = (Array.isArray(source) ? source : messages)
-            .filter((m) => {
-                const type = normalizeTkaiMessageType(m);
-                return type === 'gift' || type === 'subscriber';
-            })
+            // The live DOM does not always supply a type.  Use the same robust
+            // detector as the Gift Gallery so the dashboard cannot silently
+            // discard detected gift events.
+            .filter((m) => isTkaiGiftLikeMessage(m))
             .slice(-_giftScanLimit);
         const giftTypeMap = new Map();
         const giftUserMap = new Map();
@@ -10565,7 +10592,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         let giftCoinsTotal = 0;
         giftScanBase.forEach((m) => {
             const resolvedGift = safeResolveGiftMetaFromMessage(m);
-            const giftName = String(m.giftName || getTkaiGiftMeta(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
+            const giftName = String(resolvedGift?.giftName || m.giftName || getTkaiGiftMeta(m.text || '').giftName || m.text || 'Unknown gift').trim().slice(0, 80);
             const user = String(m.user || 'unknown').trim().slice(0, 40) || 'unknown';
             const quantity = Math.max(1, Number(m.quantity || resolvedGift?.quantity || 1));
             const coins = Math.max(0, Number(m.coins || resolvedGift?.coins || parseCoinsFromText(m.text) || 0));
@@ -10893,13 +10920,23 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             : [];
         if (giftEchartsInstance) {
             const giftData = giftRows
-                .map((gift) => ({
-                    name: String(gift.giftName || 'Nepoznati gift'),
-                    value: Math.max(0, Number(gift.coins || 0)),
-                    coins: Math.max(0, Number(gift.coins || 0)),
-                    quantity: Math.max(0, Number(gift.quantity || 0)),
-                    events: Math.max(0, Number(gift.events || 0))
-                }))
+                .map((gift) => {
+                    const coins = Math.max(0, Number(gift.coins || 0));
+                    const quantity = Math.max(0, Number(gift.quantity || 0));
+                    const events = Math.max(0, Number(gift.events || 0));
+                    // Do not hide a received gift simply because TikTok did not
+                    // expose its coin value and it is not yet in the catalog.
+                    // The fallback is explicitly marked in the tooltip.
+                    return {
+                        name: String(gift.giftName || 'Nepoznati gift'),
+                        value: coins || quantity || events,
+                        coins,
+                        quantity,
+                        events,
+                        valueKnown: coins > 0,
+                        itemStyle: coins > 0 ? undefined : { color: '#64748b' }
+                    };
+                })
                 .filter((gift) => gift.value > 0);
             giftEchartsInstance.setOption({
                 animationDuration: 250,
@@ -10908,7 +10945,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     trigger: 'item',
                     formatter: (item) => {
                         const row = item.data || {};
-                        return `<b>${escHtml(item.name)}</b><br>${formatNum(row.coins || 0)} coins · ${formatNum(row.quantity || 0)} kom · ${formatNum(row.events || 0)} događaja`;
+                        const value = row.valueKnown
+                            ? `${formatNum(row.coins || 0)} coins`
+                            : 'coin vrijednost nije dostupna';
+                        return `<b>${escHtml(item.name)}</b><br>${value} · ${formatNum(row.quantity || 0)} kom · ${formatNum(row.events || 0)} događaja`;
                     }
                 },
                 legend: {
@@ -11170,9 +11210,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         if (sentimentAqiEchartsInstance) {
             const sourceTrend = Array.isArray(insights?.sentimentTrend) ? insights.sentimentTrend.slice(-24) : [];
-            const fallbackScore = Number(insights?.sentimentCounts?.positivePct || 0) - Number(insights?.sentimentCounts?.negativePct || 0);
-            const points = sourceTrend.length ? sourceTrend : [{ minute: 0, score: fallbackScore / 25 }];
-            const scoreData = points.map((point) => Math.max(-100, Math.min(100, Math.round(Number(point.score || 0) * 25))));
+            const fallbackAqi = Number(insights?.sentimentCounts?.positivePct || 0) - Number(insights?.sentimentCounts?.negativePct || 0);
+            const points = sourceTrend.length ? sourceTrend : [{ minute: 0, aqi: fallbackAqi, total: Number(insights?.sentimentCounts?.total || 0) }];
+            // Prefer the normalized AQI.  Retain the score fallback for saved
+            // sessions created before AQI was added.
+            const scoreData = points.map((point) => {
+                const aqi = Number.isFinite(Number(point.aqi)) ? Number(point.aqi) : Number(point.score || 0) * 25;
+                return Math.max(-100, Math.min(100, Math.round(aqi)));
+            });
             const option = {
                 animationDuration: 250,
                 backgroundColor: 'transparent',
@@ -11183,7 +11228,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                         const row = rows?.[0];
                         const value = Number(row?.value || 0);
                         const label = value > 15 ? 'pozitivno' : value < -15 ? 'negativno' : 'neutralno';
-                        return `${row?.axisValueLabel || ''}<br><b>${value > 0 ? '+' : ''}${value}</b> · ${label}`;
+                        const point = points[row?.dataIndex || 0] || {};
+                        const volume = Math.max(0, Number(point.total || 0));
+                        return `${row?.axisValueLabel || ''}<br><b>${value > 0 ? '+' : ''}${value} AQI</b> · ${label}${volume ? `<br>${formatNum(volume)} poruka` : ''}`;
                     }
                 },
                 xAxis: {
@@ -11198,7 +11245,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     min: -100,
                     max: 100,
                     interval: 50,
-                    breaks: [{ start: -15, end: 15, gap: '9%' }],
                     axisLabel: { color: '#94a3b8', fontSize: 9, formatter: (value) => value > 0 ? `+${value}` : value },
                     splitLine: { lineStyle: { color: 'rgba(148,163,184,.13)' } }
                 },
@@ -11229,12 +11275,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     markLine: { silent: true, symbol: 'none', lineStyle: { color: '#64748b', type: 'dashed' }, data: [{ yAxis: 0 }] }
                 }]
             };
-            try {
-                sentimentAqiEchartsInstance.setOption(option, true);
-            } catch (_) {
-                delete option.yAxis.breaks;
-                sentimentAqiEchartsInstance.setOption(option, true);
-            }
+            sentimentAqiEchartsInstance.setOption(option, true);
         }
 
         if (viewerTrendEchartsInstance) {
@@ -11478,11 +11519,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const margin = Math.max(1, Math.ceil(sentiment.total * 0.1));
         const balance = sentiment.positive - sentiment.negative;
         insights.sentiment = balance >= margin ? 'positive' : balance <= -margin ? 'negative' : 'neutral';
-        insights.sentimentTrend = timeline.slice(-24).map((bucket) => ({
-            minute: minuteNumber(bucket),
-            score: Math.max(0, Number(bucket?.sentiment?.positive || 0))
-                - Math.max(0, Number(bucket?.sentiment?.negative || 0))
-        }));
+        insights.sentimentTrend = timeline.slice(-24).map((bucket) => {
+            const positive = Math.max(0, Number(bucket?.sentiment?.positive || 0));
+            const negative = Math.max(0, Number(bucket?.sentiment?.negative || 0));
+            const neutral = Math.max(0, Number(bucket?.sentiment?.neutral || 0));
+            const total = positive + negative + neutral;
+            return {
+                minute: minuteNumber(bucket),
+                score: positive - negative,
+                positive,
+                negative,
+                neutral,
+                total,
+                aqi: total ? Math.round(((positive - negative) / total) * 100) : 0
+            };
+        });
 
         const giftTypes = new Map();
         const gifters = new Map();
@@ -15022,8 +15073,30 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         || /^(?:no\.?|rank|top)\s*\d{1,3}\b/i;
                     return plainCounter.test(t) || viewerHint.test(t) || leaderboardHint.test(t) || leaderboardRow.test(t);
                 }
+                function hasLiveChatContext(el) {
+                    let node = el;
+                    let context = '';
+                    for (let depth = 0; node && depth < 7; depth += 1, node = node.parentElement) {
+                        context += ' ' + [
+                            node.getAttribute?.('data-e2e') || '',
+                            node.getAttribute?.('role') || '',
+                            node.className || '',
+                            node.getAttribute?.('aria-label') || ''
+                        ].join(' ');
+                    }
+                    // These elements can visually sit next to the chat, but are
+                    // stream captions, profile/header text or leaderboards.
+                    if (/(?:caption|subtitle|profile|bio|description|live-header|viewer|leaderboard|ranking)/i.test(context)) return false;
+                    return /(?:chat|comment|message|webcast|chatroom|live-room)/i.test(context);
+                }
                 function isLikelyChatRowElement(el) {
                     if (!el) return false;
+                    const rect = typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+                    // Ignore stale/hidden chat containers left by TikTok's
+                    // virtualized UI. They otherwise win the selector count
+                    // while the visible chat is never scanned.
+                    if (!rect || rect.width < 8 || rect.height < 4 || rect.bottom < 0 || rect.top > window.innerHeight) return false;
+                    if (!hasLiveChatContext(el)) return false;
                     const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim();
                     if (!txt || txt.length < 2 || txt.length > 650) return false;
                     if (isViewerOrLeaderboardText(txt)) return false;
@@ -15431,6 +15504,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             patterns.push(new RegExp('^\\s*@?' + escapeRe(normalizedUser) + '\\s*[·•|:\\-–—]?\\s*', 'i'));
           }
           patterns.push(/^\s*(?:no\.?|rank|top)\s*#?\s*[1-3]\s*[·•|:\-–—]?\s*/i);
+          // TikTok's Croatian UI can prepend club/rank badges as plain text,
+          // e.g. "RAVE Br. 1 Br. 3 Br. 2 Biciklizam je život". These are
+          // metadata, not part of the viewer's chat message.
+          patterns.push(/^\s*(?:[A-ZČĆĐŠŽ][A-ZČĆĐŠŽ0-9_-]{1,24}\s+)?(?:(?:br\.?|broj|no\.?|rank|top)\s*#?\s*[1-3]\s*[·•|:\-–—]?\s*){1,4}/i);
 
           // TikTok can render these fields as separate nodes without separators.
           // Re-run the known prefix patterns a few times, but never remove them
@@ -15478,7 +15555,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               const chatLikeFound = foundItems.filter(isLikelyChatRowElement);
               const usable = chatLikeFound.length
                 ? chatLikeFound
-                : foundItems.filter((el) => !isViewerOrLeaderboardText(el.textContent || ''));
+                : foundItems.filter((el) => hasLiveChatContext(el) && !isViewerOrLeaderboardText(el.textContent || ''));
               // TikTok often leaves an old/small chat container in the DOM.
               // Do not stop at the first selector: keep the selector that sees
               // the most real rows in the currently rendered live chat.
@@ -15488,7 +15565,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         items = bestPrimaryItems;
         // Deep DOM scan fallback: find container with many child divs that look like chat
-        if (items.length === 0) {
+        // A short live can have just one row in a stale/off-screen container.
+        // Continue with the structural fallback until we have at least two
+        // plausible rows from the currently rendered chat.
+        if (items.length < 2) {
           const chatContainerSelectors = [
             '[data-e2e="chat-message-list"]',
             '[data-e2e="chatroom-message-list"]',
@@ -15509,15 +15589,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (container) {
                 const children = Array.from(container.children).filter(c => c.textContent.trim().length > 5);
                 const chatLikeChildren = children.filter(isLikelyChatRowElement);
-                if (chatLikeChildren.length >= 2) { items = chatLikeChildren; break; }
-                if (children.length > 0 && children.some(c => !isViewerOrLeaderboardText(c.textContent || ''))) { items = children; break; }
+                if (chatLikeChildren.length >= 2 || (items.length === 0 && chatLikeChildren.length === 1)) { items = chatLikeChildren; break; }
+                if (items.length === 0 && children.length > 0 && children.some(c => !isViewerOrLeaderboardText(c.textContent || ''))) { items = children; break; }
               }
             } catch(_) {}
           }
         }
         // Structural fallback: inside #tiktok-live-main-container-id look for a right-side
         // scrollable panel whose direct children look like chat rows (has user + text content)
-        if (items.length === 0) {
+        if (items.length < 2) {
           try {
             const liveRoot = document.querySelector('#tiktok-live-main-container-id') || document.body;
             const scrollCandidates = Array.from(liveRoot.querySelectorAll('div, ul')).filter(function(el) {
@@ -15529,7 +15609,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               if (r.left < window.innerWidth * 0.35) return false;
               const kids = Array.from(el.children).filter(c => c.textContent.trim().length > 4);
               const chatLikeKids = kids.filter(isLikelyChatRowElement);
-              return chatLikeKids.length >= 3;
+              return chatLikeKids.length >= 1;
             });
             if (scrollCandidates.length) {
               // Pick the candidate with the most chat-like rows. Viewers/leaderboards can also be scrollable on the right.
@@ -15843,7 +15923,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
             // TikTok virtualizes chat rows and can reuse an element id for a
             // later message. Only data attributes are message identities.
-            const mid = el.getAttribute('data-message-id') || el.getAttribute('data-id') || '';
+            // TikTok virtualizes the chat list. Its short data-id/index values
+            // are commonly reused for a later row, which previously made the
+            // collector drop new chat messages as duplicates. Keep only IDs
+            // that look like a durable webcast/message identity.
+            const rawMid = el.getAttribute('data-message-id')
+              || el.getAttribute('data-messageid')
+              || el.getAttribute('data-webcast-id')
+              || el.getAttribute('data-id')
+              || '';
+            const mid = /^[a-z0-9_-]{12,}$/i.test(String(rawMid || '')) ? String(rawMid) : '';
                         const messageType = isShare ? 'share' : (isGift ? 'gift' : (isSubscriber ? 'subscriber' : (isJoin ? 'join' : (isLike ? 'like' : 'chat'))));
                         if (TKAI_PARSER_DEBUG) {
                             const likelyMention = /^\s*@/.test(text) || /(^|\s)@[a-z0-9._]{2,40}\b/i.test(text);
@@ -15891,6 +15980,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
               ariaLabel: el.getAttribute('aria-label') || '',
               title: el.getAttribute('title') || '',
               mid,
+              rowIndex: index,
                                                                                                                 type: isShare ? 'share' : (isGift ? 'gift' : (isJoin ? 'join' : (isSubscriber ? 'subscriber' : (isLike ? 'like' : 'chat')))),
               level: levelHint,
               userLevel: levelHint,
@@ -16088,11 +16178,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 return 0;
             }
             const existing = new Set(collectedMessages.map(message => message.id));
+            // Store every recent occurrence, not only one timestamp. TikTok can
+            // legitimately show the same user/text in two separate chat rows;
+            // a single timestamp made the second row disappear from Chat Feed.
             const existingRecent = new Map();
             const existingGiftRecent = new Map();
             collectedMessages.forEach(message => {
                 const k = `${message.type || 'chat'}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
-                existingRecent.set(k, Number(message.ts || 0));
+                const timestamps = existingRecent.get(k) || [];
+                timestamps.push(Number(message.ts || 0));
+                existingRecent.set(k, timestamps);
                 const msgType = String(message.type || '');
                 if (msgType === 'gift' || msgType === 'subscriber') {
                     const giftMeta = safeResolveGiftMetaFromMessage(message);
@@ -16111,6 +16206,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const incomingChatsForCcRead = [];
             const incomingAddedMessages = [];
             const incomingGiftSeen = new Set();
+            const incomingOccurrences = new Map();
             let lastAddedGiftMessage = null;
             const nowTs = Date.now();
             const dedupWindowMs = Math.max(2500, Number(DB.getSettings().tkaiDedupWindowMs || 7000) || 7000);
@@ -16132,7 +16228,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     : '';
 
                 const baseKey = `${type}:${message.user}:${message.text}`;
-                const inKey = `${message.mid || ''}|${type}|${message.user || ''}|${message.text || ''}`;
+                const inKey = `${message.mid || ''}|${message.rowIndex ?? ''}|${type}|${message.user || ''}|${message.text || ''}`;
                 if (incomingSeen.has(inKey)) return;
                 incomingSeen.add(inKey);
 
@@ -16143,12 +16239,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 }
 
                 // Text-only rows have no durable TikTok message id. Keep their
-                // short dedup window, but do not suppress the same real chat
-                // message forever just because a virtualized DOM row was reused.
-                const id = message.mid ? `mid:${message.mid}` : `${baseKey}:${nowTs}`;
+                // short dedup window, but preserve separate occurrences of the
+                // same text that TikTok rendered as separate rows.
                 const recentKey = `${type}:${String(message.user || '').toLowerCase()}:${String(message.text || '').trim()}`;
-                const lastSeenTs = Number(existingRecent.get(recentKey) || 0);
-                if (lastSeenTs > 0 && (nowTs - lastSeenTs) <= dedupWindowMs) return;
+                const occurrence = (incomingOccurrences.get(recentKey) || 0) + 1;
+                incomingOccurrences.set(recentKey, occurrence);
+                const id = message.mid ? `mid:${message.mid}` : `${baseKey}:${nowTs}:${occurrence}`;
+                const recentTimestamps = (existingRecent.get(recentKey) || [])
+                    .filter((ts) => ts > 0 && (nowTs - ts) <= dedupWindowMs);
+                if (recentTimestamps.length >= occurrence) return;
                 if (!existing.has(id)) {
                     const normalizedMessage = {
                         ...message,
@@ -16170,7 +16269,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     incomingAddedMessages.push(normalizedMessage);
                     if (isGiftType) lastAddedGiftMessage = normalizedMessage;
                     existing.add(id);
-                    existingRecent.set(recentKey, nowTs);
+                    existingRecent.set(recentKey, [...recentTimestamps, nowTs]);
                     if (isGiftType && giftNameNorm) {
                         existingGiftRecent.set(giftSignature, nowTs);
                         incomingGiftSeen.add(giftSignature);
@@ -17076,6 +17175,18 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 try { DB.saveSetting('tkaiShowInsights', true); } catch (_) { }
             }
             localStorage.setItem(analyticsMigrationKey, '1');
+        }
+        // Gift Gallery used to be easy to hide in saved layouts and was then
+        // rendered below the oversized chat area. Restore it once so existing
+        // users immediately see the gallery again; it can still be hidden
+        // deliberately afterwards in Settings.
+        const giftGalleryMigrationKey = 'ex_tkai_gift_gallery_visible_v1';
+        if (localStorage.getItem(giftGalleryMigrationKey) !== '1') {
+            s.tkaiShowGiftGallery = true;
+            try { DB.saveSetting('tkaiShowGiftGallery', true); } catch (_) { }
+            const section = document.getElementById('tkaiGiftGallerySection');
+            if (section) section.style.removeProperty('display');
+            localStorage.setItem(giftGalleryMigrationKey, '1');
         }
         const vis = (id, settingKey, def = true) => {
             const el = document.getElementById(id);

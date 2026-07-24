@@ -119,44 +119,31 @@ LIVE_HEALTH_DETAILS=false
 `Origin` koji šalje potpisana Electron aplikacija, zatim dopustiti samo točne
 vrijednosti. Ne koristiti `*`. Origin je dodatna zaštita, a ne zamjena za token.
 
-## Plesk/nginx proxy
+## Plesk/Apache proxy
 
-Privatni Node servis sluša samo na `127.0.0.1:8791`. Javno su dostupne samo
-nginx rute preko TLS-a:
+Privatni Node servis sluša samo na `127.0.0.1:8791`. Na ovom hostu nginx servis
+nije aktivan; javne TLS rute postavljene su kroz Pleskove Apache
+`vhost.conf` i `vhost_ssl.conf` datoteke. Izvor direktiva je
+`apache-vhost.conf.example`.
 
-```nginx
-location = /health {
-    proxy_pass http://127.0.0.1:8791/health;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $remote_addr;
-}
-
-location /v1/live {
-    proxy_pass http://127.0.0.1:8791;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $remote_addr;
-    proxy_read_timeout 3600s;
-    proxy_send_timeout 3600s;
-}
+```bash
+plesk sbin httpdmng --reconfigure-domain live.kriptoentuzijasti.io
+apache2ctl configtest
+systemctl reload apache2
 ```
 
 Node port `8791` ne otvarati javno u firewallu. TLS certifikat ostaje pod
-Pleskom/nginxom i ne kopira se u repozitorij.
+Pleskom/Apacheom i ne kopira se u repozitorij.
 
-## PM2 postupak kada deploy bude izričito odobren
+## PM2 postupak
 
-Ove naredbe su upute; samo zapisivanje dokumenta ih ne izvršava:
+Proces je postavljen pod korisnikom `kriptoen`:
 
 ```bash
-cd /PUTANJA/DO/live-chat-server
+cd "/var/www/vhosts/kriptoentuzijasti.io/AI projekt/browser/standalone-browser/live-chat-server"
 npm install --omit=dev
-pm2 start ecosystem.config.cjs
+export PM2_HOME=/var/www/vhosts/kriptoentuzijasti.io/.pm2
+pm2 start ecosystem.config.cjs --only etherx-live-chat
 pm2 save
 pm2 status etherx-live-chat
 pm2 logs etherx-live-chat --lines 50 --nostream

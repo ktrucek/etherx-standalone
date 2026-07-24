@@ -4861,7 +4861,9 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
 
 .tkai-main {
   min-height: 230px;
-  flex: 1 1 clamp(250px, 38vh, 380px);
+  /* Keep the Gift Gallery directly below the chat visible in the normal
+     580px panel. The old 380px preferred height pushed it below the fold. */
+  flex: 0 1 clamp(230px, 32vh, 300px);
 }
 
 .tkai-config {
@@ -5000,6 +5002,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
 .tkai-gift-gallery-section {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   min-height: 0;
   position: relative;
 }

@@ -1,0 +1,12 @@
+# Plesk Apache custom directives for live.kriptoentuzijasti.io.
+# Install the same content as:
+# /var/www/vhosts/system/live.kriptoentuzijasti.io/conf/vhost.conf
+# /var/www/vhosts/system/live.kriptoentuzijasti.io/conf/vhost_ssl.conf
+
+ProxyPreserveHost On
+
+ProxyPass "/health" "http://127.0.0.1:8791/health" connectiontimeout=3 timeout=10 retry=0
+ProxyPassReverse "/health" "http://127.0.0.1:8791/health"
+
+ProxyPass "/v1/live" "ws://127.0.0.1:8791/v1/live" connectiontimeout=5 timeout=3600 retry=0
+ProxyPassReverse "/v1/live" "ws://127.0.0.1:8791/v1/live"
