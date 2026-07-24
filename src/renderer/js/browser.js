@@ -11253,6 +11253,79 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         refreshRowButtons();
     }
 
+    function renderTkaiDashboardLayoutVisualList() {
+        const container = document.getElementById('tkaiLayoutVisualDashboard');
+        if (!container) return;
+        const cards = Array.from(document.querySelectorAll('#tkaiInsights .tkai-insights-card'));
+        container.innerHTML = '';
+        if (!cards.length) {
+            container.innerHTML = '<div class="tkai-empty" style="font-size:10px;padding:8px">Dashboard kartice još nisu učitane.</div>';
+            return;
+        }
+        cards.forEach((card, index) => {
+            if (!card.id) card.id = 'tkaiDashboardCard-' + index;
+            const title = String(card.querySelector('.tkai-insights-title')?.textContent || getTkaiLayoutLabel(card, 'Dashboard kartica'))
+                .replace(/\s+/g, ' ').trim();
+            const row = document.createElement('div');
+            row.className = 'tkai-layout-visual-item';
+            const icon = document.createElement('span');
+            icon.className = 'tkai-layout-visual-grip';
+            icon.textContent = card.classList.contains('tkai-resizable-chart-card') ? '📈' : '▦';
+            const name = document.createElement('div');
+            name.className = 'tkai-layout-visual-name';
+            name.textContent = title || ('Kartica ' + (index + 1));
+            const actions = document.createElement('div');
+            actions.className = 'tkai-layout-visual-actions';
+            const openBtn = document.createElement('button');
+            openBtn.type = 'button';
+            openBtn.className = 'tkai-layout-visual-btn';
+            openBtn.textContent = 'Otvori';
+            const visibleBtn = document.createElement('button');
+            visibleBtn.type = 'button';
+            visibleBtn.className = 'tkai-layout-visual-btn';
+            const isHidden = card.dataset.tkaiLayoutHidden === '1';
+            visibleBtn.textContent = isHidden ? 'Prikaži' : 'Sakrij';
+            const resetBtn = document.createElement('button');
+            resetBtn.type = 'button';
+            resetBtn.className = 'tkai-layout-visual-btn';
+            resetBtn.textContent = '↺';
+            resetBtn.title = 'Vrati početnu veličinu kartice';
+            openBtn.addEventListener('click', () => {
+                if (card.dataset.tkaiLayoutHidden === '1') {
+                    card.dataset.tkaiLayoutHidden = '0';
+                    card.style.removeProperty('display');
+                    localStorage.removeItem('ex_tkai_dashboard_hidden_' + card.id);
+                }
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('tkai-layout-focus');
+                setTimeout(() => card.classList.remove('tkai-layout-focus'), 1200);
+                renderTkaiDashboardLayoutVisualList();
+            });
+            visibleBtn.addEventListener('click', () => {
+                const hide = card.dataset.tkaiLayoutHidden !== '1';
+                card.dataset.tkaiLayoutHidden = hide ? '1' : '0';
+                card.style.display = hide ? 'none' : '';
+                if (hide) localStorage.setItem('ex_tkai_dashboard_hidden_' + card.id, '1');
+                else localStorage.removeItem('ex_tkai_dashboard_hidden_' + card.id);
+                renderTkaiDashboardLayoutVisualList();
+            });
+            resetBtn.addEventListener('click', () => {
+                card.style.removeProperty('width');
+                card.style.removeProperty('height');
+                card.style.removeProperty('min-height');
+                window.dispatchEvent(new Event('resize'));
+                showToast('↺ Veličina kartice vraćena');
+            });
+            if (localStorage.getItem('ex_tkai_dashboard_hidden_' + card.id) === '1') {
+                card.dataset.tkaiLayoutHidden = '1';
+                card.style.display = 'none';
+            }
+            actions.append(openBtn, visibleBtn, resetBtn);
+            row.append(icon, name, actions);
+            container.appendChild(row);
+        });
+    }
+
     function renderTkaiLayoutVisualEditor() {
         syncTkaiInlineLayoutControls();
         const feedRoot = getTkaiFeedLayoutRoot();
@@ -11269,6 +11342,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             datasetKey: 'tkaiLayoutKey',
             storageKey: TKAI_SESSION_LAYOUT_KEY,
         });
+        renderTkaiDashboardLayoutVisualList();
     }
     window.renderTkaiLayoutVisualEditor = renderTkaiLayoutVisualEditor;
     let syncTkaiSessionLayoutState = null;
