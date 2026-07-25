@@ -784,6 +784,65 @@ if (window.electronWebview) {
                 await wv.executeJavaScript(`(() => {
               if (window.__etherxPwdWatcherInstalled) return true;
               window.__etherxPwdWatcherInstalled = true;
+                            if (/(^|\.)tiktok\.com$/i.test(location.hostname || '') && !window.__etherxTikTokTelemetrySilenced) {
+                                window.__etherxTikTokTelemetrySilenced = true;
+                                const isTelemetryUrl = (value) => {
+                                    const url = String(value || '');
+                                    return /https?:\/\/(?:mon\d+-normal-[^/]+\.tiktokv\.eu\/monitor_browser\/collect\/batch\/\?(?:[^#]*\b(?:biz_id=tiktok_webapp_live|bid=tiktok_pns_web_runtime)\b)|mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list(?:[?#]|$))/i.test(url);
+                                };
+                                const originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
+                                if (originalFetch) {
+                                    window.fetch = function(input, init) {
+                                        const url = typeof input === 'string' ? input : (input && input.url) || '';
+                                        if (isTelemetryUrl(url)) return Promise.resolve(new Response('', { status: 204, statusText: 'No Content' }));
+                                        return originalFetch(input, init);
+                                    };
+                                }
+                                const originalBeacon = typeof navigator.sendBeacon === 'function' ? navigator.sendBeacon.bind(navigator) : null;
+                                if (originalBeacon) {
+                                    navigator.sendBeacon = function(url, data) {
+                                        if (isTelemetryUrl(url)) return true;
+                                        return originalBeacon(url, data);
+                                    };
+                                }
+                                const XhrProto = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
+                                if (XhrProto && !XhrProto.__etherxTelemetryPatched) {
+                                    XhrProto.__etherxTelemetryPatched = true;
+                                    const originalOpen = XhrProto.open;
+                                    const originalSend = XhrProto.send;
+                                    const dispatchSilentLoad = (xhr) => {
+                                        const define = (key, value) => {
+                                            try { Object.defineProperty(xhr, key, { configurable: true, get: () => value }); } catch (_) { }
+                                        };
+                                        define('readyState', 4);
+                                        define('status', 204);
+                                        define('statusText', 'No Content');
+                                        define('response', '');
+                                        define('responseText', '');
+                                        define('responseURL', String(xhr.__etherxTelemetryUrl || ''));
+                                        setTimeout(() => {
+                                            try { xhr.onreadystatechange && xhr.onreadystatechange(new Event('readystatechange')); } catch (_) { }
+                                            try { xhr.dispatchEvent(new Event('readystatechange')); } catch (_) { }
+                                            try { xhr.onload && xhr.onload(new Event('load')); } catch (_) { }
+                                            try { xhr.dispatchEvent(new Event('load')); } catch (_) { }
+                                            try { xhr.onloadend && xhr.onloadend(new Event('loadend')); } catch (_) { }
+                                            try { xhr.dispatchEvent(new Event('loadend')); } catch (_) { }
+                                        }, 0);
+                                    };
+                                    XhrProto.open = function(method, url) {
+                                        this.__etherxSilentTelemetry = isTelemetryUrl(url);
+                                        this.__etherxTelemetryUrl = String(url || '');
+                                        return originalOpen.apply(this, arguments);
+                                    };
+                                    XhrProto.send = function(body) {
+                                        if (this.__etherxSilentTelemetry) {
+                                            dispatchSilentLoad(this);
+                                            return;
+                                        }
+                                        return originalSend.apply(this, arguments);
+                                    };
+                                }
+                            }
               const visible = el => !!el && !el.disabled && el.type !== 'hidden' && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
               const getCandidate = () => {
                 const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
@@ -799,12 +858,6 @@ if (window.electronWebview) {
                 const candidate = getCandidate();
                 if (candidate?.password) console.log('__ETHERX_SAVE_PASSWORD__' + JSON.stringify({ ...candidate, reason }));
               };
-              document.addEventListener('mousedown', () => {
-                const now = Date.now();
-                if (now - (window.__etherxLastPageClickLog || 0) < 500) return;
-                window.__etherxLastPageClickLog = now;
-                console.log('__ETHERX_PAGE_CLICK__');
-              }, true);
               document.addEventListener('submit', () => setTimeout(() => emit('submit'), 80), true);
               document.addEventListener('click', ev => {
                 const target = ev.target && ev.target.closest ? ev.target.closest('button,input[type="submit"],input[type="button"]') : null;
@@ -1081,17 +1134,16 @@ if (window.electronWebview) {
                         })()`);
             } catch (_) { }
         });
+        wv.addEventListener('mousedown', () => {
+            if (Number(wv.dataset.tabId) === STATE.activeTabId) {
+                ctxMenu.classList.remove('show');
+                hideAutofillBox();
+            }
+        });
         wv.addEventListener('console-message', (e) => {
             const msg = String(e.message || '');
             if (msg.startsWith('__ETHERX_TKAI_DIRTY__')) {
                 try { window.queueTikTokLiveEventScan?.(); } catch (_) { }
-                return;
-            }
-            if (msg === '__ETHERX_PAGE_CLICK__') {
-                if (Number(wv.dataset.tabId) === STATE.activeTabId) {
-                    ctxMenu.classList.remove('show');
-                    hideAutofillBox();
-                }
                 return;
             }
             if (msg.startsWith('__ETHERX_TKAI_CTX__')) {
@@ -6504,6 +6556,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLiveServerFlushTimer = null;
     let tkaiLiveServerReconnectTimer = null;
     let tkaiLiveServerSummary = null;
+    let tkaiFeedHrTranslateInFlight = false;
     const tkaiLiveServerPageRequests = new Map();
     let tkaiTikTokLiveQueue = [];
     let tkaiTikTokLiveUnsubscribe = null;
@@ -14147,6 +14200,69 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const rank = Number(topSupporters[index]?.rank || index + 1);
         return Number.isInteger(rank) && rank >= 1 && rank <= 3 ? rank : 0;
     }
+    function getTkaiFeedHrTranslation(message) {
+        const feedTranslatedText = String(message?.feedTranslatedText || '').replace(/\s+/g, ' ').trim();
+        if (feedTranslatedText) {
+            return {
+                text: feedTranslatedText,
+                lang: String(message?.feedTranslatedLang || 'hr').trim().toLowerCase() || 'hr',
+                by: String(message?.feedTranslatedBy || '').trim()
+            };
+        }
+        const translatedText = String(message?.translatedText || '').replace(/\s+/g, ' ').trim();
+        const translatedLang = String(message?.translatedLang || '').trim().toLowerCase();
+        if (translatedText && translatedLang === 'hr') {
+            return {
+                text: translatedText,
+                lang: 'hr',
+                by: String(message?.translatedBy || message?.translatedByAi || '').trim()
+            };
+        }
+        return null;
+    }
+    async function translateMessagesForHrFeedInPlace(messages) {
+        if (!Array.isArray(messages) || !messages.length || tkaiFeedHrTranslateInFlight) return false;
+        const candidates = messages
+            .filter((message) => message && String(message.type || '').toLowerCase() === 'chat')
+            .filter((message) => String(message.text || '').trim())
+            .filter((message) => !getTkaiFeedHrTranslation(message))
+            .slice(-20);
+        if (!candidates.length) return false;
+
+        tkaiFeedHrTranslateInFlight = true;
+        let changed = false;
+        try {
+            for (const message of candidates) {
+                const sourceText = String(message.text || '').replace(/\s+/g, ' ').trim();
+                if (!sourceText) continue;
+                try {
+                    if (isLikelyIndonesianText(sourceText)) {
+                        const detail = await translateIndonesianToCroatianViaNllbDetailed(sourceText, String((DB.getSettings() || {}).tkaiNllbModel || '').trim() || undefined);
+                        const translated = String(detail?.translated || '').trim();
+                        if (translated) {
+                            message.sourceLang = String(message.sourceLang || 'id').trim() || 'id';
+                            message.feedTranslatedText = translated;
+                            message.feedTranslatedLang = 'hr';
+                            message.feedTranslatedBy = String(detail?.model || detail?.engine || 'NLLB').trim();
+                            changed = true;
+                            continue;
+                        }
+                    }
+                    const detail = await translateViaGoogleDetailed(sourceText, 'hr');
+                    const translated = String(detail?.translated || '').trim();
+                    if (!translated) continue;
+                    if (!message.sourceLang && detail?.sourceLang) message.sourceLang = String(detail.sourceLang).trim();
+                    message.feedTranslatedText = translated;
+                    message.feedTranslatedLang = 'hr';
+                    message.feedTranslatedBy = 'google';
+                    changed = true;
+                } catch (_) { }
+            }
+        } finally {
+            tkaiFeedHrTranslateInFlight = false;
+        }
+        return changed;
+    }
     function renderMessages(options = {}) {
         if (!messagesEl) return;
         const settings = DB.getSettings();
@@ -14232,6 +14348,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                                     : (displayType === 'listening'
                                         ? '<span style="font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(45,212,191,.16);color:#5eead4;border:1px solid rgba(45,212,191,.35)">🎙 Slušanje</span>'
                                         : ''))))));
+            const hrFeedTranslation = displayType === 'chat' ? getTkaiFeedHrTranslation(message) : null;
+            const showFeedHrTranslation = displayType === 'chat' && !!hrFeedTranslation?.text;
             const showCaptionTranslation = displayType === 'caption' && !!message.translatedText;
             const showListeningTranslation = displayType === 'listening' && !!message.translatedText;
             const nllbShowBoth = DB.getSettings().tkaiNllbShowBoth !== false;
@@ -14245,8 +14363,15 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + escHtml(String(message.translatedBy || 'NLLB').replace('facebook/', '').replace('nllb-200-distilled-', 'NLLB-'))
                 + '</span>'
                 : '';
-            const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showListeningTranslation || showNllbIdHrTranslation) && message.translatedText
-                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">' + escHtml(String(message.translatedLang || 'HR').toUpperCase()) + ':</span> ' + escHtml(message.translatedText) + nllbBadge + '</div>'
+            const activeTranslationText = showFeedHrTranslation ? hrFeedTranslation.text : message.translatedText;
+            const activeTranslationLang = showFeedHrTranslation ? hrFeedTranslation.lang : message.translatedLang;
+            const activeTranslationBadge = showFeedHrTranslation && hrFeedTranslation.by
+                ? '<span style="margin-left:6px;font-size:9px;padding:1px 6px;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(56,189,248,.38);color:#7dd3fc;vertical-align:middle">'
+                + escHtml(String(hrFeedTranslation.by || '').replace('facebook/', '').replace('nllb-200-distilled-', 'NLLB-').replace('google', 'Google'))
+                + '</span>'
+                : nllbBadge;
+            const translated = ((showTranslated && message.translatedLang === targetLang) || showCaptionTranslation || showListeningTranslation || showNllbIdHrTranslation || showFeedHrTranslation) && activeTranslationText
+                ? '<div class="tkai-msg-text" style="margin-top:4px;color:#f6fbff"><span style="font-size:10px;opacity:.7">' + escHtml(String(activeTranslationLang || 'HR').toUpperCase()) + ':</span> ' + escHtml(activeTranslationText) + activeTranslationBadge + '</div>'
                 : '';
             const giftSummary = (() => {
                 if (!giftMeta) return '';
@@ -14288,7 +14413,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 ? '<div class="tkai-msg-text" style="margin-top:4px;font-size:10px;color:#fda4af">'
                 + 'Likes × ' + formatNum(Math.max(1, Number(message.quantity || 1))) + '</div>'
                 : '';
-            const originalLabel = showNllbIdHrTranslation ? 'ID:' : 'Original:';
+            const originalLabel = (showNllbIdHrTranslation || (showFeedHrTranslation && String(message.sourceLang || '').toLowerCase() === 'id')) ? 'ID:' : 'Original:';
             const originalText = displayType === 'listening' && message.originalText ? message.originalText : message.text;
             const original = translated
                 ? '<div class="tkai-msg-text" style="margin-top:2px;font-size:10px;opacity:.65"><span style="font-size:10px;opacity:.7">' + originalLabel + '</span> ' + escHtml(originalText) + '</div>'
@@ -14443,6 +14568,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!incremental || incrementalGiftMessages.length) renderGiftGallery();
         if (chatPopout && document.body.contains(chatPopout)) {
             mirrorToPopout(collectedMessages, { forceRender: !incremental });
+        }
+        if (!incremental && chatMessages.length) {
+            void translateMessagesForHrFeedInPlace(chatMessages.slice(-40))
+                .then((changed) => { if (changed) renderMessages(); })
+                .catch(() => { });
         }
     }
     function renderReplies(suggestions) {
@@ -15863,25 +15993,40 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                         return false;
                                 }
 
-                items.slice(-140).forEach((el, index) => {
-          const userEl = el.querySelector(
-            '[data-e2e="chat-message-user-name"],'
-            + '[data-e2e="user-name"],'
-            + '[data-e2e="message-owner-name"],'
-            + '[data-e2e="comment-username"],'
-            + '[data-e2e="chat-username"],'
-            + '[data-e2e="webcast-live-user-name"],'
-            + '[data-e2e="live-user-name"],'
-            + '[class*="DisplayName"],'
-            + '[class*="UserName"]:not([class*="avatar"]),'
-            + '[class*="Username"]:not([class*="avatar"]),'
-            + '[class*="user-name"],'
-            + '[class*="AuthorName"],'
-            + '[class*="NickName"],'
-            + '[class*="nickname"],'
-            + 'a[href*="/@"],'
-            + 'strong, b'
-          );
+                                items.slice(-140).forEach((el, index) => {
+                    const userSelector = '[data-e2e="chat-message-user-name"],'
+                        + '[data-e2e="user-name"],'
+                        + '[data-e2e="message-owner-name"],'
+                        + '[data-e2e="comment-username"],'
+                        + '[data-e2e="chat-username"],'
+                        + '[data-e2e="webcast-live-user-name"],'
+                        + '[data-e2e="live-user-name"],'
+                        + '[class*="DisplayName"],'
+                        + '[class*="UserName"]:not([class*="avatar"]),'
+                        + '[class*="Username"]:not([class*="avatar"]),'
+                        + '[class*="user-name"],'
+                        + '[class*="AuthorName"],'
+                        + '[class*="NickName"],'
+                        + '[class*="nickname"],'
+                        + 'a[href*="/@"],'
+                        + 'strong, b';
+                    const userCandidates = Array.from(el.querySelectorAll(userSelector));
+                    const userEl = (() => {
+                        const semantic = (node) => String([
+                            node?.getAttribute?.('data-e2e') || '',
+                            node?.getAttribute?.('class') || '',
+                            node?.getAttribute?.('aria-label') || '',
+                            node?.getAttribute?.('title') || ''
+                        ].join(' ')).toLowerCase();
+                        for (const candidate of userCandidates) {
+                            const text = normalizeChatUserName(candidate?.textContent || '');
+                            if (!text) continue;
+                            const kind = semantic(candidate);
+                            if (/(badge|fan|club|rank|level|grade|medal|team|tag|supporter|gifter|gift)/i.test(kind)) continue;
+                            return candidate;
+                        }
+                        return userCandidates.find(Boolean) || null;
+                    })();
           const textEl = el.querySelector(
             '[data-e2e="chat-message-text"],'
             + '[data-e2e="message-text"],'
@@ -15947,7 +16092,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             if (ariaUser) return ariaUser;
             }
             // 4) Look for a child element with data-e2e containing "user" or "name"
-            const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
+            const nameByE2e = Array.from(el.querySelectorAll('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]')).find((node) => {
+                            const kind = String([
+                                node?.getAttribute?.('data-e2e') || '',
+                                node?.getAttribute?.('class') || '',
+                                node?.getAttribute?.('aria-label') || '',
+                                node?.getAttribute?.('title') || ''
+                            ].join(' ')).toLowerCase();
+                            if (/(badge|fan|club|rank|level|grade|medal|team|tag|supporter|gifter|gift)/i.test(kind)) return false;
+                            return !!normalizeChatUserName(node?.textContent || '');
+                        });
                         if (nameByE2e) { const t = normalizeChatUserName(nameByE2e.textContent.trim()); if (t) return t; }
             // 5) First <strong> or <b> is usually the username in TikTok chat
             const boldEl = el.querySelector('strong, b');
@@ -16441,6 +16595,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (targetLang !== 'auto' && incomingAddedMessages.length) {
                 void translateMessagesInPlace(incomingAddedMessages, targetLang)
                     .then(() => renderMessages({ incrementalMessages: incomingAddedMessages }))
+                    .catch(() => { });
+            }
+            if (incomingAddedMessages.length) {
+                void translateMessagesForHrFeedInPlace(incomingAddedMessages)
+                    .then((changed) => { if (changed) renderMessages({ incrementalMessages: incomingAddedMessages }); })
                     .catch(() => { });
             }
             if (incomingAddedMessages.length) {

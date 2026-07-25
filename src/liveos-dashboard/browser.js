@@ -693,6 +693,65 @@ if (window.electronWebview) {
                 await wv.executeJavaScript(`(() => {
               if (window.__etherxPwdWatcherInstalled) return true;
               window.__etherxPwdWatcherInstalled = true;
+                            if (/(^|\.)tiktok\.com$/i.test(location.hostname || '') && !window.__etherxTikTokTelemetrySilenced) {
+                                window.__etherxTikTokTelemetrySilenced = true;
+                                const isTelemetryUrl = (value) => {
+                                    const url = String(value || '');
+                                    return /https?:\/\/(?:mon\d+-normal-[^/]+\.tiktokv\.eu\/monitor_browser\/collect\/batch\/\?(?:[^#]*\b(?:biz_id=tiktok_webapp_live|bid=tiktok_pns_web_runtime)\b)|mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list(?:[?#]|$))/i.test(url);
+                                };
+                                const originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
+                                if (originalFetch) {
+                                    window.fetch = function(input, init) {
+                                        const url = typeof input === 'string' ? input : (input && input.url) || '';
+                                        if (isTelemetryUrl(url)) return Promise.resolve(new Response('', { status: 204, statusText: 'No Content' }));
+                                        return originalFetch(input, init);
+                                    };
+                                }
+                                const originalBeacon = typeof navigator.sendBeacon === 'function' ? navigator.sendBeacon.bind(navigator) : null;
+                                if (originalBeacon) {
+                                    navigator.sendBeacon = function(url, data) {
+                                        if (isTelemetryUrl(url)) return true;
+                                        return originalBeacon(url, data);
+                                    };
+                                }
+                                const XhrProto = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
+                                if (XhrProto && !XhrProto.__etherxTelemetryPatched) {
+                                    XhrProto.__etherxTelemetryPatched = true;
+                                    const originalOpen = XhrProto.open;
+                                    const originalSend = XhrProto.send;
+                                    const dispatchSilentLoad = (xhr) => {
+                                        const define = (key, value) => {
+                                            try { Object.defineProperty(xhr, key, { configurable: true, get: () => value }); } catch (_) { }
+                                        };
+                                        define('readyState', 4);
+                                        define('status', 204);
+                                        define('statusText', 'No Content');
+                                        define('response', '');
+                                        define('responseText', '');
+                                        define('responseURL', String(xhr.__etherxTelemetryUrl || ''));
+                                        setTimeout(() => {
+                                            try { xhr.onreadystatechange && xhr.onreadystatechange(new Event('readystatechange')); } catch (_) { }
+                                            try { xhr.dispatchEvent(new Event('readystatechange')); } catch (_) { }
+                                            try { xhr.onload && xhr.onload(new Event('load')); } catch (_) { }
+                                            try { xhr.dispatchEvent(new Event('load')); } catch (_) { }
+                                            try { xhr.onloadend && xhr.onloadend(new Event('loadend')); } catch (_) { }
+                                            try { xhr.dispatchEvent(new Event('loadend')); } catch (_) { }
+                                        }, 0);
+                                    };
+                                    XhrProto.open = function(method, url) {
+                                        this.__etherxSilentTelemetry = isTelemetryUrl(url);
+                                        this.__etherxTelemetryUrl = String(url || '');
+                                        return originalOpen.apply(this, arguments);
+                                    };
+                                    XhrProto.send = function(body) {
+                                        if (this.__etherxSilentTelemetry) {
+                                            dispatchSilentLoad(this);
+                                            return;
+                                        }
+                                        return originalSend.apply(this, arguments);
+                                    };
+                                }
+                            }
               const visible = el => !!el && !el.disabled && el.type !== 'hidden' && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
               const getCandidate = () => {
                 const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
@@ -708,7 +767,6 @@ if (window.electronWebview) {
                 const candidate = getCandidate();
                 if (candidate?.password) console.log('__ETHERX_SAVE_PASSWORD__' + JSON.stringify({ ...candidate, reason }));
               };
-              document.addEventListener('mousedown', () => console.log('__ETHERX_PAGE_CLICK__'), true);
               document.addEventListener('submit', () => setTimeout(() => emit('submit'), 80), true);
               document.addEventListener('click', ev => {
                 const target = ev.target && ev.target.closest ? ev.target.closest('button,input[type="submit"],input[type="button"]') : null;
@@ -944,15 +1002,14 @@ if (window.electronWebview) {
                         })()`);
             } catch (_) { }
         });
+        wv.addEventListener('mousedown', () => {
+            if (Number(wv.dataset.tabId) === STATE.activeTabId) {
+                ctxMenu.classList.remove('show');
+                hideAutofillBox();
+            }
+        });
         wv.addEventListener('console-message', (e) => {
             const msg = String(e.message || '');
-            if (msg === '__ETHERX_PAGE_CLICK__') {
-                if (Number(wv.dataset.tabId) === STATE.activeTabId) {
-                    ctxMenu.classList.remove('show');
-                    hideAutofillBox();
-                }
-                return;
-            }
             if (msg.startsWith('__ETHERX_TKAI_CTX__')) {
                 try {
                     const payload = JSON.parse(msg.slice('__ETHERX_TKAI_CTX__'.length));
@@ -10718,24 +10775,39 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                         return false;
                                 }
 
-                items.slice(-140).forEach((el, index) => {
-          const userEl = el.querySelector(
-            '[data-e2e="chat-message-user-name"],'
-            + '[data-e2e="user-name"],'
-            + '[data-e2e="message-owner-name"],'
-            + '[data-e2e="comment-username"],'
-            + '[data-e2e="chat-username"],'
-            + '[data-e2e="webcast-live-user-name"],'
-            + '[data-e2e="live-user-name"],'
-            + '[class*="DisplayName"],'
-            + '[class*="UserName"]:not([class*="avatar"]),'
-            + '[class*="Username"]:not([class*="avatar"]),'
-            + '[class*="user-name"],'
-            + '[class*="AuthorName"],'
-            + '[class*="NickName"],'
-            + '[class*="nickname"],'
-            + 'strong, b'
-          );
+                                items.slice(-140).forEach((el, index) => {
+                    const userSelector = '[data-e2e="chat-message-user-name"],'
+                        + '[data-e2e="user-name"],'
+                        + '[data-e2e="message-owner-name"],'
+                        + '[data-e2e="comment-username"],'
+                        + '[data-e2e="chat-username"],'
+                        + '[data-e2e="webcast-live-user-name"],'
+                        + '[data-e2e="live-user-name"],'
+                        + '[class*="DisplayName"],'
+                        + '[class*="UserName"]:not([class*="avatar"]),'
+                        + '[class*="Username"]:not([class*="avatar"]),'
+                        + '[class*="user-name"],'
+                        + '[class*="AuthorName"],'
+                        + '[class*="NickName"],'
+                        + '[class*="nickname"],'
+                        + 'strong, b';
+                    const userCandidates = Array.from(el.querySelectorAll(userSelector));
+                    const userEl = (() => {
+                        const semantic = (node) => String([
+                            node?.getAttribute?.('data-e2e') || '',
+                            node?.getAttribute?.('class') || '',
+                            node?.getAttribute?.('aria-label') || '',
+                            node?.getAttribute?.('title') || ''
+                        ].join(' ')).toLowerCase();
+                        for (const candidate of userCandidates) {
+                            const text = normalizeChatUserName(candidate?.textContent || '');
+                            if (!text) continue;
+                            const kind = semantic(candidate);
+                            if (/(badge|fan|club|rank|level|grade|medal|team|tag|supporter|gifter|gift)/i.test(kind)) continue;
+                            return candidate;
+                        }
+                        return userCandidates.find(Boolean) || null;
+                    })();
           const textEl = el.querySelector(
             '[data-e2e="chat-message-text"],'
             + '[data-e2e="message-text"],'
@@ -10798,7 +10870,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             if (am && am[1]) return normalizeChatUserName(am[1]);
             }
             // 4) Look for a child element with data-e2e containing "user" or "name"
-            const nameByE2e = el.querySelector('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]');
+            const nameByE2e = Array.from(el.querySelectorAll('[data-e2e*="user"],[data-e2e*="name"],[data-e2e*="author"]')).find((node) => {
+                            const kind = String([
+                                node?.getAttribute?.('data-e2e') || '',
+                                node?.getAttribute?.('class') || '',
+                                node?.getAttribute?.('aria-label') || '',
+                                node?.getAttribute?.('title') || ''
+                            ].join(' ')).toLowerCase();
+                            if (/(badge|fan|club|rank|level|grade|medal|team|tag|supporter|gifter|gift)/i.test(kind)) return false;
+                            return !!normalizeChatUserName(node?.textContent || '');
+                        });
                         if (nameByE2e) { const t = normalizeChatUserName(nameByE2e.textContent.trim()); if (t) return t; }
             // 5) First <strong> or <b> is usually the username in TikTok chat
             const boldEl = el.querySelector('strong, b');

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyright: reportMissingImports=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false, reportMissingParameterType=false
 """Small stdout bridge for isaackogan/TikTokLive.
 
 The Electron renderer owns the feed and deduplication. This process only turns
@@ -7,12 +8,12 @@ when the AI Live Chat toggle is switched off.
 """
 import asyncio
 import json
-import signal
 import sys
 import time
+from typing import Any, cast
 
-from TikTokLive import TikTokLiveClient
-from TikTokLive.events import (
+from TikTokLive import TikTokLiveClient as _TikTokLiveClient  # pyright: ignore[reportMissingImports]
+from TikTokLive.events import (  # pyright: ignore[reportMissingImports]
     CommentEvent,
     ConnectEvent,
     DisconnectEvent,
@@ -24,39 +25,55 @@ from TikTokLive.events import (
     SubNotifyEvent,
 )
 
+TikTokLiveClient = cast(Any, _TikTokLiveClient)
 
-def emit(payload):
+
+def emit(payload: dict[str, Any]) -> None:
     payload.setdefault("ts", int(time.time() * 1000))
     sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
     sys.stdout.flush()
 
 
-def user_fields(event):
+def clean_user_text(value: Any) -> str:
+    return str(value or "").replace("\r", " ").replace("\n", " ").strip()
+
+
+def user_fields(event: Any) -> dict[str, str]:
     user = getattr(event, "user", None)
-    handle = str(getattr(user, "unique_id", "") or "").lstrip("@")
-    name = str(getattr(user, "nickname", "") or handle or "unknown")
-    return {"user": name[:80], "userHandle": handle[:80]}
+    handle = clean_user_text(getattr(user, "unique_id", "")).lstrip("@")
+    display_name = clean_user_text(getattr(user, "nickname", "")).lstrip("@")
+    if display_name and handle and display_name.casefold() == handle.casefold():
+        display_name = handle
+    # Downstream UI and summaries primarily read `user`, so keep it as the
+    # stable TikTok handle and expose the nickname separately.
+    name = handle or display_name or "unknown"
+    return {
+        "user": name[:80],
+        "displayName": (display_name or handle or "unknown")[:80],
+        "userHandle": handle[:80],
+        "profileHandle": handle[:80],
+    }
 
 
-async def run(unique_id):
+async def run(unique_id: str) -> None:
     client = TikTokLiveClient(unique_id=unique_id.lstrip("@"))
     stopping = asyncio.Event()
 
     @client.on(ConnectEvent)
-    async def on_connect(event):
+    async def on_connect(event: Any) -> None:
         emit({"kind": "status", "status": "connected", "uniqueId": unique_id})
 
     @client.on(DisconnectEvent)
-    async def on_disconnect(event):
+    async def on_disconnect(event: Any) -> None:
         emit({"kind": "status", "status": "disconnected", "uniqueId": unique_id})
         stopping.set()
 
     @client.on(CommentEvent)
-    async def on_comment(event):
+    async def on_comment(event: Any) -> None:
         emit({"kind": "event", "type": "chat", "text": str(getattr(event, "comment", "") or ""), **user_fields(event)})
 
     @client.on(GiftEvent)
-    async def on_gift(event):
+    async def on_gift(event: Any) -> None:
         gift = getattr(event, "gift", None)
         gift_name = str(getattr(gift, "name", "") or "Gift")
         quantity = max(1, int(getattr(event, "repeat_count", 1) or 1))
@@ -70,24 +87,24 @@ async def run(unique_id):
               **user_fields(event)})
 
     @client.on(LikeEvent)
-    async def on_like(event):
+    async def on_like(event: Any) -> None:
         count = max(1, int(getattr(event, "likes", 0) or getattr(event, "like_count", 0) or 1))
         emit({"kind": "event", "type": "like", "text": f"liked ×{count}", "quantity": count, **user_fields(event)})
 
     @client.on(JoinEvent)
-    async def on_join(event):
+    async def on_join(event: Any) -> None:
         emit({"kind": "event", "type": "join", "text": "joined", **user_fields(event)})
 
     @client.on(FollowEvent)
-    async def on_follow(event):
+    async def on_follow(event: Any) -> None:
         emit({"kind": "event", "type": "subscriber", "text": "followed", **user_fields(event)})
 
     @client.on(SubNotifyEvent)
-    async def on_sub(event):
+    async def on_sub(event: Any) -> None:
         emit({"kind": "event", "type": "subscriber", "text": "subscribed", "giftName": "Subscriber", **user_fields(event)})
 
     @client.on(ShareEvent)
-    async def on_share(event):
+    async def on_share(event: Any) -> None:
         emit({"kind": "event", "type": "share", "text": "shared the live", **user_fields(event)})
 
     try:
@@ -99,7 +116,7 @@ async def run(unique_id):
         raise
 
 
-def main():
+def main() -> int:
     if len(sys.argv) < 2 or not str(sys.argv[1]).strip():
         print("unique_id is required", file=sys.stderr)
         return 2
