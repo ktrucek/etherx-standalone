@@ -219,10 +219,12 @@ async function startGoogleOAuthLogin() {
         res.end(page("Google račun povezan", `Prijavljen je račun ${String(profile.email).replace(/[<>&]/g, "")}.`));
         // Access token is intentionally discarded. EtherX stores only profile
         // metadata in its local profile and never stores the Google password.
-        finish({ ok: true, profile: {
-          id: String(profile.sub), email: String(profile.email), name: String(profile.name || profile.email),
-          picture: String(profile.picture || ""), verified: profile.email_verified === true,
-        } });
+        finish({
+          ok: true, profile: {
+            id: String(profile.sub), email: String(profile.email), name: String(profile.name || profile.email),
+            picture: String(profile.picture || ""), verified: profile.email_verified === true,
+          }
+        });
       } catch (error) {
         res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" });
         res.end(page("Google prijava nije uspjela", String(error?.message || error).replace(/[<>&]/g, "")));
@@ -2842,6 +2844,30 @@ function createWindow() {
     }
   }
 
+  function isTikTokFamilyHost(rawUrl) {
+    try {
+      const host = new URL(rawUrl).hostname.toLowerCase();
+      return [
+        "tiktok.com",
+        "tiktokv.com",
+        "tiktokcdn.com",
+        "tiktokvapp.eu",
+        "tiktok-row.net",
+        "byteoversea.com",
+        "byteintlapi.com",
+        "ttwstatic.com",
+        "ttlstatic.com",
+      ].some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stripReportOnlyCsp(headers) {
+    delete headers["content-security-policy-report-only"];
+    delete headers["Content-Security-Policy-Report-Only"];
+  }
+
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
     { urls: ["*://*/*"] },
     (details, callback) => {
@@ -2917,6 +2943,13 @@ function createWindow() {
     { urls: ["*://*/*"] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
+
+      // TikTok emits very noisy report-only CSP warnings in Chromium devtools
+      // (upgrade-insecure-requests/worker-src/connect-src). Removing only the
+      // report-only header keeps effective CSP unchanged while preventing spam.
+      if (isTikTokFamilyHost(details.url)) {
+        stripReportOnlyCsp(headers);
+      }
 
       // Keep first-party domains untouched to avoid framework/runtime regressions.
       if (isTrustedFirstPartyHost(details.url)) {
@@ -3066,6 +3099,10 @@ function createWindow() {
     (details, callback) => {
       const headers = { ...details.responseHeaders };
 
+      if (isTikTokFamilyHost(details.url)) {
+        stripReportOnlyCsp(headers);
+      }
+
       // Keep first-party domains untouched to avoid framework/runtime regressions.
       if (isTrustedFirstPartyHost(details.url)) {
         callback({ responseHeaders: headers });
@@ -3168,6 +3205,10 @@ function createWindow() {
     { urls: ["*://*/*"] },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
+
+      if (isTikTokFamilyHost(details.url)) {
+        stripReportOnlyCsp(headers);
+      }
 
       if (isTrustedFirstPartyHost(details.url)) {
         callback({ responseHeaders: headers });

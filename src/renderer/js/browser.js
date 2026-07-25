@@ -539,6 +539,8 @@ if (window.electronWebview) {
 
     window.setupWebview = function (wv) {
         if (!wv || wv.tagName !== 'WEBVIEW') return;
+        if (wv.dataset.etherxSetupBound === '1') return;
+        wv.dataset.etherxSetupBound = '1';
 
         // ── Per-instance executeJavaScript guard ──────────────────────────────
         // Replaces wv.executeJavaScript with a version that queues ANY call made
@@ -751,15 +753,24 @@ if (window.electronWebview) {
                   if (!/(^|\\.)tiktok\\.com$/i.test(location.hostname || '') || window.__etherxTikTokPlaybackInstalled) return;
                   window.__etherxTikTokPlaybackInstalled = true;
                   let playbackObserver = null;
+                                    let startupRetry = null;
                   const start = video => {
                     if (!video || video.dataset.etherxPlaybackBound) return;
                     video.dataset.etherxPlaybackBound = '1';
                     video.playsInline = true;
-                    const play = () => { if (video.paused) video.play().catch(() => {}); };
-                    video.addEventListener('loadeddata', play, { once: true });
-                    video.addEventListener('canplay', play, { once: true });
-                    setTimeout(play, 350);
-                    setTimeout(play, 1400);
+                                        let initialStartTs = 0;
+                                        const tryPlay = () => {
+                                            if (!video.paused) return;
+                                            if (!initialStartTs) initialStartTs = Date.now();
+                                            video.play().catch(() => {});
+                                        };
+                                        video.addEventListener('loadeddata', tryPlay, { once: true });
+                                        video.addEventListener('canplay', tryPlay, { once: true });
+                                        setTimeout(tryPlay, 350);
+                                        // Single delayed recovery only if the same element remains paused.
+                                        startupRetry = setTimeout(() => {
+                                            if (video.isConnected && video.paused) tryPlay();
+                                        }, 1400);
                     // Once the first player is bound, observing TikTok's entire
                     // dynamic page gives no playback benefit and is expensive.
                     playbackObserver?.disconnect();
@@ -777,7 +788,14 @@ if (window.electronWebview) {
                     }
                   });
                   playbackObserver.observe(document.documentElement, { childList: true, subtree: true });
-                  setTimeout(() => { playbackObserver?.disconnect(); playbackObserver = null; }, 12000);
+                                    setTimeout(() => {
+                                        playbackObserver?.disconnect();
+                                        playbackObserver = null;
+                                        if (startupRetry) {
+                                            clearTimeout(startupRetry);
+                                            startupRetry = null;
+                                        }
+                                    }, 12000);
                 })()`).catch(() => { });
             } catch (_) { }
             try {
@@ -10805,7 +10823,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             // The live DOM does not always supply a type.  Use the same robust
             // detector as the Gift Gallery so the dashboard cannot silently
             // discard detected gift events.
-            .filter((m) => isTkaiGiftLikeMessage(m))
+            .filter((m) => {
+                if (!m) return false;
+                if (isTkaiGiftLikeMessage(m)) return true;
+                if (String(m.giftName || '').trim()) return true;
+                return Math.max(0, Number(m.coins || 0)) > 0;
+            })
             .slice(-_giftScanLimit);
         const giftTypeMap = new Map();
         const giftUserMap = new Map();
@@ -15422,6 +15445,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           if (/^(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}$/i.test(t)) return true;
           if (/^(?:top|rank)\s*[:#-]?\s*\d{1,3}$/i.test(t)) return true;
                     if (/^(?:no\.?\s*\d{1,3}|top\s*(?:gifter|fan|supporter|viewer)|subscriber|member)$/i.test(t)) return true;
+                    if (/^(?:(?:fan|fun)\s*club|club\s*(?:member|badge)?)(?:\s*(?:no\.?|br\.?|rank|top)?\s*#?\d{1,3})*$/i.test(t)) return true;
           if (/^[#@]?\d{1,3}$/.test(t)) return true;
           return false;
         }
@@ -15517,6 +15541,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     return String(value || '')
                         .replace(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
                         .replace(/\b(?:top\s*(?:gifter|fan|supporter|viewer)|rank)\s*[:#-]?\s*\d{0,3}\b/gi, ' ')
+                        .replace(/\b(?:fan|fun)\s*club\b/gi, ' ')
+                        .replace(/\bclub\s*(?:member|badge)?\b/gi, ' ')
                         .replace(/\b(?:no\.?\s*\d{1,3})\b/gi, ' ')
                         .replace(/\b(?:subscriber|sub|member|membership)\b/gi, ' ')
                         .replace(/\s{2,}/g, ' ')
@@ -15536,6 +15562,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         .replace(/\s{2,}/g, ' ')
                         .trim();
                     if (/^(?:unknown|undefined|null|chat\s*user|user)$/i.test(normalized)) return '';
+                    if (/^(?:(?:fan|fun)\s*club|club|fan|fun|member|subscriber|badge)(?:\s*(?:no\.?|br\.?|rank|top)?\s*#?\d{1,3})*$/i.test(normalized)) return '';
                     if (!normalized || isAuxiliaryText(normalized)) return '';
                     if (/^[#@]?\d{1,3}$/.test(normalized)) return '';
                     if (!/\p{L}/u.test(normalized)) return '';
@@ -15568,10 +15595,29 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             .map((line) => line.replace(/\s+/g, ' ').trim())
                             .filter(Boolean)
                             .filter((line) => !isViewerOrLeaderboardText(line));
+                        // TikTok rows are typically rendered as separate lines:
+                        // first username, then message text on the next line.
+                        // Skip badge/meta lines (fan/fun club, level, rank...) and
+                        // bind user to the first following non-meta line only.
+                        if (rawLines.length >= 2) {
+                            for (let i = 0; i < rawLines.length - 1; i += 1) {
+                                const user = normalizeChatUserName(rawLines[i]);
+                                if (!user) continue;
+                                for (let j = i + 1; j < rawLines.length; j += 1) {
+                                    const candidateText = String(rawLines[j] || '').trim();
+                                    if (!candidateText) continue;
+                                    if (isAuxiliaryText(candidateText) || isViewerOrLeaderboardText(candidateText)) continue;
+                                    const text = cleanChatText(candidateText, user);
+                                    if (text && !isViewerOrLeaderboardText(text)) return { user, text };
+                                    break;
+                                }
+                            }
+                        }
+
                         const lines = rawLines.filter((line) => !isAuxiliaryText(line));
                         if (lines.length >= 2) {
                             const user = normalizeChatUserName(lines[0]);
-                            const text = lines.slice(1).join(' ').trim();
+                            const text = cleanChatText(lines.slice(1).join(' ').trim(), user);
                             if (user && text && !isViewerOrLeaderboardText(text)) return { user, text };
                         }
                         const compact = rawLines.join(' ').replace(/\s+/g, ' ').trim();
@@ -21922,13 +21968,35 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     // New context menu item handlers
     document.getElementById('ctx-new-tab').addEventListener('click', () => createTab());
-    document.getElementById('ctx-open-user-db')?.addEventListener('click', () => {
+    const openUserDbFromContextMenu = () => {
         try {
-            if (typeof showTkaiUserDBModal === 'function') showTkaiUserDBModal(null);
+            if (typeof showTkaiUserDBModal === 'function') {
+                showTkaiUserDBModal(null);
+                closeCtxMenu();
+                return;
+            }
+            const fallbackBtn = document.getElementById('btnTkaiOpenUserDB') || document.getElementById('btnTkaiOpenUserDB2');
+            if (fallbackBtn) {
+                fallbackBtn.click();
+                closeCtxMenu();
+                return;
+            }
+            throw new Error('showTkaiUserDBModal is not available');
         } catch (e) {
             console.warn('[TikTokAI] open user DB from context menu failed', e);
             if (typeof showToast === 'function') showToast('⚠️ Baza korisnika se ne može otvoriti.');
         }
+    };
+    const ctxOpenUserDbEl = document.getElementById('ctx-open-user-db');
+    ctxOpenUserDbEl?.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openUserDbFromContextMenu();
+    });
+    ctxOpenUserDbEl?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openUserDbFromContextMenu();
     });
     document.getElementById('ctx-reload').addEventListener('click', () => document.getElementById('btnReload').click());
     document.getElementById('ctx-find').addEventListener('click', openFind);
