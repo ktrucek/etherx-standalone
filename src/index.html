@@ -410,9 +410,10 @@
                             id="qrs-bm-count"></span></label>
                     <label class="qrs-opt"><input type="checkbox" id="qrs-hist"> 🕒 History</label>
                     <label class="qrs-opt"><input type="checkbox" id="qrs-ext" checked> 🧩 Extensions</label>
-                    <label class="qrs-opt"><input type="checkbox" id="qrs-settings"> ⚙️ Settings</label>
+                    <label class="qrs-opt"><input type="checkbox" id="qrs-settings"> ⚙️ Settings + AI/TikTok AI</label>
                     <label class="qrs-opt"><input type="checkbox" id="qrs-profiles"> 👤 Profiles</label>
                 </div>
+                <button id="qrsSelectAll" type="button" style="margin-bottom:8px">☑️ Select all</button>
                 <button id="qrsGenerate">🔄 Generate QR Code</button>
                 <div id="qrsQrWrap">
                     <img id="qrsQrImg" src="" alt="QR Code">
@@ -1674,7 +1675,8 @@
                             </div>
                         </div>
 
-                        <div class="s-group" style="margin-top:12px;border-color:rgba(66,133,244,.35);background:rgba(66,133,244,.04)">
+                        <div class="s-group"
+                            style="margin-top:12px;border-color:rgba(66,133,244,.35);background:rgba(66,133,244,.04)">
                             <div class="s-group-title" style="color:#8ab4f8">Google račun</div>
                             <div class="s-row">
                                 <div class="s-row-left">
@@ -1682,11 +1684,16 @@
                                     <div class="s-row-desc" id="sGoogleAccountStatus">Nije povezan Google račun.</div>
                                 </div>
                                 <div style="display:flex;gap:7px;align-items:center">
-                                    <button id="sGoogleSignInBtn" class="s-btn-sm" style="background:#4285f4;color:white;border-color:#4285f4">G Prijavi se</button>
-                                    <button id="sGoogleDisconnectBtn" class="s-btn-sm" style="display:none">Odspoji</button>
+                                    <button id="sGoogleSignInBtn" class="s-btn-sm"
+                                        style="background:#4285f4;color:white;border-color:#4285f4">G Prijavi
+                                        se</button>
+                                    <button id="sGoogleDisconnectBtn" class="s-btn-sm"
+                                        style="display:none">Odspoji</button>
                                 </div>
                             </div>
-                            <div class="s-row-desc" style="margin:2px 0 0">Prijava se sigurno otvara u zadanom sistemskom browseru. Sprema se samo naziv i e-mail profila, bez Google lozinke ili tokena.</div>
+                            <div class="s-row-desc" style="margin:2px 0 0">Prijava se sigurno otvara u zadanom
+                                sistemskom browseru. Sprema se samo naziv i e-mail profila, bez Google lozinke ili
+                                tokena.</div>
                         </div>
 
                         <div class="s-group" style="margin-top:12px" id="sPersonaGroup">
@@ -3254,13 +3261,15 @@
                         <div class="s-group" style="margin-top:12px">
                             <div class="s-row">
                                 <div class="s-row-left">
-                                    <div class="s-row-label" style="font-weight:600">🎙️ WhisperLive (lokalna instalacija)
+                                    <div class="s-row-label" style="font-weight:600">🎙️ WhisperLive (lokalna
+                                        instalacija)
                                     </div>
                                     <div class="s-row-desc">Server radi lokalno na <b>localhost:9090</b>. Odaberi način
                                         instalacije ili pokreni preporučenu lokalnu instalaciju za ovaj OS.</div>
                                 </div>
                             </div>
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:8px">
+                            <div
+                                style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:8px">
                                 <button id="helpWhisperAutoInstallBtn"
                                     style="font-size:11px;padding:6px 12px;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.4);border-radius:6px;color:var(--text);cursor:pointer">▶
                                     Instaliraj za OS</button>
@@ -3338,7 +3347,7 @@
                                 </div>
                             </div>
                             <div style="font-size:12px;color:var(--text2);line-height:1.8;padding:4px 0">
-                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.201</span> — Web3 & kripto
+                                <div><b>EtherX Browser</b> v<span id="helpVersionNum">3.0.202</span> — Web3 & kripto
                                     preglednik</div>
                                 <div style="color:var(--text3)">Build: <span id="helpBuildDate"></span> &nbsp;|&nbsp;
                                     Platform: <span id="helpPlatform"></span></div>
@@ -3914,12 +3923,16 @@
                             <div class="s-group" id="tkaiSqliteStorageSettings">
                                 <div class="s-row" style="align-items:center">
                                     <div class="s-row-left">
-                                        <div class="s-row-label" style="font-weight:600">🗃️ Lokalna TikTok Live baza</div>
-                                        <div class="s-row-desc">Poruke, korisnici, darovi, sesije i statistike spremaju se lokalno u SQLite bazu na ovom računalu. Ne šalju se na server.</div>
+                                        <div class="s-row-label" style="font-weight:600">🗃️ Lokalna TikTok Live baza
+                                        </div>
+                                        <div class="s-row-desc">Poruke, korisnici, darovi, sesije i statistike spremaju
+                                            se lokalno u SQLite bazu na ovom računalu. Ne šalju se na server.</div>
                                     </div>
-                                    <button class="s-btn-sm" id="btnInstallTkaiSqlite" style="white-space:nowrap">⬇ Instaliraj lokalnu bazu</button>
+                                    <button class="s-btn-sm" id="btnInstallTkaiSqlite" style="white-space:nowrap">⬇
+                                        Instaliraj lokalnu bazu</button>
                                 </div>
-                                <div id="tkaiSqliteStatus" style="font-size:10px;color:var(--text3);margin:2px 4px 0">Nije aktivirana.</div>
+                                <div id="tkaiSqliteStatus" style="font-size:10px;color:var(--text3);margin:2px 4px 0">
+                                    Nije aktivirana.</div>
                             </div>
 
                             <div class="s-group">
@@ -4310,13 +4323,17 @@
                                         <div class="s-row">
                                             <div class="s-row-left">
                                                 <div class="s-row-label">🛰️ TikTokLive GitHub izvor</div>
-                                                <div class="s-row-desc">Čita chat/giftove/joinove direktno preko isaackogan/TikTokLive. Isključeno koristi samo postojeći DOM skener.</div>
+                                                <div class="s-row-desc">Čita chat/giftove/joinove direktno preko
+                                                    isaackogan/TikTokLive. Isključeno koristi samo postojeći DOM skener.
+                                                </div>
                                             </div>
                                             <div class="toggle" data-setting="tkaiTikTokLiveEnabled"></div>
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;margin:8px 0 12px">
-                                            <button class="s-btn-sm" id="tkaiTikTokLiveInstallBtn">⬇ Instaliraj / ažuriraj TikTokLive</button>
-                                            <span id="tkaiTikTokLiveStatus" style="font-size:10px;color:var(--text3)">Nije aktivno</span>
+                                            <button class="s-btn-sm" id="tkaiTikTokLiveInstallBtn">⬇ Instaliraj /
+                                                ažuriraj TikTokLive</button>
+                                            <span id="tkaiTikTokLiveStatus"
+                                                style="font-size:10px;color:var(--text3)">Nije aktivno</span>
                                         </div>
                                         <div class="s-row">
                                             <div class="s-row-left">
@@ -4332,8 +4349,7 @@
                                             </div>
                                             <input type="text" class="s-input" data-setting="tkaiLiveServerUrl"
                                                 value="wss://live.kriptoentuzijasti.io/v1/live"
-                                                placeholder="wss://live.kriptoentuzijasti.io/v1/live"
-                                                style="width:58%">
+                                                placeholder="wss://live.kriptoentuzijasti.io/v1/live" style="width:58%">
                                         </div>
                                         <div class="s-row" style="margin-top:8px">
                                             <div class="s-row-left">
@@ -4350,11 +4366,13 @@
                                                 <div class="s-row-desc">Server čuva cijelu sesiju; browser samo zadnje
                                                     poruke</div>
                                             </div>
-                                            <input type="number" class="s-input" data-setting="tkaiLiveServerLocalBuffer"
-                                                min="100" max="1000" value="300" style="width:76px">
+                                            <input type="number" class="s-input"
+                                                data-setting="tkaiLiveServerLocalBuffer" min="100" max="1000"
+                                                value="300" style="width:76px">
                                         </div>
                                         <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
-                                            <button class="s-btn-sm" id="tkaiLiveServerTestBtn">🧪 Spoji/testiraj</button>
+                                            <button class="s-btn-sm" id="tkaiLiveServerTestBtn">🧪
+                                                Spoji/testiraj</button>
                                             <span id="tkaiLiveServerStatus"
                                                 style="font-size:10px;color:var(--text3)">Nije spojeno</span>
                                         </div>
@@ -4872,7 +4890,8 @@
                                         <div class="s-row" style="margin-top:8px">
                                             <div class="s-row-left">
                                                 <div class="s-row-label">🛡 Moritz AI provjera sumnjivih redova</div>
-                                                <div class="s-row-desc">Provjerava samo nejasne TikTok DOM redove; ne usporava obične chat poruke.</div>
+                                                <div class="s-row-desc">Provjerava samo nejasne TikTok DOM redove; ne
+                                                    usporava obične chat poruke.</div>
                                             </div>
                                             <div class="toggle on" data-setting="tkaiMoritzChatFilter"></div>
                                         </div>
@@ -4910,7 +4929,8 @@
                                     <div class="s-row" style="margin-top:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">🎙 Uključi Listen Feed u dashboard</div>
-                                            <div class="s-row-desc">Isključeno: grafovi prikazuju samo TikTok događaje</div>
+                                            <div class="s-row-desc">Isključeno: grafovi prikazuju samo TikTok događaje
+                                            </div>
                                         </div>
                                         <div class="toggle" data-setting="tkaiDashboardIncludeListening"></div>
                                     </div>
@@ -5073,7 +5093,8 @@
                                             dashboard</button>
                                         <button class="s-btn-sm" id="btnTkaiToolsExportJson">📦 Export JSON</button>
                                         <button class="s-btn-sm" id="btnTkaiToolsExportCsv">📄 Export CSV</button>
-                                        <button class="s-btn-sm" id="btnTkaiToolsImportMerge">📥 Import &amp; merge JSON</button>
+                                        <button class="s-btn-sm" id="btnTkaiToolsImportMerge">📥 Import &amp; merge
+                                            JSON</button>
                                         <button class="s-btn-sm" id="btnTkaiToolsSongRec">🎧 SongRec detect now</button>
                                         <button class="s-btn-sm" id="btnTkaiToolsClear"
                                             style="background:rgba(220,50,50,.15);border-color:rgba(220,50,50,.35)">🗑️
@@ -5158,27 +5179,32 @@
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Zapisuj u Listen Feed</div>
-                                            <div class="s-row-desc">Svaku finalnu rečenicu dodaje u zaseban Listen Feed iznad chata</div>
+                                            <div class="s-row-desc">Svaku finalnu rečenicu dodaje u zaseban Listen Feed
+                                                iznad chata</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiWhisperWriteToChat"></div>
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Samo zapisuj pod Slušanje</div>
-                                            <div class="s-row-desc">WhisperLive ne šalje glasni odgovor; samo formatira zapis u Listen Feed</div>
+                                            <div class="s-row-desc">WhisperLive ne šalje glasni odgovor; samo formatira
+                                                zapis u Listen Feed</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiWhisperTextOnlyListening"></div>
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Ne pričaj na glas</div>
-                                            <div class="s-row-desc">Whisper zapisuje tekst, ali ne pokreće speech synthesis</div>
+                                            <div class="s-row-desc">Whisper zapisuje tekst, ali ne pokreće speech
+                                                synthesis</div>
                                         </div>
                                         <div class="toggle on" data-setting="tkaiWhisperMuteSpeech"></div>
                                     </div>
                                     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px">
-                                        <button class="s-btn-sm" id="btnEnsureWhisperLiveServer">Instaliraj/pokreni WhisperLive server</button>
-                                        <span id="tkaiWhisperServerStatus" style="font-size:10px;color:var(--text3)">server: nije pokrenuto</span>
+                                        <button class="s-btn-sm" id="btnEnsureWhisperLiveServer">Instaliraj/pokreni
+                                            WhisperLive server</button>
+                                        <span id="tkaiWhisperServerStatus"
+                                            style="font-size:10px;color:var(--text3)">server: nije pokrenuto</span>
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
@@ -5198,7 +5224,8 @@
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Mikrofon za WhisperLive</div>
-                                            <div class="s-row-desc">Odaberi koji mikrofon ili virtualni audio uređaj Whisper sluša</div>
+                                            <div class="s-row-desc">Odaberi koji mikrofon ili virtualni audio uređaj
+                                                Whisper sluša</div>
                                         </div>
                                         <select class="s-select" data-setting="tkaiWhisperInputDeviceId"
                                             style="max-width:260px">
@@ -5208,7 +5235,8 @@
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Zvučnici / izlaz</div>
-                                            <div class="s-row-desc">Koristi se za browser čitanje gdje je dostupno; SongRec ima svoj izlaz u Alati</div>
+                                            <div class="s-row-desc">Koristi se za browser čitanje gdje je dostupno;
+                                                SongRec ima svoj izlaz u Alati</div>
                                         </div>
                                         <select class="s-select" data-setting="tkaiAudioOutputDeviceId"
                                             style="max-width:260px">
@@ -5216,8 +5244,10 @@
                                         </select>
                                     </div>
                                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 8px">
-                                        <button class="s-btn-sm" id="btnRefreshTkaiAudioDevices">↻ Osvježi audio uređaje</button>
-                                        <span id="tkaiAudioDevicesStatus" style="font-size:10px;color:var(--text3)">audio uređaji: idle</span>
+                                        <button class="s-btn-sm" id="btnRefreshTkaiAudioDevices">↻ Osvježi audio
+                                            uređaje</button>
+                                        <span id="tkaiAudioDevicesStatus"
+                                            style="font-size:10px;color:var(--text3)">audio uređaji: idle</span>
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
@@ -5266,7 +5296,8 @@
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Jezik prijevoda</div>
-                                            <div class="s-row-desc">Auto ili ručno odabran ciljni jezik za Whisper prijevod</div>
+                                            <div class="s-row-desc">Auto ili ručno odabran ciljni jezik za Whisper
+                                                prijevod</div>
                                         </div>
                                         <select class="s-select" data-setting="tkaiWhisperTranslateLang"
                                             style="max-width:215px">
@@ -5296,12 +5327,19 @@
                                             <option value="distil-large-v3">distil-large-v3</option>
                                         </select>
                                     </div>
-                                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-2px 0 8px">
-                                        <button class="s-btn-sm" id="btnCacheWhisperModel">⬇ Cache/preuzmi model</button>
-                                        <span id="tkaiWhisperCacheStatus" style="font-size:10px;color:var(--text3)">model cache: nije pokrenuto</span>
+                                    <div
+                                        style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-2px 0 8px">
+                                        <button class="s-btn-sm" id="btnCacheWhisperModel">⬇ Cache/preuzmi
+                                            model</button>
+                                        <span id="tkaiWhisperCacheStatus"
+                                            style="font-size:10px;color:var(--text3)">model cache: nije pokrenuto</span>
                                     </div>
-                                    <div id="tkaiWhisperCacheProgress" style="display:none;height:5px;margin:-4px 0 10px;border-radius:99px;overflow:hidden;background:rgba(148,163,184,.22)" title="Napredak je procjena iz lokalno preuzetih datoteka">
-                                        <div id="tkaiWhisperCacheProgressBar" style="width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc);transition:width .45s ease"></div>
+                                    <div id="tkaiWhisperCacheProgress"
+                                        style="display:none;height:5px;margin:-4px 0 10px;border-radius:99px;overflow:hidden;background:rgba(148,163,184,.22)"
+                                        title="Napredak je procjena iz lokalno preuzetih datoteka">
+                                        <div id="tkaiWhisperCacheProgressBar"
+                                            style="width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#38bdf8,#818cf8,#c084fc);transition:width .45s ease">
+                                        </div>
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
@@ -5377,20 +5415,23 @@
                                 <div id="tkaiDrawerLayout"
                                     style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px">
                                     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
-                                        Slaganje TikTok Chat AI panela radi ovdje u postavkama. Glavni panel ostaje čist,
+                                        Slaganje TikTok Chat AI panela radi ovdje u postavkama. Glavni panel ostaje
+                                        čist,
                                         bez ručki i strelica preko feedova.
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Sakrij kontrole u TikTok panelu</div>
-                                            <div class="s-row-desc">Redoslijed se slaže u ovoj sekciji, bez ručki na glavnom panelu</div>
+                                            <div class="s-row-desc">Redoslijed se slaže u ovoj sekciji, bez ručki na
+                                                glavnom panelu</div>
                                         </div>
                                         <div class="toggle" data-setting="tkaiHideInlineLayoutControls"></div>
                                     </div>
                                     <div class="s-row" style="margin-bottom:8px">
                                         <div class="s-row-left">
                                             <div class="s-row-label">Zaključaj direktno slaganje feedova</div>
-                                            <div class="s-row-desc">Vrijedi samo ako ponovno prikažeš kontrole u TikTok panelu</div>
+                                            <div class="s-row-desc">Vrijedi samo ako ponovno prikažeš kontrole u TikTok
+                                                panelu</div>
                                         </div>
                                         <div class="toggle" data-setting="tkaiFeedLayoutLocked"></div>
                                     </div>
@@ -5401,9 +5442,11 @@
                                         </div>
                                         <div class="toggle" data-setting="tkaiListenFeedDetached"></div>
                                     </div>
-                                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px">
+                                    <div
+                                        style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px">
                                         <button class="s-btn-sm" id="btnTkaiLayoutRefreshVisual">Osvježi layout</button>
-                                        <button class="s-btn-sm" id="btnTkaiLayoutOpenListen">⤢ Otvori Listen Feed</button>
+                                        <button class="s-btn-sm" id="btnTkaiLayoutOpenListen">⤢ Otvori Listen
+                                            Feed</button>
                                         <button class="s-btn-sm" id="btnTkaiLayoutResetFeeds">↺ Reset feedova</button>
                                         <button class="s-btn-sm" id="btnTkaiLayoutResetCards">↺ Reset kartica</button>
                                     </div>
@@ -5412,12 +5455,16 @@
                                         <div id="tkaiLayoutVisualFeeds" class="tkai-layout-visual-list"></div>
                                     </div>
                                     <div style="margin-top:12px">
-                                        <div class="s-row-label" style="font-size:11px;margin-bottom:6px">Kartice i blokovi panela</div>
+                                        <div class="s-row-label" style="font-size:11px;margin-bottom:6px">Kartice i
+                                            blokovi panela</div>
                                         <div id="tkaiLayoutVisualCards" class="tkai-layout-visual-list"></div>
                                     </div>
                                     <div style="margin-top:12px">
-                                        <div class="s-row-label" style="font-size:11px;margin-bottom:3px">Grafovi i dashboard kartice</div>
-                                        <div class="s-row-desc" style="margin-bottom:6px">Povuci graf za redoslijed, odaberi ⅓, ½ ili cijeli red, sakrij ga ili vrati početnu veličinu. Grafove potom ručno rastegni iz donjeg desnog kuta.</div>
+                                        <div class="s-row-label" style="font-size:11px;margin-bottom:3px">Grafovi i
+                                            dashboard kartice</div>
+                                        <div class="s-row-desc" style="margin-bottom:6px">Povuci graf za redoslijed,
+                                            odaberi ⅓, ½ ili cijeli red, sakrij ga ili vrati početnu veličinu. Grafove
+                                            potom ručno rastegni iz donjeg desnog kuta.</div>
                                         <div id="tkaiLayoutVisualDashboard" class="tkai-layout-visual-list"></div>
                                     </div>
                                 </div>
@@ -5551,7 +5598,7 @@
                             <div>
                                 <div style="font-size:12px;color:var(--text3);margin-bottom:3px">Trenutna verzija</div>
                                 <div style="font-size:20px;font-weight:700;letter-spacing:-0.5px" id="updCurrentVer">
-                                    v<span id="helpVersionNum2">3.0.201</span></div>
+                                    v<span id="helpVersionNum2">3.0.202</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:4px">Build: <span
                                         id="updBuildDate">—</span></div>
                                 <div style="font-size:11px;color:var(--text3);margin-top:2px" id="updLastChecked">Zadnja
@@ -5858,7 +5905,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="tkai-feed-section listen-feed tkai-listen-under-chat" id="tkaiSlusanjeSection" style="display:none">
+                <div class="tkai-feed-section listen-feed tkai-listen-under-chat" id="tkaiSlusanjeSection"
+                    style="display:none">
                     <div class="tkai-subheader">
                         <span>Listen Feed <span id="tkaiWhisperLangBadge"
                                 style="font-size:9px;color:#a78bfa;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.2);padding:1px 5px;border-radius:999px;margin-left:3px">auto</span></span>
@@ -5992,178 +6040,197 @@
                     </div>
                     <div class="tkai-insights-row triple" id="tkaiEchartsRow">
                         <div class="tkai-insights-card hero" id="tkaiGiftEchartsCard">
-                            <div class="tkai-insights-title" title="Raspodjela giftova po coin vrijednosti">Giftovi po vrijednosti<span>🎁</span></div>
+                            <div class="tkai-insights-title" title="Raspodjela giftova po coin vrijednosti">Giftovi po
+                                vrijednosti<span>🎁</span></div>
                             <div id="tkaiGiftEcharts" style="height:260px;width:100%"></div>
                         </div>
                         <div class="tkai-insights-card hero" id="tkaiSentimentAqiCard">
-                            <div class="tkai-insights-title" title="Sentiment kroz vrijeme, s prekidom neutralne zone">Sentiment AQI<span>🌡</span></div>
+                            <div class="tkai-insights-title" title="Sentiment kroz vrijeme, s prekidom neutralne zone">
+                                Sentiment AQI<span>🌡</span></div>
                             <div id="tkaiSentimentAqiChart" style="height:260px;width:100%"></div>
                         </div>
                         <div class="tkai-insights-card hero" id="tkaiViewerTrendEchartsCard">
-                            <div class="tkai-insights-title" title="Normalizirani udio rasta, stabilnosti i pada gledatelja">Viewer trend<span>👥</span></div>
+                            <div class="tkai-insights-title"
+                                title="Normalizirani udio rasta, stabilnosti i pada gledatelja">Viewer
+                                trend<span>👥</span></div>
                             <div id="tkaiViewerTrendEcharts" style="height:260px;width:100%"></div>
                         </div>
                     </div>
                     <div class="tkai-insights-row duo" id="tkaiGifterHeatmapRow">
                         <div class="tkai-insights-card hero" id="tkaiTopGiftersEchartsCard">
-                            <div class="tkai-insights-title" title="Top 10 giftera prema broju live poklona">Top 10 giftera — live pokloni<span>🏆</span></div>
+                            <div class="tkai-insights-title" title="Top 10 giftera prema broju live poklona">Top 10
+                                giftera — live pokloni<span>🏆</span></div>
                             <div id="tkaiTopGiftersEcharts" style="height:260px;width:100%"></div>
                         </div>
                         <div class="tkai-insights-card hero" id="tkaiGiftHeatmapCard">
-                            <div class="tkai-insights-title" title="Top giftovi po minuti tijekom livea">Gift Heatmap — kada stižu pokloni<span>🔥</span></div>
+                            <div class="tkai-insights-title" title="Top giftovi po minuti tijekom livea">Gift Heatmap —
+                                kada stižu pokloni<span>🔥</span></div>
                             <div id="tkaiGiftHeatmapEcharts" style="height:260px;width:100%"></div>
                         </div>
                     </div>
                     <div class="tkai-insights-row triple">
                         <div class="tkai-insights-card hero" id="tkaiGifterRaceCard">
-                            <div class="tkai-insights-title" title="Kumulativna utrka vodećih giftera po coin vrijednosti">Top Gifter Race<span>🏁</span></div>
+                            <div class="tkai-insights-title"
+                                title="Kumulativna utrka vodećih giftera po coin vrijednosti">Top Gifter
+                                Race<span>🏁</span></div>
                             <div id="tkaiGifterRaceEcharts" style="height:280px;width:100%"></div>
                         </div>
                         <div class="tkai-insights-card hero" id="tkaiChatGiftComboCard">
-                            <div class="tkai-insights-title" title="Aktivnost chata i coin vrijednost giftova kroz vrijeme">Chat + Gifts live pulse<span>⚡</span></div>
+                            <div class="tkai-insights-title"
+                                title="Aktivnost chata i coin vrijednost giftova kroz vrijeme">Chat + Gifts live
+                                pulse<span>⚡</span></div>
                             <div id="tkaiChatGiftComboEcharts" style="height:280px;width:100%"></div>
                         </div>
                         <div class="tkai-insights-card hero" id="tkaiSentimentDonutCard">
-                            <div class="tkai-insights-title" title="Udio pozitivnih, neutralnih i negativnih poruka">Sentiment distribucija<span>😊</span></div>
+                            <div class="tkai-insights-title" title="Udio pozitivnih, neutralnih i negativnih poruka">
+                                Sentiment distribucija<span>😊</span></div>
                             <div id="tkaiSentimentDonutEcharts" style="height:280px;width:100%"></div>
                         </div>
                     </div>
-                <div class="tkai-insights-row triple">
-                    <div class="tkai-insights-card" id="tkaiGiftStatsCard">
-                        <div class="tkai-insights-title" title="Detaljna statistika giftova i giftera">Gift
-                            stats<span>🪙</span></div>
-                        <div class="tkai-metric-top" id="tkaiGiftStatsMeta">0 giftova • 0 tipova</div>
-                        <ul class="tkai-insights-list" id="tkaiGiftStatsList">
-                            <li>Nema gift statistike.</li>
-                        </ul>
-                    </div>
-                    <div class="tkai-insights-card" id="tkaiJoinsCard">
-                        <div class="tkai-insights-title" title="Novi ulasci u chat i procjena levela">Join level
-                            feed<span>👋</span></div>
-                        <ul class="tkai-insights-list" id="tkaiJoinLevelList"></ul>
-                    </div>
-                    <div class="tkai-insights-card" id="tkaiShareEventsCard">
-                        <div class="tkai-insights-title" title="Korisnici koji su podijelili live">Share
-                            events<span>↗</span></div>
-                        <ul class="tkai-insights-list" id="tkaiShareEventsList"></ul>
-                    </div>
-                </div>
-                <div class="tkai-insights-row">
-                    <div class="tkai-insights-card" id="tkaiSongsCard" style="flex:1">
-                        <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs &amp; DJ
-                            CC<span>♫</span>
+                    <div class="tkai-insights-row triple">
+                        <div class="tkai-insights-card" id="tkaiGiftStatsCard">
+                            <div class="tkai-insights-title" title="Detaljna statistika giftova i giftera">Gift
+                                stats<span>🪙</span></div>
+                            <div class="tkai-metric-top" id="tkaiGiftStatsMeta">0 giftova • 0 tipova</div>
+                            <ul class="tkai-insights-list" id="tkaiGiftStatsList">
+                                <li>Nema gift statistike.</li>
+                            </ul>
                         </div>
-                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
-                            <button class="tkai-insights-btn" id="tkaiSongRecNowBtn" type="button">SongRec now</button>
-                            <button class="tkai-insights-btn" id="tkaiDjCcNowBtn" type="button">DJ CC now</button>
-                            <button class="tkai-insights-btn" id="tkaiOpenSoundboardBtn"
-                                type="button">Soundboard</button>
-                            <button class="tkai-insights-btn" id="tkaiFavSoundsQuickBtn" type="button">★ Fav</button>
-                            <span id="tkaiSongToolsStatus" style="font-size:10px;color:var(--text3)">SongRec:
-                                idle</span>
+                        <div class="tkai-insights-card" id="tkaiJoinsCard">
+                            <div class="tkai-insights-title" title="Novi ulasci u chat i procjena levela">Join level
+                                feed<span>👋</span></div>
+                            <ul class="tkai-insights-list" id="tkaiJoinLevelList"></ul>
                         </div>
-                        <div id="tkaiFavSoundsQuickWrap"
-                            style="display:none;margin-bottom:6px;padding:6px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03)">
-                            <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Favorite zvukovi (quick
-                                play)</div>
-                            <div id="tkaiFavSoundsQuickList" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+                        <div class="tkai-insights-card" id="tkaiShareEventsCard">
+                            <div class="tkai-insights-title" title="Korisnici koji su podijelili live">Share
+                                events<span>↗</span></div>
+                            <ul class="tkai-insights-list" id="tkaiShareEventsList"></ul>
                         </div>
-                        <ul class="tkai-song-list" id="tkaiSongList"></ul>
                     </div>
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiPieCard">
-                        <div class="tkai-insights-title" title="Raspodjela tipova poruka u sesiji">Pie
-                            breakdown<span>◔</span></div>
-                        <div class="tkai-pie-wrap">
-                            <div class="tkai-pie-chart" id="tkaiPieChart">
-                                <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
+                    <div class="tkai-insights-row">
+                        <div class="tkai-insights-card" id="tkaiSongsCard" style="flex:1">
+                            <div class="tkai-insights-title" title="Detektirane pjesme i DJ CC tekst">Songs &amp; DJ
+                                CC<span>♫</span>
                             </div>
-                            <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
-                        </div>
-                        <ul class="tkai-insights-list" id="tkaiPieSummary">
-                            <li>Nema podataka za pie.</li>
-                        </ul>
-                        <div class="tkai-insights-card" style="margin-top:8px" id="tkaiRecommendationsCard">
-                            <div class="tkai-insights-title" title="Preporuke za streamera">
-                                Recommendations<span>→</span>
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+                                <button class="tkai-insights-btn" id="tkaiSongRecNowBtn" type="button">SongRec
+                                    now</button>
+                                <button class="tkai-insights-btn" id="tkaiDjCcNowBtn" type="button">DJ CC now</button>
+                                <button class="tkai-insights-btn" id="tkaiOpenSoundboardBtn"
+                                    type="button">Soundboard</button>
+                                <button class="tkai-insights-btn" id="tkaiFavSoundsQuickBtn" type="button">★
+                                    Fav</button>
+                                <span id="tkaiSongToolsStatus" style="font-size:10px;color:var(--text3)">SongRec:
+                                    idle</span>
                             </div>
-                            <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
-                        </div>
-                    </div>
-                </div>
-                <div class="tkai-insights-row">
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiSpikesCard">
-                        <div class="tkai-card-head">
-                            <div class="tkai-insights-title" title="Viewer, gift i chat spike događaji">Spike
-                                events<span>⚡</span></div>
-                            <div style="display:flex;gap:6px;align-items:center">
-                                <button class="tkai-insights-btn active" id="tkaiSpikeAll" type="button">All</button>
-                                <button class="tkai-insights-btn" id="tkaiSpikeViewers" type="button">Viewers</button>
-                                <button class="tkai-insights-btn" id="tkaiSpikeGifts" type="button">Gifts</button>
-                                <button class="tkai-insights-btn" id="tkaiSpikeJoin" type="button">Join</button>
-                                <button class="tkai-insights-btn" id="tkaiSpikeShare" type="button">Share</button>
-                                <button class="tkai-insights-btn" id="tkaiSpikeChat" type="button">Chat</button>
+                            <div id="tkaiFavSoundsQuickWrap"
+                                style="display:none;margin-bottom:6px;padding:6px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03)">
+                                <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Favorite zvukovi (quick
+                                    play)</div>
+                                <div id="tkaiFavSoundsQuickList" style="display:flex;gap:6px;flex-wrap:wrap"></div>
                             </div>
+                            <ul class="tkai-song-list" id="tkaiSongList"></ul>
                         </div>
-                        <ul class="tkai-insights-list" id="tkaiSpikeList">
-                            <li>Nema spikeova.</li>
-                        </ul>
-                    </div>
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiQuestionsCard">
-                        <div class="tkai-insights-title" title="Sva pitanja iz chata ove sesije">Pitanja iz chata ❓
-                        </div>
-                        <div id="tkaiQuestionsList" style="max-height:140px;overflow-y:auto;margin-top:4px">
-                            <div style="color:var(--text3);font-size:10px;padding:2px 0">Nema detektiranih pitanja.
+                        <div class="tkai-insights-card" style="flex:1" id="tkaiPieCard">
+                            <div class="tkai-insights-title" title="Raspodjela tipova poruka u sesiji">Pie
+                                breakdown<span>◔</span></div>
+                            <div class="tkai-pie-wrap">
+                                <div class="tkai-pie-chart" id="tkaiPieChart">
+                                    <div class="tkai-pie-center" id="tkaiPieCenter">0 total</div>
+                                </div>
+                                <div class="tkai-pie-legend" id="tkaiPieLegend"></div>
+                            </div>
+                            <ul class="tkai-insights-list" id="tkaiPieSummary">
+                                <li>Nema podataka za pie.</li>
+                            </ul>
+                            <div class="tkai-insights-card" style="margin-top:8px" id="tkaiRecommendationsCard">
+                                <div class="tkai-insights-title" title="Preporuke za streamera">
+                                    Recommendations<span>→</span>
+                                </div>
+                                <ul class="tkai-insights-list" id="tkaiRecommendations"></ul>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div class="tkai-insights-row">
-                    <div class="tkai-insights-card" style="flex:1" id="tkaiShadowbanCard">
-                        <div class="tkai-insights-title" title="Provjeri je li TikTok account u shadowbanu">Shadowban
-                            check<span>🔍</span></div>
-                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0">
-                            <button class="tkai-insights-btn" id="tkaiShadowbanCheckBtn"
-                                style="background:rgba(255,100,80,.18);border-color:rgba(255,100,80,.4)">🔍 Provjeri
-                                shadowban</button>
-                            <button class="tkai-insights-btn" id="tkaiDebugScraperBtn"
-                                style="background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.4);color:#fb923c">🐞
-                                Debug Scraper</button>
-                            <span id="tkaiShadowbanResult" style="font-size:10px;color:var(--text3)">Otvori TikTok Live
-                                pa
-                                klikni.</span>
+                    <div class="tkai-insights-row">
+                        <div class="tkai-insights-card" style="flex:1" id="tkaiSpikesCard">
+                            <div class="tkai-card-head">
+                                <div class="tkai-insights-title" title="Viewer, gift i chat spike događaji">Spike
+                                    events<span>⚡</span></div>
+                                <div style="display:flex;gap:6px;align-items:center">
+                                    <button class="tkai-insights-btn active" id="tkaiSpikeAll"
+                                        type="button">All</button>
+                                    <button class="tkai-insights-btn" id="tkaiSpikeViewers"
+                                        type="button">Viewers</button>
+                                    <button class="tkai-insights-btn" id="tkaiSpikeGifts" type="button">Gifts</button>
+                                    <button class="tkai-insights-btn" id="tkaiSpikeJoin" type="button">Join</button>
+                                    <button class="tkai-insights-btn" id="tkaiSpikeShare" type="button">Share</button>
+                                    <button class="tkai-insights-btn" id="tkaiSpikeChat" type="button">Chat</button>
+                                </div>
+                            </div>
+                            <ul class="tkai-insights-list" id="tkaiSpikeList">
+                                <li>Nema spikeova.</li>
+                            </ul>
                         </div>
-                        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
-                            <label for="tkaiShadowbanUserFilter" style="font-size:10px;color:var(--text3)">Filter
-                                korisnika:</label>
-                            <select id="tkaiShadowbanUserFilter" class="tkai-cfg-select"
-                                style="max-width:220px;font-size:10px;padding:2px 6px">
-                                <option value="__all__">Svi korisnici</option>
-                            </select>
-                            <span id="tkaiShadowbanUserCount" style="font-size:10px;color:var(--text3)">0</span>
+                        <div class="tkai-insights-card" style="flex:1" id="tkaiQuestionsCard">
+                            <div class="tkai-insights-title" title="Sva pitanja iz chata ove sesije">Pitanja iz chata ❓
+                            </div>
+                            <div id="tkaiQuestionsList" style="max-height:140px;overflow-y:auto;margin-top:4px">
+                                <div style="color:var(--text3);font-size:10px;padding:2px 0">Nema detektiranih pitanja.
+                                </div>
+                            </div>
                         </div>
-                        <div id="tkaiShadowbanUserStats"
-                            style="margin-top:6px;max-height:120px;overflow-y:auto;font-size:10px;color:var(--text2)">
+                    </div>
+                    <div class="tkai-insights-row">
+                        <div class="tkai-insights-card" style="flex:1" id="tkaiShadowbanCard">
+                            <div class="tkai-insights-title" title="Provjeri je li TikTok account u shadowbanu">
+                                Shadowban
+                                check<span>🔍</span></div>
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0">
+                                <button class="tkai-insights-btn" id="tkaiShadowbanCheckBtn"
+                                    style="background:rgba(255,100,80,.18);border-color:rgba(255,100,80,.4)">🔍 Provjeri
+                                    shadowban</button>
+                                <button class="tkai-insights-btn" id="tkaiDebugScraperBtn"
+                                    style="background:rgba(251,146,60,.15);border-color:rgba(251,146,60,.4);color:#fb923c">🐞
+                                    Debug Scraper</button>
+                                <span id="tkaiShadowbanResult" style="font-size:10px;color:var(--text3)">Otvori TikTok
+                                    Live
+                                    pa
+                                    klikni.</span>
+                            </div>
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+                                <label for="tkaiShadowbanUserFilter" style="font-size:10px;color:var(--text3)">Filter
+                                    korisnika:</label>
+                                <select id="tkaiShadowbanUserFilter" class="tkai-cfg-select"
+                                    style="max-width:220px;font-size:10px;padding:2px 6px">
+                                    <option value="__all__">Svi korisnici</option>
+                                </select>
+                                <span id="tkaiShadowbanUserCount" style="font-size:10px;color:var(--text3)">0</span>
+                            </div>
+                            <div id="tkaiShadowbanUserStats"
+                                style="margin-top:6px;max-height:120px;overflow-y:auto;font-size:10px;color:var(--text2)">
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+            <div class="tkai-footer">
+                <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
+                <button class="tkai-gen-btn" id="tkaiLiveServerToggleBtn" style="font-size:11px">🛰 Live Server
+                    OFF</button>
+                <button class="tkai-gen-btn" id="tkaiAudioToggleBtn" style="font-size:11px">🔇 AI Audio OFF</button>
+                <button class="tkai-gen-btn" id="tkaiCcReadBtn" style="font-size:11px">💬🔊 CC Read OFF</button>
+                <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
+                <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
+                <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Chat JSON</button>
+                <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
+                <button class="tkai-gen-btn" id="btnSendToLiveOs"
+                    style="font-size:11px;background:linear-gradient(135deg,#0f766e,#0d5c55);border-color:rgba(31,157,139,.55)">🧩
+                    → LiveOS</button>
+                <button class="tkai-gen-btn" id="tkaiClearBtn"
+                    style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
+            </div>
+            <button class="tkai-rec-jump-btn" id="tkaiRecJumpBtn" style="display:none">🔔 Preporuke</button>
         </div>
-        <div class="tkai-footer">
-            <button class="tkai-scan-btn start" id="tkaiBtnToggle">▶ Skeniranje ON</button>
-            <button class="tkai-gen-btn" id="tkaiAudioToggleBtn" style="font-size:11px">🔇 AI Audio OFF</button>
-            <button class="tkai-gen-btn" id="tkaiCcReadBtn" style="font-size:11px">💬🔊 CC Read OFF</button>
-            <button class="tkai-gen-btn" id="tkaiGenAllBtn" style="font-size:11px">🤖 Generiraj za sve</button>
-            <button class="tkai-gen-btn" id="tkaiHoldLBtn" style="font-size:11px">⌨️ L Hold OFF</button>
-            <button class="tkai-gen-btn" id="tkaiExportBtn" style="font-size:11px">⬇️ Chat JSON</button>
-            <button class="tkai-gen-btn" id="tkaiExportCsvBtn" style="font-size:11px">⬇️ CSV</button>
-            <button class="tkai-gen-btn" id="btnSendToLiveOs"
-                style="font-size:11px;background:linear-gradient(135deg,#0f766e,#0d5c55);border-color:rgba(31,157,139,.55)">🧩
-                → LiveOS</button>
-            <button class="tkai-gen-btn" id="tkaiClearBtn"
-                style="font-size:11px;background:linear-gradient(135deg,#aa2f2f,#7e1f1f)">🗑️ Očisti</button>
-        </div>
-        <button class="tkai-rec-jump-btn" id="tkaiRecJumpBtn" style="display:none">🔔 Preporuke</button>
-    </div>
     </div>
     </div>
     </div>
@@ -6530,8 +6597,8 @@
                     </div>
                 </div>
             </div>
-            <iframe id="etherxFrame" src="about:blank" data-src="https://etherx.io" style="width:100%;height:100%;border:none;display:block"
-                data-allow="clipboard-read; clipboard-write"
+            <iframe id="etherxFrame" src="about:blank" data-src="https://etherx.io"
+                style="width:100%;height:100%;border:none;display:block" data-allow="clipboard-read; clipboard-write"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" title="EtherX.io"
                 onload="document.getElementById('etherxLoading').style.display='none'"
                 onerror="var ld=document.getElementById('etherxLoading');if(ld){ld.querySelector('div:nth-child(2)').textContent='⚠️ Could not load EtherX.io';ld.querySelector('div:last-child').style.display='none'}"></iframe>

@@ -7212,6 +7212,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const listenFeedCountEl = document.getElementById('tkaiListenFeedCount');
     const repliesEl = document.getElementById('tkaiReplies');
     const toggleBtn = document.getElementById('tkaiBtnToggle');
+    const liveServerToggleBtn = document.getElementById('tkaiLiveServerToggleBtn');
     const audioToggleBtn = document.getElementById('tkaiAudioToggleBtn');
     const genBtn = document.getElementById('tkaiGenBtn');
     const genAllBtn = document.getElementById('tkaiGenAllBtn');
@@ -9748,13 +9749,42 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const value = DB.getSettings().tkaiLiveServerEnabled;
         return value === true || value === 'true';
     }
+    function updateTkaiLiveServerToggleButton(statusText = '') {
+        if (!liveServerToggleBtn) return;
+        const enabled = isTkaiLiveServerEnabled();
+        const connected = !!(tkaiLiveServerReady && tkaiLiveServerSocket && tkaiLiveServerSocket.readyState === WebSocket.OPEN);
+        if (!enabled) {
+            liveServerToggleBtn.textContent = '🛰 Live Server OFF';
+            liveServerToggleBtn.style.opacity = '.9';
+            liveServerToggleBtn.style.boxShadow = 'none';
+            liveServerToggleBtn.style.background = '';
+            liveServerToggleBtn.title = 'Uključi server način za RAM statistiku i sinkronizaciju događaja.';
+            return;
+        }
+        if (connected) {
+            liveServerToggleBtn.textContent = '🛰 Live Server ON';
+            liveServerToggleBtn.style.opacity = '1';
+            liveServerToggleBtn.style.boxShadow = '0 0 0 1px rgba(74,222,128,.45) inset';
+            liveServerToggleBtn.style.background = 'linear-gradient(135deg,rgba(21,128,61,.35),rgba(22,163,74,.22))';
+            liveServerToggleBtn.title = statusText || 'Live server spojen — RAM statistika i događaji su aktivni.';
+            return;
+        }
+        liveServerToggleBtn.textContent = '🛰 Live Server ON';
+        liveServerToggleBtn.style.opacity = '1';
+        liveServerToggleBtn.style.boxShadow = '0 0 0 1px rgba(251,191,36,.45) inset';
+        liveServerToggleBtn.style.background = 'linear-gradient(135deg,rgba(180,83,9,.26),rgba(245,158,11,.18))';
+        liveServerToggleBtn.title = statusText || 'Uključen, čeka spajanje ili Skeniranje ON.';
+    }
     function setTkaiLiveServerStatus(text, tone = 'idle') {
         const statusEl = document.getElementById('tkaiLiveServerStatus');
-        if (!statusEl) return;
-        statusEl.textContent = String(text || '');
-        statusEl.style.color = tone === 'ok'
-            ? '#4ade80'
-            : (tone === 'error' ? '#f87171' : (tone === 'wait' ? '#fbbf24' : 'var(--text3)'));
+        const normalizedText = String(text || '');
+        if (statusEl) {
+            statusEl.textContent = normalizedText;
+            statusEl.style.color = tone === 'ok'
+                ? '#4ade80'
+                : (tone === 'error' ? '#f87171' : (tone === 'wait' ? '#fbbf24' : 'var(--text3)'));
+        }
+        updateTkaiLiveServerToggleButton(normalizedText);
     }
     function getTkaiLiveServerClientId() {
         const key = 'ex_tkai_live_server_client_id';
@@ -17337,6 +17367,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
     ensureTkaiTranslatePresetDefaults();
     loadCfg();
+    updateTkaiLiveServerToggleButton();
     restoreTkaiAutosaveIfAny();
     initTkaiAutosave();
     [toneEl, readLangEl, translateLangEl, replyLangEl, autoTranslateEl, autoTranslateGiftEl, autoTranslateShareEl, autoTranslateLikeEl, autoTranslateSkipEnglishEl, countEl, contextEl, customPromptEl].forEach(el => el?.addEventListener('change', saveCfg));
@@ -17458,6 +17489,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         stopTkaiLiveServerTransport({ keepStatus: true, reason: 'Ručni test' });
         connectTkaiLiveServer({ manual: true });
     });
+    liveServerToggleBtn?.addEventListener('click', () => {
+        const next = !isTkaiLiveServerEnabled();
+        DB.saveSetting('tkaiLiveServerEnabled', next);
+        const serverToggle = document.querySelector('#stab-ai-live-chat [data-setting="tkaiLiveServerEnabled"]');
+        setToggleOn(serverToggle, next);
+        if (next) {
+            if (scanActive) connectTkaiLiveServer();
+            else setTkaiLiveServerStatus('Uključeno · čeka Skeniranje ON', 'wait');
+            showToast('🛰 Live server uključen');
+        } else {
+            stopTkaiLiveServerTransport({ reason: 'Server način isključen (panel toggle)' });
+            showToast('🛰 Live server isključen');
+        }
+        updateTkaiLiveServerToggleButton();
+    });
     document.querySelector('#stab-ai-live-chat [data-setting="tkaiLiveServerEnabled"]')?.addEventListener('click', () => {
         setTimeout(() => {
             if (isTkaiLiveServerEnabled()) {
@@ -17466,6 +17512,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             } else {
                 stopTkaiLiveServerTransport({ reason: 'Server način isključen' });
             }
+            updateTkaiLiveServerToggleButton();
         }, 0);
     });
 
@@ -20294,11 +20341,24 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     (function initQrSync() {
         const overlay = document.getElementById('qrSyncOverlay');
         if (!overlay) return;
+        const qrOptionIds = ['qrs-bm', 'qrs-hist', 'qrs-ext', 'qrs-settings', 'qrs-profiles'];
+        const getQrOptionBoxes = () => qrOptionIds
+            .map((id) => document.getElementById(id))
+            .filter((el) => !!el);
+
+        function refreshQrSelectAllLabel() {
+            const toggleBtn = document.getElementById('qrsSelectAll');
+            if (!toggleBtn) return;
+            const boxes = getQrOptionBoxes();
+            const allChecked = boxes.length > 0 && boxes.every((el) => !!el.checked);
+            toggleBtn.textContent = allChecked ? '☐ Clear all' : '☑️ Select all';
+        }
 
         // Open / Close
         document.getElementById('mi-sync-qr')?.addEventListener('click', () => {
             overlay.classList.add('show');
             updateBmCount();
+            refreshQrSelectAllLabel();
         });
         document.getElementById('qrSyncClose').addEventListener('click', () => overlay.classList.remove('show'));
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('show'); });
@@ -20321,13 +20381,47 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (el) el.textContent = '(' + n + ')';
         }
 
+        document.getElementById('qrsSelectAll')?.addEventListener('click', () => {
+            const boxes = getQrOptionBoxes();
+            if (!boxes.length) return;
+            const allChecked = boxes.every((el) => !!el.checked);
+            boxes.forEach((el) => { el.checked = !allChecked; });
+            refreshQrSelectAllLabel();
+        });
+        getQrOptionBoxes().forEach((el) => {
+            el.addEventListener('change', refreshQrSelectAllLabel);
+        });
+        refreshQrSelectAllLabel();
+
         // Build sync payload from checked options
-        function buildPayload() {
+        async function buildPayload() {
             const payload = { type: 'etherx-sync', v: 1, ts: Date.now() };
             if (document.getElementById('qrs-bm')?.checked) payload.bookmarks = DB.getBookmarks();
             if (document.getElementById('qrs-hist')?.checked) payload.history = DB.getHistory().slice(0, 200);
             if (document.getElementById('qrs-ext')?.checked) payload.extensions = EXT_DB.get();
-            if (document.getElementById('qrs-settings')?.checked) payload.settings = DB.getSettings();
+            if (document.getElementById('qrs-settings')?.checked) {
+                let settingsSnapshot = DB.getSettings();
+                try {
+                    const persisted = await window.etherx?.settings?.get?.();
+                    if (persisted && typeof persisted === 'object' && !Array.isArray(persisted)) {
+                        settingsSnapshot = { ...settingsSnapshot, ...persisted };
+                    }
+                } catch (_) { }
+                payload.settings = settingsSnapshot;
+                try {
+                    payload.aiLiveChatConfig = JSON.parse(localStorage.getItem('ex_tkai_cfg') || '{}') || {};
+                } catch (_) {
+                    payload.aiLiveChatConfig = {};
+                }
+                try {
+                    payload.aiLiveChatUi = {
+                        panelPos: JSON.parse(localStorage.getItem('ex_tkai_panel_pos') || 'null'),
+                        panelSize: JSON.parse(localStorage.getItem('ex_tkai_panel_size') || 'null')
+                    };
+                } catch (_) {
+                    payload.aiLiveChatUi = { panelPos: null, panelSize: null };
+                }
+            }
             if (document.getElementById('qrs-profiles')?.checked) {
                 payload.profiles = JSON.parse(localStorage.getItem('ex_profiles') || '[]');
             }
@@ -20350,7 +20444,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
 
         document.getElementById('qrsGenerate').addEventListener('click', async () => {
-            const payload = buildPayload();
+            const payload = await buildPayload();
             const json = JSON.stringify(payload);
             const b64 = btoa(unescape(encodeURIComponent(json)));
 
@@ -20416,7 +20510,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                     data = JSON.parse(json);
                 }
                 if (data.type !== 'etherx-sync') { showToast('❌ Invalid sync code'); return; }
-                if (data.token && !data.bookmarks && !data.settings && !data.extensions && !data.profiles && !data.history) {
+                if (data.token && !data.bookmarks && !data.settings && !data.aiLiveChatConfig && !data.extensions && !data.profiles && !data.history) {
                     document.getElementById('qrsImportResult').innerHTML = 'ℹ️ QR token mode detected. For now use smaller export selection (bookmarks/settings only).';
                     showToast('ℹ️ Token QR detected — odaberi manje stavki za single QR');
                     return;
@@ -20426,6 +20520,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 if (data.history) { data.history.forEach(h => DB.addHistory(h)); imported.push(data.history.length + ' history'); }
                 if (data.extensions) { data.extensions.forEach(e => EXT_DB.add(e)); imported.push(data.extensions.length + ' extensions'); renderExtIconBar(); }
                 if (data.settings) { Object.entries(data.settings).forEach(([k, v]) => DB.saveSetting(k, v)); imported.push('settings'); }
+                if (data.aiLiveChatConfig && typeof data.aiLiveChatConfig === 'object') {
+                    localStorage.setItem('ex_tkai_cfg', JSON.stringify(data.aiLiveChatConfig));
+                    imported.push('AI Live Chat config');
+                }
+                if (data.aiLiveChatUi && typeof data.aiLiveChatUi === 'object') {
+                    if (data.aiLiveChatUi.panelPos != null) localStorage.setItem('ex_tkai_panel_pos', JSON.stringify(data.aiLiveChatUi.panelPos));
+                    if (data.aiLiveChatUi.panelSize != null) localStorage.setItem('ex_tkai_panel_size', JSON.stringify(data.aiLiveChatUi.panelSize));
+                    imported.push('AI Live Chat UI');
+                }
                 if (data.profiles) { localStorage.setItem('ex_profiles', JSON.stringify(data.profiles)); imported.push(data.profiles.length + ' profiles'); }
                 renderBookmarksPanel(); renderBmFolderBar();
                 document.getElementById('qrsImportResult').innerHTML = '✅ Imported: ' + imported.join(', ');
@@ -21968,32 +22071,52 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     });
     // New context menu item handlers
     document.getElementById('ctx-new-tab').addEventListener('click', () => createTab());
+    let _ctxUserDbOpenInFlight = false;
+    let _ctxUserDbLastOpenedAt = 0;
     const openUserDbFromContextMenu = () => {
+        const now = Date.now();
+        if (_ctxUserDbOpenInFlight || (now - _ctxUserDbLastOpenedAt) < 450) return;
+        _ctxUserDbOpenInFlight = true;
+        _ctxUserDbLastOpenedAt = now;
         try {
-            if (typeof showTkaiUserDBModal === 'function') {
-                showTkaiUserDBModal(null);
-                closeCtxMenu();
-                return;
-            }
-            const fallbackBtn = document.getElementById('btnTkaiOpenUserDB') || document.getElementById('btnTkaiOpenUserDB2');
-            if (fallbackBtn) {
-                fallbackBtn.click();
-                closeCtxMenu();
-                return;
-            }
-            throw new Error('showTkaiUserDBModal is not available');
+            closeCtxMenu();
+            // Let the context menu close first, then open modal on next frame
+            // to avoid swallowed clicks and duplicate heavy modal rendering.
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    try {
+                        if (typeof showTkaiUserDBModal === 'function') {
+                            showTkaiUserDBModal(null);
+                            return;
+                        }
+                        const fallbackBtn = document.getElementById('btnTkaiOpenUserDB') || document.getElementById('btnTkaiOpenUserDB2');
+                        if (fallbackBtn) {
+                            fallbackBtn.click();
+                            return;
+                        }
+                        throw new Error('showTkaiUserDBModal is not available');
+                    } catch (e) {
+                        console.warn('[TikTokAI] open user DB from context menu failed', e);
+                        if (typeof showToast === 'function') showToast('⚠️ Baza korisnika se ne može otvoriti.');
+                    } finally {
+                        setTimeout(() => { _ctxUserDbOpenInFlight = false; }, 120);
+                    }
+                }, 0);
+            });
         } catch (e) {
             console.warn('[TikTokAI] open user DB from context menu failed', e);
             if (typeof showToast === 'function') showToast('⚠️ Baza korisnika se ne može otvoriti.');
+            _ctxUserDbOpenInFlight = false;
         }
     };
     const ctxOpenUserDbEl = document.getElementById('ctx-open-user-db');
-    ctxOpenUserDbEl?.addEventListener('mousedown', (event) => {
+    ctxOpenUserDbEl?.addEventListener('pointerdown', (event) => {
         event.preventDefault();
         event.stopPropagation();
         openUserDbFromContextMenu();
     });
-    ctxOpenUserDbEl?.addEventListener('click', (event) => {
+    ctxOpenUserDbEl?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         event.stopPropagation();
         openUserDbFromContextMenu();

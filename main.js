@@ -2938,7 +2938,7 @@ function createWindow() {
     },
   );
 
-  // ── Response headers: Disable CORS, X-Frame-Options, CSP ────────────────────
+  // ── Response headers: relax CORS/X-Frame-Options for targeted auth/API flows ──
   mainWindow.webContents.session.webRequest.onHeadersReceived(
     { urls: ["*://*/*"] },
     (details, callback) => {
@@ -2990,10 +2990,8 @@ function createWindow() {
       delete headers["x-frame-options"];
       delete headers["X-Frame-Options"];
 
-      // Remove CSP restrictions
-      delete headers["content-security-policy"];
-      delete headers["Content-Security-Policy"];
-      delete headers["content-security-policy-report-only"];
+      // Keep effective CSP intact. We only strip noisy report-only CSP for
+      // specific TikTok-family hosts above (via stripReportOnlyCsp).
 
       // Update network log with response
       const logEntry = networkLog.get(details.id);
@@ -3140,9 +3138,8 @@ function createWindow() {
       delete headers["Access-Control-Allow-Credentials"];
       delete headers["x-frame-options"];
       delete headers["X-Frame-Options"];
-      delete headers["content-security-policy"];
-      delete headers["Content-Security-Policy"];
-      delete headers["content-security-policy-report-only"];
+      // Keep effective CSP intact. We only strip noisy report-only CSP for
+      // specific TikTok-family hosts above (via stripReportOnlyCsp).
       callback({ responseHeaders: headers });
     },
   );
@@ -3239,9 +3236,8 @@ function createWindow() {
       delete headers["Access-Control-Allow-Credentials"];
       delete headers["x-frame-options"];
       delete headers["X-Frame-Options"];
-      delete headers["content-security-policy"];
-      delete headers["Content-Security-Policy"];
-      delete headers["content-security-policy-report-only"];
+      // Keep effective CSP intact. We only strip noisy report-only CSP for
+      // specific TikTok-family hosts above (via stripReportOnlyCsp).
       callback({ responseHeaders: headers });
     },
   );
