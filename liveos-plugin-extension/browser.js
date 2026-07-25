@@ -697,7 +697,7 @@ if (window.electronWebview) {
                                 window.__etherxTikTokTelemetrySilenced = true;
                                 const isTelemetryUrl = (value) => {
                                     const url = String(value || '');
-                                    return /https?:\/\/(?:mon\d+-normal-[^/]+\.tiktokv\.eu\/monitor_browser\/collect\/batch\/\?(?:[^#]*\b(?:biz_id=tiktok_webapp_live|bid=tiktok_pns_web_runtime)\b)|mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list(?:[?#]|$))/i.test(url);
+                                    return /https?:\/\/(?:(?:mon(?:-i18n)?(?:\d+-normal-[^/]+)?\.tiktokv\.(?:eu|com)\/monitor_browser\/collect\/batch\/\?(?:[^#]*\b(?:biz_id=tiktok_webapp_live|biz_id=webmssdk|biz_id=ucenter_tiktok_zti_sdk|bid=tiktok_pns_web_runtime)\b))|(?:mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list(?:[?#]|$)))/i.test(url);
                                 };
                                 const originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
                                 if (originalFetch) {
@@ -5606,16 +5606,33 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return '';
         }
     };
+    function isTkaiSyntheticNameToken(value) {
+        const normalized = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (!normalized) return false;
+        if (/^live_gift_\d+\b/.test(normalized)) return true;
+        if (/\blive_gift_\d+\b/.test(normalized)) return true;
+        if (/\b(?:i18n|missing key|webapp|webmssdk|ucenter_tiktok_zti_sdk|tiktok_webapp_live|tiktok_pns_web_runtime)\b/.test(normalized)) return true;
+        if (/^plur$/.test(normalized)) return true;
+        return false;
+    }
     function normalizeTikTokProfileHandle(value) {
         const raw = String(value || '').trim();
         if (!raw) return '';
         const fromUrl = parseTikTokOwnerFromUrl(raw);
         const base = String(fromUrl || raw).trim().replace(/^@+/, '');
         if (!base) return '';
+        if (isTkaiSyntheticNameToken(base)) return '';
         const strict = base.match(/^([a-z0-9._]{2,40})$/i);
-        if (strict && strict[1]) return strict[1].toLowerCase();
+        if (strict && strict[1]) {
+            const candidate = strict[1].toLowerCase();
+            return isTkaiSyntheticNameToken(candidate) ? '' : candidate;
+        }
         const fromMention = base.match(/@([a-z0-9._]{2,40})/i);
-        if (fromMention && fromMention[1]) return fromMention[1].toLowerCase();
+        if (fromMention && fromMention[1]) {
+            const candidate = fromMention[1].toLowerCase();
+            return isTkaiSyntheticNameToken(candidate) ? '' : candidate;
+        }
+        if (/\s/.test(base)) return '';
         const fallback = base
             .toLowerCase()
             .replace(/[^a-z0-9._\s-]+/g, ' ')
@@ -5623,7 +5640,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .replace(/[\s-]+/g, '.')
             .replace(/\.{2,}/g, '.')
             .replace(/^\.+|\.+$/g, '');
-        return /^[a-z0-9._]{2,40}$/.test(fallback) ? fallback : '';
+        if (!/^[a-z0-9._]{2,40}$/.test(fallback)) return '';
+        return isTkaiSyntheticNameToken(fallback) ? '' : fallback;
     }
     function resolveTikTokProfileHandle(user, message = null) {
         const direct = normalizeTikTokProfileHandle(
@@ -13565,6 +13583,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
     // ── Hook browser console & errors ────────────────────────────────────────
     (function hookBrowserConsole() {
+        const isSilencedTikTokConsoleNoise = (msg) => {
+            const text = String(msg || '');
+            if (!text) return false;
+            if (/\[i18n\]\s*missing key/i.test(text) && /live_gift_\d+/i.test(text)) return true;
+            if (!/ERR_BLOCKED_BY_CLIENT/i.test(text)) return false;
+            return /(monitor_browser\/collect\/batch|tiktok_webapp_live|webmssdk|ucenter_tiktok_zti_sdk|tiktok_pns_web_runtime|mon(?:-i18n)?(?:\d+-normal-[^/]+)?\.tiktokv\.(?:eu|com)|mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list)/i.test(text);
+        };
         const origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
         console.log = function (...args) { consoleLog('log', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'index.html'); origLog.apply(console, args); };
         console.warn = function (...args) { consoleLog('warn', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '), 'index.html'); origWarn.apply(console, args); };
@@ -13572,6 +13597,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const msg = args.map(a => a instanceof Error ? (a.message || String(a)) : (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
             // Silence Electron-internal ERR_ABORTED (-3) which is normal during navigation
             if (msg.includes('ERR_ABORTED (-3)')) { origError.apply(console, args); return; }
+            if (isSilencedTikTokConsoleNoise(msg)) return;
             consoleLog('error', msg, 'index.html');
             origError.apply(console, args);
         };
