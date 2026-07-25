@@ -7788,9 +7788,64 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!/\p{L}/u.test(cleaned)) return '';
         return cleaned.slice(0, 60);
     }
+    function collectTkaiBadgeTokens(message) {
+        const bag = new Set();
+        const pushToken = (token) => {
+            const t = String(token || '').trim().toLowerCase();
+            if (!t || t.length < 2 || t.length > 30) return;
+            bag.add(t);
+        };
+        const sources = [
+            message?.badgeText,
+            message?.userBadgeName,
+            message?.userBadge,
+            message?.clubName
+        ].map((value) => String(value || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        sources.forEach((source) => {
+            source
+                .split(/[^\p{L}0-9@._-]+/u)
+                .map((part) => part.replace(/^@+/, '').trim())
+                .filter(Boolean)
+                .forEach(pushToken);
+        });
+        return bag;
+    }
+    function isTkaiBadgeLikeUserCandidate(candidate, badgeTokens) {
+        const value = String(candidate || '').replace(/\s+/g, ' ').trim();
+        if (!value) return true;
+        const normalized = value.toLowerCase().replace(/^@+/, '');
+        if (/^(?:plur|fan|club|team|mod|moderator|vip|member|subscriber|supporter|gifter|top|rank|lvl|lv|level)$/i.test(normalized)) return true;
+        const words = normalized
+            .split(/[^\p{L}0-9._-]+/u)
+            .map((word) => word.trim())
+            .filter(Boolean);
+        if (!words.length) return true;
+        if (!badgeTokens || !badgeTokens.size) return false;
+        return words.every((word) => badgeTokens.has(word));
+    }
+    function stripTkaiBadgePrefix(text, badgeTokens) {
+        const source = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!source) return '';
+        const words = source.split(' ').filter(Boolean);
+        let start = 0;
+        while (start < words.length) {
+            const token = words[start].replace(/^@+/, '').toLowerCase();
+            if (!token) {
+                start += 1;
+                continue;
+            }
+            if (/^(?:plur|fan|club|team|mod|moderator|vip|member|subscriber|supporter|gifter|top|rank|lvl|lv|level)$/i.test(token) || (badgeTokens && badgeTokens.has(token))) {
+                start += 1;
+                continue;
+            }
+            break;
+        }
+        return words.slice(start).join(' ').trim();
+    }
     function resolveTkaiMessageUser(message) {
+        const badgeTokens = collectTkaiBadgeTokens(message);
         const direct = normalizeTkaiDisplayUserName(message?.user || '');
-        if (direct) return direct;
+        if (direct && !isTkaiBadgeLikeUserCandidate(direct, badgeTokens)) return direct;
         const handle = normalizeTikTokProfileHandle(message?.userHandle || message?.profileHandle || '');
         if (handle) return handle;
         const sources = [
@@ -7806,10 +7861,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             /^\s*(.{2,80}?)\s+(?:said|commented|wrote|ka[žz]e|komentira)\b/iu
         ];
         for (const source of sources) {
+            const mentionHandle = normalizeTikTokProfileHandle(source);
+            if (mentionHandle && !isTkaiBadgeLikeUserCandidate(mentionHandle, badgeTokens)) return mentionHandle;
             for (const pattern of patterns) {
                 const match = source.match(pattern);
-                const user = normalizeTkaiDisplayUserName(match?.[1] || '');
-                if (user) return user;
+                const matchedPrefix = String(match?.[1] || '').trim();
+                if (!matchedPrefix) continue;
+                const fromMention = normalizeTikTokProfileHandle(matchedPrefix);
+                if (fromMention && !isTkaiBadgeLikeUserCandidate(fromMention, badgeTokens)) return fromMention;
+                const withoutBadgePrefix = stripTkaiBadgePrefix(matchedPrefix, badgeTokens);
+                const lastToken = withoutBadgePrefix.split(/\s+/).filter(Boolean).slice(-1)[0] || withoutBadgePrefix;
+                const user = normalizeTkaiDisplayUserName(lastToken) || normalizeTkaiDisplayUserName(withoutBadgePrefix);
+                if (user && !isTkaiBadgeLikeUserCandidate(user, badgeTokens)) return user;
             }
         }
         return '';
