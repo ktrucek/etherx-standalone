@@ -5,6 +5,8 @@ const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
+const DetectorStore = require("./detector-store");
+const { inspectGiftRisk, normalizeAccountId } = require("./gift-detector");
 
 require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
 
@@ -67,6 +69,10 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean),
 );
 const MAX_PAYLOAD_BYTES = 512 * 1024;
+const DETECTOR_HIGH_GIFT_COINS = Math.max(1, Number(process.env.DETECTOR_HIGH_GIFT_COINS || 5000) || 5000);
+const DETECTOR_WHALE_GIFT_COINS = Math.max(DETECTOR_HIGH_GIFT_COINS, Number(process.env.DETECTOR_WHALE_GIFT_COINS || 20000) || 20000);
+const DETECTOR_ALERT_SCORE_THRESHOLD = Math.max(1, Math.min(100, Number(process.env.DETECTOR_ALERT_SCORE_THRESHOLD || 55) || 55));
+const DETECTOR_ALERTS_PER_SESSION = Math.max(10, Math.min(1000, Number(process.env.DETECTOR_ALERTS_PER_SESSION || 200) || 200));
 
 if (AUTH_TOKEN.length < 32) {
   console.error("[live] LIVE_AUTH_TOKEN mora imati najmanje 32 znaka.");
@@ -76,6 +82,14 @@ if (AUTH_TOKEN.length < 32) {
 const sessions = new Map();
 const authAttempts = new Map();
 let snapshotDirty = false;
+const detectorStore = new DetectorStore({
+  dataDir: DATA_DIR,
+  postgresUrl: process.env.DETECTOR_POSTGRES_URL,
+  redisUrl: process.env.DETECTOR_REDIS_URL,
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
+  telegramChatId: process.env.TELEGRAM_CHAT_ID,
+  maxRecentAlerts: DETECTOR_ALERTS_PER_SESSION,
+});
 
 function safeText(value, max = 500) {
   return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").slice(0, max);
@@ -89,6 +103,10 @@ function safeNumber(value, fallback = 0) {
 function safeId(value, fallbackPrefix = "id") {
   const cleaned = safeText(value, 160).replace(/[^a-zA-Z0-9._:@/-]/g, "_");
   return cleaned || `${fallbackPrefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
+function toAlertId(value) {
+  return safeId(value, "alert").replace(/^event-/, "alert-");
 }
 
 function tokenMatches(candidate) {
@@ -161,12 +179,14 @@ function sanitizeEvent(source) {
     translatedLang: safeText(event.translatedLang, 16),
     ts: Math.max(0, safeNumber(event.ts, Date.now())),
     giftName: safeText(event.giftName, 120),
+    roomId: safeText(event.roomId, 160),
     quantity: Math.max(1, safeNumber(event.quantity, 1)),
     unitCoins: Math.max(0, safeNumber(event.unitCoins, 0)),
     coins: Math.max(0, safeNumber(event.coins, 0)),
     userLevel: Math.max(0, safeNumber(event.userLevel || event.level, 0)),
     userBadgeName: safeText(event.userBadgeName, 40),
     gifterRank: Math.max(0, safeNumber(event.gifterRank, 0)),
+    firstSeenPrivate: Boolean(event.firstSeenPrivate || event.isPrivateProfile),
   };
 }
 
@@ -182,6 +202,8 @@ function createSession(id, metadata = {}) {
     events: [],
     eventIds: new Set(),
     users: new Map(),
+    alerts: [],
+    alertIds: new Set(),
     counts: {
       total: 0,
       chat: 0,
@@ -209,6 +231,26 @@ function restoreSessionsFromSnapshot() {
         ? row.events.slice(-MAX_EVENTS_PER_SESSION).map(sanitizeEvent)
         : [];
       session.eventIds = new Set(session.events.map((event) => event.id));
+      session.alerts = Array.isArray(row?.alerts) ? row.alerts.map((alert) => ({
+        id: safeText(alert?.id, 180),
+        type: safeText(alert?.type, 60),
+        severity: safeText(alert?.severity, 20),
+        status: safeText(alert?.status, 40),
+        sessionId: safeText(alert?.sessionId, 160),
+        accountId: safeText(alert?.accountId, 120),
+        creatorId: safeText(alert?.creatorId, 160),
+        user: safeText(alert?.user, 80),
+        userHandle: safeText(alert?.userHandle, 80),
+        giftName: safeText(alert?.giftName, 120),
+        quantity: Math.max(1, safeNumber(alert?.quantity, 1)),
+        coins: Math.max(0, safeNumber(alert?.coins, 0)),
+        riskScore: Math.max(0, safeNumber(alert?.riskScore, 0)),
+        title: safeText(alert?.title, 200),
+        text: safeText(alert?.text, 500),
+        ts: Math.max(0, safeNumber(alert?.ts, 0)),
+        reasons: Array.isArray(alert?.reasons) ? alert.reasons.map((reason) => safeText(reason, 200)).filter(Boolean).slice(0, 8) : [],
+      })) : [];
+      session.alertIds = new Set(session.alerts.map((alert) => alert.id).filter(Boolean));
       session.users = new Map(
         (Array.isArray(row?.users) ? row.users : [])
           .filter((entry) => Array.isArray(entry) && entry.length === 2)
@@ -266,6 +308,7 @@ function persistSessionsSnapshot(force = false) {
         updatedAt: session.updatedAt,
         counts: session.counts,
         users: Array.from(session.users.entries()),
+        alerts: session.alerts,
         events: session.events,
       })),
     };
@@ -362,6 +405,55 @@ function applyEvent(session, rawEvent) {
   if (event.text) user.lastMessage = safeText(event.text, 160);
   user.lastSeenAt = Math.max(user.lastSeenAt, event.ts);
   session.users.set(userKey, user);
+
+  const accountId = normalizeAccountId(event.userHandle || event.user || user.userHandle || user.user);
+  const watchEntry = detectorStore.getWatchlistEntry(accountId);
+  const detection = (event.type === "gift" || event.type === "subscriber")
+    ? inspectGiftRisk({
+      session,
+      event,
+      userState: user,
+      watchEntry,
+      config: {
+        highGiftCoins: DETECTOR_HIGH_GIFT_COINS,
+        whaleGiftCoins: DETECTOR_WHALE_GIFT_COINS,
+        alertScoreThreshold: DETECTOR_ALERT_SCORE_THRESHOLD,
+      },
+    })
+    : null;
+  if (detection?.shouldAlert) {
+    const alert = {
+      id: toAlertId(`alert:${session.id}:${event.id}`),
+      type: "agency_detector",
+      severity: safeText(detection.severity, 20),
+      status: safeText(detection.suggestedStatus, 40),
+      sessionId: session.id,
+      accountId: detection.accountId,
+      creatorId: safeText(detection.creatorId || session.owner || session.id, 160),
+      user: safeText(event.user, 80),
+      userHandle: safeText(event.userHandle, 80),
+      giftName: safeText(event.giftName || event.text || "Gift", 120),
+      quantity: Math.max(1, safeNumber(event.quantity, 1)),
+      coins: Math.max(0, safeNumber(event.coins, 0)),
+      riskScore: Math.max(0, safeNumber(detection.riskScore, 0)),
+      title: safeText(detection.title, 200),
+      text: safeText(detection.text, 500),
+      ts: event.ts,
+      reasons: Array.isArray(detection.reasons) ? detection.reasons.map((reason) => safeText(reason, 200)).filter(Boolean).slice(0, 8) : [],
+    };
+    detection.alert = alert;
+    if (!session.alertIds.has(alert.id)) {
+      session.alertIds.add(alert.id);
+      session.alerts.unshift(alert);
+      session.alerts = session.alerts
+        .sort((a, b) => b.ts - a.ts || b.riskScore - a.riskScore)
+        .slice(0, DETECTOR_ALERTS_PER_SESSION);
+      broadcastSessionMessage(session.id, { type: "detector_alert", alert });
+    }
+  }
+  void detectorStore.recordObservation({ session, event, userState: user, detection }).catch((error) => {
+    console.warn("[detector] recordObservation warning:", error.message);
+  });
 
   if (session.events.length > MAX_EVENTS_PER_SESSION) {
     const removed = session.events.splice(0, session.events.length - MAX_EVENTS_PER_SESSION);
@@ -473,7 +565,15 @@ function buildSummary(session, options = {}) {
     .filter((user) => user.coins > 0 || user.gifts > 0)
     .sort((a, b) => b.coins - a.coins || b.gifts - a.gifts)
     .slice(0, 20)
-    .map((user, index) => ({ ...user, rank: index + 1 }));
+    .map((user, index) => {
+      const watchEntry = detectorStore.getWatchlistEntry(user.userHandle || user.user);
+      return {
+        ...user,
+        rank: index + 1,
+        watchStatus: safeText(watchEntry?.status, 40),
+        riskScore: Math.max(0, safeNumber(watchEntry?.risk_score, 0)),
+      };
+    });
   const topChatters = users
     .filter((user) => user.messages > 0)
     .sort((a, b) => b.messages - a.messages)
@@ -487,6 +587,15 @@ function buildSummary(session, options = {}) {
     retainedEvents: session.events.length,
     uniqueUsers: users.length,
     counts: { ...session.counts },
+    alerts: session.alerts.slice(0, 50),
+    detector: {
+      watchlistCount: detectorStore.size(),
+      thresholds: {
+        highGiftCoins: DETECTOR_HIGH_GIFT_COINS,
+        whaleGiftCoins: DETECTOR_WHALE_GIFT_COINS,
+        alertScoreThreshold: DETECTOR_ALERT_SCORE_THRESHOLD,
+      },
+    },
     topGifters,
     topChatters,
   };
@@ -498,6 +607,13 @@ function buildSummary(session, options = {}) {
 function sendJson(socket, payload) {
   if (socket.readyState !== WebSocket.OPEN) return;
   socket.send(JSON.stringify(payload));
+}
+
+function broadcastSessionMessage(sessionId, payload) {
+  wss.clients.forEach((socket) => {
+    if (!socket.isAuthenticated || socket.sessionId !== sessionId) return;
+    sendJson(socket, payload);
+  });
 }
 
 const server = http.createServer((request, response) => {
@@ -532,6 +648,11 @@ const wss = new WebSocketServer({
 });
 
 restoreSessionsFromSnapshot();
+detectorStore.init().then(() => {
+  console.log(`[detector] Watchlist učitana: ${detectorStore.size()} računa.`);
+}).catch((error) => {
+  console.warn("[detector] Init warning:", error.message);
+});
 
 server.on("upgrade", (request, socket, head) => {
   const requestUrl = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
@@ -705,6 +826,43 @@ wss.on("connection", (socket, request) => {
         hasMore: allUsers.length > offset + users.length,
         nextOffset: offset + users.length,
       });
+      return;
+    }
+
+    if (message?.type === "get_alerts") {
+      const session = getSession(socket.sessionId);
+      const limit = Math.max(1, Math.min(500, safeNumber(message.limit, 100)));
+      sendJson(socket, {
+        type: "alerts_page",
+        requestId: safeId(message.requestId, "request"),
+        alerts: session.alerts.slice(0, limit),
+        hasMore: session.alerts.length > limit,
+      });
+      return;
+    }
+
+    if (message?.type === "get_watchlist") {
+      const limit = Math.max(1, Math.min(5000, safeNumber(message.limit, 500)));
+      sendJson(socket, {
+        type: "watchlist_page",
+        requestId: safeId(message.requestId, "request"),
+        accounts: detectorStore.listWatchlist(limit),
+      });
+      return;
+    }
+
+    if (message?.type === "upsert_watchlist") {
+      Promise.resolve(detectorStore.upsertWatchlistEntry(message.entry || {}))
+        .then((entry) => sendJson(socket, {
+          type: "watchlist_updated",
+          requestId: safeId(message.requestId, "request"),
+          entry,
+        }))
+        .catch((error) => sendJson(socket, {
+          type: "error",
+          code: "watchlist_update_failed",
+          detail: safeText(error?.message || error, 200),
+        }));
       return;
     }
 

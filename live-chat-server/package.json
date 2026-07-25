@@ -5,13 +5,16 @@
   "description": "RAM-backed WebSocket aggregation service for EtherX TikTok LIVE chat",
   "main": "server.js",
   "scripts": {
-    "smoke": "node smoke-test.js"
+    "smoke": "node smoke-test.js",
+    "detect:import": "node ../scripts/tiktok-detect-import.js"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
+    "pg": "^8.13.1",
+    "redis": "^4.7.0",
     "ws": "^8.21.0"
   }
 }

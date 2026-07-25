@@ -6556,6 +6556,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLiveServerFlushTimer = null;
     let tkaiLiveServerReconnectTimer = null;
     let tkaiLiveServerSummary = null;
+    let tkaiLiveServerAlerts = [];
+    const tkaiLiveServerSeenAlertIds = new Set();
     let tkaiFeedHrTranslateInFlight = false;
     const tkaiLiveServerPageRequests = new Map();
     let tkaiTikTokLiveQueue = [];
@@ -6569,6 +6571,45 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!el) return;
         el.textContent = String(text || '');
         el.style.color = tone === 'ok' ? '#34d399' : tone === 'error' ? '#f87171' : 'var(--text3)';
+    }
+    function registerTkaiLiveServerAlerts(alerts, options = {}) {
+        const rows = Array.isArray(alerts) ? alerts : [];
+        const merged = new Map();
+        [...rows, ...tkaiLiveServerAlerts].forEach((alert, index) => {
+            if (!alert || typeof alert !== 'object') return;
+            const id = String(alert.id || `${alert.accountId || alert.userHandle || alert.user || 'unknown'}:${alert.giftName || ''}:${alert.ts || 0}:${index}`).trim();
+            if (!id || merged.has(id)) return;
+            const normalized = {
+                id,
+                type: String(alert.type || 'agency_detector').trim() || 'agency_detector',
+                severity: String(alert.severity || 'info').trim() || 'info',
+                status: String(alert.status || '').trim(),
+                accountId: String(alert.accountId || alert.userHandle || alert.user || '').trim().replace(/^@+/, ''),
+                creatorId: String(alert.creatorId || '').trim(),
+                user: String(alert.user || alert.accountId || '').trim(),
+                userHandle: String(alert.userHandle || alert.accountId || '').trim().replace(/^@+/, ''),
+                giftName: String(alert.giftName || '').trim(),
+                quantity: Math.max(1, Number(alert.quantity || 1)),
+                coins: Math.max(0, Number(alert.coins || 0)),
+                riskScore: Math.max(0, Number(alert.riskScore || 0)),
+                title: String(alert.title || '').trim(),
+                text: String(alert.text || '').trim(),
+                reasons: Array.isArray(alert.reasons) ? alert.reasons.slice(0, 8) : [],
+                ts: Math.max(0, Number(alert.ts || Date.now())),
+            };
+            merged.set(id, normalized);
+            const shouldToast = options.toast === true
+                && !tkaiLiveServerSeenAlertIds.has(id)
+                && ['critical', 'high', 'warning'].includes(normalized.severity);
+            tkaiLiveServerSeenAlertIds.add(id);
+            if (shouldToast) {
+                const label = normalized.title || normalized.text || ('Alert @' + (normalized.accountId || normalized.userHandle || 'unknown'));
+                showToast('🚨 ' + label.slice(0, 180));
+            }
+        });
+        tkaiLiveServerAlerts = Array.from(merged.values())
+            .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0) || Number(b.riskScore || 0) - Number(a.riskScore || 0))
+            .slice(0, 100);
     }
     function setupTkaiTikTokLiveBridge() {
         if (tkaiTikTokLiveUnsubscribe || !window.etherx?.tiktokLiveBridge?.onEvent) return;
@@ -9667,6 +9708,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function applyTkaiLiveServerSummary(summary) {
         if (!summary || typeof summary !== 'object') return;
         tkaiLiveServerSummary = summary;
+        registerTkaiLiveServerAlerts(summary.alerts, { toast: true });
         if (Array.isArray(summary.topGifters) && summary.topGifters.length) {
             topSupporters = summary.topGifters.map((row, index) => ({
                 user: String(row.user || row.userHandle || '').slice(0, 60),
@@ -9896,6 +9938,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                         syncTkaiLiveServerUsers().catch(() => { });
                     }
                 }, 2000);
+                return;
+            }
+            if (message.type === 'detector_alert') {
+                registerTkaiLiveServerAlerts([message.alert], { toast: true });
+                requestTkaiLiveServerSummary(true);
                 return;
             }
             if (message.type === 'ack') {
@@ -21471,6 +21518,19 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 giftTypes.set(key, row);
             });
             const liveOsSaved = getLiveOsSavedSessionPayload();
+            const remoteAlertRows = (tkaiLiveServerReady && Array.isArray(tkaiLiveServerAlerts))
+                ? tkaiLiveServerAlerts.map((alert) => ({
+                    id: alert.id,
+                    type: alert.type || 'agency_detector',
+                    severity: alert.severity || 'warning',
+                    text: alert.text || alert.title || 'Detector alert',
+                    score: Number(alert.riskScore || 0),
+                    ts: Number(alert.ts || Date.now()),
+                    accountId: alert.accountId || alert.userHandle || alert.user || '',
+                    status: alert.status || '',
+                    coins: Number(alert.coins || 0),
+                }))
+                : [];
             const snapshot = {
                 connection: { state: scanActive ? 'scanning' : 'paused', tabId: tab?.id || null, liveUrl: tab?.url || '', owner, startedAt: sessionStartedAt, lastEventAt: messages.reduce((mx, r) => Math.max(mx, Number(r?.ts || 0)), 0), error: '' },
                 session: { id: sessionStartedAt ? `live-${sessionStartedAt}` : `export-${Date.now()}`, title: owner ? `@${owner} LIVE` : 'TikTok LIVE', startedAt: sessionStartedAt, messageCount: messages.length, peakViewers: peakViewerCount, currentViewers: liveViewerCount, totalCoins: giftStats.totalCoins, uniqueUsers: users.length },
@@ -21484,7 +21544,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 insights: [...(insightsSnapshot.topTopics || []).map(t => ({ type: 'topic', text: String(t?.topic || t?.label || t), score: Number(t?.count || 0) })), ...(insightsSnapshot.spikes || []).map(s => ({ type: 'spike', text: `${s.type || 'activity'} spike`, score: Number(s.delta || 0), ts: Number(s.ts || Date.now()) }))],
                 analytics: analyticsSummary,
                 music: { currentTrack: songHistory[0] || insightsSnapshot.songs?.[0] || null, history: songHistory.length ? songHistory : (insightsSnapshot.songs || []) },
-                alerts: alertRows,
+                alerts: [...remoteAlertRows, ...alertRows].filter((row, index, arr) => {
+                    const key = String(row.id || `${row.type}:${row.text}:${row.ts || 0}`);
+                    return arr.findIndex((candidate) => String(candidate.id || `${candidate.type}:${candidate.text}:${candidate.ts || 0}`) === key) === index;
+                }).sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)),
                 sentiment: {
                     label: insightsSnapshot.sentiment || 'neutral',
                     confidence: null,
