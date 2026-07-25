@@ -402,8 +402,32 @@ async function installTikTokLive() {
   }
   const pip = await execFileText(python, ["-m", "pip", "install", "--upgrade", "pip"], 420000, { cwd: runtimeRoot });
   const install = await execFileText(python, ["-m", "pip", "install", "-r", requirements], 900000, { cwd: runtimeRoot });
-  if (!install.ok) return { ok: false, runtimeRoot, python, pipUpgrade: pip.ok, error: trimPythonInstallOutput(install.stderr || install.stdout || install.error?.message || "TikTokLive instalacija nije uspjela") };
-  return { ok: true, runtimeRoot, python, pipUpgrade: pip.ok, output: trimPythonInstallOutput(install.stdout || "") };
+  if (install.ok) {
+    return { ok: true, runtimeRoot, python, pipUpgrade: pip.ok, source: "github", output: trimPythonInstallOutput(install.stdout || "") };
+  }
+  // GitHub installs use `git clone` and can fail on macOS when Git is missing,
+  // the temporary directory is restricted, or GitHub is temporarily blocked.
+  // The PyPI release has the same TikTokLive API and is a safe fallback.
+  const fallback = await execFileText(python, ["-m", "pip", "install", "--upgrade", "TikTokLive"], 900000, { cwd: runtimeRoot });
+  if (!fallback.ok) {
+    return {
+      ok: false,
+      runtimeRoot,
+      python,
+      pipUpgrade: pip.ok,
+      error: trimPythonInstallOutput(fallback.stderr || fallback.stdout || install.stderr || install.stdout || fallback.error?.message || "TikTokLive instalacija nije uspjela"),
+      githubError: trimPythonInstallOutput(install.stderr || install.stdout || ""),
+    };
+  }
+  return {
+    ok: true,
+    runtimeRoot,
+    python,
+    pipUpgrade: pip.ok,
+    source: "pypi-fallback",
+    githubError: trimPythonInstallOutput(install.stderr || install.stdout || ""),
+    output: trimPythonInstallOutput(fallback.stdout || ""),
+  };
 }
 
 function stopTikTokLiveBridge() {

@@ -17139,7 +17139,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         setTkaiTikTokLiveStatus('Instalacija traje…');
         try {
             const result = await window.etherx?.tiktokLiveBridge?.install?.();
-            if (result?.ok) setTkaiTikTokLiveStatus('Instalirano · uključi prekidač za test', 'ok');
+            if (result?.ok) setTkaiTikTokLiveStatus(result.source === 'pypi-fallback' ? 'Instalirano preko PyPI fallbacka · uključi prekidač za test' : 'Instalirano s GitHuba · uključi prekidač za test', 'ok');
             else setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(result?.error || 'nepoznata greška').slice(0, 120), 'error');
         } catch (error) {
             setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(error?.message || error).slice(0, 120), 'error');
