@@ -53,6 +53,23 @@ contextBridge.exposeInMainWorld('etherx', {
     getStatus: () => ipcRenderer.invoke('db:getTikTokLiveStorageStatus'),
   },
 
+  // Optional isaackogan/TikTokLive source (Python bridge).
+  tiktokLiveBridge: {
+    install: () => ipcRenderer.invoke('app:installTikTokLive'),
+    start: (owner) => ipcRenderer.invoke('app:startTikTokLive', owner),
+    stop: () => ipcRenderer.invoke('app:stopTikTokLive'),
+    onEvent: (callback) => {
+      const listener = (_event, data) => callback(data);
+      ipcRenderer.on('tiktoklive:event', listener);
+      return () => ipcRenderer.removeListener('tiktoklive:event', listener);
+    },
+    onLog: (callback) => {
+      const listener = (_event, data) => callback(data);
+      ipcRenderer.on('tiktoklive:log', listener);
+      return () => ipcRenderer.removeListener('tiktoklive:log', listener);
+    },
+  },
+
   // ── Downloads ───────────────────────────────────────────────────────────────
   downloads: {
     add: (data) => ipcRenderer.invoke('db:addDownload', data),

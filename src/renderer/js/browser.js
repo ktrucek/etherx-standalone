@@ -6505,6 +6505,37 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLiveServerReconnectTimer = null;
     let tkaiLiveServerSummary = null;
     const tkaiLiveServerPageRequests = new Map();
+    let tkaiTikTokLiveQueue = [];
+    let tkaiTikTokLiveUnsubscribe = null;
+
+    function isTkaiTikTokLiveEnabled() {
+        return DB.getSettings().tkaiTikTokLiveEnabled === true;
+    }
+    function setTkaiTikTokLiveStatus(text, tone = '') {
+        const el = document.getElementById('tkaiTikTokLiveStatus');
+        if (!el) return;
+        el.textContent = String(text || '');
+        el.style.color = tone === 'ok' ? '#34d399' : tone === 'error' ? '#f87171' : 'var(--text3)';
+    }
+    function setupTkaiTikTokLiveBridge() {
+        if (tkaiTikTokLiveUnsubscribe || !window.etherx?.tiktokLiveBridge?.onEvent) return;
+        tkaiTikTokLiveUnsubscribe = window.etherx.tiktokLiveBridge.onEvent((payload) => {
+            if (!payload || payload.kind === 'status') {
+                if (payload?.status === 'connected') setTkaiTikTokLiveStatus('Spojeno · čita TikTokLive', 'ok');
+                else if (payload?.status === 'stopped' || payload?.status === 'disconnected') setTkaiTikTokLiveStatus('Zaustavljeno');
+                return;
+            }
+            if (payload.kind === 'error') {
+                setTkaiTikTokLiveStatus('Greška: ' + String(payload.error || '').slice(0, 100), 'error');
+                return;
+            }
+            if (payload.kind === 'event' && isTkaiTikTokLiveEnabled()) {
+                tkaiTikTokLiveQueue.push({ ...payload, id: `tiktoklive:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, ts: Date.now(), sourceType: 'TikTokLive' });
+                if (tkaiTikTokLiveQueue.length > 500) tkaiTikTokLiveQueue = tkaiTikTokLiveQueue.slice(-500);
+            }
+        });
+    }
+    setupTkaiTikTokLiveBridge();
 
     function getLiveOsSavedSessionPayload() {
         let savedSessions = [];
@@ -9994,6 +10025,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         saveSessionToHistory();
         scanActive = false;
         stopTkaiLiveServerTransport({ endSession: true, reason: 'Skeniranje zaustavljeno' });
+        if (window.etherx?.tiktokLiveBridge?.stop) window.etherx.tiktokLiveBridge.stop().catch(() => { });
+        tkaiTikTokLiveQueue = [];
+        setTkaiTikTokLiveStatus('Zaustavljeno');
         try { window.syncBpmDetectionWithTikTokScan?.(false); } catch (_) { }
         if (scanInterval) clearTimeout(scanInterval);
         scanInterval = null;
@@ -16182,6 +16216,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             }
             const meta = parsed.find(m => m && m.type === '_meta');
             const messages = parsed.filter(m => m && m.type !== '_meta' && m.type !== '_parserDebug');
+            // TikTokLive events use the exact same downstream normalization,
+            // deduplication, translation and Chat Feed path as DOM rows.
+            if (isTkaiTikTokLiveEnabled() && tkaiTikTokLiveQueue.length) {
+                messages.push(...tkaiTikTokLiveQueue.splice(0, tkaiTikTokLiveQueue.length));
+            }
             // Always process meta (viewer count) regardless of chat messages
             if (meta) {
                 updateTkaiStreamOwner(meta.streamOwner || meta.creatorName || meta.hostName || '', tab.url);
@@ -17094,6 +17133,38 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }, 0);
     });
 
+    document.getElementById('tkaiTikTokLiveInstallBtn')?.addEventListener('click', async () => {
+        const button = document.getElementById('tkaiTikTokLiveInstallBtn');
+        if (button) button.disabled = true;
+        setTkaiTikTokLiveStatus('Instalacija traje…');
+        try {
+            const result = await window.etherx?.tiktokLiveBridge?.install?.();
+            if (result?.ok) setTkaiTikTokLiveStatus('Instalirano · uključi prekidač za test', 'ok');
+            else setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(result?.error || 'nepoznata greška').slice(0, 120), 'error');
+        } catch (error) {
+            setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(error?.message || error).slice(0, 120), 'error');
+        } finally { if (button) button.disabled = false; }
+    });
+    document.querySelector('#stab-ai-live-chat [data-setting="tkaiTikTokLiveEnabled"]')?.addEventListener('click', () => {
+        setTimeout(async () => {
+            if (!isTkaiTikTokLiveEnabled()) {
+                tkaiTikTokLiveQueue = [];
+                await Promise.resolve(window.etherx?.tiktokLiveBridge?.stop?.()).catch(() => { });
+                setTkaiTikTokLiveStatus('Isključeno');
+                return;
+            }
+            const owner = String(streamOwnerEl?.textContent || '').replace(/^@+/, '').trim() || parseTikTokOwnerFromUrl(getTikTokSourceTab()?.url || '');
+            if (!owner) {
+                setTkaiTikTokLiveStatus('Otvori TikTok LIVE pa pokušaj ponovo', 'error');
+                return;
+            }
+            setTkaiTikTokLiveStatus('Spajanje…');
+            const result = await window.etherx?.tiktokLiveBridge?.start?.(owner);
+            if (!result?.ok) setTkaiTikTokLiveStatus(String(result?.error || 'TikTokLive nije pokrenut').slice(0, 140), 'error');
+            else if (!scanActive) setTkaiTikTokLiveStatus('Uključeno · čeka Skeniranje ON');
+        }, 0);
+    });
+
     toggleBtn?.addEventListener('click', () => {
         if (scanActive) {
             stopScanning();
@@ -17117,6 +17188,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         setStatus('<span class="tkai-scanning-dot"></span>Skeniranje…');
         showToast('▶ Skeniranje uključeno');
         if (isTkaiLiveServerEnabled()) connectTkaiLiveServer();
+        if (isTkaiTikTokLiveEnabled()) {
+            const owner = String(streamOwnerEl?.textContent || '').replace(/^@+/, '').trim() || parseTikTokOwnerFromUrl(tab.url || '');
+            window.etherx?.tiktokLiveBridge?.start?.(owner).then((result) => {
+                if (!result?.ok) setTkaiTikTokLiveStatus(String(result?.error || 'TikTokLive nije pokrenut').slice(0, 140), 'error');
+            }).catch(() => { });
+        }
         runTkaiScanCycle();
         statsTimerInterval = setInterval(function () {
             if (scanActive) {

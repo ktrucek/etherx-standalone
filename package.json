@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "3.0.194",
+  "version": "3.0.195",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -53,6 +53,8 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "live-chat-server/tiktoklive_bridge.py",
+      "live-chat-server/requirements-tiktoklive.txt",
       "liveos-plugin-extension/**/*",
       "!src/**/*.backup*",
       "!src/**/*.bak",
@@ -119,5 +121,5 @@
     "uuid": "^11.1.1",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-07-24T23:26:19Z"
+  "buildTime": "2026-07-25T00:01:30Z"
 }

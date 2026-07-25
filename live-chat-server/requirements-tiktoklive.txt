@@ -1,0 +1,2 @@
+# Installed on demand in the persistent EtherX Python runtime.
+TikTokLive @ git+https://github.com/isaackogan/TikTokLive.git

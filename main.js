@@ -359,6 +359,100 @@ let mainWindow = null;
 let liveOsSnapshot = null;
 const liveOsSubscribers = new Set();
 
+// Optional TikTokLive Python source. It is deliberately separate from the
+// DOM scanner so the user can switch it on/off without changing the normal
+// browser scanner or its local fallback.
+let tkaiTikTokLiveChild = null;
+let tkaiTikTokLiveOwner = "";
+
+function resolveTikTokLiveRuntimeRoot() {
+  const root = app.isPackaged
+    ? path.join(app.getPath("userData"), "tiktoklive-runtime")
+    : path.join(app.getAppPath(), "live-chat-server", ".tiktoklive-runtime");
+  try { fs.mkdirSync(root, { recursive: true }); } catch (_) { }
+  return root;
+}
+
+function resolveTikTokLivePython(runtimeRoot) {
+  const venv = path.join(runtimeRoot, ".venv");
+  return process.platform === "win32"
+    ? path.join(venv, "Scripts", "python.exe")
+    : path.join(venv, "bin", "python");
+}
+
+async function installTikTokLive() {
+  const runtimeRoot = resolveTikTokLiveRuntimeRoot();
+  const venvDir = path.join(runtimeRoot, ".venv");
+  const python = resolveTikTokLivePython(runtimeRoot);
+  if (!fs.existsSync(python)) {
+    const candidates = resolvePythonCandidates(runtimeRoot);
+    let lastError = "";
+    for (const candidate of candidates) {
+      if (path.isAbsolute(candidate) && !fs.existsSync(candidate)) continue;
+      const created = await execFileText(candidate, ["-m", "venv", venvDir], 300000, { cwd: runtimeRoot });
+      if (created.ok) { lastError = ""; break; }
+      lastError = trimPythonInstallOutput(created.stderr || created.stdout || created.error?.message || "");
+    }
+    if (!fs.existsSync(python)) return { ok: false, runtimeRoot, python, error: lastError || "Ne mogu kreirati TikTokLive virtualni Python runtime." };
+  }
+  const sourceRequirements = path.join(app.getAppPath(), "live-chat-server", "requirements-tiktoklive.txt");
+  const requirements = path.join(runtimeRoot, "requirements-tiktoklive.txt");
+  try { fs.copyFileSync(sourceRequirements, requirements); } catch (error) {
+    return { ok: false, runtimeRoot, python, error: "TikTokLive requirements datoteka nije dostupna: " + String(error?.message || error) };
+  }
+  const pip = await execFileText(python, ["-m", "pip", "install", "--upgrade", "pip"], 420000, { cwd: runtimeRoot });
+  const install = await execFileText(python, ["-m", "pip", "install", "-r", requirements], 900000, { cwd: runtimeRoot });
+  if (!install.ok) return { ok: false, runtimeRoot, python, pipUpgrade: pip.ok, error: trimPythonInstallOutput(install.stderr || install.stdout || install.error?.message || "TikTokLive instalacija nije uspjela") };
+  return { ok: true, runtimeRoot, python, pipUpgrade: pip.ok, output: trimPythonInstallOutput(install.stdout || "") };
+}
+
+function stopTikTokLiveBridge() {
+  const child = tkaiTikTokLiveChild;
+  tkaiTikTokLiveChild = null;
+  tkaiTikTokLiveOwner = "";
+  if (!child) return { ok: true, stopped: false };
+  try { child.kill("SIGTERM"); } catch (_) { }
+  return { ok: true, stopped: true };
+}
+
+async function startTikTokLiveBridge(owner, sender) {
+  const uniqueId = String(owner || "").trim().replace(/^@+/, "").split(/[/?#]/)[0];
+  if (!/^[a-zA-Z0-9._-]{2,80}$/.test(uniqueId)) return { ok: false, error: "TikTok username nije pronađen u aktivnom Live tabu." };
+  if (tkaiTikTokLiveChild && !tkaiTikTokLiveChild.killed && tkaiTikTokLiveOwner.toLowerCase() === uniqueId.toLowerCase()) return { ok: true, alreadyRunning: true, owner: uniqueId };
+  stopTikTokLiveBridge();
+  const runtimeRoot = resolveTikTokLiveRuntimeRoot();
+  const python = resolveTikTokLivePython(runtimeRoot);
+  const sourceScript = path.join(app.getAppPath(), "live-chat-server", "tiktoklive_bridge.py");
+  const script = path.join(runtimeRoot, "tiktoklive_bridge.py");
+  if (!fs.existsSync(python)) return { ok: false, error: "TikTokLive nije instaliran. Klikni Instaliraj TikTokLive u AI Live Chat postavkama." };
+  try { fs.copyFileSync(sourceScript, script); } catch (error) { return { ok: false, error: "TikTokLive bridge skripta nije dostupna: " + String(error?.message || error) }; }
+  const child = spawn(python, [script, uniqueId], { cwd: runtimeRoot, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  tkaiTikTokLiveChild = child;
+  tkaiTikTokLiveOwner = uniqueId;
+  let lineBuffer = "";
+  child.stdout.on("data", (chunk) => {
+    lineBuffer += String(chunk || "");
+    const lines = lineBuffer.split(/\r?\n/);
+    lineBuffer = lines.pop() || "";
+    lines.forEach((line) => {
+      if (!line.trim()) return;
+      try { sender?.send?.("tiktoklive:event", JSON.parse(line)); } catch (_) { }
+    });
+  });
+  child.stderr.on("data", (chunk) => {
+    const message = String(chunk || "").trim().slice(-500);
+    if (message) sender?.send?.("tiktoklive:log", { level: "warn", message });
+  });
+  child.once("exit", (code, signal) => {
+    if (tkaiTikTokLiveChild === child) {
+      tkaiTikTokLiveChild = null;
+      tkaiTikTokLiveOwner = "";
+      sender?.send?.("tiktoklive:event", { kind: "status", status: "stopped", code, signal });
+    }
+  });
+  return { ok: true, owner: uniqueId, pid: child.pid, runtimeRoot, python };
+}
+
 function sanitizeLiveOsSnapshot(payload) {
   const source = payload && typeof payload === "object" ? payload : {};
   const safeText = (value, max = 500) => String(value || "").slice(0, max);
@@ -3632,6 +3726,10 @@ function setupIPC() {
   ipcMain.handle("ai:installPythonDeps", async () => {
     return installPythonBridgeDeps();
   });
+
+  ipcMain.handle("app:installTikTokLive", async () => installTikTokLive());
+  ipcMain.handle("app:startTikTokLive", async (event, owner) => startTikTokLiveBridge(owner, event.sender));
+  ipcMain.handle("app:stopTikTokLive", async () => stopTikTokLiveBridge());
 
   ipcMain.handle("app:runOneClickSetup", async () => {
     return runOneClickLocalSetup();
