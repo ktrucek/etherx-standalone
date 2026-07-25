@@ -1292,6 +1292,45 @@ if (window.electronWebview) {
 
     // ── Also receive context-menu info from main process (via IPC) ──────────
     if (window.etherx?.on) {
+        const isTikTokTelemetryNoiseUrl = (value) => {
+            const url = String(value || '');
+            return /(monitor_browser\/collect\/batch|tiktok_webapp_live|webmssdk|ucenter_tiktok_zti_sdk|tiktok_pns_web_runtime|mon(?:-i18n)?(?:\d+-normal-[^/]+)?\.tiktokv\.(?:eu|com)|mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list)/i.test(url);
+        };
+        const isTikTokDrawerTabsUrl = (value) => /webcast\.tiktok\.com\/webcast\/feed\/drawer_tabs\//i.test(String(value || ''));
+        const updateTikTokDrawerTabsBadge = (state, detail = '') => {
+            const badge = document.getElementById('tkaiDrawerTabsBadge');
+            if (!badge) return;
+            const normalized = String(state || '').toLowerCase();
+            if (!normalized) {
+                badge.style.display = 'none';
+                badge.textContent = 'drawer_tabs …';
+                badge.title = '';
+                return;
+            }
+            badge.style.display = '';
+            if (normalized === 'ok') {
+                badge.textContent = 'drawer_tabs OK';
+                badge.style.color = '#86efac';
+                badge.style.background = 'rgba(34,197,94,.14)';
+                badge.style.borderColor = 'rgba(34,197,94,.28)';
+            } else if (normalized === '403') {
+                badge.textContent = 'drawer_tabs 403';
+                badge.style.color = '#fca5a5';
+                badge.style.background = 'rgba(239,68,68,.14)';
+                badge.style.borderColor = 'rgba(239,68,68,.28)';
+            } else if (normalized === 'blocked') {
+                badge.textContent = 'drawer_tabs BLOCKED';
+                badge.style.color = '#fcd34d';
+                badge.style.background = 'rgba(245,158,11,.14)';
+                badge.style.borderColor = 'rgba(245,158,11,.28)';
+            } else {
+                badge.textContent = 'drawer_tabs ' + String(state).toUpperCase();
+                badge.style.color = '#cbd5e1';
+                badge.style.background = 'rgba(148,163,184,.12)';
+                badge.style.borderColor = 'rgba(148,163,184,.24)';
+            }
+            badge.title = detail ? ('TikTok drawer_tabs: ' + detail) : 'TikTok drawer_tabs status';
+        };
         window.etherx.on('webview-context-menu', (params) => {
             const selectionText = String(params?.selectionText || '').trim();
             const isEditable = !!params?.isEditable;
@@ -1307,8 +1346,17 @@ if (window.electronWebview) {
         window.etherx.on('network-log-batch', (entries) => {
             if (!Array.isArray(entries)) return;
             entries.forEach(e => {
+                const url = String(e?.url || '');
+                if (isTikTokDrawerTabsUrl(url)) {
+                    if (Number(e?.statusCode || 0) === 403) updateTikTokDrawerTabsBadge('403', 'HTTP 403');
+                    else if (String(e?.error || '').toUpperCase().includes('ERR_BLOCKED_BY_CLIENT')) updateTikTokDrawerTabsBadge('blocked', String(e.error || 'ERR_BLOCKED_BY_CLIENT'));
+                    else if (Number(e?.statusCode || 0) >= 200 && Number(e?.statusCode || 0) < 300) updateTikTokDrawerTabsBadge('ok', 'HTTP ' + Number(e.statusCode || 0));
+                }
+                if (String(e?.error || '').toUpperCase().includes('ERR_BLOCKED_BY_CLIENT') && isTikTokTelemetryNoiseUrl(url)) {
+                    return;
+                }
                 const type = e.resourceType ? ({ xmlhttprequest: 'XHR', fetch: 'XHR', script: 'JS', stylesheet: 'CSS', image: 'Img', media: 'Media', websocket: 'WS', document: 'HTML' }[e.resourceType.toLowerCase()] || e.resourceType) : 'HTML';
-                logNetworkEntry(e.url, type, e.statusCode, e.duration ? e.duration + 'ms' : undefined);
+                logNetworkEntry(url, type, e.statusCode, e.duration ? e.duration + 'ms' : undefined);
             });
         });
     }
@@ -2249,17 +2297,50 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             ollama: ['llama3.1:8b', 'llama3.2:latest', 'qwen2.5:7b']
         };
 
+        const getFetchedProviderModels = (provider) => {
+            const selectedProvider = String(provider || '').trim();
+            if (!selectedProvider) return [];
+            const runtimeCache = (window.__etherxAiFetchedModelsByProvider && typeof window.__etherxAiFetchedModelsByProvider === 'object')
+                ? window.__etherxAiFetchedModelsByProvider
+                : {};
+            const persistedCache = (DB.getSettings()?.aiFetchedModelsByProvider && typeof DB.getSettings().aiFetchedModelsByProvider === 'object')
+                ? DB.getSettings().aiFetchedModelsByProvider
+                : {};
+            const out = [];
+            const seen = new Set();
+            const pushList = (list) => {
+                if (!Array.isArray(list)) return;
+                list.forEach((value) => {
+                    const model = String(value || '').trim();
+                    if (!model || seen.has(model)) return;
+                    seen.add(model);
+                    out.push(model);
+                });
+            };
+            pushList(runtimeCache[selectedProvider]);
+            pushList(persistedCache[selectedProvider]);
+            return out;
+        };
+
         const getTkaiProviderModels = (provider) => {
             const selectedProvider = String(provider || '').trim();
             const globalModelSel = document.getElementById('settingsAiModel');
             const seen = new Set();
             const models = [];
+            const fetchedModels = getFetchedProviderModels(selectedProvider);
+
+            fetchedModels.forEach((value) => {
+                const model = String(value || '').trim();
+                if (!model || seen.has(model)) return;
+                seen.add(model);
+                models.push(model);
+            });
 
             Array.from(globalModelSel?.options || []).forEach((opt) => {
                 const value = String(opt?.value || '').trim();
                 if (!value || value === '__main__' || seen.has(value)) return;
                 const inferred = inferAiProviderFromModel(value);
-                if (selectedProvider && inferred !== selectedProvider) return;
+                if (selectedProvider && inferred !== selectedProvider && !fetchedModels.includes(value)) return;
                 seen.add(value);
                 models.push(value);
             });
@@ -6498,9 +6579,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let statsTimerInterval = null;
     let collectedMessages = [];
     let listeningMessages = [];
-    // Cumulative per-session ledger for Top users detail. This is intentionally
-    // independent from collectedMessages because the live message buffer is
-    // trimmed (especially while the remote RAM server is connected).
+    // Cumulative per-session ledger for Top users detail. Keep this
+    // independent from collectedMessages so user analytics survive any
+    // frontend filtering/rendering, but do not trim the active live session
+    // merely because the remote RAM server is connected.
     let tkaiSessionUserStats = new Map();
     let tkaiSessionUserEventIds = new Set();
     let tkaiSessionUserStatsVersion = 0;
@@ -7811,10 +7893,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const raw = String(value || '').replace(/\s+/g, ' ').trim();
         if (!raw || isUnknownTkaiUserName(raw)) return '';
         if (isTkaiSyntheticNameToken(raw)) return '';
+        if (/\b(?:(?:fan|fun|subscriber|creator)\s*club|club\s*(?:member|badge|level)|membership)\b/i.test(raw)) return '';
         const handle = normalizeTikTokProfileHandle(raw);
         if (handle && /^@?[a-z0-9._]{2,40}$/i.test(raw)) return handle;
         const cleaned = raw
             .replace(/\b(?:lvl|lv|level|razina)\s*[:#-]?\s*\d{1,3}\b/gi, ' ')
+            .replace(/\b(?:(?:fan|fun|subscriber|creator)\s*club|club\s*(?:member|badge|level)|membership)\b/gi, ' ')
             .replace(/^(?:lvl|lv|level|razina)?\s*[:#-]?\s*\d{1,3}\s+/i, '')
             .replace(/^[^\p{L}@#]+/u, '')
             .replace(/^@+/, '')
@@ -10161,8 +10245,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function getTkaiEffectiveLocalBuffer() {
         const settings = DB.getSettings();
         const normal = Math.max(80, Number(settings.tkaiMsgBuffer) || 2000);
-        if (!tkaiLiveServerReady) return normal;
-        return Math.max(100, Math.min(1000, Number(settings.tkaiLiveServerLocalBuffer) || 300));
+        // Frontend session history must stay complete for the whole live,
+        // regardless of whether the live server accepted/retained the data.
+        // The server can still keep its own RAM window, but the browser must
+        // preserve the local session buffer for Gift Gallery and stats.
+        return normal;
     }
     async function sendTextToActiveTikTokChat(rawText, options = {}) {
         const text = String(rawText || '').replace(/\s+/g, ' ').trim().slice(0, 380);
@@ -13549,7 +13636,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const countEl = document.getElementById('tkaiPopoutMsgCount');
         const giftCountEl = document.getElementById('tkaiPopoutGiftCount');
         if (!container) return;
-        const src = Array.isArray(messages) ? messages : collectedMessages;
+        const src = (typeof getTkaiSessionMessages === 'function')
+            ? getTkaiSessionMessages()
+            : (Array.isArray(messages) ? messages : collectedMessages);
         const msgs = src.filter((m) => {
             const type = normalizeTkaiMessageType(m);
             if (type === 'like') return chatPopoutFilters.likes;
@@ -16506,8 +16595,12 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           ];
           for (const sel of ownerSelectors) {
             const el = document.querySelector(sel);
-            const txt = String(el?.textContent || '').trim();
+                    const href = String(el?.getAttribute?.('href') || '').trim();
+                    const hrefMatch = href.match(/\/\@([a-z0-9._]{2,40})(?:[/?#]|$)/i);
+                    if (hrefMatch && hrefMatch[1]) return hrefMatch[1].replace(/^@+/, '');
+                    const txt = String(el?.textContent || '').trim();
             if (!txt) continue;
+                    if (/\b(?:(?:fan|fun|subscriber|creator)\s*club|club\s*(?:member|badge|level)|membership)\b/i.test(txt)) continue;
             const m = txt.match(/@?([a-z0-9._]{2,40})/i);
             if (m && m[1]) return m[1].replace(/^@+/, '');
           }
@@ -25109,10 +25202,13 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             document.getElementById('aiKeyRowHuggingface')?.style && (document.getElementById('aiKeyRowHuggingface').style.display = p === 'huggingface' ? '' : 'none');
             document.getElementById('aiKeyRowGuardian')?.style && (document.getElementById('aiKeyRowGuardian').style.display = p === 'guardian' ? '' : 'none');
             const defaults = defaultModelsByProvider[p] || defaultModelsByProvider.gemini;
-            if (!modelSel.dataset['populated_' + p]) {
+            const fetched = Array.isArray(fetchedModelsByProvider[p]) ? fetchedModelsByProvider[p].filter(Boolean) : [];
+            const candidateModels = fetched.length ? fetched : defaults;
+            if (!modelSel.dataset['populated_' + p] || fetched.length) {
                 const prev = modelSel.value;
-                modelSel.innerHTML = defaults.map(m => `<option value="${m}">${m}</option>`).join('');
-                if (defaults.includes(prev)) modelSel.value = prev;
+                modelSel.innerHTML = candidateModels.map(m => `<option value="${m}">${m}</option>`).join('');
+                if (candidateModels.includes(prev)) modelSel.value = prev;
+                if (fetched.length) modelSel.dataset['populated_' + p] = '1';
             }
             syncTranslateModelOptions();
         }
@@ -25128,7 +25224,11 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             guardian: ['grok-2', 'grok-beta', 'local-guardian'],
             huggingface: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3', 'google/gemma-3-27b-it', 'deepseek-ai/DeepSeek-R1']
         };
-        const fetchedModelsByProvider = {};
+        const persistedFetchedModelsByProvider = (cfg.aiFetchedModelsByProvider && typeof cfg.aiFetchedModelsByProvider === 'object')
+            ? cfg.aiFetchedModelsByProvider
+            : {};
+        const fetchedModelsByProvider = { ...persistedFetchedModelsByProvider };
+        window.__etherxAiFetchedModelsByProvider = fetchedModelsByProvider;
 
         function syncTranslateModelOptions() {
             const mainModelSel = document.getElementById('settingsAiModel');
@@ -25230,6 +25330,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 if (models.includes(prev)) modelSel.value = prev;
                 modelSel.dataset['populated_' + provider] = '1';
                 fetchedModelsByProvider[provider] = models.slice();
+                window.__etherxAiFetchedModelsByProvider = fetchedModelsByProvider;
+                DB.saveSetting('aiFetchedModelsByProvider', fetchedModelsByProvider);
                 syncTranslateModelOptions();
                 if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
                     window.syncTkaiModelSelectorsFromGlobal();

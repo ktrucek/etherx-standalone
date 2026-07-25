@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,260 +8,499 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     /* Toast */
-    #liveosToast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(12px);background:#1f9d8b;color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;z-index:9999;}
-    #liveosToast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+    #liveosToast {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      background: #1f9d8b;
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    #liveosToast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     /* Status bar */
-    #liveosStatusBar{display:flex;align-items:center;gap:8px;font-size:11px;color:rgba(255,255,255,.45);padding:6px 20px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.25);}
+    #liveosStatusBar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, .45);
+      padding: 6px 20px;
+      border-top: 1px solid rgba(255, 255, 255, .06);
+      background: rgba(0, 0, 0, .25);
+    }
+
     /* Capture buttons */
-    .capture-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    .capture-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:#fff;cursor:pointer;font-size:12px;font-weight:600;transition:background .15s;}
-    .capture-btn:hover{background:rgba(255,255,255,.13);}
-    .capture-btn.primary{background:rgba(31,157,139,.35);border-color:rgba(31,157,139,.6);}
-    .capture-btn.primary:hover{background:rgba(31,157,139,.5);}
-    .capture-btn.danger{background:rgba(255,80,60,.2);border-color:rgba(255,80,60,.4);}
+    .capture-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .capture-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, .15);
+      background: rgba(255, 255, 255, .07);
+      color: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background .15s;
+    }
+
+    .capture-btn:hover {
+      background: rgba(255, 255, 255, .13);
+    }
+
+    .capture-btn.primary {
+      background: rgba(31, 157, 139, .35);
+      border-color: rgba(31, 157, 139, .6);
+    }
+
+    .capture-btn.primary:hover {
+      background: rgba(31, 157, 139, .5);
+    }
+
+    .capture-btn.danger {
+      background: rgba(255, 80, 60, .2);
+      border-color: rgba(255, 80, 60, .4);
+    }
+
+    /* Plugin tools dropdown */
+    .topbar-actions {
+      position: relative;
+    }
+
+    #pluginToolsMenu {
+      position: absolute;
+      right: 0;
+      top: 48px;
+      min-width: 220px;
+      background: rgba(16, 20, 28, .96);
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 10px;
+      padding: 6px;
+      display: none;
+      z-index: 999;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .35);
+    }
+
+    #pluginToolsMenu button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+      border: none;
+      background: transparent;
+      color: #f4f7ff;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    #pluginToolsMenu button:hover {
+      background: rgba(255, 255, 255, .08);
+    }
+
+    #pluginToolsMenu .sep {
+      height: 1px;
+      background: rgba(255, 255, 255, .08);
+      margin: 6px 0;
+    }
+
     /* Panel visibility */
-    .panel.hidden-by-view{display:none!important;}
+    .panel.hidden-by-view {
+      display: none !important;
+    }
+
     /* Sessions list */
-    #sessionsListContainer{padding:4px 0;max-height:60vh;overflow-y:auto;}
+    #sessionsListContainer {
+      padding: 4px 0;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
     /* Track list (music) */
-    .track-list{margin-top:10px;display:grid;gap:4px;max-height:120px;overflow-y:auto;}
-    .track-item{display:flex;justify-content:space-between;align-items:center;padding:4px 6px;background:rgba(255,255,255,.04);border-radius:5px;font-size:11px;}
+    .track-list {
+      margin-top: 10px;
+      display: grid;
+      gap: 4px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .track-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 6px;
+      background: rgba(255, 255, 255, .04);
+      border-radius: 5px;
+      font-size: 11px;
+    }
+
     /* Waveform placeholder */
-    #waveform{height:36px;background:rgba(255,255,255,.04);border-radius:6px;margin-top:8px;}
+    #waveform {
+      height: 36px;
+      background: rgba(255, 255, 255, .04);
+      border-radius: 6px;
+      margin-top: 8px;
+    }
   </style>
 </head>
+
 <body>
-<div id="liveosToast"></div>
+  <div id="liveosToast"></div>
 
-<div class="dashboard-shell">
-  <!-- ─── SIDEBAR ─────────────────────────────────────────────────────── -->
-  <aside class="sidebar">
-    <div class="sidebar-top">
-      <div class="brand">
-        <div class="brand-mark"><span></span><span></span><span></span><span></span><span></span></div>
-        <div><strong>LiveOS+</strong><p>Plugin Intelligence</p></div>
-      </div>
-      <nav class="sidebar-nav">
-        <button class="nav-item active"><span>◉</span><span class="nav-label">Plugin Dashboard</span></button>
-        <button class="nav-item"><span>▣</span><span class="nav-label">Live Sessions</span></button>
-        <button class="nav-item"><span>⌁</span><span class="nav-label">Analytics</span></button>
-        <button class="nav-item"><span>◌</span><span class="nav-label">Users</span></button>
-        <button class="nav-item"><span>✦</span><span class="nav-label">Gifts</span></button>
-        <button class="nav-item"><span>✉</span><span class="nav-label">Chat AI</span></button>
-        <button class="nav-item"><span>♫</span><span class="nav-label">Music & BPM</span></button>
-        <button class="nav-item"><span>⟡</span><span class="nav-label">Alerts</span></button>
-        <button class="nav-item"><span>⌘</span><span class="nav-label">Automations</span></button>
-        <button class="nav-item"><span>✧</span><span class="nav-label">AI Tools</span></button>
-        <button class="nav-item"><span>⚙</span><span class="nav-label">Settings</span></button>
-      </nav>
-    </div>
-
-    <div class="sidebar-stack">
-      <div class="sidebar-card status-card">
-        <span class="eyebrow">Plugin Status</span>
-        <ul class="mini-list">
-          <li><span class="status-dot online"></span>Dashboard loaded</li>
-          <li id="sidebarScanStatus"><span class="status-dot"></span>Waiting for data</li>
-        </ul>
-      </div>
-      <div class="sidebar-card profile-card">
-        <div class="avatar">K</div>
-        <div class="profile-copy"><strong>Kristijan</strong><p>Plugin Owner</p></div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ─── MAIN ──────────────────────────────────────────────────────────── -->
-  <main class="main-content" style="display:flex;flex-direction:column;min-height:100vh;">
-    <header class="topbar">
-      <div>
-        <div class="page-title-row">
-          <h1>LiveOS Plugin Dashboard</h1>
-          <span class="powered-badge">TikTok Chat AI</span>
-        </div>
-        <p>Real-time analytics from TikTok Chat AI sessions</p>
-      </div>
-      <div class="topbar-actions">
-        <div class="capture-toolbar">
-          <button class="capture-btn primary" id="btnStartCapture">▶ Start Capture</button>
-          <button class="capture-btn danger"  id="btnStopCapture">⏹ Stop</button>
-          <button class="capture-btn" id="btnRefresh">↺ Refresh</button>
-          <button class="capture-btn" id="btnExportSnapshot">⬇ Export JSON</button>
-        </div>
-        <div class="top-chip" id="currentDate"></div>
-        <button class="primary-btn" id="btnPluginTools">Plugin Tools <span>▾</span></button>
-      </div>
-    </header>
-
-    <!-- Sessions view container (shown only on Sessions nav) -->
-    <div id="sessionsListContainer" style="display:none;padding:16px;flex:1;overflow-y:auto;"></div>
-
-    <!-- Metrics -->
-    <section class="metrics-grid">
-      <article class="metric-card accent-purple"><div class="metric-icon">◷</div><span class="metric-label">Session Time</span><strong>—</strong><small>idle</small></article>
-      <article class="metric-card accent-blue"><div class="metric-icon">◌</div><span class="metric-label">Viewers</span><strong>—</strong><small>Peak: —</small></article>
-      <article class="metric-card accent-orange"><div class="metric-icon">✦</div><span class="metric-label">Gift Coins</span><strong>—</strong><small>— gift types</small></article>
-      <article class="metric-card accent-orange soft"><div class="metric-icon">⟡</div><span class="metric-label">Events</span><strong>—</strong><small>Current session</small></article>
-      <article class="metric-card accent-pink"><div class="metric-icon">♡</div><span class="metric-label">Users</span><strong>—</strong><small>Unique</small></article>
-    </section>
-
-    <!-- Content panels -->
-    <section class="content-grid" style="flex:1;">
-
-      <!-- Trend -->
-      <div class="panel trend-panel" data-panel="trend">
-        <div class="panel-head">
-          <div><h2>Viewer Trend</h2><p>Event activity over time</p></div>
-          <div class="segmented">
-            <button data-range="1">1H</button>
-            <button data-range="6" class="active">6H</button>
-            <button data-range="24">24H</button>
-            <button data-range="168">7D</button>
+  <div class="dashboard-shell">
+    <!-- ─── SIDEBAR ─────────────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-mark"><span></span><span></span><span></span><span></span><span></span></div>
+          <div><strong>LiveOS+</strong>
+            <p>Plugin Intelligence</p>
           </div>
         </div>
-        <div class="chart chart-line">
-          <svg viewBox="0 0 640 260" preserveAspectRatio="none" aria-hidden="true">
-            <defs><linearGradient id="viewerFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="rgba(31,157,139,0.55)"></stop><stop offset="100%" stop-color="rgba(31,157,139,0.02)"></stop></linearGradient></defs>
-            <path class="grid-line" d="M0 30H640 M0 90H640 M0 150H640 M0 210H640"></path>
-            <path class="area-path" d="M0 260 L640 260 L640 260 L0 260 Z"></path>
-            <path class="line-path" d="M0 260 L640 260"></path>
-          </svg>
-          <div class="chart-y-axis"><span>High</span><span></span><span>Mid</span><span></span><span>0</span></div>
-          <div class="chart-label peak">Peak: — viewers</div>
-          <div class="chart-axis"><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span></div>
+        <nav class="sidebar-nav">
+          <button class="nav-item active"><span>◉</span><span class="nav-label">Plugin Dashboard</span></button>
+          <button class="nav-item"><span>▣</span><span class="nav-label">Live Sessions</span></button>
+          <button class="nav-item"><span>⌁</span><span class="nav-label">Analytics</span></button>
+          <button class="nav-item"><span>◌</span><span class="nav-label">Users</span></button>
+          <button class="nav-item"><span>✦</span><span class="nav-label">Gifts</span></button>
+          <button class="nav-item"><span>✉</span><span class="nav-label">Chat AI</span></button>
+          <button class="nav-item"><span>♫</span><span class="nav-label">Music & BPM</span></button>
+          <button class="nav-item"><span>⟡</span><span class="nav-label">Alerts</span></button>
+          <button class="nav-item"><span>⌘</span><span class="nav-label">Automations</span></button>
+          <button class="nav-item"><span>✧</span><span class="nav-label">AI Tools</span></button>
+          <button class="nav-item"><span>⚙</span><span class="nav-label">Settings</span></button>
+        </nav>
+      </div>
+
+      <div class="sidebar-stack">
+        <div class="sidebar-card status-card">
+          <span class="eyebrow">Plugin Status</span>
+          <ul class="mini-list">
+            <li><span class="status-dot online"></span>Dashboard loaded</li>
+            <li id="sidebarScanStatus"><span class="status-dot"></span>Waiting for data</li>
+          </ul>
         </div>
-      </div>
-
-      <!-- Gift distribution -->
-      <div class="panel gift-panel" data-panel="gift">
-        <div class="panel-head"><div><h2>Gift Distribution</h2><p>— gifts · — types</p></div></div>
-        <div class="gift-content">
-          <div class="donut"><div class="donut-hole"><strong>—</strong><span>Coins</span></div></div>
-          <div class="legend"><div style="color:rgba(255,255,255,.3);font-size:12px;padding:8px 0">No gift events yet.</div></div>
-        </div>
-      </div>
-
-      <!-- Chat AI Feed -->
-      <div class="panel chat-panel" data-panel="chat">
-        <div class="panel-head utility-head">
-          <div><h2>Live Chat AI Feed</h2><p>—</p></div>
-          <div class="tiny-actions"><button>⚙</button></div>
-        </div>
-        <div class="chat-list"><div class="chat-item"><span class="chat-event">No chat events yet. Start a TikTok LIVE scan.</span></div></div>
-        <div class="chat-input-row"><input type="text" placeholder="Type a message..." aria-label="Type a message"><button>Send</button></div>
-      </div>
-
-      <!-- Supporters -->
-      <div class="panel supporters-panel" data-panel="supporters">
-        <div class="panel-head"><div><h2>Top Supporters</h2><p>By gift coins</p></div></div>
-        <div class="supporters-list"><div class="row"><span class="supporter-name" style="color:rgba(255,255,255,.3)">No supporters yet.</span></div></div>
-      </div>
-
-      <!-- Sentiment -->
-      <div class="panel sentiment-panel" data-panel="sentiment">
-        <div class="panel-head"><div><h2>Sentiment Analysis</h2><p>Live audience mood</p></div></div>
-        <div class="sentiment-layout">
-          <div class="gauge"><div class="gauge-ring"><strong>—</strong><span>Neutral</span></div></div>
-          <div class="mood-stats">
-            <div><span>Positive</span><b>—</b></div>
-            <div><span>Neutral</span><b>—</b></div>
-            <div><span>Negative</span><b>—</b></div>
+        <div class="sidebar-card profile-card">
+          <div class="avatar">K</div>
+          <div class="profile-copy"><strong>Kristijan</strong>
+            <p>Plugin Owner</p>
           </div>
         </div>
       </div>
+    </aside>
 
-      <!-- Music & BPM -->
-      <div class="panel music-panel" data-panel="music">
-        <div class="panel-head"><div><h2>Music & BPM</h2><p>Detected tracks</p></div></div>
-        <div class="track-card"><div class="album-art"></div><div><strong>No track detected</strong><p>Start SongRec or DJ CC</p></div></div>
-        <div class="track-meta"><span class="track-badge">BPM</span><span>—</span></div>
-        <div class="track-list"></div>
-        <div class="waveform" id="waveform"></div>
-      </div>
+    <!-- ─── MAIN ──────────────────────────────────────────────────────────── -->
+    <main class="main-content" style="display:flex;flex-direction:column;min-height:100vh;">
+      <header class="topbar">
+        <div>
+          <div class="page-title-row">
+            <h1>LiveOS Plugin Dashboard</h1>
+            <span class="powered-badge">TikTok Chat AI</span>
+          </div>
+          <p>Real-time analytics from TikTok Chat AI sessions</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="capture-toolbar">
+            <button class="capture-btn primary" id="btnStartCapture">▶ Start Capture</button>
+            <button class="capture-btn danger" id="btnStopCapture">⏹ Stop</button>
+            <button class="capture-btn" id="btnRefresh">↺ Refresh</button>
+            <button class="capture-btn" id="btnExportSnapshot">⬇ Export JSON</button>
+          </div>
+          <div class="top-chip" id="currentDate"></div>
+          <button class="primary-btn" id="btnPluginTools">Plugin Tools <span>▾</span></button>
+          <div id="pluginToolsMenu" role="menu" aria-label="Plugin tools menu">
+            <button data-plugin-tools="reload-bridge">↺ Reload from LiveOS bridge</button>
+            <button data-plugin-tools="load-latest-session">▣ Load latest saved session</button>
+            <div class="sep"></div>
+            <button data-plugin-tools="today">📅 Filter: Today</button>
+            <button data-plugin-tools="yesterday">📆 Filter: Yesterday</button>
+            <button data-plugin-tools="pick-date">🗓 Pick date...</button>
+            <button data-plugin-tools="clear-date">✕ Clear date filter</button>
+          </div>
+          <input type="date" id="pluginToolsDateInput"
+            style="position:absolute;left:-9999px;opacity:0;pointer-events:none" aria-hidden="true">
+        </div>
+      </header>
 
-      <!-- AI Insights -->
-      <div class="panel insights-panel" data-panel="insights">
-        <div class="panel-head"><div><h2>AI Insights</h2><p>Live analysis & recommendations</p></div></div>
-        <div class="insight-list"><div class="insight-item"><span>No insights yet. Scan a TikTok LIVE to generate.</span><b>—</b></div></div>
-      </div>
+      <!-- Sessions view container (shown only on Sessions nav) -->
+      <div id="sessionsListContainer" style="display:none;padding:16px;flex:1;overflow-y:auto;"></div>
 
-      <!-- Timeline -->
-      <div class="panel timeline-panel" data-panel="timeline">
-        <div class="panel-head">
-          <div><h2>Activity Timeline</h2><p>All events in real-time</p></div>
-          <div class="segmented">
-            <button class="active" data-liveos-filter="all">All</button>
-            <button data-liveos-filter="gift">Gifts</button>
-            <button data-liveos-filter="chat">Chat</button>
-            <button data-liveos-filter="join">Join</button>
-            <button data-liveos-filter="share">Share</button>
-            <button data-liveos-filter="like">Like</button>
-            <button data-liveos-filter="caption">CC</button>
+      <!-- Metrics -->
+      <section class="metrics-grid">
+        <article class="metric-card accent-purple">
+          <div class="metric-icon">◷</div><span class="metric-label">Session
+            Time</span><strong>—</strong><small>idle</small>
+        </article>
+        <article class="metric-card accent-blue">
+          <div class="metric-icon">◌</div><span class="metric-label">Viewers</span><strong>—</strong><small>Peak:
+            —</small>
+        </article>
+        <article class="metric-card accent-orange">
+          <div class="metric-icon">✦</div><span class="metric-label">Gift Coins</span><strong>—</strong><small>— gift
+            types</small>
+        </article>
+        <article class="metric-card accent-orange soft">
+          <div class="metric-icon">⟡</div><span class="metric-label">Events</span><strong>—</strong><small>Current
+            session</small>
+        </article>
+        <article class="metric-card accent-pink">
+          <div class="metric-icon">♡</div><span class="metric-label">Users</span><strong>—</strong><small>Unique</small>
+        </article>
+      </section>
+
+      <!-- Content panels -->
+      <section class="content-grid" style="flex:1;">
+
+        <!-- Trend -->
+        <div class="panel trend-panel" data-panel="trend">
+          <div class="panel-head">
+            <div>
+              <h2>Viewer Trend</h2>
+              <p>Event activity over time</p>
+            </div>
+            <div class="segmented">
+              <button data-range="1">1H</button>
+              <button data-range="6" class="active">6H</button>
+              <button data-range="24">24H</button>
+              <button data-range="168">7D</button>
+            </div>
+          </div>
+          <div class="chart chart-line">
+            <svg viewBox="0 0 640 260" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="viewerFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(31,157,139,0.55)"></stop>
+                  <stop offset="100%" stop-color="rgba(31,157,139,0.02)"></stop>
+                </linearGradient>
+              </defs>
+              <path class="grid-line" d="M0 30H640 M0 90H640 M0 150H640 M0 210H640"></path>
+              <path class="area-path" d="M0 260 L640 260 L640 260 L0 260 Z"></path>
+              <path class="line-path" d="M0 260 L640 260"></path>
+            </svg>
+            <div class="chart-y-axis"><span>High</span><span></span><span>Mid</span><span></span><span>0</span></div>
+            <div class="chart-label peak">Peak: — viewers</div>
+            <div class="chart-axis"><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span>
+            </div>
           </div>
         </div>
-        <div class="timeline-list"><div class="timeline-item"><span>No events yet.</span></div></div>
-      </div>
 
-      <!-- Health -->
-      <div class="panel health-panel" data-panel="health">
-        <div class="panel-head"><div><h2>Session Health</h2><p>Connection state</p></div><span class="health-pill">Idle</span></div>
-        <div class="health-metrics">
-          <div><span>Connection</span><b>—</b><small>OK</small></div>
-          <div><span>Last Event</span><b>—</b><small></small></div>
-          <div><span>Live URL</span><b>—</b><small></small></div>
-          <div><span>Snapshot Age</span><b>—</b><small></small></div>
+        <!-- Gift distribution -->
+        <div class="panel gift-panel" data-panel="gift">
+          <div class="panel-head">
+            <div>
+              <h2>Gift Distribution</h2>
+              <p>— gifts · — types</p>
+            </div>
+          </div>
+          <div class="gift-content">
+            <div class="donut">
+              <div class="donut-hole"><strong>—</strong><span>Coins</span></div>
+            </div>
+            <div class="legend">
+              <div style="color:rgba(255,255,255,.3);font-size:12px;padding:8px 0">No gift events yet.</div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- Actions -->
-      <div class="panel actions-panel" data-panel="actions">
-        <div class="panel-head"><div><h2>Quick Actions</h2><p>Common controls</p></div></div>
-        <div class="actions-grid">
-          <button data-liveos-command="startScan">▶ Start Scan</button>
-          <button data-liveos-command="stopScan">⏹ Stop Scan</button>
-          <button id="btnActRefresh">↺ Refresh Data</button>
-          <button id="btnActExport">⬇ Export JSON</button>
-          <button id="btnActSessions">▣ View Sessions</button>
-          <button id="btnActUsers">◌ Users View</button>
-          <button id="btnActGifts">✦ Gifts View</button>
-          <button id="btnActDashboard">◉ Dashboard</button>
-          <button id="btnActAnalytics">⌁ Analytics</button>
+        <!-- Chat AI Feed -->
+        <div class="panel chat-panel" data-panel="chat">
+          <div class="panel-head utility-head">
+            <div>
+              <h2>Live Chat AI Feed</h2>
+              <p>—</p>
+            </div>
+            <div class="tiny-actions"><button>⚙</button></div>
+          </div>
+          <div class="chat-list">
+            <div class="chat-item"><span class="chat-event">No chat events yet. Start a TikTok LIVE scan.</span></div>
+          </div>
+          <div class="chat-input-row"><input type="text" placeholder="Type a message..."
+              aria-label="Type a message"><button>Send</button></div>
         </div>
-      </div>
 
-    </section>
+        <!-- Supporters -->
+        <div class="panel supporters-panel" data-panel="supporters">
+          <div class="panel-head">
+            <div>
+              <h2>Top Supporters</h2>
+              <p>By gift coins</p>
+            </div>
+          </div>
+          <div class="supporters-list">
+            <div class="row"><span class="supporter-name" style="color:rgba(255,255,255,.3)">No supporters yet.</span>
+            </div>
+          </div>
+        </div>
 
-    <!-- Status bar -->
-    <div id="liveosStatusBar"><span class="status-dot"></span>Idle · No data yet</div>
-  </main>
-</div>
+        <!-- Sentiment -->
+        <div class="panel sentiment-panel" data-panel="sentiment">
+          <div class="panel-head">
+            <div>
+              <h2>Sentiment Analysis</h2>
+              <p>Live audience mood</p>
+            </div>
+          </div>
+          <div class="sentiment-layout">
+            <div class="gauge">
+              <div class="gauge-ring"><strong>—</strong><span>Neutral</span></div>
+            </div>
+            <div class="mood-stats">
+              <div><span>Positive</span><b>—</b></div>
+              <div><span>Neutral</span><b>—</b></div>
+              <div><span>Negative</span><b>—</b></div>
+            </div>
+          </div>
+        </div>
 
-<script src="app.js"></script>
-<script>
-// Wire quick action buttons that navigate views
-document.getElementById('btnActRefresh')?.addEventListener('click', () => { document.getElementById('btnRefresh')?.click(); });
-document.getElementById('btnActExport')?.addEventListener('click', () => { document.getElementById('btnExportSnapshot')?.click(); });
-document.getElementById('btnActSessions')?.addEventListener('click', () => { if(typeof setView==='function') setView('sessions'); });
-document.getElementById('btnActUsers')?.addEventListener('click', () => { if(typeof setView==='function') setView('users'); });
-document.getElementById('btnActGifts')?.addEventListener('click', () => { if(typeof setView==='function') setView('gifts'); });
-document.getElementById('btnActDashboard')?.addEventListener('click', () => { if(typeof setView==='function') setView('dashboard'); });
-document.getElementById('btnActAnalytics')?.addEventListener('click', () => { if(typeof setView==='function') setView('analytics'); });
+        <!-- Music & BPM -->
+        <div class="panel music-panel" data-panel="music">
+          <div class="panel-head">
+            <div>
+              <h2>Music & BPM</h2>
+              <p>Detected tracks</p>
+            </div>
+          </div>
+          <div class="track-card">
+            <div class="album-art"></div>
+            <div><strong>No track detected</strong>
+              <p>Start SongRec or DJ CC</p>
+            </div>
+          </div>
+          <div class="track-meta"><span class="track-badge">BPM</span><span>—</span></div>
+          <div class="track-list"></div>
+          <div class="waveform" id="waveform"></div>
+        </div>
 
-// Sessions view toggle with content-grid
-const sessContainer = document.getElementById('sessionsListContainer');
-const contentGrid = document.querySelector('.content-grid');
-const metricsGrid = document.querySelector('.metrics-grid');
-const _origSetView = typeof setView === 'function' ? setView : null;
-// Hook sessions view to show/hide list vs panels
-if(sessContainer && contentGrid) {
-  const observer = new MutationObserver(() => {
-    const isSessions = document.querySelector('.nav-item.active .nav-label')?.textContent === 'Live Sessions';
-    sessContainer.style.display = isSessions ? '' : 'none';
-    contentGrid.style.display = isSessions ? 'none' : '';
-    metricsGrid.style.display = isSessions ? 'none' : '';
-  });
-  observer.observe(document.querySelector('.sidebar-nav'), { subtree: true, attributes: true, attributeFilter: ['class'] });
-}
-</script>
+        <!-- AI Insights -->
+        <div class="panel insights-panel" data-panel="insights">
+          <div class="panel-head">
+            <div>
+              <h2>AI Insights</h2>
+              <p>Live analysis & recommendations</p>
+            </div>
+          </div>
+          <div class="insight-list">
+            <div class="insight-item"><span>No insights yet. Scan a TikTok LIVE to generate.</span><b>—</b></div>
+          </div>
+        </div>
+
+        <!-- Timeline -->
+        <div class="panel timeline-panel" data-panel="timeline">
+          <div class="panel-head">
+            <div>
+              <h2>Activity Timeline</h2>
+              <p>All events in real-time</p>
+            </div>
+            <div class="segmented">
+              <button class="active" data-liveos-filter="all">All</button>
+              <button data-liveos-filter="gift">Gifts</button>
+              <button data-liveos-filter="chat">Chat</button>
+              <button data-liveos-filter="join">Join</button>
+              <button data-liveos-filter="share">Share</button>
+              <button data-liveos-filter="like">Like</button>
+              <button data-liveos-filter="caption">CC</button>
+            </div>
+          </div>
+          <div class="timeline-list">
+            <div class="timeline-item"><span>No events yet.</span></div>
+          </div>
+        </div>
+
+        <!-- Health -->
+        <div class="panel health-panel" data-panel="health">
+          <div class="panel-head">
+            <div>
+              <h2>Session Health</h2>
+              <p>Connection state</p>
+            </div><span class="health-pill">Idle</span>
+          </div>
+          <div class="health-metrics">
+            <div><span>Connection</span><b>—</b><small>OK</small></div>
+            <div><span>Last Event</span><b>—</b><small></small></div>
+            <div><span>Live URL</span><b>—</b><small></small></div>
+            <div><span>Snapshot Age</span><b>—</b><small></small></div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="panel actions-panel" data-panel="actions">
+          <div class="panel-head">
+            <div>
+              <h2>Quick Actions</h2>
+              <p>Common controls</p>
+            </div>
+          </div>
+          <div class="actions-grid">
+            <button data-liveos-command="startScan">▶ Start Scan</button>
+            <button data-liveos-command="stopScan">⏹ Stop Scan</button>
+            <button id="btnActRefresh">↺ Refresh Data</button>
+            <button id="btnActExport">⬇ Export JSON</button>
+            <button id="btnActSessions">▣ View Sessions</button>
+            <button id="btnActUsers">◌ Users View</button>
+            <button id="btnActGifts">✦ Gifts View</button>
+            <button id="btnActDashboard">◉ Dashboard</button>
+            <button id="btnActAnalytics">⌁ Analytics</button>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Status bar -->
+      <div id="liveosStatusBar"><span class="status-dot"></span>Idle · No data yet</div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // Wire quick action buttons that navigate views
+    document.getElementById('btnActRefresh')?.addEventListener('click', () => { document.getElementById('btnRefresh')?.click(); });
+    document.getElementById('btnActExport')?.addEventListener('click', () => { document.getElementById('btnExportSnapshot')?.click(); });
+    document.getElementById('btnActSessions')?.addEventListener('click', () => { if (typeof setView === 'function') setView('sessions'); });
+    document.getElementById('btnActUsers')?.addEventListener('click', () => { if (typeof setView === 'function') setView('users'); });
+    document.getElementById('btnActGifts')?.addEventListener('click', () => { if (typeof setView === 'function') setView('gifts'); });
+    document.getElementById('btnActDashboard')?.addEventListener('click', () => { if (typeof setView === 'function') setView('dashboard'); });
+    document.getElementById('btnActAnalytics')?.addEventListener('click', () => { if (typeof setView === 'function') setView('analytics'); });
+
+    // Sessions view toggle with content-grid
+    const sessContainer = document.getElementById('sessionsListContainer');
+    const contentGrid = document.querySelector('.content-grid');
+    const metricsGrid = document.querySelector('.metrics-grid');
+    const _origSetView = typeof setView === 'function' ? setView : null;
+    // Hook sessions view to show/hide list vs panels
+    if (sessContainer && contentGrid) {
+      const observer = new MutationObserver(() => {
+        const isSessions = document.querySelector('.nav-item.active .nav-label')?.textContent === 'Live Sessions';
+        sessContainer.style.display = isSessions ? '' : 'none';
+        contentGrid.style.display = isSessions ? 'none' : '';
+        metricsGrid.style.display = isSessions ? 'none' : '';
+      });
+      observer.observe(document.querySelector('.sidebar-nav'), { subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+  </script>
 </body>
+
 </html>

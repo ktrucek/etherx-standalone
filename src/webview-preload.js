@@ -8,6 +8,72 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// TikTok evaluates anti-bot signals in the page world, not just Electron's
+// isolated preload world. Inject the same Windows Chrome fingerprint directly
+// into the page context before site scripts read navigator.* values.
+try {
+    const injectPageWorldNavigatorSpoof = () => {
+        try {
+            const script = document.createElement('script');
+            script.textContent = `(function(){
+                try {
+                    const define = (target, key, getter) => {
+                        try {
+                            Object.defineProperty(target, key, { get: getter, configurable: true });
+                        } catch (_) {}
+                    };
+                    const uaData = {
+                        brands: [
+                            { brand: 'Chromium', version: '142' },
+                            { brand: 'Google Chrome', version: '142' },
+                            { brand: 'Not.A/Brand', version: '24' }
+                        ],
+                        mobile: false,
+                        platform: 'Windows',
+                        getHighEntropyValues: async (hints) => {
+                            const values = {
+                                architecture: 'x86',
+                                bitness: '64',
+                                formFactors: ['Desktop'],
+                                fullVersionList: [
+                                    { brand: 'Chromium', version: '142.0.0.0' },
+                                    { brand: 'Google Chrome', version: '142.0.0.0' },
+                                    { brand: 'Not.A/Brand', version: '24.0.0.0' }
+                                ],
+                                model: '',
+                                platform: 'Windows',
+                                platformVersion: '10.0.0',
+                                uaFullVersion: '142.0.0.0',
+                                wow64: false
+                            };
+                            const out = {};
+                            for (const key of (Array.isArray(hints) ? hints : [])) {
+                                if (Object.prototype.hasOwnProperty.call(values, key)) out[key] = values[key];
+                            }
+                            return out;
+                        }
+                    };
+                    define(Navigator.prototype, 'webdriver', () => false);
+                    define(Navigator.prototype, 'platform', () => 'Win32');
+                    define(Navigator.prototype, 'vendor', () => 'Google Inc.');
+                    define(Navigator.prototype, 'userAgentData', () => uaData);
+                    if (!window.chrome) {
+                        Object.defineProperty(window, 'chrome', {
+                            value: { runtime: {}, loadTimes: function(){}, csi: function(){}, app: {} },
+                            configurable: true,
+                            writable: true
+                        });
+                    }
+                } catch (_) {}
+            })();`;
+            (document.documentElement || document.head || document).appendChild(script);
+            script.remove();
+        } catch (_) { }
+    };
+    if (document.documentElement) injectPageWorldNavigatorSpoof();
+    else document.addEventListener('readystatechange', injectPageWorldNavigatorSpoof, { once: true });
+} catch (_) { }
+
 if (location.protocol === 'chrome-extension:') {
     contextBridge.exposeInMainWorld('liveos', {
         getSnapshot: () => ipcRenderer.invoke('liveos:getSnapshot'),
@@ -15,7 +81,7 @@ if (location.protocol === 'chrome-extension:') {
         unsubscribe: () => ipcRenderer.invoke('liveos:unsubscribe'),
         command: (action) => ipcRenderer.invoke('liveos:command', action),
         onSnapshot: (callback) => {
-            if (typeof callback !== 'function') return () => {};
+            if (typeof callback !== 'function') return () => { };
             const listener = (_event, snapshot) => callback(snapshot);
             ipcRenderer.on('liveos:snapshot', listener);
             return () => ipcRenderer.removeListener('liveos:snapshot', listener);
