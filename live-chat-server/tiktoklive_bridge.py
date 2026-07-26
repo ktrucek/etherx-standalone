@@ -109,7 +109,12 @@ async def run(unique_id: str) -> None:
         emit({"kind": "event", "type": "share", "text": "shared the live", **user_fields(event)})
 
     try:
-        await client.connect(fetch_gift_info=True)
+        # Gift metadata is optional. Some TikTok regions return an empty gift
+        # catalog, which currently makes TikTokLive fail the whole connection
+        # with a NoneType/TypeError before chat events can start. Gift events
+        # still contain their own name, quantity and coin fields when TikTok
+        # provides them, so do not make the catalog a startup dependency.
+        await client.connect(fetch_gift_info=False)
     except asyncio.CancelledError:
         pass
     except Exception as exc:

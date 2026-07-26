@@ -490,7 +490,13 @@ async function startTikTokLiveBridge(owner, sender) {
         if (payload?.kind === "status" && payload?.status === "connected") {
           finishStart({ ok: true, owner: uniqueId, pid: child.pid, runtimeRoot, python });
         } else if (payload?.kind === "error") {
-          finishStart({ ok: false, error: String(payload.error || "TikTokLive spajanje nije uspjelo").slice(0, 500) });
+          finishStart({
+            ok: false,
+            error: String(payload.error || "TikTokLive spajanje nije uspjelo").slice(0, 1000),
+            errorType: String(payload.errorType || "").slice(0, 120),
+            phase: String(payload.phase || "").slice(0, 120),
+            trace: String(payload.trace || "").slice(-2000),
+          });
         }
       } catch (_) { }
     });

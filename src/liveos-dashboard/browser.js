@@ -16378,11 +16378,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const fullError = String(bridgeResult?.error || 'TikTokLive nije pokrenut');
             const errorText = fullError.slice(0, 280);
             setTkaiTikTokLiveStatus(errorText, 'error');
+            const bridgeStatusEl = document.getElementById('tkaiTikTokLiveStatus');
+            if (bridgeStatusEl) bridgeStatusEl.title = String(bridgeResult?.trace || fullError).slice(-2000);
             const statusText = '⚠️ Skeniranje nije pokrenuto · ' + errorText;
             setStatus(statusText);
             console.error('[TikTokAI] Skeniranje ON nije pokrenuto:', {
                 owner,
                 error: fullError,
+                errorType: bridgeResult?.errorType || '',
+                phase: bridgeResult?.phase || '',
+                trace: bridgeResult?.trace || '',
                 originalError: bridgeResult?.originalError || '',
             });
             showToast('⚠️ ' + errorText);
