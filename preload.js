@@ -53,7 +53,7 @@ contextBridge.exposeInMainWorld('etherx', {
     getStatus: () => ipcRenderer.invoke('db:getTikTokLiveStorageStatus'),
   },
 
-  // Optional isaackogan/TikTokLive source (Python bridge).
+  // TikTok Chat AI capture source (isaackogan/TikTokLive Python bridge).
   tiktokLiveBridge: {
     install: () => ipcRenderer.invoke('app:installTikTokLive'),
     start: (owner) => ipcRenderer.invoke('app:startTikTokLive', owner),

@@ -362,9 +362,8 @@ let liveOsSnapshot = null;
 const liveOsSubscribers = new Set();
 let tkaiBotControlServer = null;
 
-// Optional TikTokLive Python source. It is deliberately separate from the
-// DOM scanner so the user can switch it on/off without changing the normal
-// browser scanner or its local fallback.
+// TikTok Chat AI capture source. The Python process streams structured
+// TikTokLive events to the renderer without reading the embedded page DOM.
 let tkaiTikTokLiveChild = null;
 let tkaiTikTokLiveOwner = "";
 
@@ -457,27 +456,61 @@ async function startTikTokLiveBridge(owner, sender) {
   tkaiTikTokLiveChild = child;
   tkaiTikTokLiveOwner = uniqueId;
   let lineBuffer = "";
+  let lastStderr = "";
+  let startSettled = false;
+  let settleStart = null;
+  const startReady = new Promise((resolve) => { settleStart = resolve; });
+  const startTimeout = setTimeout(() => {
+    if (startSettled) return;
+    startSettled = true;
+    if (tkaiTikTokLiveChild === child) stopTikTokLiveBridge();
+    settleStart({ ok: false, error: "TikTokLive spajanje nije potvrđeno unutar 20 sekundi." });
+  }, 20000);
+  const finishStart = (result) => {
+    if (startSettled) return;
+    startSettled = true;
+    clearTimeout(startTimeout);
+    settleStart(result);
+  };
   child.stdout.on("data", (chunk) => {
     lineBuffer += String(chunk || "");
     const lines = lineBuffer.split(/\r?\n/);
     lineBuffer = lines.pop() || "";
     lines.forEach((line) => {
       if (!line.trim()) return;
-      try { sender?.send?.("tiktoklive:event", JSON.parse(line)); } catch (_) { }
+      try {
+        const payload = JSON.parse(line);
+        sender?.send?.("tiktoklive:event", payload);
+        if (payload?.kind === "status" && payload?.status === "connected") {
+          finishStart({ ok: true, owner: uniqueId, pid: child.pid, runtimeRoot, python });
+        } else if (payload?.kind === "error") {
+          finishStart({ ok: false, error: String(payload.error || "TikTokLive spajanje nije uspjelo").slice(0, 500) });
+        }
+      } catch (_) { }
     });
   });
   child.stderr.on("data", (chunk) => {
     const message = String(chunk || "").trim().slice(-500);
-    if (message) sender?.send?.("tiktoklive:log", { level: "warn", message });
+    if (message) {
+      lastStderr = message;
+      sender?.send?.("tiktoklive:log", { level: "warn", message });
+    }
+  });
+  child.once("error", (error) => {
+    finishStart({ ok: false, error: String(error?.message || error || "TikTokLive proces se ne može pokrenuti").slice(0, 500) });
   });
   child.once("exit", (code, signal) => {
+    finishStart({
+      ok: false,
+      error: lastStderr || `TikTokLive proces je zaustavljen prije spajanja (code ${code ?? "?"}${signal ? `, ${signal}` : ""}).`,
+    });
     if (tkaiTikTokLiveChild === child) {
       tkaiTikTokLiveChild = null;
       tkaiTikTokLiveOwner = "";
       sender?.send?.("tiktoklive:event", { kind: "status", status: "stopped", code, signal });
     }
   });
-  return { ok: true, owner: uniqueId, pid: child.pid, runtimeRoot, python };
+  return startReady;
 }
 
 function sanitizeLiveOsSnapshot(payload) {
