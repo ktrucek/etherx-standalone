@@ -4513,7 +4513,18 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
 // ─────────────────────────────────────────────────────────────────────────
 
 let tabIdCounter = 0;
+let _lastBlankTabCreateAt = 0;
 function createTab(url = '', title = 'New Tab', active = true) {
+    // Defensive dedupe: fallback and primary listeners can both fire for the
+    // same UI click when the app is in partial-initialization state.
+    if (!url && active && title === 'New Tab') {
+        const now = Date.now();
+        if (now - _lastBlankTabCreateAt < 120) {
+            return getActiveTab() || null;
+        }
+        _lastBlankTabCreateAt = now;
+    }
+
     const id = ++tabIdCounter;
     const tab = { id, url, title, favicon: '🌐', history: [], histIdx: -1, pinned: false, muted: false, lastActive: Date.now(), discarded: false };
     STATE.tabs.push(tab); renderTab(tab);
@@ -4559,8 +4570,53 @@ function createTab(url = '', title = 'New Tab', active = true) {
     }
     return tab;
 }
+
+function ensureTabBarScaffold() {
+    const tabBar = document.getElementById('tabBar') || document.querySelector('.tab-bar');
+    if (!tabBar) return null;
+
+    let newBtn = document.getElementById('newTabBtn');
+    if (!newBtn) {
+        newBtn = document.createElement('button');
+        newBtn.className = 'new-tab-btn';
+        newBtn.id = 'newTabBtn';
+        newBtn.title = 'New Tab (Ctrl+T)';
+        newBtn.textContent = '+';
+        tabBar.appendChild(newBtn);
+    }
+
+    return { tabBar, newBtn };
+}
+
+(function bindCriticalNewTabFallbacks() {
+    if (window.__etherxNewTabFallbackBound) return;
+    window.__etherxNewTabFallbackBound = true;
+
+    // Capture-phase delegated handler so New Tab still works if a later init block crashes.
+    document.addEventListener('click', (event) => {
+        const trigger = event.target?.closest?.('#newTabBtn, #mi-new-tab');
+        if (!trigger) return;
+        createTab();
+    }, true);
+
+    // Keep Ctrl/Cmd+T functional even when the main shortcut block is not reached.
+    document.addEventListener('keydown', (event) => {
+        const key = String(event.key || '').toLowerCase();
+        if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || key !== 't') return;
+        const inEditable = !!(event.target && (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.isContentEditable));
+        if (inEditable) return;
+        event.preventDefault();
+        createTab();
+    }, true);
+})();
+
 function renderTab(tab) {
-    const tabBar = document.getElementById('tabBar'), newBtn = document.getElementById('newTabBtn');
+    const scaffold = ensureTabBarScaffold();
+    if (!scaffold) {
+        console.warn('[EtherX] Tab bar not found, cannot render tab:', tab?.id);
+        return;
+    }
+    const { tabBar, newBtn } = scaffold;
     const el = document.createElement('div');
     el.className = 'tab' + (tab.pinned ? ' pinned' : '') + (tab.muted ? ' muted' : '');
     el.dataset.tabId = tab.id;
