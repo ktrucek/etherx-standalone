@@ -1458,6 +1458,41 @@ class SimpleVirtualList {
 
 const origGetElementById = document.getElementById;
 const MISSING_DOM_FALLBACK_IDS = new Set();
+const MISSING_DOM_FALLBACK_CACHE = new Map();
+const MISSING_DOM_LISTENER_QUEUE = new Map();
+
+function queueMissingDomListener(id, type, listener, options) {
+    if (!id || !type || typeof listener !== 'function') return;
+    const queue = MISSING_DOM_LISTENER_QUEUE.get(id) || [];
+    queue.push({ type, listener, options });
+    MISSING_DOM_LISTENER_QUEUE.set(id, queue);
+}
+
+function flushQueuedListenersForId(id, realEl) {
+    if (!id || !realEl || realEl.dataset?.missingFallback === '1') return;
+    const queue = MISSING_DOM_LISTENER_QUEUE.get(id);
+    if (!Array.isArray(queue) || !queue.length) return;
+    queue.forEach(({ type, listener, options }) => {
+        try { realEl.addEventListener(type, listener, options); } catch (_) { }
+    });
+    MISSING_DOM_LISTENER_QUEUE.delete(id);
+    MISSING_DOM_FALLBACK_CACHE.delete(id);
+}
+
+function createMissingFallbackProxy(id) {
+    const el = document.createElement('div');
+    el.id = id;
+    el.dataset.missingFallback = '1';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = 'display:none !important; visibility:hidden !important; pointer-events:none !important;';
+
+    const nativeAddEventListener = el.addEventListener.bind(el);
+    el.addEventListener = function (type, listener, options) {
+        queueMissingDomListener(id, type, listener, options);
+        return nativeAddEventListener(type, listener, options);
+    };
+    return el;
+}
 
 function shouldCreateMissingFallback(id) {
     if (!id || typeof id !== 'string') return false;
@@ -1489,12 +1524,12 @@ function getOrCreateMissingElement(id) {
     let el = origGetElementById.call(document, id);
     if (el) return el;
 
-    el = document.createElement('div');
-    el.id = id;
-    el.dataset.missingFallback = '1';
-    el.setAttribute('aria-hidden', 'true');
-    el.style.cssText = 'display:none !important; visibility:hidden !important; pointer-events:none !important;';
-    (document.body || document.documentElement).appendChild(el);
+    el = MISSING_DOM_FALLBACK_CACHE.get(id);
+    if (el) return el;
+
+    // Keep fallback detached so duplicate IDs do not hijack future lookups.
+    el = createMissingFallbackProxy(id);
+    MISSING_DOM_FALLBACK_CACHE.set(id, el);
 
     if (!MISSING_DOM_FALLBACK_IDS.has(id)) {
         MISSING_DOM_FALLBACK_IDS.add(id);
@@ -1525,11 +1560,23 @@ document.getElementById = function (id) {
     }
 
     const found = origGetElementById.call(document, id);
-    if (found) return found;
+    if (found) {
+        flushQueuedListenersForId(id, found);
+        return found;
+    }
 
     // Guard against hard crashes when an expected node was removed/renamed.
     return getOrCreateMissingElement(id);
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Late-pass: if listeners were queued before target nodes were parsed,
+    // bind them now to the real DOM elements.
+    Array.from(MISSING_DOM_LISTENER_QUEUE.keys()).forEach((id) => {
+        const realEl = origGetElementById.call(document, id);
+        if (realEl) flushQueuedListenersForId(id, realEl);
+    });
+});
 const SENSITIVE_SETTING_KEYS = new Set([
     'geminiApiKey',
     'gemini_api_key',
