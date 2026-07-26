@@ -15732,12 +15732,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                 }
                             }
                             if (!clubUser) continue;
+                            const messageParts = [];
                             for (let i = userIndex + 1; i < rawLines.length; i += 1) {
                                 const candidateText = String(rawLines[i] || '').trim();
                                 if (!candidateText || isAuxiliaryText(candidateText) || isViewerOrLeaderboardText(candidateText)) continue;
-                                const text = cleanChatText(candidateText, clubUser);
-                                if (text && !isViewerOrLeaderboardText(text)) return { user: clubUser, text };
+                                messageParts.push(candidateText);
                             }
+                            const text = cleanChatText(messageParts.join(' '), clubUser);
+                            if (text && !isViewerOrLeaderboardText(text)) return { user: clubUser, text };
                         }
                         // TikTok rows are typically rendered as separate lines:
                         // first username, then message text on the next line.
@@ -15748,14 +15750,15 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                 if (clubMarkerIndexes.some((markerIndex) => i === markerIndex || i === markerIndex - 1)) continue;
                                 const user = normalizeChatUserName(rawLines[i]);
                                 if (!user) continue;
+                                const messageParts = [];
                                 for (let j = i + 1; j < rawLines.length; j += 1) {
                                     const candidateText = String(rawLines[j] || '').trim();
                                     if (!candidateText) continue;
                                     if (isAuxiliaryText(candidateText) || isViewerOrLeaderboardText(candidateText)) continue;
-                                    const text = cleanChatText(candidateText, user);
-                                    if (text && !isViewerOrLeaderboardText(text)) return { user, text };
-                                    break;
+                                    messageParts.push(candidateText);
                                 }
+                                const text = cleanChatText(messageParts.join(' '), user);
+                                if (text && !isViewerOrLeaderboardText(text)) return { user, text };
                             }
                         }
 
@@ -16316,6 +16319,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                                 }
 
                                 items.slice(-140).forEach((el, index) => {
+                    const messageTextSelector = '[data-e2e="chat-message-text"],'
+                        + '[data-e2e="message-text"],'
+                        + '[data-e2e="webcast-live-comment"],'
+                        + '[data-e2e="webcast-live-message"],'
+                        + '[data-e2e="webcast-message"],'
+                        + '[data-e2e="live-comment-text"],'
+                        + '[class*="MessageText"],'
+                        + '[class*="CommentText"],'
+                        + '[class*="message-content"],'
+                        + '[class*="chat-content"],'
+                        + '[class*="GiftText"],'
+                        + '[class*="GiftMessage"],'
+                        + '[class*="Subscribe"],'
+                        + '[class*="SpanMessage"],'
+                        + '[class*="comment-text"]';
                     const userSelector = '[data-e2e="chat-message-user-name"],'
                         + '[data-e2e="user-name"],'
                         + '[data-e2e="message-owner-name"],'
@@ -16334,38 +16352,30 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         + 'strong, b';
                     const userCandidates = Array.from(el.querySelectorAll(userSelector));
                     const userEl = (() => {
+                        const linkedUser = userCandidates.find((candidate) => /\/@[^/?#]+/i.test(String(candidate?.getAttribute?.('href') || '')));
+                        if (linkedUser) return linkedUser;
                         const semantic = (node) => String([
                             node?.getAttribute?.('data-e2e') || '',
                             node?.getAttribute?.('class') || '',
                             node?.getAttribute?.('aria-label') || '',
                             node?.getAttribute?.('title') || ''
                         ].join(' ')).toLowerCase();
+                        const validCandidates = [];
                         for (const candidate of userCandidates) {
                             const text = normalizeChatUserName(candidate?.textContent || '');
                             if (!text) continue;
                             const kind = semantic(candidate);
                             if (/(badge|fan|club|rank|level|grade|medal|team|tag|supporter|gifter|gift)/i.test(kind)) continue;
-                            return candidate;
+                            if (candidate.closest?.(messageTextSelector)) continue;
+                            validCandidates.push(candidate);
                         }
-                        return userCandidates.find(Boolean) || null;
+                        if (validCandidates.length) return validCandidates[validCandidates.length - 1];
+                        return null;
                     })();
-          const textEl = el.querySelector(
-            '[data-e2e="chat-message-text"],'
-            + '[data-e2e="message-text"],'
-            + '[data-e2e="webcast-live-comment"],'
-            + '[data-e2e="webcast-live-message"],'
-            + '[data-e2e="webcast-message"],'
-            + '[data-e2e="live-comment-text"],'
-            + '[class*="MessageText"],'
-            + '[class*="CommentText"],'
-            + '[class*="message-content"],'
-            + '[class*="chat-content"],'
-            + '[class*="GiftText"],'
-            + '[class*="GiftMessage"],'
-            + '[class*="Subscribe"],'
-            + '[class*="SpanMessage"],'
-            + '[class*="comment-text"]'
-          );
+          const textEl = Array.from(el.querySelectorAll(messageTextSelector))
+            .filter((node) => String(node?.textContent || '').trim())
+            .sort((a, b) => String(b.textContent || '').trim().length - String(a.textContent || '').trim().length)[0]
+            || null;
           const textNodes = Array.from(el.querySelectorAll(
             '[data-e2e="chat-message-text"],'
             + '[data-e2e="message-text"],'
@@ -16449,11 +16459,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                         }
                         return '';
                     })();
-          let user = (derivedUser || userHandle || '').slice(0, 60) || null; // null = skip if truly empty
+          let user = (userHandle || derivedUser || '').slice(0, 60) || null; // null = skip if truly empty
           // TikTok's normal live layout is two lines: username first, message
-          // second. Prefer that structured extraction over generic child-node
-          // fallbacks, which can otherwise merge the username into the text.
-          if (structuredRow?.user && structuredRow?.text) {
+          // second. Structured extraction is only a fallback: explicit profile
+          // links/name nodes already skip the diamond, heart and club badges.
+          if (!user && structuredRow?.user && structuredRow?.text) {
             const structuredUser = normalizeChatUserName(structuredRow.user);
             if (structuredUser) user = structuredUser;
           }
@@ -16470,7 +16480,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
           const chatBadgeMeta = extractChatBadgeMeta(el, user);
           const rowFallbackText = extractFullChatTextFromRow(fullRowText, user);
           const structuredText = structuredRow?.text ? String(structuredRow.text).trim() : '';
-          let rawText = (structuredText || assembledText || textBase || rowFallbackText || fallbackParts.join(' ') || '').trim().slice(0, 2000);
+          let rawText = (textBase || structuredText || assembledText || rowFallbackText || fallbackParts.join(' ') || '').trim().slice(0, 2000);
           rawText = stripKnownChatRowPrefix(rawText, user, chatBadgeMeta).slice(0, 2000);
           if (rowFallbackText && (!rawText || rawText.length < 2 || isAuxiliaryText(rawText))) {
             rawText = stripKnownChatRowPrefix(rowFallbackText, user, chatBadgeMeta).slice(0, 2000);
