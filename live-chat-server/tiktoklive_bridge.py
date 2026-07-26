@@ -8,6 +8,7 @@ when the AI Live Chat toggle is switched off.
 """
 import asyncio
 import json
+import re
 import sys
 import time
 import traceback
@@ -39,7 +40,42 @@ def clean_user_text(value: Any) -> str:
     return str(value or "").replace("\r", " ").replace("\n", " ").strip()
 
 
-def user_fields(event: Any) -> dict[str, str]:
+def explicit_user_level(user: Any) -> int:
+    """Return only a level explicitly present in TikTok's user/badge payload."""
+    if user is None:
+        return 0
+
+    candidates = [
+        getattr(getattr(user, "pay_grade", None), "level", 0),
+        getattr(getattr(user, "payGrade", None), "level", 0),
+        getattr(user, "user_level", 0),
+        getattr(user, "userLevel", 0),
+    ]
+    for candidate in candidates:
+        try:
+            level = int(candidate or 0)
+        except (TypeError, ValueError):
+            continue
+        if 0 < level < 500:
+            return level
+
+    badge_list = getattr(user, "badge_list", None) or getattr(user, "badgeList", None) or []
+    for badge in badge_list:
+        badge_sources = [
+            getattr(badge, "name", ""),
+            getattr(badge, "text", ""),
+            getattr(badge, "display_name", ""),
+            getattr(badge, "badge_display_type", ""),
+        ]
+        for source in badge_sources:
+            match = re.search(r"\b(?:lv|lvl|level)\.?\s*[:#-]?\s*(\d{1,3})\b", clean_user_text(source), re.IGNORECASE)
+            level = int(match.group(1)) if match else 0
+            if 0 < level < 500:
+                return level
+    return 0
+
+
+def user_fields(event: Any) -> dict[str, Any]:
     user = getattr(event, "user", None)
     handle = clean_user_text(getattr(user, "unique_id", "")).lstrip("@")
     display_name = clean_user_text(getattr(user, "nickname", "")).lstrip("@")
@@ -48,12 +84,17 @@ def user_fields(event: Any) -> dict[str, str]:
     # Downstream UI and summaries primarily read `user`, so keep it as the
     # stable TikTok handle and expose the nickname separately.
     name = handle or display_name or "unknown"
-    return {
+    fields: dict[str, Any] = {
         "user": name[:80],
         "displayName": (display_name or handle or "unknown")[:80],
         "userHandle": handle[:80],
         "profileHandle": handle[:80],
     }
+    level = explicit_user_level(user)
+    if level:
+        fields["userLevel"] = level
+        fields["joinLevel"] = level
+    return fields
 
 
 async def run(unique_id: str) -> None:

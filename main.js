@@ -18,6 +18,7 @@ const os = require("os");
 const fs = require("fs");
 const http = require("http");
 const https = require("https");
+const net = require("net");
 const crypto = require("crypto");
 const { execFile, spawn } = require("child_process");
 const ETHERX_DEBUG_LOGS = process.env.ETHERX_DEBUG === "1" || process.env.ETHERX_DEBUG_LOGS === "1";
@@ -2523,12 +2524,129 @@ async function installPythonBridgeDeps() {
   }
 }
 
+async function getPythonBridgeStatus() {
+  const projectRoot = resolvePersistentPythonRuntimeRoot();
+  const venvDir = path.join(projectRoot, ".venv");
+  const python = process.platform === "win32"
+    ? path.join(venvDir, "Scripts", "python.exe")
+    : path.join(venvDir, "bin", "python");
+  if (!fs.existsSync(python)) {
+    return { ok: true, installed: false, working: false, projectRoot, python, missing: ["venv"] };
+  }
+  const probe = await execFileText(
+    python,
+    ["-c", "import importlib.util,json; mods=['torch','transformers','accelerate','gliclass']; missing=[m for m in mods if importlib.util.find_spec(m) is None]; print(json.dumps({'missing':missing}))"],
+    30000,
+    { cwd: projectRoot },
+  );
+  let missing = [];
+  try {
+    missing = JSON.parse(String(probe.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "{}").missing || [];
+  } catch (_) {
+    missing = probe.ok ? [] : ["probe"];
+  }
+  return {
+    ok: true,
+    installed: probe.ok && missing.length === 0,
+    working: probe.ok && missing.length === 0,
+    projectRoot,
+    python,
+    missing,
+    error: probe.ok ? "" : trimPythonInstallOutput(probe.stderr || probe.stdout || probe.error?.message || "Python AI provjera nije uspjela"),
+  };
+}
+
 function resolveWhisperLiveRuntimeRoot() {
   const runtimeRoot = path.join(app.getPath("userData"), "whisperlive-runtime");
   try {
     fs.mkdirSync(runtimeRoot, { recursive: true });
   } catch (_) { }
   return runtimeRoot;
+}
+
+function probeLocalTcpPort(port, host = "127.0.0.1", timeoutMs = 1200) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch (_) { }
+      resolve(value);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+async function getWhisperLiveStatus() {
+  const runtimeRoot = resolveWhisperLiveRuntimeRoot();
+  const venvDir = path.join(runtimeRoot, ".venv-whisperlive");
+  const python = process.platform === "win32"
+    ? path.join(venvDir, "Scripts", "python.exe")
+    : path.join(venvDir, "bin", "python");
+  const pipProbePromise = fs.existsSync(python)
+    ? execFileText(python, ["-c", "import whisper_live"], 30000, { cwd: runtimeRoot })
+    : Promise.resolve({ ok: false, stdout: "", stderr: "" });
+  const dockerProbePromise = execFileText(
+    "docker",
+    ["inspect", "-f", "{{.State.Running}}", "etherx-whisperlive"],
+    15000,
+    { cwd: runtimeRoot },
+  );
+  const [running, pipProbe, dockerProbe] = await Promise.all([
+    probeLocalTcpPort(9090),
+    pipProbePromise,
+    dockerProbePromise,
+  ]);
+  const pipInstalled = !!pipProbe.ok;
+  const dockerInstalled = !!dockerProbe.ok;
+  const dockerRunning = dockerInstalled && String(dockerProbe.stdout || "").trim().toLowerCase() === "true";
+  const mode = dockerInstalled ? "docker-cpu" : (pipInstalled ? "pip" : "");
+  return {
+    ok: true,
+    installed: pipInstalled || dockerInstalled || running,
+    working: running,
+    running,
+    starting: !running && dockerRunning,
+    mode,
+    pipInstalled,
+    dockerInstalled,
+    dockerRunning,
+    endpoint: "ws://localhost:9090",
+    runtimeRoot,
+    python,
+  };
+}
+
+async function ensureWhisperLiveRunning() {
+  const before = await getWhisperLiveStatus();
+  if (before.working) return { ...before, started: false, alreadyRunning: true };
+  if (!before.installed) return { ...before, ok: false, error: "WhisperLive nije instaliran." };
+
+  let startResult = null;
+  if (before.dockerInstalled) {
+    startResult = await execFileText(
+      "docker",
+      ["start", "etherx-whisperlive"],
+      60000,
+      { cwd: before.runtimeRoot },
+    );
+  } else if (before.pipInstalled) {
+    startResult = await startWhisperLivePipServer();
+  }
+  if (!startResult?.ok) {
+    return {
+      ...before,
+      ok: false,
+      error: trimPythonInstallOutput(startResult?.stderr || startResult?.stdout || startResult?.error?.message || startResult?.error || "WhisperLive se ne može pokrenuti"),
+    };
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const after = await getWhisperLiveStatus();
+  return { ...after, ok: true, started: true, starting: !after.working };
 }
 
 function resolveWhisperLiveModelCacheRoot() {
@@ -4625,6 +4743,9 @@ function setupIPC() {
   ipcMain.handle("ai:installPythonDeps", async () => {
     return installPythonBridgeDeps();
   });
+  ipcMain.handle("ai:getPythonDepsStatus", async () => {
+    return getPythonBridgeStatus();
+  });
 
   ipcMain.handle("app:installTikTokLive", async () => installTikTokLive());
   ipcMain.handle("app:startTikTokLive", async (event, owner) => startTikTokLiveBridge(owner, event.sender));
@@ -4636,6 +4757,12 @@ function setupIPC() {
 
   ipcMain.handle("app:installWhisperLive", async (_e, mode) => {
     return installWhisperLive(mode);
+  });
+  ipcMain.handle("app:getWhisperLiveStatus", async () => {
+    return getWhisperLiveStatus();
+  });
+  ipcMain.handle("app:ensureWhisperLiveRunning", async () => {
+    return ensureWhisperLiveRunning();
   });
 
   ipcMain.handle("app:refreshWhisperLiveModelCache", async () => {

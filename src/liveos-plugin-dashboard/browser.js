@@ -1537,6 +1537,9 @@ const SENSITIVE_SETTING_KEYS = new Set([
     'translateAiApiKey',
     'tkaiGuardianApiKey',
     'tkaiLiveServerToken',
+    'tkaiTelegramBotToken',
+    'tkaiTelegramChatId',
+    'tkaiBotControlToken',
     'giteaUpdateToken',
     'githubUpdateToken'
 ]);
@@ -1565,6 +1568,40 @@ function getPublicSettingsSnapshot() {
 }
 function writePublicSettingsSnapshot(settings) {
     localStorage.setItem('ex_cfg', JSON.stringify(settings || {}));
+}
+function applyHydratedSettingsToSpecialControls(settings = {}) {
+    const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (!el || value === undefined || value === null || String(value) === '') return;
+        // Never overwrite a value the user started typing while async hydration
+        // was still loading the encrypted settings file.
+        if (document.activeElement === el && String(el.value || '').trim()) return;
+        el.value = String(value);
+    };
+    const first = (...values) => values.find((value) => value !== undefined && value !== null && String(value) !== '');
+
+    setValue('settingsAiProvider', settings.aiProvider);
+    setValue('settingsAiModel', settings.aiModel);
+    setValue('settingsGeminiKey', first(settings.geminiApiKey, settings.gemini_api_key));
+    setValue('settingsOpenaiKey', first(settings.openaiApiKey, settings.openai_api_key));
+    setValue('settingsAnthropicKey', first(settings.anthropicApiKey, settings.anthropic_api_key));
+    setValue('settingsGroqKey', first(settings.groqApiKey, settings.groq_api_key));
+    setValue('settingsOpenrouterKey', first(settings.openrouterApiKey, settings.openrouter_api_key));
+    setValue('settingsHfToken', first(settings.hfApiKey, settings.hf_api_key));
+    setValue('tkaiHfTokenInput', first(settings.hfApiKey, settings.hf_api_key));
+    setValue('settingsLocalAiKey', first(settings.localAiApiKey, settings.local_ai_api_key));
+    setValue('settingsLocalAiBaseUrl', first(settings.localAiBaseUrl, settings.local_ai_base_url));
+    setValue('settingsOllamaBaseUrl', settings.ollamaBaseUrl);
+    setValue('settingsTranslateProvider', settings.translateAiProvider);
+    setValue('settingsTranslateModel', settings.translateAiModel);
+    setValue('settingsTranslateMaxChars', settings.translateMaxChars);
+    setValue('settingsTranslateApiKey', settings.translateAiApiKey);
+    setValue('settingsAiTemp', settings.aiTemperature);
+
+    const tempValue = document.getElementById('settingsAiTempVal');
+    if (tempValue && settings.aiTemperature !== undefined) {
+        tempValue.textContent = String(settings.aiTemperature);
+    }
 }
 async function persistSensitiveSettings(settings) {
     if (!window.etherx?.secrets) return;
@@ -1715,26 +1752,37 @@ async function hydrateSettingsFromSqlite() {
             await persistSensitiveSettings({ ...legacyPublic, ...legacySecrets });
         }
 
-        const sqliteRaw = await window.etherx.settings.get();
-        if (!sqliteRaw || typeof sqliteRaw !== 'object') return;
+        const [sqliteRaw, secureRaw] = await Promise.all([
+            window.etherx.settings.get(),
+            window.etherx?.secrets?.getSettings
+                ? window.etherx.secrets.getSettings().catch(() => ({}))
+                : Promise.resolve({})
+        ]);
+        if ((!sqliteRaw || typeof sqliteRaw !== 'object') && (!secureRaw || typeof secureRaw !== 'object')) return;
 
         const sqliteParsed = {};
-        Object.entries(sqliteRaw).forEach(([key, value]) => {
+        Object.entries(sqliteRaw || {}).forEach(([key, value]) => {
             sqliteParsed[key] = parseStoredSettingValue(value);
+        });
+        const secureParsed = {};
+        Object.entries(secureRaw || {}).forEach(([key, value]) => {
+            secureParsed[key] = parseStoredSettingValue(value);
         });
 
         const local = DB.getSettings() || {};
         // Keep current in-memory/local values if present, fill missing from SQLite backup.
-        const merged = { ...sqliteParsed, ...local };
+        const merged = { ...sqliteParsed, ...secureParsed, ...local };
         const { publicSettings, secretSettings } = splitSensitiveSettingsObject(merged);
         SECURE_SETTINGS_CACHE = { ...secretSettings };
         writePublicSettingsSnapshot(publicSettings);
         PENDING_SETTINGS = { ...merged };
 
         if (typeof _refreshSettingsToggles === 'function') _refreshSettingsToggles();
+        applyHydratedSettingsToSpecialControls(merged);
         if (typeof window.syncTkaiModelSelectorsFromGlobal === 'function') {
             try { window.syncTkaiModelSelectorsFromGlobal(); } catch (_) { }
         }
+        window.dispatchEvent(new CustomEvent('etherx:settings-hydrated', { detail: { settings: merged } }));
     } catch (err) {
         console.warn('Settings hydration from SQLite failed:', err);
     }
@@ -1793,7 +1841,7 @@ function _refreshSettingsToggles() {
             else if (saved === false) el.classList.remove('on');
         } else if (el.tagName === 'SELECT') {
             if (s[k] !== undefined) el.value = normalizeSelectSettingValue(k, s[k]);
-        } else if (el.tagName === 'INPUT') {
+        } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
             if (el.type === 'checkbox') {
                 if (s[k] !== undefined) el.checked = s[k];
             } else {
@@ -1840,7 +1888,7 @@ function initSettingsPanel() {
                 DB.saveSetting(k, el.value); // auto-save immediately
                 showSettingsAutoSaveIndicator();
             });
-        } else if (el.tagName === 'INPUT') {
+        } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
             if (el.type === 'checkbox') {
                 if (PENDING_SETTINGS[k] !== undefined) el.checked = PENDING_SETTINGS[k];
                 el.addEventListener('change', () => {
@@ -2388,7 +2436,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             }
             DB.saveSetting('tkaiProviderOverride', provider);
             if (model) DB.saveSetting('tkaiModelOverride', model);
-            writeProviderKey(provider, key);
+            // Empty quick-test input means "use the already stored provider
+            // key", not "erase it". Explicit deletion remains available from
+            // the provider's credential control.
+            if (key) writeProviderKey(provider, key);
             showToast('✅ TikTok stack provider/API spremljeni.');
         });
 
@@ -3765,6 +3816,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             ? `Pokrenut${telegram.pid ? ` · PID ${telegram.pid}` : ''}`
             : telegramReady ? 'Konfiguriran · zaustavljen' : 'Nije konfiguriran';
         setStatus('tkaiOpsTelegramStatus', telegramLabel, telegram.running ? true : (telegramReady ? null : false));
+        const telegramTokenEl = byId('tkaiTelegramBotToken');
+        if (telegramTokenEl && !String(telegramTokenEl.value || '').trim()) {
+            telegramTokenEl.placeholder = telegram.tokenConfigured
+                ? 'Token je sigurno spremljen — upiši samo za promjenu'
+                : '123456:ABC…';
+        }
 
         const summary = data.browserSnapshot || {};
         const session = summary.session || {};
@@ -11029,7 +11086,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 ts: Number(m.ts || now)
             }))
             .filter((j) => {
-                if (joinMinLevel <= 0) return true;
+                // TikTok does not include a level on every JoinEvent. Keep those
+                // real joins visible as "lvl ?" and apply the minimum only when
+                // an explicit level was actually received.
+                if (joinMinLevel <= 0 || !Number(j.level || 0)) return true;
                 return Number(j.level || 0) >= joinMinLevel;
             })
             .filter((j) => {
@@ -12414,7 +12474,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const joinMinLevel = Math.max(0, Math.min(99, Number(insights.joinMinLevel ?? DB.getSettings().tkaiJoinMinLevel ?? 0) || 0));
             const summary = document.createElement('li');
             summary.textContent =
-                `Min lvl: ${formatNum(joinMinLevel)} • Unknown: ${formatNum(buckets.unknown || 0)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)}`;
+                `Min poznati lvl: ${formatNum(joinMinLevel)} • Bez levela: ${formatNum(buckets.unknown || 0)} • Lvl 35-49: ${formatNum(buckets.lvl35to49 || 0)} • Lvl 50+: ${formatNum(buckets.lvl50plus || 0)}`;
             joinLevelListEl.appendChild(summary);
             if (!joins.length) {
                 const li = document.createElement('li');
@@ -15515,9 +15575,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 const autoAfter = Number(DB.getSettings().tkaiAutoSuggestAfter) || 0;
                 if (autoAfter > 0 && newMsgsSinceAutoGen >= autoAfter) {
                     newMsgsSinceAutoGen = 0;
-                    const badge = document.getElementById('tkaiAutoSuggestBadge');
-                    if (badge) { badge.textContent = '⚡ Auto'; badge.style.display = ''; }
-                    generateReplies(collectedMessages.slice(-getTkaiContextWindowCount(10)));
+                    generateReplies(
+                        collectedMessages.slice(-getTkaiContextWindowCount(10)),
+                        { auto: true }
+                    );
                 }
             }
             return added;
@@ -15738,7 +15799,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }, 60);
     }
 
-    async function generateReplies(messages) {
+    async function generateReplies(messages, options = {}) {
+        const autoGeneration = options?.auto === true;
+        const autoBadge = document.getElementById('tkaiAutoSuggestBadge');
         if (!messages || !messages.length) {
             showToast('⚠️ Nema poruka za analizu. Skeniraj chat prvo.');
             if (repliesEl) repliesEl.innerHTML = '<div class="tkai-empty">⚠️ Nema poruka za analizu.<br>Klikni <b>Skeniranje ON</b> dok si na TikTok Live.</div>';
@@ -15746,8 +15809,17 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
         if (isGenerating) return;
         isGenerating = true;
+        if (autoBadge) {
+            autoBadge.textContent = autoGeneration ? '⚡ Auto generiranje…' : '';
+            autoBadge.style.display = autoGeneration ? '' : 'none';
+        }
         if (genBtn) { genBtn.disabled = true; genBtn.textContent = '⏳ Generiram…'; }
-        if (genAllBtn) genAllBtn.disabled = true;
+        if (genAllBtn) {
+            genAllBtn.disabled = true;
+            genAllBtn.textContent = '⏳ Generiram…';
+            genAllBtn.classList.add('active');
+            genAllBtn.setAttribute('aria-pressed', 'true');
+        }
         if (repliesEl) repliesEl.innerHTML = '<div class="tkai-status"><span class="tkai-scanning-dot"></span>AI generira odgovore…</div>';
         try {
             const s = DB.getSettings() || {};
@@ -15758,13 +15830,28 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const providerForReplies = _tkaiProviderOverride || getSelectedAiProvider();
             const directTkaiApiInput = String(document.getElementById('tkaiStackTestApiKey')?.value || '').trim();
             const resolvedApiKey = directTkaiApiInput || (useGuardianForReplies ? (s.tkaiGuardianApiKey || '') : getProviderApiKey(providerForReplies));
-            const raw = await runAiTextRequest(buildPrompt(messages), {
-                temperature: 0.85,
-                maxOutputTokens: 600,
-                provider: providerForReplies,
-                ...(useGuardianForReplies ? { model: _tkaiModelOverride } : (_tkaiModelOverride ? { model: _tkaiModelOverride } : {})),
-                ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {})
-            });
+            const replyTimeoutMs = Math.max(15000, Math.min(120000, Number(s.tkaiReplyTimeoutMs || 45000) || 45000));
+            let replyTimeout = null;
+            let raw = '';
+            try {
+                raw = await Promise.race([
+                    runAiTextRequest(buildPrompt(messages), {
+                        temperature: 0.85,
+                        maxOutputTokens: 600,
+                        provider: providerForReplies,
+                        ...(useGuardianForReplies ? { model: _tkaiModelOverride } : (_tkaiModelOverride ? { model: _tkaiModelOverride } : {})),
+                        ...(resolvedApiKey ? { apiKey: resolvedApiKey } : {})
+                    }),
+                    new Promise((_, reject) => {
+                        replyTimeout = setTimeout(
+                            () => reject(new Error('AI provider nije odgovorio unutar ' + Math.round(replyTimeoutMs / 1000) + ' sekundi.')),
+                            replyTimeoutMs
+                        );
+                    })
+                ]);
+            } finally {
+                if (replyTimeout) clearTimeout(replyTimeout);
+            }
             const suggestions = raw.split('\n')
                 .map(line => line.replace(/^[\d]+[\.)]\s*/, '').replace(/^[-*]\s*/, '').trim())
                 .filter(line => line.length > 3 && line.length < 300)
@@ -15775,7 +15862,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         } finally {
             isGenerating = false;
             if (genBtn) { genBtn.disabled = false; genBtn.textContent = '↺ Generiraj'; }
-            if (genAllBtn) genAllBtn.disabled = false;
+            if (genAllBtn) {
+                genAllBtn.disabled = false;
+                genAllBtn.textContent = '🤖 Generiraj za sve';
+                genAllBtn.classList.remove('active');
+                genAllBtn.setAttribute('aria-pressed', 'false');
+            }
+            if (autoBadge) {
+                autoBadge.textContent = '';
+                autoBadge.style.display = 'none';
+            }
         }
     }
 
@@ -23019,6 +23115,31 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 try { window.syncTkaiModelSelectorsFromGlobal(); } catch (_) { }
             }
         });
+        const bindCredentialAutosave = (element, keys) => {
+            element?.addEventListener('change', () => {
+                const value = String(element.value || '').trim();
+                if (!value) return;
+                keys.forEach((key) => DB.saveSetting(key, value));
+                showSettingsAutoSaveIndicator();
+            });
+        };
+        bindCredentialAutosave(geminiKeyEl, ['geminiApiKey', 'gemini_api_key']);
+        bindCredentialAutosave(openaiKeyEl, ['openaiApiKey', 'openai_api_key']);
+        bindCredentialAutosave(anthropicKeyEl, ['anthropicApiKey', 'anthropic_api_key']);
+        bindCredentialAutosave(groqKeyEl, ['groqApiKey', 'groq_api_key']);
+        bindCredentialAutosave(openrouterKeyEl, ['openrouterApiKey', 'openrouter_api_key']);
+        bindCredentialAutosave(localKeyEl, ['localAiApiKey', 'local_ai_api_key']);
+        bindCredentialAutosave(document.getElementById('settingsHfToken'), ['hfApiKey', 'hf_api_key']);
+        bindCredentialAutosave(document.getElementById('settingsTranslateApiKey'), ['translateAiApiKey']);
+        localBaseUrlEl?.addEventListener('change', () => {
+            const value = normalizeLocalAiBaseUrl(localBaseUrlEl.value);
+            DB.saveSetting('localAiBaseUrl', value);
+            DB.saveSetting('local_ai_base_url', value);
+        });
+        ollamaBaseUrlEl?.addEventListener('change', () => {
+            DB.saveSetting('ollamaBaseUrl', normalizeLocalAiBaseUrl(ollamaBaseUrlEl.value || OLLAMA_REMOTE_DEFAULT_BASE_URL));
+        });
+        tempSlider?.addEventListener('change', () => DB.saveSetting('aiTemperature', Number(tempSlider.value)));
         document.getElementById('settingsTranslateProvider')?.addEventListener('change', (e) => {
             DB.saveSetting('translateAiProvider', e.target?.value || '__main__');
         });
@@ -23047,29 +23168,29 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             DB.saveSetting('translateMaxChars', document.getElementById('settingsTranslateMaxChars')?.value || '2000');
             const trKey = document.getElementById('settingsTranslateApiKey')?.value?.trim() || '';
             if (trKey) DB.saveSetting('translateAiApiKey', trKey);
-            DB.saveSetting('geminiApiKey', gKey);
-            DB.saveSetting('openaiApiKey', oKey);
-            DB.saveSetting('anthropicApiKey', aKey);
-            DB.saveSetting('localAiApiKey', lKey);
+            if (gKey) DB.saveSetting('geminiApiKey', gKey);
+            if (oKey) DB.saveSetting('openaiApiKey', oKey);
+            if (aKey) DB.saveSetting('anthropicApiKey', aKey);
+            if (lKey) DB.saveSetting('localAiApiKey', lKey);
             DB.saveSetting('localAiBaseUrl', lBaseUrl);
-            DB.saveSetting('gemini_api_key', gKey);
-            DB.saveSetting('openai_api_key', oKey);
-            DB.saveSetting('anthropic_api_key', aKey);
-            DB.saveSetting('local_ai_api_key', lKey);
+            if (gKey) DB.saveSetting('gemini_api_key', gKey);
+            if (oKey) DB.saveSetting('openai_api_key', oKey);
+            if (aKey) DB.saveSetting('anthropic_api_key', aKey);
+            if (lKey) DB.saveSetting('local_ai_api_key', lKey);
             DB.saveSetting('local_ai_base_url', lBaseUrl);
-            DB.saveSetting('groqApiKey', grKey);
-            DB.saveSetting('groq_api_key', grKey);
-            DB.saveSetting('openrouterApiKey', orKey);
-            DB.saveSetting('openrouter_api_key', orKey);
+            if (grKey) DB.saveSetting('groqApiKey', grKey);
+            if (grKey) DB.saveSetting('groq_api_key', grKey);
+            if (orKey) DB.saveSetting('openrouterApiKey', orKey);
+            if (orKey) DB.saveSetting('openrouter_api_key', orKey);
             DB.saveSetting('ollamaBaseUrl', olBaseUrl);
             DB.saveSetting('tkaiGuardianProtocol', guardianProtocol);
             DB.saveSetting('tkaiGuardianHost', guardianHost);
             DB.saveSetting('tkaiGuardianPort', guardianPort);
             DB.saveSetting('tkaiGuardianPath', guardianPath);
-            DB.saveSetting('tkaiGuardianApiKey', guardianKey);
+            if (guardianKey) DB.saveSetting('tkaiGuardianApiKey', guardianKey);
             const hfKey = document.getElementById('settingsHfToken')?.value.trim() || '';
-            DB.saveSetting('hfApiKey', hfKey);
-            DB.saveSetting('hf_api_key', hfKey);
+            if (hfKey) DB.saveSetting('hfApiKey', hfKey);
+            if (hfKey) DB.saveSetting('hf_api_key', hfKey);
             if (tempSlider) DB.saveSetting('aiTemperature', Number(tempSlider.value));
             if (window.etherx?.db?.settings?.save) {
                 window.etherx.db.settings.save(DB.getSettings()).catch(() => { });
@@ -25238,6 +25359,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
     (function initHelpWhisperLiveInstallControls() {
         const statusEl = document.getElementById('helpWhisperInstallStatus');
+        let statusBusy = false;
+        let autoStartAttempted = false;
         const setStatus = (text) => {
             if (statusEl) statusEl.textContent = text;
         };
@@ -25271,6 +25394,61 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (res?.ok) lines.push('', 'Nakon prvog pokretanja model se može skidati/učitavati nekoliko minuta. U TikTok Chat AI klikni Test ili Start.');
             return lines.join('\n');
         };
+        const refreshWhisperRuntimeStatus = async (options = {}) => {
+            if (statusBusy || !window.etherx?.app?.getWhisperLiveStatus) return null;
+            statusBusy = true;
+            const ensureRunning = options.ensureRunning === true;
+            const autoBtn = document.getElementById('helpWhisperAutoInstallBtn');
+            try {
+                let status = await window.etherx.app.getWhisperLiveStatus();
+                if (status?.installed && !status?.working && ensureRunning && !autoStartAttempted && status?.mode) {
+                    autoStartAttempted = true;
+                    setStatus('✅ WhisperLive je instaliran.\n⏳ Automatski pokrećem postojeći server na localhost:9090…');
+                    const started = window.etherx.app.ensureWhisperLiveRunning
+                        ? await window.etherx.app.ensureWhisperLiveRunning()
+                        : await window.etherx.app.installWhisperLive(status.mode);
+                    if (started?.ok) {
+                        await new Promise((resolve) => setTimeout(resolve, 1500));
+                        status = await window.etherx.app.getWhisperLiveStatus();
+                        if (!status?.working) status = { ...status, starting: true };
+                    }
+                }
+
+                if (status?.working) {
+                    setStatus(
+                        '✅ WhisperLive je instaliran i radi.\n' +
+                        '✅ Server: online\n' +
+                        'Endpoint: ' + (status.endpoint || 'ws://localhost:9090') + '\n' +
+                        'Način: ' + (status.mode || 'vanjski/lokalni server') + '\n\n' +
+                        'Nije potrebna ponovna instalacija.'
+                    );
+                    if (autoBtn) autoBtn.textContent = '✅ WhisperLive instaliran i radi';
+                } else if (status?.installed && status?.starting) {
+                    setStatus(
+                        '✅ WhisperLive je instaliran.\n' +
+                        '⏳ Server se pokreće i učitava model na localhost:9090.\n\n' +
+                        'Nije potrebna ponovna instalacija.'
+                    );
+                    if (autoBtn) autoBtn.textContent = '⏳ WhisperLive se pokreće';
+                } else if (status?.installed) {
+                    setStatus(
+                        '✅ WhisperLive je instaliran.\n' +
+                        '⚠️ Server trenutno nije dostupan na localhost:9090.\n' +
+                        'Klikni jednom za pokretanje postojeće instalacije; paketi se neće ponovno instalirati.'
+                    );
+                    if (autoBtn) autoBtn.textContent = '▶ Pokreni instalirani WhisperLive';
+                } else {
+                    setStatus('WhisperLive još nije instaliran.\nOdaberi preporučenu, Docker ili pip instalaciju.');
+                    if (autoBtn) autoBtn.textContent = '▶ Instaliraj za OS';
+                }
+                return status;
+            } catch (error) {
+                setStatus('WhisperLive status nije dostupan:\n' + String(error?.message || error));
+                return null;
+            } finally {
+                statusBusy = false;
+            }
+        };
         const runInstall = async (mode, commandLabel, fallbackCommand) => {
             if (!window.etherx?.app?.installWhisperLive) {
                 setStatus('Install API nije dostupan u ovom buildu.\n\nKomanda:\n' + fallbackCommand);
@@ -25288,6 +25466,10 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 const res = await window.etherx.app.installWhisperLive(mode);
                 setStatus(formatInstallResult(res, fallbackCommand));
                 showToast(res?.ok ? '✅ WhisperLive pokrenut' : '❌ WhisperLive install nije uspio', 5000);
+                if (res?.ok) {
+                    autoStartAttempted = true;
+                    setTimeout(() => refreshWhisperRuntimeStatus({ ensureRunning: false }), 1500);
+                }
             } catch (err) {
                 setStatus('WhisperLive install greška:\n' + String(err?.message || err) + '\n\nKomanda:\n' + fallbackCommand);
                 showToast('❌ WhisperLive install greška');
@@ -25306,7 +25488,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             }
         };
 
-        document.getElementById('helpWhisperDetectBtn')?.addEventListener('click', () => {
+        document.getElementById('helpWhisperDetectBtn')?.addEventListener('click', async () => {
             const os = platformLabel();
             const recommendation = os === 'mac'
                 ? 'macOS: koristi Docker CPU ili pip. Docker GPU nije podržan na Macu.'
@@ -25315,7 +25497,8 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                     : os === 'linux'
                         ? 'Linux: Docker CPU, Docker GPU ili pip su dostupni. GPU koristi samo s NVIDIA runtimeom.'
                         : 'Nepoznat OS: koristi Docker CPU ili pip varijantu koju podržava tvoj terminal.';
-            setStatus('Prepoznat OS: ' + os + '\n\n' + recommendation + '\n\nWhisperLive endpoint: ws://localhost:9090');
+            setStatus('Prepoznat OS: ' + os + '\n\n' + recommendation + '\n\nProvjeravam instalaciju i endpoint…');
+            await refreshWhisperRuntimeStatus({ ensureRunning: false });
             showToast('🧭 OS: ' + os);
         });
         document.getElementById('helpWhisperAutoInstallBtn')?.addEventListener('click', () => {
@@ -25344,7 +25527,50 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             window.open('https://github.com/collabora/WhisperLive', '_blank');
             showToast('🌐 Otvaram WhisperLive docs');
         });
+        window.refreshHelpWhisperRuntimeStatus = refreshWhisperRuntimeStatus;
+        document.querySelector('[data-stab="help"]')?.addEventListener('click', () => {
+            refreshWhisperRuntimeStatus({ ensureRunning: true });
+        });
+        setTimeout(() => refreshWhisperRuntimeStatus({ ensureRunning: true }), 300);
     })();
+
+    async function refreshHelpPythonAiStatus() {
+        const statusEl = document.getElementById('helpInstallPythonDepsStatus');
+        const btn = document.getElementById('helpInstallPythonDepsBtn');
+        if (!statusEl || !window.etherx?.ai?.getPythonDepsStatus) return null;
+        try {
+            const status = await window.etherx.ai.getPythonDepsStatus();
+            if (status?.working) {
+                statusEl.textContent =
+                    '✅ Python AI je instaliran i radi.\n' +
+                    '✅ Paketi: torch, transformers, accelerate, gliclass\n' +
+                    'Python: ' + (status.python || 'lokalni .venv') + '\n\n' +
+                    'Nije potrebna ponovna instalacija.';
+                if (btn) btn.textContent = '✅ Python AI instaliran';
+            } else if (status?.installed) {
+                statusEl.textContent = '✅ Python AI virtualno okruženje postoji, ali provjera nije završila uspješno.';
+                if (btn) btn.textContent = '🔧 Popravi Python pakete';
+            } else {
+                const missing = Array.isArray(status?.missing) && status.missing.length
+                    ? '\nNedostaje: ' + status.missing.join(', ')
+                    : '';
+                statusEl.textContent = 'Python AI još nije potpuno instaliran.' + missing;
+                if (btn) btn.textContent = '⚡ Instaliraj Python pakete';
+            }
+            return status;
+        } catch (error) {
+            statusEl.textContent = 'Python AI status nije dostupan: ' + String(error?.message || error);
+            return null;
+        }
+    }
+    window.refreshHelpPythonAiStatus = refreshHelpPythonAiStatus;
+    document.querySelector('[data-stab="help"]')?.addEventListener('click', refreshHelpPythonAiStatus);
+    setTimeout(refreshHelpPythonAiStatus, 300);
+    setInterval(() => {
+        if (!document.getElementById('stab-help')?.classList.contains('active')) return;
+        refreshHelpPythonAiStatus();
+        window.refreshHelpWhisperRuntimeStatus?.({ ensureRunning: true });
+    }, 30000);
 
     document.getElementById('helpInstallPythonDepsBtn')?.addEventListener('click', async () => {
         const btn = document.getElementById('helpInstallPythonDepsBtn');
@@ -25383,6 +25609,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
                 else if (res.stdout) lines.push('', 'Log (tail):', String(res.stdout));
                 statusEl.textContent = lines.join('\n');
                 showToast('✅ Python paketi su instalirani');
+                setTimeout(refreshHelpPythonAiStatus, 250);
             } else {
                 const lines = [
                     '❌ Instalacija nije uspjela.',
@@ -25460,6 +25687,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
 
             statusEl.textContent = lines.join('\n');
             showToast(res?.ok ? '✅ Setup gotov (Python + PM2)' : '❌ Setup nije prošao');
+            if (res?.python?.ok) setTimeout(refreshHelpPythonAiStatus, 250);
         } catch (err) {
             const msg = String(err?.message || err || 'Nepoznata greška');
             statusEl.textContent = '❌ Iznimka: ' + msg;
