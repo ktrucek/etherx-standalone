@@ -1865,11 +1865,12 @@ function initSettingsPanel() {
     const s = DB.getSettings();
     PENDING_SETTINGS = { ...s };
     document.querySelectorAll('[data-setting]').forEach(el => {
-        const k = el.dataset.setting;
+        const k = el.getAttribute?.('data-setting') || el.dataset?.setting;
+        if (!k) return;
         if (el.classList.contains('toggle')) {
             // Skip Appearance toggles that already have dedicated handlers
             // (initIconVisibility & initTitleBarVisibility manage data-icon / data-titlebar)
-            if (el.dataset.icon || el.dataset.titlebar) return;
+            if (el.dataset?.icon || el.dataset?.titlebar) return;
             const saved = PENDING_SETTINGS[k];
             if (saved === false) el.classList.remove('on');
             else if (saved === true) el.classList.add('on');
@@ -1917,6 +1918,45 @@ function initSettingsPanel() {
         }
     });
 }
+
+(function initSettingsDelegation() {
+    if (window.__etherxSettingsDelegationBound) return;
+    window.__etherxSettingsDelegationBound = true;
+
+    document.addEventListener('click', (e) => {
+        // 1) Delegated click for sidebar tab buttons inside Settings panel
+        const sitBtn = e.target?.closest?.('.sit-btn');
+        if (sitBtn) {
+            const stab = sitBtn.getAttribute('data-stab') || sitBtn.dataset?.stab;
+            if (stab) {
+                document.querySelectorAll('.sit-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.s-tab-pane').forEach(p => p.classList.remove('active'));
+                sitBtn.classList.add('active');
+                const pane = document.getElementById('stab-' + stab);
+                if (pane) pane.classList.add('active');
+                if (window.syncAiSettingsVisibility) window.syncAiSettingsVisibility();
+                if (window.refreshSettingsPane) window.refreshSettingsPane(stab);
+                if (stab === 'ai' && window.renderAiHistory) window.renderAiHistory();
+            }
+            return;
+        }
+
+        // 2) Delegated click for toggles inside Settings panel
+        const toggle = e.target?.closest?.('#settingsPanel .toggle[data-setting], #settingsPanel .toggle');
+        if (toggle) {
+            if (toggle.id === 'togglePageDarkMode') return;
+            if (toggle.dataset?.icon || toggle.dataset?.titlebar) return;
+            const k = toggle.getAttribute('data-setting') || toggle.dataset?.setting;
+            toggle.classList.toggle('on');
+            const isOn = toggle.classList.contains('on');
+            if (k) {
+                PENDING_SETTINGS[k] = isOn;
+                DB.saveSetting(k, isOn);
+            }
+            showSettingsAutoSaveIndicator();
+        }
+    }, true);
+})();
 
 function showSettingsAutoSaveIndicator() {
     const btn = document.getElementById('btnSaveSettings');
