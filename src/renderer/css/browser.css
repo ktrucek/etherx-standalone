@@ -5578,9 +5578,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
   display: contents;
 }
 
-.tkai-insights.tkai-modular-dashboard
-  > .tkai-insights-row
-  > .tkai-insights-card {
+.tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card {
   grid-column: span var(--tkai-grid-span, 3);
   order: var(--tkai-grid-order, 0);
 }
@@ -5600,15 +5598,11 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tkai-insights.tkai-modular-dashboard
-    > .tkai-insights-row
-    > .tkai-insights-card {
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card {
     grid-column: span 1;
   }
 
-  .tkai-insights.tkai-modular-dashboard
-    > .tkai-insights-row
-    > .tkai-insights-card[data-tkai-layout-span="6"] {
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card[data-tkai-layout-span="6"] {
     grid-column: span 2;
   }
 }
@@ -5624,12 +5618,8 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .tkai-insights.tkai-modular-dashboard
-    > .tkai-insights-row
-    > .tkai-insights-card,
-  .tkai-insights.tkai-modular-dashboard
-    > .tkai-insights-row
-    > .tkai-insights-card[data-tkai-layout-span="6"] {
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card,
+  .tkai-insights.tkai-modular-dashboard > .tkai-insights-row > .tkai-insights-card[data-tkai-layout-span="6"] {
     grid-column: span 1;
   }
 
@@ -6862,7 +6852,7 @@ a {
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(6px);
-  z-index: 24999;
+  z-index: 4999;
   display: none;
 }
 
@@ -6889,7 +6879,7 @@ a {
   border-radius: 14px !important;
   border: 1px solid var(--border2) !important;
   box-shadow: 0 32px 90px rgba(0, 0, 0, 0.9) !important;
-  z-index: 25000 !important;
+  z-index: 5000 !important;
   border-left: none !important;
 }
 
@@ -6985,10 +6975,7 @@ a {
 
 .tkai-layout-section {
   position: relative;
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease,
-    outline-color 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease, outline-color 0.15s ease;
 }
 
 .tkai-layout-section.tkai-layout-dragging {
