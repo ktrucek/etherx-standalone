@@ -16298,6 +16298,51 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(error?.message || error).slice(0, 120), 'error');
         } finally { if (button) button.disabled = false; }
     });
+    async function startTkaiTikTokLiveWithRepair(owner) {
+        const bridge = window.etherx?.tiktokLiveBridge;
+        if (!bridge?.start) return { ok: false, error: 'TikTokLive bridge nije dostupan u ovoj verziji aplikacije' };
+        let result = null;
+        try {
+            result = await bridge.start(owner);
+        } catch (error) {
+            result = { ok: false, error: String(error?.message || error) };
+        }
+        const firstError = String(result?.error || '');
+        const repairable = /(?:typeerror|importerror|modulenotfounderror|cannot import name|unexpected keyword argument|not callable)/i.test(firstError);
+        if (result?.ok || !repairable || !bridge.install) return result;
+
+        setTkaiTikTokLiveStatus('Otkriven neusklađen TikTokLive runtime · automatski popravljam…');
+        setStatus('🔧 Ažuriram TikTokLive nakon ' + firstError.slice(0, 120));
+        let repaired = null;
+        try {
+            repaired = await bridge.install();
+        } catch (error) {
+            repaired = { ok: false, error: String(error?.message || error) };
+        }
+        if (!repaired?.ok) {
+            return {
+                ok: false,
+                error: `Automatski popravak nije uspio: ${String(repaired?.error || firstError || 'nepoznata greška')}`,
+                originalError: firstError,
+            };
+        }
+
+        setTkaiTikTokLiveStatus('Runtime ažuriran · ponavljam spajanje na @' + owner + '…');
+        try {
+            const retry = await bridge.start(owner);
+            return retry?.ok ? { ...retry, repaired: true } : {
+                ...retry,
+                error: `Nakon ažuriranja: ${String(retry?.error || firstError || 'TikTokLive nije pokrenut')}`,
+                originalError: firstError,
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                error: `Nakon ažuriranja: ${String(error?.message || error)}`,
+                originalError: firstError,
+            };
+        }
+    }
     toggleBtn?.addEventListener('click', async () => {
         if (scanActive) {
             stopScanning();
@@ -16323,16 +16368,23 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         setTkaiTikTokLiveStatus('Spajanje na @' + owner + '…');
         let bridgeResult = null;
         try {
-            bridgeResult = await window.etherx.tiktokLiveBridge.start(owner);
+            bridgeResult = await startTkaiTikTokLiveWithRepair(owner);
         } catch (error) {
             bridgeResult = { ok: false, error: String(error?.message || error) };
         } finally {
             toggleBtn.disabled = false;
         }
         if (!bridgeResult?.ok) {
-            const errorText = String(bridgeResult?.error || 'TikTokLive nije pokrenut').slice(0, 140);
+            const fullError = String(bridgeResult?.error || 'TikTokLive nije pokrenut');
+            const errorText = fullError.slice(0, 280);
             setTkaiTikTokLiveStatus(errorText, 'error');
-            setStatus('⚠️ Skeniranje nije pokrenuto');
+            const statusText = '⚠️ Skeniranje nije pokrenuto · ' + errorText;
+            setStatus(statusText);
+            console.error('[TikTokAI] Skeniranje ON nije pokrenuto:', {
+                owner,
+                error: fullError,
+                originalError: bridgeResult?.originalError || '',
+            });
             showToast('⚠️ ' + errorText);
             return;
         }
@@ -16347,7 +16399,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         toggleBtn.style.boxShadow = '0 0 0 1px rgba(34,197,94,.45) inset, 0 0 10px rgba(34,197,94,.35)';
         setStatus('<span class="tkai-scanning-dot"></span>TikTokLive skeniranje…');
         setTkaiTikTokLiveStatus('Pokrenuto · čeka TikTokLive događaje', 'ok');
-        showToast('▶ TikTokLive skeniranje uključeno');
+        showToast(bridgeResult.repaired ? '▶ TikTokLive popravljen i skeniranje uključeno' : '▶ TikTokLive skeniranje uključeno');
         if (isTkaiLiveServerEnabled()) connectTkaiLiveServer();
         queueTkaiTikTokLiveFlush();
         scheduleTkaiViewerCountRead(true);

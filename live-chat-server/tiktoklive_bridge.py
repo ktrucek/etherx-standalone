@@ -10,6 +10,7 @@ import asyncio
 import json
 import sys
 import time
+import traceback
 from typing import Any, cast
 
 from TikTokLive import TikTokLiveClient as _TikTokLiveClient  # pyright: ignore[reportMissingImports]
@@ -112,7 +113,16 @@ async def run(unique_id: str) -> None:
     except asyncio.CancelledError:
         pass
     except Exception as exc:
-        emit({"kind": "error", "error": str(exc)[:500]})
+        error_type = type(exc).__name__
+        error_text = str(exc).strip()
+        trace_tail = traceback.format_exc(limit=4).strip().splitlines()[-8:]
+        emit({
+            "kind": "error",
+            "phase": "connect",
+            "errorType": error_type,
+            "error": f"{error_type}: {error_text or 'bez dodatnog opisa'}"[:1000],
+            "trace": "\n".join(trace_tail)[-2000:],
+        })
         raise
 
 
