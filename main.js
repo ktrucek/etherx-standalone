@@ -382,26 +382,109 @@ function resolveTikTokLiveRuntimeRoot() {
 }
 
 function resolveTikTokLivePython(runtimeRoot) {
-  const venv = path.join(runtimeRoot, ".venv");
+  // Keep this separate from the legacy .venv, which may have been created
+  // with Python 3.9. TikTokLive 7 uses PEP 604 annotations (`int | None`)
+  // and therefore requires Python 3.10 or newer.
+  const venv = path.join(runtimeRoot, ".venv-py310");
   return process.platform === "win32"
     ? path.join(venv, "Scripts", "python.exe")
     : path.join(venv, "bin", "python");
 }
 
+async function inspectTikTokLivePython(command, prefixArgs = [], cwd = undefined) {
+  const probe = await execFileText(
+    command,
+    [...prefixArgs, "-c", "import json,sys; print(json.dumps({'major':sys.version_info[0],'minor':sys.version_info[1],'version':sys.version.split()[0]}))"],
+    30000,
+    cwd ? { cwd } : {},
+  );
+  if (!probe.ok) return { ok: false, command, prefixArgs, error: trimPythonInstallOutput(probe.stderr || probe.stdout || probe.error?.message || "") };
+  try {
+    const parsed = JSON.parse(String(probe.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "{}");
+    const major = Number(parsed.major || 0);
+    const minor = Number(parsed.minor || 0);
+    return {
+      ok: major > 3 || (major === 3 && minor >= 10),
+      command,
+      prefixArgs,
+      version: String(parsed.version || `${major}.${minor}`),
+      error: major > 3 || (major === 3 && minor >= 10) ? "" : `Python ${major}.${minor} je prestar; potreban je Python 3.10+.`,
+    };
+  } catch (error) {
+    return { ok: false, command, prefixArgs, error: "Ne mogu očitati Python verziju: " + String(error?.message || error) };
+  }
+}
+
+function getTikTokLivePythonCandidateSpecs(runtimeRoot) {
+  const specs = [];
+  const seen = new Set();
+  const push = (command, prefixArgs = []) => {
+    const key = `${command}\u0000${prefixArgs.join("\u0000")}`;
+    if (!command || seen.has(key)) return;
+    seen.add(key);
+    specs.push({ command, prefixArgs });
+  };
+  if (process.platform === "win32") {
+    ["-3.13", "-3.12", "-3.11", "-3.10"].forEach((selector) => push("py", [selector]));
+    ["python3.13", "python3.12", "python3.11", "python3.10", "python"].forEach((command) => push(command));
+  } else {
+    ["python3.13", "python3.12", "python3.11", "python3.10", "python3", "python"].forEach((command) => push(command));
+  }
+  resolvePythonCandidates(runtimeRoot).forEach((command) => push(command));
+  return specs;
+}
+
 async function installTikTokLive() {
   const runtimeRoot = resolveTikTokLiveRuntimeRoot();
-  const venvDir = path.join(runtimeRoot, ".venv");
+  const venvDir = path.join(runtimeRoot, ".venv-py310");
   const python = resolveTikTokLivePython(runtimeRoot);
-  if (!fs.existsSync(python)) {
-    const candidates = resolvePythonCandidates(runtimeRoot);
-    let lastError = "";
-    for (const candidate of candidates) {
-      if (path.isAbsolute(candidate) && !fs.existsSync(candidate)) continue;
-      const created = await execFileText(candidate, ["-m", "venv", venvDir], 300000, { cwd: runtimeRoot });
-      if (created.ok) { lastError = ""; break; }
+  let runtimeProbe = fs.existsSync(python)
+    ? await inspectTikTokLivePython(python, [], runtimeRoot)
+    : { ok: false, error: "Python runtime još nije izrađen." };
+  if (!runtimeProbe.ok && fs.existsSync(venvDir)) {
+    const backupDir = path.join(runtimeRoot, `.venv-incompatible-${Date.now()}`);
+    try {
+      fs.renameSync(venvDir, backupDir);
+    } catch (error) {
+      return {
+        ok: false,
+        runtimeRoot,
+        python,
+        error: `Postojeći TikTokLive runtime nije kompatibilan i ne mogu ga premjestiti: ${String(error?.message || error)}`,
+      };
+    }
+  }
+  if (!runtimeProbe.ok) {
+    let lastError = runtimeProbe.error || "";
+    let selectedVersion = "";
+    for (const spec of getTikTokLivePythonCandidateSpecs(runtimeRoot)) {
+      if (path.isAbsolute(spec.command) && !fs.existsSync(spec.command)) continue;
+      const probe = await inspectTikTokLivePython(spec.command, spec.prefixArgs, runtimeRoot);
+      if (!probe.ok) {
+        lastError = probe.error || lastError;
+        continue;
+      }
+      const created = await execFileText(spec.command, [...spec.prefixArgs, "-m", "venv", venvDir], 300000, { cwd: runtimeRoot });
+      if (created.ok && fs.existsSync(python)) {
+        selectedVersion = probe.version || "";
+        lastError = "";
+        break;
+      }
       lastError = trimPythonInstallOutput(created.stderr || created.stdout || created.error?.message || "");
     }
-    if (!fs.existsSync(python)) return { ok: false, runtimeRoot, python, error: lastError || "Ne mogu kreirati TikTokLive virtualni Python runtime." };
+    if (!fs.existsSync(python)) {
+      return {
+        ok: false,
+        runtimeRoot,
+        python,
+        error: `Python 3.10+ nije pronađen. Instaliraj Python 3.10, 3.11 ili 3.12 pa ponovi. ${lastError}`.trim(),
+      };
+    }
+    runtimeProbe = await inspectTikTokLivePython(python, [], runtimeRoot);
+    if (!runtimeProbe.ok) {
+      return { ok: false, runtimeRoot, python, error: runtimeProbe.error || "Novi TikTokLive runtime nije Python 3.10+." };
+    }
+    runtimeProbe.selectedVersion = selectedVersion;
   }
   const sourceRequirements = path.join(app.getAppPath(), "live-chat-server", "requirements-tiktoklive.txt");
   const requirements = path.join(runtimeRoot, "requirements-tiktoklive.txt");
@@ -411,7 +494,7 @@ async function installTikTokLive() {
   const pip = await execFileText(python, ["-m", "pip", "install", "--upgrade", "pip"], 420000, { cwd: runtimeRoot });
   const install = await execFileText(python, ["-m", "pip", "install", "-r", requirements], 900000, { cwd: runtimeRoot });
   if (install.ok) {
-    return { ok: true, runtimeRoot, python, pipUpgrade: pip.ok, source: "github", output: trimPythonInstallOutput(install.stdout || "") };
+    return { ok: true, runtimeRoot, python, pythonVersion: runtimeProbe.version || runtimeProbe.selectedVersion || "", pipUpgrade: pip.ok, source: "github", output: trimPythonInstallOutput(install.stdout || "") };
   }
   // GitHub installs use `git clone` and can fail on macOS when Git is missing,
   // the temporary directory is restricted, or GitHub is temporarily blocked.
@@ -431,6 +514,7 @@ async function installTikTokLive() {
     ok: true,
     runtimeRoot,
     python,
+    pythonVersion: runtimeProbe.version || runtimeProbe.selectedVersion || "",
     pipUpgrade: pip.ok,
     source: "pypi-fallback",
     githubError: trimPythonInstallOutput(install.stderr || install.stdout || ""),

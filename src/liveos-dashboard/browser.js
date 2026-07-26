@@ -16308,7 +16308,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             result = { ok: false, error: String(error?.message || error) };
         }
         const firstError = String(result?.error || '');
-        const repairable = /(?:typeerror|importerror|modulenotfounderror|cannot import name|unexpected keyword argument|not callable)/i.test(firstError);
+        const repairable = /(?:typeerror|importerror|modulenotfounderror|cannot import name|unexpected keyword argument|not callable|nije instaliran|python 3\.10|unsupported operand type.*\|)/i.test(firstError);
         if (result?.ok || !repairable || !bridge.install) return result;
 
         setTkaiTikTokLiveStatus('Otkriven neusklađen TikTokLive runtime · automatski popravljam…');
