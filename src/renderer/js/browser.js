@@ -8118,8 +8118,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 ts: Date.now(),
             };
             collectedMessages.push(trackMsg);
-            const maxLen = Math.max(120, Number(DB.getSettings().tkaiMsgBuffer || 300));
-            if (collectedMessages.length > maxLen) collectedMessages = collectedMessages.slice(-maxLen);
 
             setSongToolStatus('SongRec: ' + title);
             renderMessages();
@@ -8497,13 +8495,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     }
     function renderUserSummary() {
         if (!userSummaryListEl || !userSummaryMetaEl) return;
-        const s = DB.getSettings();
-        const limit = Number(s.tkaiUserScanLimit || 200);
-        const users = buildUserStats(collectedMessages, limit);
-        userSummaryMetaEl.textContent = `${formatNum(users.length)} korisnika • scan ${formatNum(limit)} poruka`;
+        const users = getTkaiSessionUserStatsRows()
+            .slice()
+            .sort((a, b) => Number(a.firstSeen || 0) - Number(b.firstSeen || 0) || String(a.user || '').localeCompare(String(b.user || '')));
+        const messagesByUser = new Map();
+        collectedMessages.forEach((message) => {
+            const key = String(message?.user || '').trim().replace(/^@+/, '').toLowerCase();
+            if (!key) return;
+            if (!messagesByUser.has(key)) messagesByUser.set(key, []);
+            messagesByUser.get(key).push(message);
+        });
+        userSummaryMetaEl.textContent = `${formatNum(users.length)} korisnika • cijeli session`;
         userSummaryListEl.innerHTML = '';
-        users.slice(0, 18).forEach((u) => {
-            const userMsgs = collectedMessages.filter((m) => String(m?.user || '').trim().toLowerCase() === String(u.user || '').trim().toLowerCase());
+        users.forEach((u) => {
+            const userKey = String(u.user || '').trim().replace(/^@+/, '').toLowerCase();
+            const userMsgs = messagesByUser.get(userKey) || [];
             const sentiment = computeUserSentiment(userMsgs);
             const pill = document.createElement('button');
             pill.type = 'button';
@@ -10241,15 +10247,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (tkaiLiveServerQueue.length > 2000) tkaiLiveServerQueue = tkaiLiveServerQueue.slice(-2000);
         if (!tkaiLiveServerSocket) connectTkaiLiveServer();
         flushTkaiLiveServerQueue();
-    }
-    function getTkaiEffectiveLocalBuffer() {
-        const settings = DB.getSettings();
-        const normal = Math.max(80, Number(settings.tkaiMsgBuffer) || 2000);
-        // Frontend session history must stay complete for the whole live,
-        // regardless of whether the live server accepted/retained the data.
-        // The server can still keep its own RAM window, but the browser must
-        // preserve the local session buffer for Gift Gallery and stats.
-        return normal;
     }
     async function sendTextToActiveTikTokChat(rawText, options = {}) {
         const text = String(rawText || '').replace(/\s+/g, ' ').trim().slice(0, 380);
@@ -14891,7 +14888,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         collectedMessages.push(pushedMessage);
         ingestTkaiSessionUserMessages([pushedMessage]);
         extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
-        if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
         const forceTranslate = options && (options.forceTranslate === true || options.forceTranslate === 'true');
         const skipAutoTranslate = options && (options.skipAutoTranslate === true || options.skipAutoTranslate === 'true');
         const preferredLang = getTranslateTargetLang();
@@ -14938,7 +14934,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             meta: String(payload.meta || '').trim(),
         };
         listeningMessages.push(message);
-        if (listeningMessages.length > 500) listeningMessages = listeningMessages.slice(-500);
         markTkaiInsightsDirty();
         renderListenFeed();
         scheduleTkaiAutosave('whisperlive');
@@ -15714,12 +15709,43 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                             .map((line) => line.replace(/\s+/g, ' ').trim())
                             .filter(Boolean)
                             .filter((line) => !isViewerOrLeaderboardText(line));
+                        const clubMarkerIndexes = rawLines
+                            .map((line, index) => /(?:^|\s)(?:fan|fun)\s*club(?:\s|$)/i.test(line) ? index : -1)
+                            .filter((index) => index >= 0);
+                        // TikTok can render: club name, "Fan Club", real user,
+                        // message. Bind identity to the first valid line after
+                        // the marker; the club name before it is badge metadata.
+                        for (const markerIndex of clubMarkerIndexes) {
+                            const markerTail = String(rawLines[markerIndex] || '')
+                                .replace(/^.*?(?:fan|fun)\s*club\b/i, '')
+                                .replace(/^(?:member|badge|level|lvl|lv|razina)\b\s*[:#-]?\s*\d{0,3}/i, '')
+                                .trim();
+                            let userIndex = markerIndex;
+                            let clubUser = normalizeChatUserName(markerTail);
+                            for (let i = markerIndex + 1; i < rawLines.length; i += 1) {
+                                if (clubUser) break;
+                                if (isAuxiliaryText(rawLines[i]) || /(?:^|\s)(?:fan|fun)\s*club(?:\s|$)/i.test(rawLines[i])) continue;
+                                clubUser = normalizeChatUserName(rawLines[i]);
+                                if (clubUser) {
+                                    userIndex = i;
+                                    break;
+                                }
+                            }
+                            if (!clubUser) continue;
+                            for (let i = userIndex + 1; i < rawLines.length; i += 1) {
+                                const candidateText = String(rawLines[i] || '').trim();
+                                if (!candidateText || isAuxiliaryText(candidateText) || isViewerOrLeaderboardText(candidateText)) continue;
+                                const text = cleanChatText(candidateText, clubUser);
+                                if (text && !isViewerOrLeaderboardText(text)) return { user: clubUser, text };
+                            }
+                        }
                         // TikTok rows are typically rendered as separate lines:
                         // first username, then message text on the next line.
                         // Skip badge/meta lines (fan/fun club, level, rank...) and
                         // bind user to the first following non-meta line only.
                         if (rawLines.length >= 2) {
                             for (let i = 0; i < rawLines.length - 1; i += 1) {
+                                if (clubMarkerIndexes.some((markerIndex) => i === markerIndex || i === markerIndex - 1)) continue;
                                 const user = normalizeChatUserName(rawLines[i]);
                                 if (!user) continue;
                                 for (let j = i + 1; j < rawLines.length; j += 1) {
@@ -16884,8 +16910,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 markTkaiInsightsDirty();
             }
             if (incomingAddedMessages.length) queueTkaiLiveServerEvents(incomingAddedMessages);
-            const _msgBuf = getTkaiEffectiveLocalBuffer();
-            if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
             if (!sessionStartedAt) sessionStartedAt = Date.now();
             if (added > 0) extractAndTrackQuestions(collectedMessages.slice(-added));
             const targetLang = getTranslateTargetLang();
@@ -17372,7 +17396,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (!autosaveEnabled) return;
             const sessionMessages = getTkaiSessionMessages();
             if (!sessionMessages.length) return;
-            const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
             const payload = {
                 version: 1,
                 reason,
@@ -17384,8 +17407,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 viewerSamples: Array.isArray(viewerSamples) ? viewerSamples.slice(-200) : [],
                 viewerSamplePoints: Array.isArray(viewerSamplePoints) ? viewerSamplePoints.slice(-200) : [],
                 sessionUsers: serializeTkaiSessionUserStats(),
-                messages: sessionMessages.slice(-maxKeep),
-                listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice(-500) : [],
+                messages: sessionMessages.slice(),
+                listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice() : [],
             };
             localStorage.setItem(TKAI_AUTOSAVE_KEY, JSON.stringify(payload));
         } catch (e) {
@@ -17419,9 +17442,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             const chatRows = msgs.filter((m) => normalizeTkaiMessageType(m) !== 'listening');
             if (!chatRows.length && !listeningRows.length) return;
 
-            const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
-            collectedMessages = chatRows.slice(-maxKeep);
-            listeningMessages = listeningRows.slice(-500).map((message) => ({ ...message, type: 'listening', user: message.user || 'Slušanje' }));
+            collectedMessages = chatRows.slice();
+            listeningMessages = listeningRows.map((message) => ({ ...message, type: 'listening', user: message.user || 'Slušanje' }));
             restoreTkaiSessionUserStats(saved?.sessionUsers, chatRows);
             markTkaiInsightsDirty();
             selectedMsgIds.clear();
@@ -22586,8 +22608,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (!added) return { added: 0, acceptedRows: [] };
         ingestTkaiSessionUserMessages(collectedMessages.slice(-added));
         markTkaiInsightsDirty();
-        const _msgBuf = Number(DB.getSettings().tkaiMsgBuffer) || 2000;
-        if (collectedMessages.length > _msgBuf) collectedMessages = collectedMessages.slice(-_msgBuf);
         if (!sessionStartedAt) sessionStartedAt = Date.now();
         extractAndTrackQuestions(collectedMessages.slice(-added));
         renderMessages();
