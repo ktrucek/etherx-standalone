@@ -11,6 +11,7 @@ const {
   protocol,
   clipboard,
   Menu,
+  webContents,
 } = require("electron");
 const path = require("path");
 const os = require("os");
@@ -361,6 +362,11 @@ let mainWindow = null;
 let liveOsSnapshot = null;
 const liveOsSubscribers = new Set();
 let tkaiBotControlServer = null;
+let tkaiTelegramBotChild = null;
+let tkaiTelegramBotStartedAt = 0;
+let tkaiTelegramBotLastExit = null;
+let tkaiTelegramBotLastError = "";
+let tkaiTelegramBotLogs = [];
 
 // TikTok Chat AI capture source. The Python process streams structured
 // TikTokLive events to the renderer without reading the embedded page DOM.
@@ -443,7 +449,7 @@ function stopTikTokLiveBridge() {
 
 async function startTikTokLiveBridge(owner, sender) {
   const uniqueId = String(owner || "").trim().replace(/^@+/, "").split(/[/?#]/)[0];
-  if (!/^[a-zA-Z0-9._-]{2,80}$/.test(uniqueId)) return { ok: false, error: "TikTok username nije pronađen u aktivnom Live tabu." };
+  if (!/^[a-zA-Z0-9._-]{2,80}$/.test(uniqueId)) return { ok: false, error: "TikTok LIVE username nije pronađen u otvorenim tabovima." };
   if (tkaiTikTokLiveChild && !tkaiTikTokLiveChild.killed && tkaiTikTokLiveOwner.toLowerCase() === uniqueId.toLowerCase()) return { ok: true, alreadyRunning: true, owner: uniqueId };
   stopTikTokLiveBridge();
   const runtimeRoot = resolveTikTokLiveRuntimeRoot();
@@ -1002,6 +1008,241 @@ function stopTkaiBotControlServer() {
   tkaiBotControlServer = null;
 }
 
+function resolveTkaiTelegramNotifyPath() {
+  return path.join(app.getPath("userData"), "tkai-telegram", "tkai-bot-notify.json");
+}
+
+function getTkaiTelegramConfig() {
+  const secrets = getSecretStore()?.getNamespace("settings") || {};
+  return {
+    token: safeTkaiText(process.env.TELEGRAM_BOT_TOKEN || secrets.tkaiTelegramBotToken || "", 1000),
+    chatId: safeTkaiText(process.env.TELEGRAM_CHAT_ID || secrets.tkaiTelegramChatId || "", 120),
+    autoStart: secrets.tkaiTelegramAutoStart === true,
+  };
+}
+
+function defaultTkaiTelegramNotifyState(chatId = "") {
+  return {
+    enabled: false,
+    startupEnabled: true,
+    alertEnabled: true,
+    chatId: safeTkaiText(chatId, 120),
+    viewerThreshold: 0,
+    giftEnabled: true,
+    giftCoinsMin: 500,
+    whaleCoins: 10000,
+    spikeThreshold: 150,
+    watchUsers: [],
+    last: {
+      sessionId: "",
+      alertKey: "",
+      viewerThresholdHitAt: 0,
+      giftKey: "",
+      whaleKey: "",
+      watchUserKey: "",
+      spikeKey: "",
+    },
+  };
+}
+
+function readTkaiTelegramNotifyState() {
+  const config = getTkaiTelegramConfig();
+  const fallback = defaultTkaiTelegramNotifyState(config.chatId);
+  try {
+    const filePath = resolveTkaiTelegramNotifyPath();
+    if (!fs.existsSync(filePath)) return fallback;
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8") || "{}");
+    return {
+      ...fallback,
+      ...parsed,
+      enabled: parsed?.enabled === true,
+      startupEnabled: parsed?.startupEnabled !== false,
+      alertEnabled: parsed?.alertEnabled !== false,
+      giftEnabled: parsed?.giftEnabled === true,
+      chatId: safeTkaiText(parsed?.chatId || config.chatId, 120),
+      viewerThreshold: Math.max(0, safeTkaiNumber(parsed?.viewerThreshold, 0)),
+      giftCoinsMin: Math.max(1, safeTkaiNumber(parsed?.giftCoinsMin, 500) || 500),
+      whaleCoins: Math.max(0, safeTkaiNumber(parsed?.whaleCoins, 10000)),
+      spikeThreshold: Math.max(0, safeTkaiNumber(parsed?.spikeThreshold, 150)),
+      watchUsers: Array.isArray(parsed?.watchUsers)
+        ? parsed.watchUsers.map((value) => safeTkaiText(value, 80).replace(/^@+/, "").toLowerCase()).filter(Boolean).slice(0, 50)
+        : [],
+      last: { ...fallback.last, ...(parsed?.last || {}) },
+    };
+  } catch (error) {
+    tkaiTelegramBotLastError = "Notify config: " + safeTkaiText(error?.message || error, 300);
+    return fallback;
+  }
+}
+
+function writeTkaiTelegramNotifyState(values = {}) {
+  const current = readTkaiTelegramNotifyState();
+  const next = {
+    ...current,
+    enabled: values.enabled === true,
+    startupEnabled: values.startupEnabled !== false,
+    alertEnabled: values.alertEnabled !== false,
+    chatId: safeTkaiText(values.chatId || current.chatId || getTkaiTelegramConfig().chatId, 120),
+    viewerThreshold: Math.max(0, safeTkaiNumber(values.viewerThreshold, 0)),
+    giftEnabled: values.giftEnabled === true,
+    giftCoinsMin: Math.max(1, safeTkaiNumber(values.giftCoinsMin, 500) || 500),
+    whaleCoins: Math.max(0, safeTkaiNumber(values.whaleCoins, 0)),
+    spikeThreshold: Math.max(0, safeTkaiNumber(values.spikeThreshold, 0)),
+    watchUsers: String(Array.isArray(values.watchUsers) ? values.watchUsers.join(",") : values.watchUsers || "")
+      .split(/[\s,;]+/)
+      .map((value) => safeTkaiText(value, 80).replace(/^@+/, "").toLowerCase())
+      .filter(Boolean)
+      .slice(0, 50),
+    last: current.last || defaultTkaiTelegramNotifyState().last,
+  };
+  const filePath = resolveTkaiTelegramNotifyPath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(next, null, 2), { encoding: "utf8", mode: 0o600 });
+  return next;
+}
+
+function appendTkaiTelegramBotLog(value) {
+  const line = safeTkaiText(value, 600);
+  if (!line) return;
+  tkaiTelegramBotLogs.push({ ts: Date.now(), text: line });
+  tkaiTelegramBotLogs = tkaiTelegramBotLogs.slice(-30);
+}
+
+function getTkaiTelegramBotStatus() {
+  const config = getTkaiTelegramConfig();
+  return {
+    running: !!(tkaiTelegramBotChild && !tkaiTelegramBotChild.killed),
+    pid: tkaiTelegramBotChild?.pid || null,
+    startedAt: tkaiTelegramBotStartedAt || null,
+    lastExit: tkaiTelegramBotLastExit,
+    lastError: safeTkaiText(tkaiTelegramBotLastError, 400),
+    tokenConfigured: config.token.length >= 20,
+    chatIdConfigured: !!config.chatId,
+    chatIdMasked: config.chatId ? `${config.chatId.slice(0, 4)}…${config.chatId.slice(-3)}` : "",
+    autoStart: config.autoStart,
+    logs: tkaiTelegramBotLogs.slice(-8),
+  };
+}
+
+function ensureTkaiBotControlToken() {
+  const existing = getTkaiBotControlConfig().token;
+  if (existing.length >= 24) return existing;
+  const token = crypto.randomBytes(32).toString("hex");
+  getSecretStore()?.mergeNamespace("settings", { tkaiBotControlToken: token });
+  return token;
+}
+
+function stopTkaiTelegramBot() {
+  const child = tkaiTelegramBotChild;
+  tkaiTelegramBotChild = null;
+  if (!child) return { ok: true, stopped: false, status: getTkaiTelegramBotStatus() };
+  try { child.kill("SIGTERM"); } catch (_) { }
+  return { ok: true, stopped: true, status: getTkaiTelegramBotStatus() };
+}
+
+function startTkaiTelegramBot() {
+  if (tkaiTelegramBotChild && !tkaiTelegramBotChild.killed) {
+    return { ok: true, alreadyRunning: true, status: getTkaiTelegramBotStatus() };
+  }
+  const config = getTkaiTelegramConfig();
+  if (config.token.length < 20) return { ok: false, error: "Telegram Bot Token nije postavljen." };
+  if (!config.chatId) return { ok: false, error: "Telegram Chat ID nije postavljen." };
+  const controlToken = ensureTkaiBotControlToken();
+  if (!tkaiBotControlServer) startTkaiBotControlServer();
+  const sourceScript = path.join(app.getAppPath(), "scripts", "tkai-telegram-bot.js");
+  if (!fs.existsSync(sourceScript)) return { ok: false, error: "Telegram bot skripta nije pronađena." };
+  const runtimeRoot = path.join(app.getPath("userData"), "tkai-telegram");
+  const runtimeScript = path.join(runtimeRoot, "tkai-telegram-bot.js");
+  fs.mkdirSync(runtimeRoot, { recursive: true });
+  fs.copyFileSync(sourceScript, runtimeScript);
+  writeTkaiTelegramNotifyState({ ...readTkaiTelegramNotifyState(), chatId: config.chatId });
+  tkaiTelegramBotLastError = "";
+  tkaiTelegramBotLastExit = null;
+  const control = getTkaiBotControlConfig();
+  const child = spawn(process.execPath, [runtimeScript], {
+    cwd: runtimeRoot,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      TELEGRAM_BOT_TOKEN: config.token,
+      TELEGRAM_CHAT_ID: config.chatId,
+      TKAI_BOT_CONTROL_URL: `http://${control.host}:${control.port}`,
+      TKAI_BOT_CONTROL_TOKEN: controlToken,
+      TKAI_NOTIFY_STORE_PATH: resolveTkaiTelegramNotifyPath(),
+    },
+  });
+  tkaiTelegramBotChild = child;
+  tkaiTelegramBotStartedAt = Date.now();
+  child.stdout.on("data", (chunk) => String(chunk || "").split(/\r?\n/).forEach(appendTkaiTelegramBotLog));
+  child.stderr.on("data", (chunk) => {
+    const text = String(chunk || "");
+    text.split(/\r?\n/).forEach(appendTkaiTelegramBotLog);
+    if (text.trim()) tkaiTelegramBotLastError = safeTkaiText(text.trim(), 400);
+  });
+  child.once("error", (error) => {
+    tkaiTelegramBotLastError = safeTkaiText(error?.message || error, 400);
+  });
+  child.once("exit", (code, signal) => {
+    if (tkaiTelegramBotChild === child) tkaiTelegramBotChild = null;
+    tkaiTelegramBotLastExit = { code, signal: signal || "", at: Date.now() };
+  });
+  return { ok: true, status: getTkaiTelegramBotStatus() };
+}
+
+async function testTkaiTelegramBot() {
+  const config = getTkaiTelegramConfig();
+  if (config.token.length < 20 || !config.chatId) return { ok: false, error: "Spremi Bot Token i Chat ID prije testa." };
+  const response = await fetch(`https://api.telegram.org/bot${config.token}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: config.chatId, text: "EtherX TikTok Chat AI: Telegram test je uspješan ✅" }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) return { ok: false, error: safeTkaiText(data?.description || `Telegram HTTP ${response.status}`, 400) };
+  return { ok: true, chatIdMasked: getTkaiTelegramBotStatus().chatIdMasked };
+}
+
+async function getTkaiOperationsStatus() {
+  let publicHealth = { ok: false, status: 0, error: "" };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch("https://live.kriptoentuzijasti.io/health", { signal: controller.signal });
+    clearTimeout(timer);
+    const data = await response.json().catch(() => ({}));
+    publicHealth = { ok: response.ok && data?.ok !== false, status: response.status, service: safeTkaiText(data?.service || "", 100) };
+  } catch (error) {
+    publicHealth = { ok: false, status: 0, error: safeTkaiText(error?.message || error, 200) };
+  }
+  const appRoot = app.getAppPath();
+  const scriptDefinitions = [
+    ["Telegram bot", "scripts/tkai-telegram-bot.js", "Upravljivo iz ovog panela"],
+    ["TikTokLive bridge", "live-chat-server/tiktoklive_bridge.py", "Pokreće Skeniranje ON"],
+    ["LIVE server", "live-chat-server/server.js", "Produkcijski PM2 servis"],
+    ["Server smoke test", "live-chat-server/smoke-test.js", "Provjera WSS protokola"],
+    ["Gift detector", "live-chat-server/gift-detector.js", "Whale i gift detekcija"],
+    ["Detector import", "scripts/tiktok-detect-import.js", "Uvoz detektiranih događaja"],
+    ["PM2 bootstrap", "scripts/pm2-bootstrap.sh", "Lokalni EtherX servis"],
+  ];
+  return {
+    ok: true,
+    publicHealth,
+    browserSnapshot: buildTkaiControlSummary(10),
+    controlServer: { running: !!tkaiBotControlServer, ...getTkaiBotControlConfig(), token: undefined },
+    telegram: getTkaiTelegramBotStatus(),
+    notify: readTkaiTelegramNotifyState(),
+    scripts: scriptDefinitions.map(([name, relativePath, purpose]) => ({
+      name,
+      relativePath,
+      purpose,
+      available: fs.existsSync(path.join(appRoot, relativePath)),
+    })),
+    notifyPath: resolveTkaiTelegramNotifyPath(),
+  };
+}
+
 let db = null;
 let adBlocker = null;
 let ai = null;
@@ -1032,6 +1273,9 @@ const SECRET_SETTING_KEYS = new Set([
   "translateAiApiKey",
   "tkaiGuardianApiKey",
   "tkaiLiveServerToken",
+  "tkaiTelegramBotToken",
+  "tkaiTelegramChatId",
+  "tkaiBotControlToken",
   "giteaUpdateToken",
   "githubUpdateToken",
 ]);
@@ -2857,7 +3101,33 @@ app.whenReady().then(async () => {
   try {
     if (AdBlocker && adBlocker) {
       const etherxSess = session.fromPartition("persist:etherx");
-      adBlocker.blocker?.enableBlockingInSession(etherxSess);
+      const blocker = adBlocker.blocker;
+      if (blocker) {
+        blocker.enableBlockingInSession(etherxSess);
+        // Electron allows only one onBeforeRequest listener per session.
+        // Replace the blocker's direct listener with an explicit TikTok
+        // bypass, then delegate every other request back to the blocker.
+        etherxSess.webRequest.onBeforeRequest(
+          { urls: ["<all_urls>"] },
+          (details, callback) => {
+            let pageUrl =
+              details.firstPartyURL ||
+              details.referrer ||
+              details.initiator ||
+              "";
+            if (!pageUrl && Number(details.webContentsId || 0)) {
+              try {
+                pageUrl = webContents.fromId(Number(details.webContentsId))?.getURL?.() || "";
+              } catch (_) { }
+            }
+            if (adBlocker.shouldBypassRequest({ ...details, pageUrl })) {
+              callback({});
+              return;
+            }
+            blocker.onBeforeRequest(details, callback);
+          },
+        );
+      }
     }
   } catch (e) {
     console.warn("[AdBlocker] persist:etherx enable failed:", e.message);
@@ -2960,6 +3230,10 @@ app.whenReady().then(async () => {
     _ipcSetupDone = true;
   }
   startTkaiBotControlServer();
+  if (getTkaiTelegramConfig().autoStart) {
+    const started = startTkaiTelegramBot();
+    if (!started?.ok) console.warn("[TKAI Telegram] auto-start skipped:", started?.error || "unknown error");
+  }
   createWindow();
 
   // Yield once so Chromium can paint the shell before optional extension work
@@ -3048,6 +3322,7 @@ app.on("window-all-closed", () => {
 
 // ─── Auto-save session before window closes ───────────────────────────────────
 app.on("before-quit", () => {
+  stopTkaiTelegramBot();
   stopTkaiBotControlServer();
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -3221,7 +3496,10 @@ function createWindow() {
       return [
         "tiktok.com",
         "tiktokcdn.com",
+        "tiktokcdn-us.com",
+        "tiktokcdn-eu.com",
         "tiktokv.com",
+        "tiktokv.eu",
         "byteoversea.com",
         "ibytedtos.com",
         "muscdn.com",
@@ -3296,7 +3574,10 @@ function createWindow() {
       return [
         "tiktok.com",
         "tiktokv.com",
+        "tiktokv.eu",
         "tiktokcdn.com",
+        "tiktokcdn-us.com",
+        "tiktokcdn-eu.com",
         "tiktokvapp.eu",
         "tiktok-row.net",
         "byteoversea.com",
@@ -3914,6 +4195,27 @@ function setupIPC() {
     liveOsSubscribers.delete(event.sender.id);
     return { ok: true };
   });
+  ipcMain.handle("tkaiOps:getStatus", () => getTkaiOperationsStatus());
+  ipcMain.handle("tkaiOps:saveTelegram", async (_event, payload = {}) => {
+    const current = getTkaiTelegramConfig();
+    const token = safeTkaiText(payload.token, 1000);
+    const chatId = safeTkaiText(payload.chatId || current.chatId, 120);
+    const values = {
+      tkaiTelegramChatId: chatId,
+      tkaiTelegramAutoStart: payload.autoStart === true,
+    };
+    if (token) values.tkaiTelegramBotToken = token;
+    const store = getSecretStore();
+    if (!store) return { ok: false, error: "Sigurna pohrana nije dostupna." };
+    store.mergeNamespace("settings", values);
+    ensureTkaiBotControlToken();
+    writeTkaiTelegramNotifyState({ ...(payload.notify || {}), chatId });
+    if (!tkaiBotControlServer) startTkaiBotControlServer();
+    return getTkaiOperationsStatus();
+  });
+  ipcMain.handle("tkaiOps:startTelegram", () => startTkaiTelegramBot());
+  ipcMain.handle("tkaiOps:stopTelegram", () => stopTkaiTelegramBot());
+  ipcMain.handle("tkaiOps:testTelegram", () => testTkaiTelegramBot());
   ipcMain.handle("liveos:command", (event, action) => {
     const allowed = new Set(["start-scan", "stop-scan", "open-ai-live-chat", "songrec-now"]);
     const normalized = String(action || "");

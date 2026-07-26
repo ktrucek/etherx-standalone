@@ -2,7 +2,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const NOTIFY_STORE_PATH = path.join(process.cwd(), "live-chat-server", "data", "tkai-bot-notify.json");
+const NOTIFY_STORE_PATH = String(process.env.TKAI_NOTIFY_STORE_PATH || "").trim()
+  || path.join(process.cwd(), "live-chat-server", "data", "tkai-bot-notify.json");
 
 function loadEnvFile(filePath) {
   try {
@@ -60,6 +61,8 @@ function loadNotifyState() {
     if (!fs.existsSync(NOTIFY_STORE_PATH)) {
       return {
         enabled: false,
+        startupEnabled: true,
+        alertEnabled: true,
         chatId: ALLOWED_CHAT_ID || "",
         viewerThreshold: 0,
         giftEnabled: false,
@@ -81,6 +84,8 @@ function loadNotifyState() {
     const parsed = JSON.parse(fs.readFileSync(NOTIFY_STORE_PATH, "utf8"));
     return {
       enabled: parsed?.enabled === true,
+      startupEnabled: parsed?.startupEnabled !== false,
+      alertEnabled: parsed?.alertEnabled !== false,
       chatId: String(parsed?.chatId || ALLOWED_CHAT_ID || ""),
       viewerThreshold: Math.max(0, Number(parsed?.viewerThreshold || 0) || 0),
       giftEnabled: parsed?.giftEnabled === true,
@@ -104,6 +109,8 @@ function loadNotifyState() {
     console.error("[tkai-telegram-bot] notify load failed:", String(error?.message || error));
     return {
       enabled: false,
+      startupEnabled: true,
+      alertEnabled: true,
       chatId: ALLOWED_CHAT_ID || "",
       viewerThreshold: 0,
       giftEnabled: false,
@@ -319,6 +326,8 @@ function buildNotifyStatusMessage() {
   return [
     "Notify status",
     `Enabled: ${notifyState.enabled ? "ON" : "OFF"}`,
+    `Startup poruka: ${notifyState.startupEnabled ? "ON" : "OFF"}`,
+    `TKAI alerts: ${notifyState.alertEnabled ? "ON" : "OFF"}`,
     `Chat ID: ${notifyState.chatId || "-"}`,
     `Viewer threshold: ${fmtNum(notifyState.viewerThreshold)}`,
     `Gift alert: ${notifyState.giftEnabled ? `ON (min ${fmtNum(notifyState.giftCoinsMin)} coins)` : "OFF"}`,
@@ -488,6 +497,7 @@ async function handleCommand(text) {
 }
 
 async function runNotifyCheck() {
+  notifyState = loadNotifyState();
   if (!notifyState.enabled || !notifyState.chatId || !controlApiReady()) return;
   try {
     const data = await callControlApi("/api/tkai/session");
@@ -519,7 +529,7 @@ async function runNotifyCheck() {
         });
       }
     }
-    const latestAlert = alerts[0];
+    const latestAlert = notifyState.alertEnabled ? alerts[0] : null;
     if (latestAlert) {
       const key = String(latestAlert.id || `${latestAlert.type}:${latestAlert.ts}:${latestAlert.accountId || latestAlert.user || ""}`);
       if (key && notifyState.last.alertKey !== key) {
@@ -601,6 +611,8 @@ function startNotifyMonitor() {
 }
 
 async function sendStartupMessage() {
+  notifyState = loadNotifyState();
+  if (notifyState.startupEnabled === false) return;
   if (!ALLOWED_CHAT_ID) return;
   const lines = [
     "TKAI Telegram bot je pokrenut.",

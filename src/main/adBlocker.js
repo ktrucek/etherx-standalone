@@ -58,11 +58,61 @@ class AdBlocker {
     return this._registrableDomain(reqHost) === this._registrableDomain(fpHost);
   }
 
+  _isRequestFromTikTokPage(firstPartyUrl) {
+    const fpHost = this._normalizeHost(firstPartyUrl);
+    return fpHost === 'tiktok.com' || fpHost.endsWith('.tiktok.com');
+  }
+
+  shouldBypassRequest(details = {}) {
+    const url = String(details.url || '');
+    if (
+      /^https?:\/\/[^/]*\.?tiktokv\.(?:com|eu)\/monitor_browser\/collect\/batch\//i.test(url)
+      || /^https?:\/\/[^/]*\.?tiktokw\.eu\/v1\/list(?:[/?#]|$)/i.test(url)
+    ) {
+      return true;
+    }
+    const pageUrl = details.pageUrl
+      || details.firstPartyURL
+      || details.referrer
+      || details.initiator
+      || '';
+    return this._isRequestFromTikTokPage(pageUrl);
+  }
+
   async init() {
     try {
       if (ElectronBlockerLib) {
         const { ElectronBlocker } = ElectronBlockerLib;
         this.blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
+        // TikTok's own identity, LIVE runtime and CDN endpoints are required
+        // for hydration, login state and playback. EasyPrivacy otherwise
+        // reports these first-party calls as ERR_BLOCKED_BY_CLIENT.
+        this.blocker.updateFromDiff({
+          added: [
+            // Disable network filtering only for requests initiated by a
+            // TikTok page. LIVE uses rotating regional hosts (including
+            // tiktokv.eu and multiple WASM/CDN domains), so a host allow-list
+            // leaves valid runtime modules vulnerable to redirect/block rules.
+            '@@*$domain=tiktok.com',
+            // Electron can omit referrer/sourceUrl for beacon and ping
+            // requests. Allow only TikTok's monitoring collectors globally so
+            // EasyPrivacy does not report harmless ERR_BLOCKED_BY_CLIENT noise.
+            '@@||tiktokv.com/monitor_browser/collect/batch/',
+            '@@||tiktokv.eu/monitor_browser/collect/batch/',
+            '@@||tiktokw.eu/v1/list',
+            '@@||tiktok.com^$domain=tiktok.com',
+            '@@||tiktokv.com^$domain=tiktok.com',
+            '@@||tiktokv.eu^$domain=tiktok.com',
+            '@@||tiktokcdn.com^$domain=tiktok.com',
+            '@@||tiktokvapp.eu^$domain=tiktok.com',
+            '@@||tiktok-row.net^$domain=tiktok.com',
+            '@@||byteoversea.com^$domain=tiktok.com',
+            '@@||byteintlapi.com^$domain=tiktok.com',
+            '@@||ttwstatic.com^$domain=tiktok.com',
+            '@@||ttlstatic.com^$domain=tiktok.com',
+          ],
+          removed: [],
+        });
       } else {
         // Fallback: load our bundled EasyList filter
         await this._loadFallbackFilters();
@@ -130,6 +180,12 @@ class AdBlocker {
         if (!this.enabled) { callback({}); return; }
 
         const reqHost = this._normalizeHost(details.url);
+        const firstParty = details.firstPartyURL || details.referrer || details.initiator || '';
+        if (this.shouldBypassRequest({ ...details, pageUrl: firstParty })) {
+          this.stats.allowed++;
+          callback({});
+          return;
+        }
         if (!this._isDomainBlocked(reqHost)) {
           this.stats.allowed++;
           callback({});
@@ -140,7 +196,6 @@ class AdBlocker {
         // "all images missing" regressions when filter lists are aggressive.
         const rt = String(details.resourceType || '').toLowerCase();
         if (rt === 'image') {
-          const firstParty = details.firstPartyURL || details.referrer || details.initiator || '';
           if (!firstParty) {
             this.stats.allowed++;
             callback({});

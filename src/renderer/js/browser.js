@@ -792,7 +792,11 @@ if (window.electronWebview) {
                                 window.__etherxTikTokTelemetrySilenced = true;
                                 const isTelemetryUrl = (value) => {
                                     const url = String(value || '');
-                                    return /https?:\/\/(?:(?:mon(?:-i18n)?(?:\d+-normal-[^/]+)?\.tiktokv\.(?:eu|com)\/monitor_browser\/collect\/batch\/\?(?:[^#]*\b(?:biz_id=tiktok_webapp_live|biz_id=webmssdk|biz_id=ucenter_tiktok_zti_sdk|bid=tiktok_pns_web_runtime)\b))|(?:mcs\d+-normal-[^/]+\.tiktokw\.eu\/v1\/list(?:[?#]|$)))/i.test(url);
+                                    const isMonitorBatch = url.includes('/monitor_browser/collect/batch/')
+                                        && ['biz_id=tiktok_webapp_live', 'biz_id=webmssdk', 'biz_id=ucenter_tiktok_zti_sdk', 'bid=tiktok_pns_web_runtime']
+                                            .some((token) => url.includes(token));
+                                    const isMcsList = /mcs\d+-normal-[^.]+\.tiktokw\.eu/i.test(url) && url.includes('/v1/list');
+                                    return isMonitorBatch || isMcsList;
                                 };
                                 const originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
                                 if (originalFetch) {
@@ -948,7 +952,7 @@ if (window.electronWebview) {
                                 if (!shareLooseRe.test(raw)) return false;
                                 const reduced = raw
                                     .replace(shareLooseRe, ' ')
-                                    .replace(/[.!?,:;()\[\]{}"'_*+=|\\/-]+/g, ' ')
+                                    .replace(/[^A-Za-z0-9ČĆĐŠŽčćđšž]+/g, ' ')
                                     .replace(/\s+/g, ' ')
                                     .trim();
                                 return reduced.length === 0;
@@ -1884,7 +1888,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     const ALL_DRAWERS = [
         'tkaiDrawerCustomCategories', 'tkaiDrawerGiftGallery', 'tkaiDrawerFanClubGallery',
         'tkaiDrawerAutoScan', 'tkaiDrawerAiModel', 'tkaiDrawerFeatures',
-        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian', 'tkaiDrawerWhisper', 'tkaiDrawerLayout'
+        'tkaiDrawerMsgTypes', 'tkaiDrawerTools', 'tkaiDrawerSessions', 'tkaiDrawerGuardian', 'tkaiDrawerWhisper',
+        'tkaiDrawerLayout', 'tkaiDrawerOperations'
     ];
     // Wire button → drawer, toggling off if already open
     const MAP = {
@@ -1900,6 +1905,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         btnTkaiGuardian: 'tkaiDrawerGuardian',
         btnTkaiWhisper: 'tkaiDrawerWhisper',
         btnTkaiLayout: 'tkaiDrawerLayout',
+        btnTkaiOperations: 'tkaiDrawerOperations',
     };
     Object.entries(MAP).forEach(([btnId, drawerId]) => {
         const btn = document.getElementById(btnId);
@@ -1912,6 +1918,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             document.querySelectorAll('.tkai-settings-toggle').forEach(b => b.classList.remove('active'));
             if (!isOpen) { if (drawer) drawer.style.display = ''; btn.classList.add('active'); }
             if (drawerId === 'tkaiDrawerSessions' && !isOpen) renderTkaiSessionHistory();
+            if (drawerId === 'tkaiDrawerOperations' && !isOpen && typeof window.refreshTkaiOperationsPanel === 'function') {
+                window.refreshTkaiOperationsPanel(true);
+            }
             if (drawerId === 'tkaiDrawerLayout' && !isOpen && typeof window.renderTkaiLayoutVisualEditor === 'function') {
                 setTimeout(() => window.renderTkaiLayoutVisualEditor(), 40);
             }
@@ -3692,6 +3701,206 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             if (latest) openTkaiSessionStatsPage(latest, 1);
         } catch (e) { showToast('Greška pri spajanju: ' + e.message); }
     });
+})();
+
+// ── LIVE server and Telegram operations ──────────────────────────────────────
+(function initTkaiOperationsPanel() {
+    const api = window.etherx?.tkaiOperations;
+    const byId = (id) => document.getElementById(id);
+    let hydrated = false;
+    let busy = false;
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function setStatus(id, text, ok = null) {
+        const el = byId(id);
+        if (!el) return;
+        el.textContent = text;
+        el.style.color = ok === true ? '#4ade80' : ok === false ? '#fb7185' : 'var(--text2)';
+    }
+
+    function setAction(text, ok = null) {
+        setStatus('tkaiOpsActionStatus', text, ok);
+    }
+
+    function numberValue(id, fallback = 0) {
+        const value = Number(byId(id)?.value);
+        return Number.isFinite(value) ? value : fallback;
+    }
+
+    function renderOperations(data, shouldHydrate = false) {
+        if (!data?.ok) {
+            setAction(data?.error || 'Status nije dostupan.', false);
+            return;
+        }
+
+        const health = data.publicHealth || {};
+        setStatus(
+            'tkaiOpsPublicHealth',
+            health.ok ? `Online${health.service ? ` · ${health.service}` : ''}` : `Nedostupan${health.status ? ` · HTTP ${health.status}` : ''}`,
+            health.ok,
+        );
+
+        const existingWs = String(byId('tkaiLiveServerStatus')?.textContent || '').trim();
+        const wsConnected = /spojen|connected|online|open/i.test(existingWs) && !/nije|not|disconnected|closed/i.test(existingWs);
+        setStatus('tkaiOpsWsStatus', existingWs || 'Nije spojeno', wsConnected);
+
+        const control = data.controlServer || {};
+        setStatus(
+            'tkaiOpsControlStatus',
+            control.running ? `Aktivan · ${control.host}:${control.port}` : 'Zaustavljen',
+            control.running,
+        );
+
+        const telegram = data.telegram || {};
+        const telegramReady = telegram.tokenConfigured && telegram.chatIdConfigured;
+        const telegramLabel = telegram.running
+            ? `Pokrenut${telegram.pid ? ` · PID ${telegram.pid}` : ''}`
+            : telegramReady ? 'Konfiguriran · zaustavljen' : 'Nije konfiguriran';
+        setStatus('tkaiOpsTelegramStatus', telegramLabel, telegram.running ? true : (telegramReady ? null : false));
+
+        const summary = data.browserSnapshot || {};
+        const session = summary.session || {};
+        const connection = summary.connection || {};
+        const sessionEl = byId('tkaiOpsSessionSummary');
+        if (sessionEl) {
+            sessionEl.textContent = summary.snapshotAvailable
+                ? `LiveOS: ${connection.state || 'idle'} · poruke ${Number(session.messageCount || 0).toLocaleString()} · gledatelji ${Number(session.currentViewers || 0).toLocaleString()} · coini ${Number(session.totalCoins || 0).toLocaleString()} · korisnici ${Number(session.uniqueUsers || 0).toLocaleString()}`
+                : 'LiveOS još nema aktivnu snimku. Pokreni TikTok skeniranje za podatke sesije.';
+        }
+        const liveDataEl = byId('tkaiOpsLiveData');
+        if (liveDataEl) {
+            const latest = summary.latestEvent;
+            const topGifters = Array.isArray(summary.topGifters) ? summary.topGifters.slice(0, 5) : [];
+            const lines = [];
+            if (latest) {
+                const latestUser = latest.user ? ` · @${String(latest.user).replace(/^@+/, '')}` : '';
+                const latestText = latest.text ? ` · ${latest.text}` : '';
+                const latestCoins = Number(latest.coins || 0) > 0 ? ` · ${Number(latest.coins).toLocaleString()} coins` : '';
+                lines.push(`Zadnji event: ${latest.type || 'event'}${latestUser}${latestText}${latestCoins}`);
+            }
+            if (topGifters.length) {
+                lines.push('Top gifteri:');
+                topGifters.forEach((row, index) => {
+                    lines.push(`${index + 1}. @${String(row.user || row.displayName || 'korisnik').replace(/^@+/, '')} · ${Number(row.coins || 0).toLocaleString()} coins · ${Number(row.gifts || 0).toLocaleString()} giftova`);
+                });
+            }
+            liveDataEl.textContent = lines.length ? lines.join('\n') : 'Nema aktivnih događaja. Podaci će se pojaviti kada skeniranje primi TikTok LIVE događaje.';
+        }
+
+        const scriptsEl = byId('tkaiOpsScripts');
+        if (scriptsEl) {
+            scriptsEl.innerHTML = (data.scripts || []).map((script) => `
+                <div style="padding:7px 8px;border:1px solid rgba(255,255,255,.08);border-radius:7px">
+                    <div style="font-size:11px;color:${script.available ? '#4ade80' : '#fb7185'}">${script.available ? '●' : '○'} ${escapeHtml(script.name)}</div>
+                    <div style="font-size:10px;color:var(--text3);margin-top:2px">${escapeHtml(script.purpose || '')}</div>
+                    <code style="display:block;font-size:9px;color:#64748b;margin-top:3px;overflow-wrap:anywhere">${escapeHtml(script.relativePath || '')}</code>
+                </div>
+            `).join('') || '<div style="font-size:11px;color:var(--text3)">Nema popisa skripti.</div>';
+        }
+
+        const logsEl = byId('tkaiOpsLogs');
+        if (logsEl) {
+            const logs = Array.isArray(telegram.logs) ? telegram.logs : [];
+            logsEl.textContent = logs.length
+                ? logs.map((row) => `[${new Date(row.ts || Date.now()).toLocaleTimeString()}] ${row.text || ''}`).join('\n')
+                : (telegram.lastError ? `Greška: ${telegram.lastError}` : 'Nema logova.');
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+
+        if (shouldHydrate || !hydrated) {
+            const notify = data.notify || {};
+            const chatIdEl = byId('tkaiTelegramChatId');
+            if (chatIdEl) chatIdEl.value = notify.chatId || '';
+            if (byId('tkaiTelegramAutoStart')) byId('tkaiTelegramAutoStart').checked = telegram.autoStart === true;
+            if (byId('tkaiNotifyEnabled')) byId('tkaiNotifyEnabled').checked = notify.enabled === true;
+            if (byId('tkaiNotifyStartup')) byId('tkaiNotifyStartup').checked = notify.startupEnabled !== false;
+            if (byId('tkaiNotifyAlerts')) byId('tkaiNotifyAlerts').checked = notify.alertEnabled !== false;
+            if (byId('tkaiNotifyGifts')) byId('tkaiNotifyGifts').checked = notify.giftEnabled === true;
+            if (byId('tkaiNotifyGiftMin')) byId('tkaiNotifyGiftMin').value = notify.giftCoinsMin ?? 500;
+            if (byId('tkaiNotifyViewer')) byId('tkaiNotifyViewer').value = notify.viewerThreshold ?? 0;
+            if (byId('tkaiNotifyWhale')) byId('tkaiNotifyWhale').value = notify.whaleCoins ?? 10000;
+            if (byId('tkaiNotifySpike')) byId('tkaiNotifySpike').value = notify.spikeThreshold ?? 150;
+            if (byId('tkaiNotifyWatchUsers')) byId('tkaiNotifyWatchUsers').value = (notify.watchUsers || []).join(', ');
+            hydrated = true;
+        }
+    }
+
+    async function refreshOperations(shouldHydrate = false) {
+        if (!api?.getStatus) {
+            setAction('Operations API nije dostupan. Ponovno pokreni browser nakon nadogradnje.', false);
+            return null;
+        }
+        try {
+            setAction('Osvježavam stanje…');
+            const data = await api.getStatus();
+            renderOperations(data, shouldHydrate);
+            setAction('Status osvježen.', true);
+            return data;
+        } catch (error) {
+            setAction(`Greška statusa: ${error?.message || error}`, false);
+            return null;
+        }
+    }
+
+    async function runAction(label, action, refreshAfter = true) {
+        if (busy || typeof action !== 'function') return;
+        busy = true;
+        ['tkaiOpsSaveBtn', 'tkaiOpsStartBtn', 'tkaiOpsStopBtn', 'tkaiOpsTestBtn', 'tkaiOpsRefreshBtn']
+            .forEach((id) => { if (byId(id)) byId(id).disabled = true; });
+        setAction(label);
+        try {
+            const result = await action();
+            if (!result?.ok) throw new Error(result?.error || 'Radnja nije uspjela.');
+            if (refreshAfter) await refreshOperations(false);
+            setAction(result?.message || 'Radnja je uspješno završena.', true);
+        } catch (error) {
+            setAction(error?.message || String(error), false);
+        } finally {
+            busy = false;
+            ['tkaiOpsSaveBtn', 'tkaiOpsStartBtn', 'tkaiOpsStopBtn', 'tkaiOpsTestBtn', 'tkaiOpsRefreshBtn']
+                .forEach((id) => { if (byId(id)) byId(id).disabled = false; });
+        }
+    }
+
+    byId('tkaiOpsSaveBtn')?.addEventListener('click', () => runAction('Spremam Telegram postavke…', async () => {
+        const result = await api.saveTelegram({
+            token: String(byId('tkaiTelegramBotToken')?.value || '').trim(),
+            chatId: String(byId('tkaiTelegramChatId')?.value || '').trim(),
+            autoStart: byId('tkaiTelegramAutoStart')?.checked === true,
+            notify: {
+                enabled: byId('tkaiNotifyEnabled')?.checked === true,
+                startupEnabled: byId('tkaiNotifyStartup')?.checked === true,
+                alertEnabled: byId('tkaiNotifyAlerts')?.checked === true,
+                giftEnabled: byId('tkaiNotifyGifts')?.checked === true,
+                giftCoinsMin: Math.max(1, numberValue('tkaiNotifyGiftMin', 500)),
+                viewerThreshold: Math.max(0, numberValue('tkaiNotifyViewer', 0)),
+                whaleCoins: Math.max(0, numberValue('tkaiNotifyWhale', 10000)),
+                spikeThreshold: Math.max(0, numberValue('tkaiNotifySpike', 150)),
+                watchUsers: String(byId('tkaiNotifyWatchUsers')?.value || ''),
+            },
+        });
+        if (result?.ok && byId('tkaiTelegramBotToken')) byId('tkaiTelegramBotToken').value = '';
+        if (result?.ok) renderOperations(result, true);
+        return result;
+    }, false));
+    byId('tkaiOpsStartBtn')?.addEventListener('click', () => runAction('Pokrećem Telegram bot…', () => api.startTelegram()));
+    byId('tkaiOpsStopBtn')?.addEventListener('click', () => runAction('Zaustavljam Telegram bot…', () => api.stopTelegram()));
+    byId('tkaiOpsTestBtn')?.addEventListener('click', () => runAction('Šaljem testnu Telegram poruku…', () => api.testTelegram()));
+    byId('tkaiOpsRefreshBtn')?.addEventListener('click', () => refreshOperations(true));
+
+    window.refreshTkaiOperationsPanel = refreshOperations;
+    setInterval(() => {
+        const drawer = byId('tkaiDrawerOperations');
+        if (drawer && drawer.style.display !== 'none' && !busy) refreshOperations(false);
+    }, 5000);
 })();
 
 // ── WhisperLive Integration ───────────────────────────────────────────────────
@@ -9590,23 +9799,73 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!tab) return null;
         return document.getElementById('browseFrame_' + tab.id) || document.getElementById('browseFrame');
     }
+    function getTkaiTabUrlCandidates(tab) {
+        const candidates = [];
+        const add = (value) => {
+            const url = String(value || '').trim();
+            if (url && !candidates.includes(url)) candidates.push(url);
+        };
+        add(tab?.url);
+        try {
+            const webview = tab?.id ? document.getElementById('browseFrame_' + tab.id) : null;
+            if (webview?.getURL) add(webview.getURL());
+            add(webview?.src);
+        } catch (_) { }
+        return candidates;
+    }
+    function isTkaiTikTokUrl(value) {
+        try {
+            const hostname = new URL(String(value || '')).hostname.toLowerCase();
+            return hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com');
+        } catch (_) {
+            return false;
+        }
+    }
+    function getTkaiLiveOwnerFromTab(tab) {
+        for (const url of getTkaiTabUrlCandidates(tab)) {
+            if (!isTkaiTikTokUrl(url)) continue;
+            const owner = normalizeTikTokProfileHandle(parseTikTokOwnerFromUrl(url));
+            if (owner && /\/live(?:[/?#]|$)/i.test(url)) return owner;
+        }
+        for (const url of getTkaiTabUrlCandidates(tab)) {
+            if (!isTkaiTikTokUrl(url)) continue;
+            const owner = normalizeTikTokProfileHandle(parseTikTokOwnerFromUrl(url));
+            if (owner) return owner;
+        }
+        return normalizeTikTokProfileHandle(String(streamOwnerEl?.textContent || '').replace(/^@+/, ''));
+    }
     function rememberTikTokSourceTab(tab) {
-        if (tab?.id && String(tab.url || '').includes('tiktok.com')) {
+        if (tab?.id && getTkaiTabUrlCandidates(tab).some(isTkaiTikTokUrl)) {
             tkaiLiveSourceTabId = Number(tab.id);
         }
         return tab || null;
     }
     function getTikTokSourceTab() {
         const active = getActiveTab();
-        if (active?.url && active.url.includes('tiktok.com')) return rememberTikTokSourceTab(active);
+        const tabs = Array.isArray(STATE.tabs) ? STATE.tabs : [];
+        const isTikTokTab = (tab) => getTkaiTabUrlCandidates(tab).some(isTkaiTikTokUrl);
+        const isLiveTab = (tab) => getTkaiTabUrlCandidates(tab).some((url) => (
+            isTkaiTikTokUrl(url)
+            && /\/@[^/?#]+\/live(?:[/?#]|$)/i.test(url)
+        ));
+        if (active && isLiveTab(active)) return rememberTikTokSourceTab(active);
         if (tkaiLiveSourceTabId) {
-            const remembered = STATE.tabs.find((tab) => Number(tab.id) === Number(tkaiLiveSourceTabId) && String(tab.url || '').includes('tiktok.com'));
+            const remembered = tabs.find((tab) => Number(tab.id) === Number(tkaiLiveSourceTabId) && isLiveTab(tab));
             if (remembered) return remembered;
         }
-        const latest = [...STATE.tabs]
-            .filter((tab) => String(tab.url || '').includes('tiktok.com'))
+        const latestLive = [...tabs]
+            .filter(isLiveTab)
             .sort((a, b) => Number(b.lastActive || 0) - Number(a.lastActive || 0))[0];
-        return rememberTikTokSourceTab(latest || null);
+        if (latestLive) return rememberTikTokSourceTab(latestLive);
+        if (active && isTikTokTab(active)) return rememberTikTokSourceTab(active);
+        if (tkaiLiveSourceTabId) {
+            const remembered = tabs.find((tab) => Number(tab.id) === Number(tkaiLiveSourceTabId) && isTikTokTab(tab));
+            if (remembered) return remembered;
+        }
+        const latestTikTok = [...tabs]
+            .filter(isTikTokTab)
+            .sort((a, b) => Number(b.lastActive || 0) - Number(a.lastActive || 0))[0];
+        return rememberTikTokSourceTab(latestTikTok || null);
     }
     function isTkaiLiveServerEnabled() {
         const value = DB.getSettings().tkaiLiveServerEnabled;
@@ -16045,11 +16304,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             return;
         }
         const tab = getTikTokSourceTab();
-        if (!tab?.url || !tab.url.includes('tiktok.com')) {
+        if (!tab || !getTkaiTabUrlCandidates(tab).some(isTkaiTikTokUrl)) {
             showToast('⚠️ Otvori TikTok Live stranicu u browseru pa klikni Skeniranje ON');
             return;
         }
-        const owner = String(streamOwnerEl?.textContent || '').replace(/^@+/, '').trim() || parseTikTokOwnerFromUrl(tab.url || '');
+        const owner = getTkaiLiveOwnerFromTab(tab);
         if (!owner) {
             setTkaiTikTokLiveStatus('Nije pronađen TikTok LIVE korisnik', 'error');
             showToast('⚠️ Otvori adresu oblika tiktok.com/@korisnik/live');

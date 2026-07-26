@@ -70,6 +70,14 @@ contextBridge.exposeInMainWorld('etherx', {
     },
   },
 
+  tkaiOperations: {
+    getStatus: () => ipcRenderer.invoke('tkaiOps:getStatus'),
+    saveTelegram: (payload) => ipcRenderer.invoke('tkaiOps:saveTelegram', payload),
+    startTelegram: () => ipcRenderer.invoke('tkaiOps:startTelegram'),
+    stopTelegram: () => ipcRenderer.invoke('tkaiOps:stopTelegram'),
+    testTelegram: () => ipcRenderer.invoke('tkaiOps:testTelegram'),
+  },
+
   // ── Downloads ───────────────────────────────────────────────────────────────
   downloads: {
     add: (data) => ipcRenderer.invoke('db:addDownload', data),
