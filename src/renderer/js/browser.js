@@ -959,7 +959,7 @@ if (window.electronWebview) {
                                 if (!shareLooseRe.test(raw)) return false;
                                 const reduced = raw
                                     .replace(shareLooseRe, ' ')
-                                    .replace(/[.!?,:;()\[\]{}"'_*+=|\\/-]+/g, ' ')
+                                    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
                                     .replace(/\s+/g, ' ')
                                     .trim();
                                 return reduced.length === 0;
@@ -4657,6 +4657,47 @@ function ensureTabBarScaffold() {
     }, true);
 })();
 
+(function initGlobalMenuBarHandler() {
+    if (window.__etherxMenuBarHandlerBound) return;
+    window.__etherxMenuBarHandlerBound = true;
+
+    // Delegated click handler for menu bar items & dropdown items
+    document.addEventListener('click', (e) => {
+        const di = e.target?.closest?.('.di');
+        if (di) {
+            // User clicked a menu dropdown action (.di)
+            setTimeout(() => {
+                document.querySelectorAll('.menu-item.open').forEach(m => m.classList.remove('open'));
+            }, 30);
+            return;
+        }
+
+        const menuItem = e.target?.closest?.('.menu-item');
+        if (menuItem) {
+            // Clicked on the top menu header (e.g. File, Edit, View)
+            e.stopPropagation();
+            const wasOpen = menuItem.classList.contains('open');
+            document.querySelectorAll('.menu-item.open').forEach(m => m.classList.remove('open'));
+            if (!wasOpen) menuItem.classList.add('open');
+            return;
+        }
+
+        // Clicked outside any menu item -> close all open menus
+        document.querySelectorAll('.menu-item.open').forEach(m => m.classList.remove('open'));
+    }, true);
+
+    // Mouseover / hover switching when a menu dropdown is already open
+    document.addEventListener('mouseover', (e) => {
+        const item = e.target?.closest?.('.menu-item');
+        if (!item) return;
+        const anyOpen = document.querySelector('.menu-item.open');
+        if (anyOpen && anyOpen !== item) {
+            document.querySelectorAll('.menu-item.open').forEach(m => m.classList.remove('open'));
+            item.classList.add('open');
+        }
+    });
+})();
+
 function renderTab(tab) {
     const scaffold = ensureTabBarScaffold();
     if (!scaffold) {
@@ -5718,7 +5759,7 @@ document.addEventListener('mousedown', e => {
     const anyOpen = ['bmPanel', 'histPanel', 'dlPanel', 'settingsPanel', 'walletPanel', 'bobiaiPanel', 'aiAgentPanel', 'tiktokAIPanel', 'aiInspectPanel', 'kriptoPanel', 'etherxPanel', 'cryptoPricePanel', 'botDetectionPanel', 'shieldPanel']
         .some(id => document.getElementById(id)?.classList.contains('open'));
     if (!anyOpen) return;
-    const inPanel = e.target.closest('.panel, .nav-btn, .toolbar, #tabBar, #ctxMenu, .dropdown-menu, .modal, [id$="Panel"]');
+    const inPanel = e.target.closest('.panel, .nav-btn, .toolbar, #tabBar, #menuBar, .menu-bar, .menu-item, #ctxMenu, .dropdown-menu, .modal, [id$="Panel"]');
     if (!inPanel) closeAllPanels();
 }, true);
 document.getElementById('btnBookmarks').addEventListener('click', () => { window.renderBookmarksPanel?.(); togglePanel('bmPanel'); });
@@ -23524,10 +23565,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.getElementById('ctx-img-copy-url').addEventListener('click', () => {
         if (_ctxImageUrl) navigator.clipboard.writeText(_ctxImageUrl).then(() => showToast('📋 Image URL copied'));
     });
-    document.querySelectorAll('.menu-item').forEach(item => {
-        item.addEventListener('click', e => { e.stopPropagation(); const wasOpen = item.classList.contains('open'); document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')); if (!wasOpen) item.classList.add('open'); });
-    });
-    document.addEventListener('click', () => document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('open')));
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     // Use var to avoid TDZ when showToast is called before this section fully initializes.
     var toastTimer;
