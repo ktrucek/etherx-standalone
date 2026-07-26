@@ -360,6 +360,7 @@ try {
 let mainWindow = null;
 let liveOsSnapshot = null;
 const liveOsSubscribers = new Set();
+let tkaiBotControlServer = null;
 
 // Optional TikTokLive Python source. It is deliberately separate from the
 // DOM scanner so the user can switch it on/off without changing the normal
@@ -511,6 +512,73 @@ function sanitizeLiveOsSnapshot(payload) {
     unitCoins: safeNumber(event?.unitCoins),
     coins: safeNumber(event?.coins),
   }));
+  const safeUsers = Array.isArray(source.users)
+    ? source.users.slice(0, 500).map((user) => ({
+      user: safeText(user?.user, 120),
+      total: safeNumber(user?.total),
+      chat: safeNumber(user?.chat),
+      gifts: safeNumber(user?.gifts),
+      joins: safeNumber(user?.joins),
+      likes: safeNumber(user?.likes),
+      shares: safeNumber(user?.shares),
+      lastTs: safeNumber(user?.lastTs),
+      firstSeen: safeNumber(user?.firstSeen),
+      appearances: safeNumber(user?.appearances),
+      coins: safeNumber(user?.coins),
+      repeatMax: safeNumber(user?.repeatMax),
+      giftTypes: Array.isArray(user?.giftTypes)
+        ? user.giftTypes.slice(0, 8).map((entry) => (Array.isArray(entry)
+          ? [safeText(entry[0], 120), safeNumber(entry[1])]
+          : null)).filter(Boolean)
+        : [],
+      lastMessage: safeText(user?.lastMessage, 240),
+    }))
+    : [];
+  const safeGifts = Array.isArray(source.gifts)
+    ? source.gifts.slice(0, 500).map((gift) => ({
+      giftName: safeText(gift?.giftName || gift?.name, 120),
+      name: safeText(gift?.name || gift?.giftName, 120),
+      events: safeNumber(gift?.events),
+      quantity: safeNumber(gift?.quantity),
+      coins: safeNumber(gift?.coins),
+      users: safeNumber(gift?.users),
+    }))
+    : [];
+  const safeSupporters = Array.isArray(source.supporters)
+    ? source.supporters.slice(0, 200).map((row) => ({
+      user: safeText(row?.user, 120),
+      coins: safeNumber(row?.coins),
+      events: safeNumber(row?.events),
+    }))
+    : [];
+  const safeGiftLedger = Array.isArray(source.giftLedger)
+    ? source.giftLedger.slice(0, 1000).map((row) => ({
+      id: safeText(row?.id, 180),
+      ts: safeNumber(row?.ts),
+      user: safeText(row?.user, 120),
+      giftName: safeText(row?.giftName || row?.name, 120),
+      quantity: safeNumber(row?.quantity),
+      coins: safeNumber(row?.coins),
+      text: safeText(row?.text, 240),
+    }))
+    : [];
+  const safeAlerts = Array.isArray(source.alerts)
+    ? source.alerts.slice(0, 200).map((row) => ({
+      id: safeText(row?.id, 180),
+      type: safeText(row?.type, 60),
+      severity: safeText(row?.severity, 20),
+      text: safeText(row?.text || row?.title, 300),
+      score: safeNumber(row?.score || row?.riskScore),
+      riskScore: safeNumber(row?.riskScore || row?.score),
+      ts: safeNumber(row?.ts),
+      accountId: safeText(row?.accountId, 120),
+      user: safeText(row?.user, 120),
+      userHandle: safeText(row?.userHandle, 120),
+      status: safeText(row?.status, 40),
+      coins: safeNumber(row?.coins),
+    }))
+    : [];
+  const analytics = source.analytics && typeof source.analytics === "object" ? source.analytics : {};
   return {
     version: 1,
     publishedAt: Date.now(),
@@ -535,9 +603,21 @@ function sanitizeLiveOsSnapshot(payload) {
       uniqueUsers: safeNumber(source.session?.uniqueUsers),
     },
     events: safeEvents,
-    users: Array.isArray(source.users) ? source.users.slice(0, 500) : [],
-    gifts: Array.isArray(source.gifts) ? source.gifts.slice(0, 500) : [],
-    supporters: Array.isArray(source.supporters) ? source.supporters.slice(0, 200) : [],
+    users: safeUsers,
+    gifts: safeGifts,
+    giftLedger: safeGiftLedger,
+    supporters: safeSupporters,
+    alerts: safeAlerts,
+    analytics: {
+      totalCoins: safeNumber(analytics.totalCoins),
+      peakViewers: safeNumber(analytics.peakViewers),
+      currentViewers: safeNumber(analytics.currentViewers),
+      uniqueUsers: safeNumber(analytics.uniqueUsers),
+      messageRatePerMinute: safeNumber(analytics.messageRatePerMinute),
+      topGifters: Array.isArray(analytics.topGifters) ? analytics.topGifters.slice(0, 20) : [],
+      spikes: Array.isArray(analytics.spikes) ? analytics.spikes.slice(0, 20) : [],
+      recommendations: Array.isArray(analytics.recommendations) ? analytics.recommendations.slice(0, 20) : [],
+    },
     insights: Array.isArray(source.insights) ? source.insights.slice(0, 100) : [],
     scans: Array.isArray(source.scans) ? source.scans.slice(0, 100) : [],
     music: source.music && typeof source.music === "object" ? source.music : {},
@@ -558,6 +638,337 @@ function publishLiveOsSnapshot(snapshot) {
   }
   return liveOsSnapshot;
 }
+
+function safeTkaiNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function safeTkaiText(value, max = 500) {
+  return String(value || "").replace(/[\u0000-\u001F]/g, "").trim().slice(0, max);
+}
+
+function getTkaiBotControlConfig() {
+  const envLocal = typeof _readEnvLocalMap === "function" ? _readEnvLocalMap() : {};
+  const secretSettings = getSecretStore()?.getNamespace("settings") || {};
+  const token = safeTkaiText(
+    process.env.TKAI_BOT_CONTROL_TOKEN
+    || envLocal.TKAI_BOT_CONTROL_TOKEN
+    || secretSettings.tkaiBotControlToken
+    || "",
+    500,
+  );
+  const host = safeTkaiText(
+    process.env.TKAI_BOT_CONTROL_HOST
+    || envLocal.TKAI_BOT_CONTROL_HOST
+    || "127.0.0.1",
+    120,
+  ) || "127.0.0.1";
+  const port = Math.max(
+    1,
+    Math.min(
+      65535,
+      safeTkaiNumber(
+        process.env.TKAI_BOT_CONTROL_PORT
+        || envLocal.TKAI_BOT_CONTROL_PORT
+        || 8793,
+        8793,
+      ) || 8793,
+    ),
+  );
+  const enabledRaw = safeTkaiText(
+    process.env.TKAI_BOT_CONTROL_ENABLED
+    || envLocal.TKAI_BOT_CONTROL_ENABLED
+    || (token ? "true" : "false"),
+    20,
+  ).toLowerCase();
+  return {
+    enabled: enabledRaw === "1" || enabledRaw === "true" || enabledRaw === "yes" || enabledRaw === "on",
+    host,
+    port,
+    token,
+  };
+}
+
+function parseTkaiBotAuthToken(request) {
+  const authHeader = safeTkaiText(request?.headers?.authorization, 600);
+  if (/^Bearer /i.test(authHeader)) return authHeader.replace(/^Bearer\s+/i, "").trim();
+  return safeTkaiText(request?.headers?.["x-auth-token"], 600);
+}
+
+function isTkaiBotAuthorized(request, config) {
+  if (!config?.token || config.token.length < 24) return false;
+  const supplied = parseTkaiBotAuthToken(request);
+  if (!supplied) return false;
+  const actual = Buffer.from(config.token);
+  const candidate = Buffer.from(supplied);
+  return actual.length === candidate.length && crypto.timingSafeEqual(actual, candidate);
+}
+
+function sendTkaiJson(response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function normalizeTkaiTopGifters(sourceRows, limit = 10) {
+  const rows = Array.isArray(sourceRows) ? sourceRows : [];
+  return rows
+    .map((row, index) => {
+      const coins = Math.max(
+        safeTkaiNumber(row?.coins, 0),
+        safeTkaiNumber(row?.totalCoins, 0),
+        safeTkaiNumber(row?.giftCoins, 0),
+      );
+      const gifts = Math.max(
+        safeTkaiNumber(row?.gifts, 0),
+        safeTkaiNumber(row?.giftCount, 0),
+        safeTkaiNumber(row?.totalGiftEvents, 0),
+      );
+      const messages = Math.max(
+        safeTkaiNumber(row?.messages, 0),
+        safeTkaiNumber(row?.chatCount, 0),
+      );
+      const user = safeTkaiText(
+        row?.user
+        || row?.username
+        || row?.userHandle
+        || row?.profileHandle
+        || row?.displayName
+        || `user-${index + 1}`,
+        120,
+      );
+      return {
+        rank: index + 1,
+        user,
+        userHandle: safeTkaiText(row?.userHandle || row?.profileHandle || row?.username || user, 120),
+        displayName: safeTkaiText(row?.displayName || row?.user || row?.username || user, 120),
+        coins,
+        gifts,
+        messages,
+        status: safeTkaiText(row?.status || row?.watchStatus || "", 40),
+        riskScore: safeTkaiNumber(row?.riskScore, 0),
+      };
+    })
+    .filter((row) => row.coins > 0 || row.gifts > 0 || row.messages > 0)
+    .sort((a, b) => b.coins - a.coins || b.gifts - a.gifts || b.messages - a.messages || a.user.localeCompare(b.user))
+    .slice(0, Math.max(1, Math.min(50, safeTkaiNumber(limit, 10))));
+}
+
+function buildTkaiControlSummary(limit = 10) {
+  const snapshot = liveOsSnapshot && typeof liveOsSnapshot === "object" ? liveOsSnapshot : null;
+  const connection = snapshot?.connection && typeof snapshot.connection === "object"
+    ? { ...snapshot.connection }
+    : { state: "idle", liveUrl: "", owner: "", startedAt: null, lastEventAt: null, error: "" };
+  const sessionInfo = snapshot?.session && typeof snapshot.session === "object"
+    ? { ...snapshot.session }
+    : { id: "", title: "", startedAt: null, endedAt: null, messageCount: 0, peakViewers: 0, currentViewers: 0, totalCoins: 0, uniqueUsers: 0 };
+  const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
+  const latestEvent = events.length ? events[events.length - 1] : null;
+  const users = Array.isArray(snapshot?.users) ? snapshot.users : [];
+  const topGifters = normalizeTkaiTopGifters(
+    Array.isArray(snapshot?.supporters) && snapshot.supporters.length ? snapshot.supporters : users,
+    limit,
+  );
+  const dbStatus = db?.getTikTokLiveStorageStatus ? db.getTikTokLiveStorageStatus() : { ok: false, error: "Database not available" };
+  return {
+    ok: true,
+    snapshotAvailable: !!snapshot,
+    connection: {
+      state: safeTkaiText(connection.state || "idle", 24) || "idle",
+      liveUrl: safeTkaiText(connection.liveUrl, 1000),
+      owner: safeTkaiText(connection.owner, 120),
+      startedAt: safeTkaiNumber(connection.startedAt, 0) || null,
+      lastEventAt: safeTkaiNumber(connection.lastEventAt, 0) || null,
+      error: safeTkaiText(connection.error, 200),
+    },
+    session: {
+      id: safeTkaiText(sessionInfo.id, 120),
+      title: safeTkaiText(sessionInfo.title, 180),
+      startedAt: safeTkaiNumber(sessionInfo.startedAt, 0) || null,
+      endedAt: safeTkaiNumber(sessionInfo.endedAt, 0) || null,
+      messageCount: safeTkaiNumber(sessionInfo.messageCount, 0),
+      peakViewers: safeTkaiNumber(sessionInfo.peakViewers, 0),
+      currentViewers: safeTkaiNumber(sessionInfo.currentViewers, 0),
+      totalCoins: safeTkaiNumber(sessionInfo.totalCoins, 0),
+      uniqueUsers: safeTkaiNumber(sessionInfo.uniqueUsers, 0),
+    },
+    latestEvent: latestEvent ? {
+      type: safeTkaiText(latestEvent.type, 24),
+      user: safeTkaiText(latestEvent.user || latestEvent.userHandle, 120),
+      text: safeTkaiText(latestEvent.text || latestEvent.giftName, 200),
+      coins: safeTkaiNumber(latestEvent.coins, 0),
+      ts: safeTkaiNumber(latestEvent.ts, 0),
+    } : null,
+    topGifters,
+    database: dbStatus,
+  };
+}
+
+function getTkaiDatabaseSummary(limit = 10) {
+  const storage = db?.getTikTokLiveStorageStatus ? db.getTikTokLiveStorageStatus() : { ok: false, error: "Database not available" };
+  const archive = db?.getTikTokLiveData ? db.getTikTokLiveData() : { ok: false, error: "Database not available" };
+  const users = archive?.users && typeof archive.users === "object" ? Object.values(archive.users) : [];
+  const topStoredGifters = normalizeTkaiTopGifters(users, limit);
+  const sessions = Array.isArray(archive?.sessions) ? archive.sessions.slice(-Math.max(1, Math.min(10, limit))) : [];
+  const stats = Array.isArray(archive?.stats) ? archive.stats.slice(-Math.max(1, Math.min(10, limit))) : [];
+  return {
+    ok: true,
+    storage,
+    topStoredGifters,
+    latestSessions: sessions.map((row) => ({
+      id: safeTkaiText(row?.id, 120),
+      label: safeTkaiText(row?.label || row?.name || row?.session?.title || "", 160),
+      savedAt: safeTkaiNumber(row?.savedAt || row?.updatedAt || row?.session?.endedAt || row?.session?.startedAt, 0),
+      messageCount: safeTkaiNumber(row?.messageCount || row?.session?.messageCount, 0),
+      peakViewers: safeTkaiNumber(row?.peakViewers || row?.session?.peakViewers, 0),
+      totalCoins: safeTkaiNumber(row?.totalCoins || row?.session?.totalCoins, 0),
+    })),
+    latestStats: stats.map((row) => ({
+      id: safeTkaiText(row?.id, 120),
+      label: safeTkaiText(row?.label || "", 160),
+      savedAt: safeTkaiNumber(new Date(row?.savedAt || 0).getTime() || row?.savedAt, 0),
+      totalCoins: safeTkaiNumber(row?.totalCoins || row?.coins, 0),
+      peakViewers: safeTkaiNumber(row?.peakViewers, 0),
+      uniqueUsers: safeTkaiNumber(row?.uniqueUsers, 0),
+    })),
+  };
+}
+
+function dispatchTkaiBotCommand(action) {
+  const allowed = new Set(["start-scan", "stop-scan", "open-ai-live-chat", "songrec-now"]);
+  const normalized = safeTkaiText(action, 60).toLowerCase();
+  if (!allowed.has(normalized)) return { ok: false, error: "Unsupported action." };
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, error: "Main window is unavailable." };
+  }
+  mainWindow.webContents.send("liveos:command", { action: normalized });
+  return { ok: true, action: normalized, dispatchedAt: Date.now() };
+}
+
+function readTkaiRequestBody(request) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    request.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > 256 * 1024) {
+        reject(new Error("Payload too large"));
+        request.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    request.on("error", reject);
+  });
+}
+
+function handleTkaiBotControlRequest(request, response) {
+  const config = getTkaiBotControlConfig();
+  let requestUrl;
+  try {
+    requestUrl = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
+  } catch (_) {
+    sendTkaiJson(response, 400, { ok: false, error: "Invalid URL" });
+    return;
+  }
+
+  if (request.method === "GET" && requestUrl.pathname === "/health") {
+    sendTkaiJson(response, 200, {
+      ok: true,
+      service: "etherx-tkai-bot-control",
+      enabled: config.enabled,
+      snapshotAvailable: !!liveOsSnapshot,
+      now: new Date().toISOString(),
+    });
+    return;
+  }
+
+  if (!config.enabled) {
+    sendTkaiJson(response, 503, { ok: false, error: "TKAI bot control is disabled." });
+    return;
+  }
+
+  if (!isTkaiBotAuthorized(request, config)) {
+    sendTkaiJson(response, 401, { ok: false, error: "Unauthorized" });
+    return;
+  }
+
+  if (request.method === "GET" && requestUrl.pathname === "/api/tkai/status") {
+    const limit = Math.max(1, Math.min(50, safeTkaiNumber(requestUrl.searchParams.get("limit"), 10)));
+    sendTkaiJson(response, 200, buildTkaiControlSummary(limit));
+    return;
+  }
+
+  if (request.method === "GET" && requestUrl.pathname === "/api/tkai/session") {
+    sendTkaiJson(response, 200, { ok: true, snapshot: liveOsSnapshot, summary: buildTkaiControlSummary(10) });
+    return;
+  }
+
+  if (request.method === "GET" && requestUrl.pathname === "/api/tkai/gifters") {
+    const limit = Math.max(1, Math.min(50, safeTkaiNumber(requestUrl.searchParams.get("limit"), 10)));
+    sendTkaiJson(response, 200, {
+      ok: true,
+      gifters: buildTkaiControlSummary(limit).topGifters,
+      snapshotAvailable: !!liveOsSnapshot,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && requestUrl.pathname === "/api/tkai/database") {
+    const limit = Math.max(1, Math.min(50, safeTkaiNumber(requestUrl.searchParams.get("limit"), 10)));
+    sendTkaiJson(response, 200, getTkaiDatabaseSummary(limit));
+    return;
+  }
+
+  if (request.method === "POST" && requestUrl.pathname === "/api/tkai/command") {
+    readTkaiRequestBody(request).then((rawBody) => {
+      let payload = {};
+      try {
+        payload = rawBody ? JSON.parse(rawBody) : {};
+      } catch (_) {
+        sendTkaiJson(response, 400, { ok: false, error: "Invalid JSON body" });
+        return;
+      }
+      const result = dispatchTkaiBotCommand(payload?.action);
+      sendTkaiJson(response, result.ok ? 200 : 400, result);
+    }).catch((error) => {
+      sendTkaiJson(response, 400, { ok: false, error: String(error?.message || error || "Request failed") });
+    });
+    return;
+  }
+
+  sendTkaiJson(response, 404, { ok: false, error: "Not found" });
+}
+
+function startTkaiBotControlServer() {
+  const config = getTkaiBotControlConfig();
+  if (!config.enabled) return { ok: false, skipped: true, reason: "disabled" };
+  if (!config.token || config.token.length < 24) {
+    return { ok: false, skipped: true, reason: "missing_token" };
+  }
+  if (tkaiBotControlServer) return { ok: true, alreadyRunning: true, host: config.host, port: config.port };
+  tkaiBotControlServer = http.createServer(handleTkaiBotControlRequest);
+  tkaiBotControlServer.on("error", (error) => {
+    console.warn("[TKAI Bot] control server error:", error.message);
+  });
+  tkaiBotControlServer.listen(config.port, config.host, () => {
+    console.log(`[TKAI Bot] control server listening on http://${config.host}:${config.port}`);
+  });
+  return { ok: true, host: config.host, port: config.port };
+}
+
+function stopTkaiBotControlServer() {
+  if (!tkaiBotControlServer) return;
+  try {
+    tkaiBotControlServer.close();
+  } catch (_) { }
+  tkaiBotControlServer = null;
+}
+
 let db = null;
 let adBlocker = null;
 let ai = null;
@@ -2515,6 +2926,7 @@ app.whenReady().then(async () => {
     setupIPC();
     _ipcSetupDone = true;
   }
+  startTkaiBotControlServer();
   createWindow();
 
   // Yield once so Chromium can paint the shell before optional extension work
@@ -2603,6 +3015,7 @@ app.on("window-all-closed", () => {
 
 // ─── Auto-save session before window closes ───────────────────────────────────
 app.on("before-quit", () => {
+  stopTkaiBotControlServer();
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents

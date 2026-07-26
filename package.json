@@ -1,6 +1,6 @@
 {
   "name": "etherx-standalone",
-  "version": "3.0.203",
+  "version": "3.0.204",
   "description": "EtherX Standalone Browser - Complete desktop + web version",
   "main": "main.js",
   "scripts": {
@@ -8,6 +8,7 @@
     "dev": "electron . --no-sandbox --inspect=5858",
     "build": "electron-builder --dir --publish never",
     "tkai:env": "node scripts/tkai-hashes-to-env.js",
+    "tkai:telegram-bot": "node scripts/tkai-telegram-bot.js",
     "pm2:setup": "bash scripts/pm2-bootstrap.sh",
     "pm2:start": "npx pm2 start ecosystem.config.cjs --update-env",
     "pm2:restart": "npx pm2 delete etherx-browser || true && npx pm2 start ecosystem.config.cjs --update-env",
@@ -52,6 +53,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "scripts/tkai-telegram-bot.js",
       "src/**/*",
       "live-chat-server/tiktoklive_bridge.py",
       "live-chat-server/requirements-tiktoklive.txt",
@@ -121,5 +123,5 @@
     "uuid": "^11.1.1",
     "yauzl": "^3.2.1"
   },
-  "buildTime": "2026-07-25T23:52:19Z"
+  "buildTime": "2026-07-26T07:40:14Z"
 }
