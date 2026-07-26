@@ -139,9 +139,7 @@ function escHtml(value) {
 
 function safeResolveGiftMetaFromMessage(message) {
     if (typeof resolveGiftMetaFromMessage === 'function') return resolveGiftMetaFromMessage(message);
-    if (typeof detectGiftMetaFromText === 'function') {
-        return detectGiftMetaFromText(String(message?.giftName || message?.text || ''));
-    }
+    if (typeof getTkaiGiftMeta === 'function') return getTkaiGiftMeta(message);
     return {
         giftName: String(message?.giftName || message?.text || '').trim().slice(0, 80),
         quantity: Number(message?.quantity || 1) || 1,
@@ -292,48 +290,6 @@ function downloadTextFile(fileName, content, mime = 'text/plain;charset=utf-8') 
             URL.revokeObjectURL(href);
         }, 0);
     } catch (_) { }
-}
-
-// Runtime-safe fallbacks for builds where TikTok helpers end up outside current scope.
-if (typeof globalThis.getSongPerfDb !== 'function') {
-    globalThis.getSongPerfDb = function getSongPerfDbFallback() {
-        try {
-            const raw = localStorage.getItem('ex_tkai_song_perf_db') || '{}';
-            const db = JSON.parse(raw);
-            return db && typeof db === 'object' ? db : {};
-        } catch (_) {
-            return {};
-        }
-    };
-}
-if (typeof globalThis.saveSongPerfDb !== 'function') {
-    globalThis.saveSongPerfDb = function saveSongPerfDbFallback(db) {
-        try {
-            localStorage.setItem('ex_tkai_song_perf_db', JSON.stringify(db || {}));
-        } catch (_) { }
-    };
-}
-if (typeof globalThis.getActiveTikTokWebview !== 'function') {
-    globalThis.getActiveTikTokWebview = function getActiveTikTokWebviewFallback() {
-        try {
-            let tabId = null;
-            if (typeof getActiveTab === 'function') {
-                const tab = getActiveTab();
-                tabId = Number(tab?.id || 0) || null;
-            }
-            if (!tabId && typeof STATE === 'object' && STATE) {
-                tabId = Number(STATE.activeTabId || 0) || null;
-            }
-            if (tabId) {
-                const byId = document.getElementById('browseFrame_' + tabId);
-                if (byId && byId.tagName === 'WEBVIEW') return byId;
-            }
-            const main = document.getElementById('browseFrame');
-            return main && main.tagName === 'WEBVIEW' ? main : null;
-        } catch (_) {
-            return null;
-        }
-    };
 }
 // Store the element that had focus before a context menu opened so paste targets it correctly
 let _ctxFocusedEl = null;
@@ -2552,32 +2508,6 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         });
         return out.slice(-Math.max(10, Number(maxItems || 120)));
     }
-    function getTkaiGiftMeta(text) {
-        if (typeof detectGiftMetaFromText === 'function') {
-            return detectGiftMetaFromText(text);
-        }
-        const src = String(text || '').trim();
-        const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-        const normalized = normalize(src);
-        const entries = typeof getGiftCatalogEntries === 'function' ? getGiftCatalogEntries() : [];
-        let found = null;
-        for (const [key, value] of entries) {
-            if (key && normalized.includes(String(key || ''))) {
-                found = value;
-                break;
-            }
-        }
-        const qtyMatch = src.match(/(?:\b(?:x|×)\s*(\d{1,4})\b|\b(\d{1,4})\s*x\b|\b(?:combo|gift(?:ed)?|sent)(?:\b|(?=[a-z0-9]))\s*(\d{1,4})\b)/i);
-        const quantity = Math.max(1, Number(qtyMatch?.[1] || qtyMatch?.[2] || qtyMatch?.[3] || 1));
-        let unitCoins = found ? Number(found.coins || 0) : 0;
-        if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
-        return {
-            giftName: found ? found.name : src.slice(0, 80),
-            coins: Math.max(0, Number(unitCoins * quantity || 0)),
-            unitCoins: Math.max(0, Number(unitCoins || 0)),
-            quantity
-        };
-    }
     function normalizeTkaiGiftKeySafe(value) {
         if (typeof normalizeGiftKey === 'function') return normalizeGiftKey(value);
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -4014,7 +3944,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         }
     }
 
-    function setStatus(text, color) {
+    function setWhisperStatus(text, color) {
         const el = document.getElementById('tkaiWhisperStatus');
         if (!el) return;
         el.textContent = text;
@@ -4089,7 +4019,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         stopAudio();
         try { wsRef && wsRef.close(); } catch (_) { }
         wsRef = null;
-        setStatus('⏸ Zaustavljeno', '#94a3b8');
+        setWhisperStatus('⏸ Zaustavljeno', '#94a3b8');
     }
 
     async function start() {
@@ -4098,7 +4028,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             const cfg = getCfg();
             connecting = true;
             setConnectingBtn(true);
-            setStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
+            setWhisperStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
 
             const wsUrl = 'ws://' + cfg.host + ':' + cfg.port;
             let ws;
@@ -4108,7 +4038,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 connecting = false;
                 clearConnectionTimer();
                 setConnectingBtn(false);
-                setStatus('❌ ' + e.message, '#f87171');
+                setWhisperStatus('❌ ' + e.message, '#f87171');
                 if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + e.message);
                 return;
             }
@@ -4118,7 +4048,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 connecting = false;
                 lastWhisperErrorAt = Date.now();
                 setConnectingBtn(false);
-                setStatus('❌ Timeout spajanja na ' + cfg.host + ':' + cfg.port + ' — WhisperLive server ne odgovara', '#f87171');
+                setWhisperStatus('❌ Timeout spajanja na ' + cfg.host + ':' + cfg.port + ' — WhisperLive server ne odgovara', '#f87171');
                 try { ws.close(); } catch (_) { }
                 if (typeof showToast === 'function') showToast('❌ WhisperLive ne odgovara na ' + wsUrl + '. Pokreni instalaciju/server u Pomoć → WhisperLive.');
             }, 7000);
@@ -4171,9 +4101,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                     silentGain.connect(audioCtx.destination);
                     active = true;
                     setToggleBtn(true);
-                    setStatus('🔴 Sluša…', '#4ade80');
+                    setWhisperStatus('🔴 Sluša…', '#4ade80');
                 } catch (micErr) {
-                    setStatus('❌ Mikrofon: ' + micErr.message, '#f87171');
+                    setWhisperStatus('❌ Mikrofon: ' + micErr.message, '#f87171');
                     ws.close();
                     active = false;
                     setToggleBtn(false);
@@ -4184,8 +4114,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    if (data.message === 'WAIT') { setStatus('⏳ Server zauzet…', '#fbbf24'); return; }
-                    if (data.message === 'SERVER_READY') { setStatus('🔴 Sluša…', '#4ade80'); return; }
+                    if (data.message === 'WAIT') { setWhisperStatus('⏳ Server zauzet…', '#fbbf24'); return; }
+                    if (data.message === 'SERVER_READY') { setWhisperStatus('🔴 Sluša…', '#4ade80'); return; }
                     if (data.message === 'DISCONNECT') { stop(); if (typeof showToast === 'function') showToast('⚠️ WhisperLive prekinuo vezu'); return; }
 
                     // WhisperLive sends { segments: [{text, completed, ...}, ...] }
@@ -4213,7 +4143,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 clearConnectionTimer();
                 stopAudio();
                 setConnectingBtn(false);
-                setStatus('❌ Greška veze — provjeri radi li WhisperLive server na ' + cfg.host + ':' + cfg.port, '#f87171');
+                setWhisperStatus('❌ Greška veze — provjeri radi li WhisperLive server na ' + cfg.host + ':' + cfg.port, '#f87171');
                 if (wasConnecting && typeof showToast === 'function') showToast('❌ WhisperLive veza nije uspjela');
             };
 
@@ -4225,16 +4155,16 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 if (active) {
                     active = false;
                     setToggleBtn(false);
-                    setStatus('⏸ Veza prekinuta', '#94a3b8');
+                    setWhisperStatus('⏸ Veza prekinuta', '#94a3b8');
                 } else {
                     setConnectingBtn(false);
-                    if (Date.now() - lastWhisperErrorAt > 1200) setStatus('⏸ WhisperLive nije spojen', '#94a3b8');
+                    if (Date.now() - lastWhisperErrorAt > 1200) setWhisperStatus('⏸ WhisperLive nije spojen', '#94a3b8');
                 }
             };
         } catch (err) {
             console.error('[WhisperLive] start failed:', err);
             try { stop(); } catch (_) { }
-            setStatus('⚠️ Whisper greška', '#fbbf24');
+            setWhisperStatus('⚠️ Whisper greška', '#fbbf24');
         }
     }
 
@@ -4826,31 +4756,6 @@ setInterval(() => {
         }
     });
 }, 60000); // Check every minute
-
-function _oldSaveSessionTabs(force = false) {
-    if (_saveSessionTimeout) clearTimeout(_saveSessionTimeout);
-    const doSave = () => {
-        // Use window-specific keys to avoid overwriting state between windows
-        let windowId = 'main';
-        try {
-            if (window.electronAPI && typeof window.electronAPI.windowId === 'function') {
-                windowId = window.electronAPI.windowId() || 'main';
-            }
-        } catch (e) { }
-
-        const session = STATE.tabs.map(t => ({ url: t.url, title: t.title, favicon: t.favicon, faviconUrl: t.faviconUrl, pinned: t.pinned }));
-        localStorage.setItem('ex_session_tabs_' + windowId, JSON.stringify(session));
-        localStorage.setItem('ex_session_active_' + windowId, STATE.activeTabId);
-        // Also persist to SQLite when running inside Electron
-        if (window.electronAPI) {
-            try { window.electronAPI.invoke('db:saveSession', { name: '__autosave_' + windowId, tabs: session, activeTab: STATE.activeTabId }); } catch (e) { }
-        }
-        _saveSessionTimeout = null;
-    };
-
-    if (force) doSave();
-    else _saveSessionTimeout = setTimeout(doSave, 500);
-}
 function closeTab(id) {
     const idx = STATE.tabs.findIndex(t => t.id === id); if (idx === -1) return;
     STATE.tabs.splice(idx, 1); const el = getTabEl(id); if (el) el.remove();
@@ -6711,21 +6616,35 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0) || Number(b.riskScore || 0) - Number(a.riskScore || 0))
             .slice(0, 100);
     }
+    let tkaiTikTokLiveConnected = false;
+    function isTkaiTikTokLiveBridgeConnected() {
+        return isTkaiTikTokLiveEnabled() && tkaiTikTokLiveConnected;
+    }
     function setupTkaiTikTokLiveBridge() {
         if (tkaiTikTokLiveUnsubscribe || !window.etherx?.tiktokLiveBridge?.onEvent) return;
         tkaiTikTokLiveUnsubscribe = window.etherx.tiktokLiveBridge.onEvent((payload) => {
             if (!payload || payload.kind === 'status') {
-                if (payload?.status === 'connected') setTkaiTikTokLiveStatus('Spojeno · čita TikTokLive', 'ok');
-                else if (payload?.status === 'stopped' || payload?.status === 'disconnected') setTkaiTikTokLiveStatus('Zaustavljeno');
+                if (payload?.status === 'connected') {
+                    tkaiTikTokLiveConnected = true;
+                    setTkaiTikTokLiveStatus('Spojeno · čita TikTokLive (Primarno)', 'ok');
+                } else if (payload?.status === 'stopped' || payload?.status === 'disconnected') {
+                    tkaiTikTokLiveConnected = false;
+                    setTkaiTikTokLiveStatus('Zaustavljeno (DOM Fallback aktivan)');
+                }
                 return;
             }
             if (payload.kind === 'error') {
+                tkaiTikTokLiveConnected = false;
                 setTkaiTikTokLiveStatus('Greška: ' + String(payload.error || '').slice(0, 100), 'error');
                 return;
             }
             if (payload.kind === 'event' && isTkaiTikTokLiveEnabled()) {
+                tkaiTikTokLiveConnected = true;
                 tkaiTikTokLiveQueue.push({ ...payload, id: `tiktoklive:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, ts: Date.now(), sourceType: 'TikTokLive' });
                 if (tkaiTikTokLiveQueue.length > 500) tkaiTikTokLiveQueue = tkaiTikTokLiveQueue.slice(-500);
+                if (typeof window.queueTikTokLiveEventScan === 'function') {
+                    window.queueTikTokLiveEventScan();
+                }
             }
         });
     }
@@ -7099,13 +7018,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         } catch (_) {
             giftCatalogFromPage = [];
         }
-    }
-    function normalizeSongTitleKey(title) {
-        return String(title || '')
-            .toLowerCase()
-            .replace(/\s+/g, ' ')
-            .replace(/[^a-z0-9čćđšž _\-]/gi, '')
-            .trim();
     }
     const DEFAULT_GIFT_CATALOG_LINES = [
         "2199 Jollie's Heartland",
@@ -8046,11 +7958,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const resolved = (fromOwner || fallback || '').slice(0, 40);
         streamOwnerEl.textContent = resolved ? ('@' + resolved) : '@-';
         streamOwnerEl.title = resolved ? ('Live stream owner: @' + resolved) : 'Live stream owner nije detektiran';
-    }
-    function formatNum(value) {
-        const n = Number(value || 0);
-        if (!Number.isFinite(n)) return '0';
-        return n.toLocaleString('hr-HR');
     }
     function formatDurationHoursMinutes(totalMs) {
         const mins = Math.max(0, Math.floor(Number(totalMs || 0) / 60000));
@@ -9475,31 +9382,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         return null;
     }
-    function getTkaiGiftMeta(text) {
-        if (typeof detectGiftMetaFromText === 'function') {
-            return detectGiftMetaFromText(text);
+    function getTkaiGiftMeta(input) {
+        if (input && typeof input === 'object') {
+            if (typeof resolveGiftMetaFromMessage === 'function') return resolveGiftMetaFromMessage(input);
+            return detectGiftMetaFromText(String(input.giftName || input.text || ''));
         }
-        const src = String(text || '').trim();
-        const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-        const normalized = normalize(src);
-        const entries = typeof getGiftCatalogEntries === 'function' ? getGiftCatalogEntries() : [];
-        let found = null;
-        for (const [key, value] of entries) {
-            if (key && normalized.includes(String(key || ''))) {
-                found = value;
-                break;
-            }
-        }
-        const qtyMatch = src.match(/(?:\b(?:x|×)\s*(\d{1,4})\b|\b(\d{1,4})\s*x\b|\b(?:combo|gift(?:ed)?|sent)\s*(\d{1,4})\b)/i);
-        const quantity = Math.max(1, Number(qtyMatch?.[1] || qtyMatch?.[2] || qtyMatch?.[3] || 1));
-        let unitCoins = found ? Number(found.coins || 0) : 0;
-        if (/\b(?:rose|ruza|ruža)\b/i.test(src)) unitCoins = 1;
-        return {
-            giftName: found ? found.name : src.slice(0, 80),
-            coins: Math.max(0, Number(unitCoins * quantity || 0)),
-            unitCoins: Math.max(0, Number(unitCoins || 0)),
-            quantity
-        };
+        return detectGiftMetaFromText(String(input || ''));
     }
     function parseCoinsFromText(text) {
         const meta = getTkaiGiftMeta(text);
@@ -9704,7 +9592,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         };
     }
 
-    function downloadTextFile(fileName, content, mime = 'text/plain;charset=utf-8') {
+    function _downloadTextFileImpl(fileName, content, mime = 'text/plain;charset=utf-8') {
         const blob = new Blob([String(content || '')], { type: mime });
         const href = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -9714,7 +9602,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         a.click();
         setTimeout(() => { a.remove(); URL.revokeObjectURL(href); }, 0);
     }
-    globalThis.__etherxDownloadTextFileImpl = downloadTextFile;
+    globalThis.__etherxDownloadTextFileImpl = _downloadTextFileImpl;
     function trackViewerSample(value) {
         const v = Number(value || 0);
         if (!Number.isFinite(v) || v <= 0) return;
@@ -16977,6 +16865,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
 
     function getNextTkaiScanDelayMs() {
+        if (typeof isTkaiTikTokLiveBridgeConnected === 'function' && isTkaiTikTokLiveBridgeConnected()) {
+            return 8000; // Relaxed 8s polling when Python Bridge is active
+        }
         const turboEnabled = DB.getSettings().tkaiTurboScan !== false;
         if (!turboEnabled) return Math.max(1500, Number(DB.getSettings().tkaiScanIntervalMs) || TKAI_SCAN_INTERVAL_NORMAL_MS);
         return Date.now() < turboScanFastUntilTs ? TKAI_SCAN_INTERVAL_FAST_MS : TKAI_SCAN_INTERVAL_NORMAL_MS;
@@ -17038,14 +16929,14 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
     }
 
-    // Called by the lightweight MutationObserver inside the TikTok webview.
+    // Called by the lightweight MutationObserver inside the TikTok webview or Python bridge.
     // A 120 ms debounce batches bursts such as gifts/likes without hammering DOM.
     window.queueTikTokLiveEventScan = function () {
         if (!scanActive || tkaiEventScanTimer) return;
         tkaiEventScanTimer = setTimeout(() => {
             tkaiEventScanTimer = null;
             runTikTokEventScan().catch(() => { });
-        }, 120);
+        }, 80);
     };
 
     async function runTkaiScanCycle() {
@@ -19417,7 +19308,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             return String(a);
         }).join(' ');
     }
-    function consoleLog(type, msg, src) {
+    function _consoleLogImpl(type, msg, src) {
         try {
             if (!consoleOutput) return;
             if (!shouldCaptureConsoleDom()) {
@@ -19440,7 +19331,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (!_conFilterTimer) { _conFilterTimer = setTimeout(() => { _conFilterTimer = null; applyConsoleFilter(); }, 150); }
         } catch (e) { /* prevent recursion */ }
     }
-    globalThis.__etherxConsoleLogImpl = consoleLog;
+    globalThis.__etherxConsoleLogImpl = _consoleLogImpl;
 
     // ── Hook browser console & errors ────────────────────────────────────────
     (function hookBrowserConsole() {
@@ -19607,8 +19498,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.getElementById('elemRefreshBtn')?.addEventListener('click', renderDOMTree);
 
     function renderDOMTree() {
-        const getFrame = () => document.getElementById('browseFrame');
-        const frame = new Proxy({}, { get: (t, p) => typeof getFrame()[p] === "function" ? getFrame()[p].bind(getFrame()) : getFrame()[p], set: (t, p, v) => { getFrame()[p] = v; return true; } });
         const view = document.getElementById('elemView');
         if (!view) return;
         view.innerHTML = '<div style="color:#888;padding:8px">Loading DOM tree...</div>';
@@ -19790,7 +19679,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         _netBuffer.forEach(entry => _renderNetEntry(entry));
         _netBuffer.length = 0;
     }
-    function logNetworkEntry(url, type, status, size, time) {
+    function _logNetworkEntryImpl(url, type, status, size, time) {
         const entry = { url, type: type || 'HTML', status: status || 200, size, time };
         // Always buffer so history is available when DevTools opens
         _netBuffer.push(entry);
@@ -20183,7 +20072,6 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     }
     function _sqliteLoading(name) { return `<div style="padding:16px;color:#858585;font-size:12px;display:flex;align-items:center;gap:8px"><div style="width:14px;height:14px;border:2px solid #555;border-top-color:#4a9eff;border-radius:50%;animation:spin .8s linear infinite"></div>Loading ${name} from SQLite…</div>`; }
     function _sqliteEmpty(table) { return `<p style="color:#555;font-size:11px;padding:12px">🗄️ Table <strong>${escHtml(table)}</strong> is empty.</p>`; }
-    function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
     // ── DevTools Tab Switcher ─────────────────────────────────────────────────
     function switchDevToolTab(paneName) {
@@ -21024,7 +20912,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     function addBookmark() { const t = getActiveTab(); if (!t?.url) { showToast('Nothing to bookmark'); return; } DB.addBookmark({ url: t.url, title: t.title }); }
     document.getElementById('btnBookmarkPage')?.addEventListener('click', addBookmark);
     const DEFAULT_QUICKLINKS = [{ url: 'https://en.wikipedia.org', label: 'Wiki', icon: '📖' }, { url: 'https://github.com', label: 'GitHub', icon: '��' }, { url: 'https://app.uniswap.org', label: 'Uniswap', icon: '🦄' }, { url: 'https://etherscan.io', label: 'Etherscan', icon: '🔍' }];
-    function renderQuickLinks() {
+    function _renderQuickLinksImpl() {
         const ql = document.getElementById('quickLinks');
         if (!ql) return;
         // Show top 10 most visited sites based on history frequency
@@ -21045,10 +20933,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         ql.innerHTML = '';
         links.forEach(l => { const el = document.createElement('div'); el.className = 'ql-item'; el.innerHTML = `<div class="ql-icon">${l.icon}</div><div class="ql-label">${l.label}</div>`; el.addEventListener('click', () => navigateTo(l.url)); ql.appendChild(el); });
     }
-    globalThis.__etherxRenderQuickLinksImpl = renderQuickLinks;
+    globalThis.__etherxRenderQuickLinksImpl = _renderQuickLinksImpl;
 
     // Recently Visited
-    function addRecentSite(url, title) {
+    function _addRecentSiteImpl(url, title) {
         if (!url || url === 'about:blank' || url === 'etherx://newtab' || STATE.isPrivate) return;
         let r = JSON.parse(localStorage.getItem('ex_recent') || '[]');
         r = r.filter(x => x.url !== url);
@@ -21058,16 +20946,16 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         renderRecentSites();
         renderQuickLinks();
     }
-    globalThis.__etherxAddRecentSiteImpl = addRecentSite;
-    function getSiteFavicon(url) {
+    globalThis.__etherxAddRecentSiteImpl = _addRecentSiteImpl;
+    function _getSiteFaviconImpl(url) {
         try {
             const h = new URL(url).hostname;
             const map = { 'etherscan.io': '\uD83D\uDD0D', 'uniswap.org': '\uD83E\uDD84', 'metamask.io': '\uD83E\uDD8A', 'coingecko.com': '\uD83E\uDD8E', 'github.com': '\uD83D\uDC19', 'google.com': '\uD83D\uDD35', 'youtube.com': '\u25B6\uFE0F', 'twitter.com': '\uD83D\uDC26', 'wallet.kriptoentuzijasti.io': '\uD83D\uDCB0', 'opensea.io': '\uD83C\uDF0A' };
             for (const k in map) if (h.includes(k)) return map[k];
         } catch (e) { } return '\uD83C\uDF10';
     }
-    globalThis.__etherxGetSiteFaviconImpl = getSiteFavicon;
-    function renderRecentSites() {
+    globalThis.__etherxGetSiteFaviconImpl = _getSiteFaviconImpl;
+    function _renderRecentSitesImpl() {
         const r = JSON.parse(localStorage.getItem('ex_recent') || '[]').slice(0, 8);
         const sec = document.getElementById('ntpRecentSection');
         const cont = document.getElementById('ntpRecent');
@@ -21643,8 +21531,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     afBox.style.cssText = 'position:fixed;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:9999;min-width:260px;max-width:320px;display:none;flex-direction:column;overflow:hidden';
     document.body.appendChild(afBox);
 
-    function hideAutofillBox() { afBox.style.display = 'none'; }
-    globalThis.__etherxHideAutofillBoxImpl = hideAutofillBox;
+    function _hideAutofillBoxImpl() { afBox.style.display = 'none'; }
+    globalThis.__etherxHideAutofillBoxImpl = _hideAutofillBoxImpl;
     function injectAutofillIntoPage(username, password) {
         const wv = document.getElementById('browseFrame');
         if (!wv || typeof wv.executeJavaScript !== 'function') {
@@ -23540,7 +23428,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     document.getElementById('newTabBtn').addEventListener('click', () => createTab());
     // Use var to avoid TDZ when showToast is called before this section fully initializes.
     var toastTimer;
-    function showToast(msg, duration) {
+    function _showToastImpl(msg, duration) {
         const t = document.getElementById('toast');
         if (!t) return;
         const cfgDur = Number(DB?.getSettings?.().toastDurationMs || 3500);
@@ -23550,7 +23438,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => t.classList.remove('show'), ms);
     }
-    globalThis.__etherxShowToastImpl = showToast;
+    globalThis.__etherxShowToastImpl = _showToastImpl;
     function showPrompt(message, defaultVal = '', opts = {}) {
         return new Promise(resolve => {
             const overlay = document.createElement('div');
@@ -26920,8 +26808,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         showToast('📷 Snimam zaslon…');
         try {
             let canvas;
-            const getFrame = () => document.getElementById('browseFrame');
-            const frame = new Proxy({}, { get: (t, p) => typeof getFrame()[p] === "function" ? getFrame()[p].bind(getFrame()) : getFrame()[p], set: (t, p, v) => { getFrame()[p] = v; return true; } });
             if (window.html2canvas) {
                 const target = fullPage ? document.documentElement : (frame || document.documentElement);
                 canvas = await window.html2canvas(target, { useCORS: true, allowTaint: true, scale: window.devicePixelRatio || 1, logging: false });
@@ -28404,7 +28290,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     })();
 
     // ── Site Permissions list in Settings → Websites ──────────────────────────
-    function renderSitePermsList() {
+    function _renderSitePermsListImpl() {
         const el = document.getElementById('sitePermsList'); if (!el) return;
         const perms = getSitePerms();
         const domains = Object.keys(perms);
@@ -28419,6 +28305,7 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
         </div>`;
         }).join('');
     }
+    globalThis.__etherxRenderSitePermsListImpl = _renderSitePermsListImpl;
     globalThis.__etherxRenderSitePermsListImpl = renderSitePermsList;
     document.getElementById('sClearSitePerms')?.addEventListener('click', () => {
         window.customConfirm('Clear all per-site permission overrides?', ok => {
@@ -28574,47 +28461,6 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
             if (e.key === 'Enter') document.getElementById('cpOk').click();
             if (e.key === 'Escape') document.getElementById('cpCancel').click();
         };
-    };
-
-
-    window.customPrompt = function (message, defaultValue, callback) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999999;display:flex;align-items:center;justify-content:center;';
-        const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
-        box.innerHTML = `<div style="margin-bottom:12px;font-size:14px;">${message}</div>
-    <input type="text" id="cpInput" style="width:100%; padding:8px; margin-bottom:16px; box-sizing:border-box; background:var(--bg2); color:var(--text); border:1px solid var(--border); border-radius:4px;" value="${defaultValue || ''}">
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button id="cpCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-      <button id="cpOk" style="padding:6px 12px; cursor:pointer; background:var(--accent); color:#fff; border:none; border-radius:4px;">OK</button>
-    </div>`;
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-        const inp = document.getElementById('cpInput');
-        inp.focus();
-        document.getElementById('cpCancel').onclick = () => { overlay.remove(); callback(null); };
-        document.getElementById('cpOk').onclick = () => { overlay.remove(); callback(inp.value); };
-        inp.onkeydown = (e) => {
-            if (e.key === 'Enter') document.getElementById('cpOk').click();
-            if (e.key === 'Escape') document.getElementById('cpCancel').click();
-        };
-    };
-
-
-    window.customConfirm = function (message, callback) {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999999;display:flex;align-items:center;justify-content:center;';
-        const box = document.createElement('div');
-        box.style.cssText = 'background:var(--bg); border:1px solid var(--border); padding:20px; border-radius:8px; width:300px; color:var(--text); font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);';
-        box.innerHTML = `<div style="margin-bottom:20px;font-size:14px;white-space:pre-wrap;">${message}</div>
-    <div style="display:flex; justify-content:flex-end; gap:8px;">
-      <button id="ccCancel" style="padding:6px 12px; cursor:pointer; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:4px;">Cancel</button>
-      <button id="ccOk" style="padding:6px 12px; cursor:pointer; background:var(--red, #d93d3d); color:#fff; border:none; border-radius:4px;">Confirm</button>
-    </div>`;
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-        document.getElementById('ccCancel').onclick = () => { overlay.remove(); callback(false); };
-        document.getElementById('ccOk').onclick = () => { overlay.remove(); callback(true); };
     };
 
     window.customConfirm = function (message, callback) {
@@ -28836,14 +28682,14 @@ Sve se izvršava optimalno i brzo! Što te zanima?`;
     document.getElementById('sManageExtensions')?.addEventListener('click', () => openExtPanelOnTab('installed'));
 
     // Update ext count in Settings → Extensions
-    function updateSettingsExtCount() {
+    function _updateSettingsExtCountImpl() {
         const el = document.getElementById('sExtCount');
         if (!el) return;
         const exts = EXT_DB.get();
         const enabled = exts.filter(e => e.enabled).length;
         el.textContent = `${exts.length} installed, ${enabled} active`;
     }
-    globalThis.__etherxUpdateSettingsExtCountImpl = updateSettingsExtCount;
+    globalThis.__etherxUpdateSettingsExtCountImpl = _updateSettingsExtCountImpl;
 
     // ── Site info popup (padlock/URL icon click) ─────────────────────────────
     // Per-domain permission storage: ex_site_perms = { "example.com": { camera: "Ask", ... } }
