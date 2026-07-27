@@ -373,6 +373,7 @@ let tkaiTelegramBotLogs = [];
 // TikTokLive events to the renderer without reading the embedded page DOM.
 let tkaiTikTokLiveChild = null;
 let tkaiTikTokLiveOwner = "";
+let tkaiTikTokLiveConnected = false;
 
 function resolveTikTokLiveRuntimeRoot() {
   const root = app.isPackaged
@@ -523,10 +524,82 @@ async function installTikTokLive() {
   };
 }
 
+async function getTikTokLiveRuntimeStatus() {
+  const runtimeRoot = resolveTikTokLiveRuntimeRoot();
+  const python = resolveTikTokLivePython(runtimeRoot);
+  const running = !!(tkaiTikTokLiveChild && !tkaiTikTokLiveChild.killed);
+  if (!fs.existsSync(python)) {
+    return {
+      ok: true,
+      installed: false,
+      ready: false,
+      running,
+      connected: false,
+      owner: "",
+      errorType: "runtime_missing",
+      error: "TikTokLive runtime nije instaliran.",
+    };
+  }
+  const pythonProbe = await inspectTikTokLivePython(python, [], runtimeRoot);
+  if (!pythonProbe.ok) {
+    return {
+      ok: true,
+      installed: true,
+      ready: false,
+      running,
+      connected: false,
+      owner: tkaiTikTokLiveOwner,
+      pythonVersion: pythonProbe.version || "",
+      errorType: "python_incompatible",
+      error: pythonProbe.error || "TikTokLive Python runtime nije kompatibilan.",
+    };
+  }
+  const importProbe = await execFileText(
+    python,
+    [
+      "-c",
+      "import json,importlib.metadata; import TikTokLive; print(json.dumps({'version':importlib.metadata.version('TikTokLive')}))",
+    ],
+    30000,
+    { cwd: runtimeRoot },
+  );
+  if (!importProbe.ok) {
+    return {
+      ok: true,
+      installed: true,
+      ready: false,
+      running,
+      connected: false,
+      owner: tkaiTikTokLiveOwner,
+      pythonVersion: pythonProbe.version || "",
+      errorType: "runtime_import",
+      error: trimPythonInstallOutput(importProbe.stderr || importProbe.stdout || importProbe.error?.message || "TikTokLive import nije uspio"),
+    };
+  }
+  let version = "";
+  try {
+    const parsed = JSON.parse(String(importProbe.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "{}");
+    version = String(parsed.version || "");
+  } catch (_) { }
+  return {
+    ok: true,
+    installed: true,
+    ready: true,
+    running,
+    connected: running && tkaiTikTokLiveConnected,
+    owner: tkaiTikTokLiveOwner,
+    pythonVersion: pythonProbe.version || "",
+    version,
+    errorType: "",
+    error: "",
+  };
+}
+
 function stopTikTokLiveBridge() {
   const child = tkaiTikTokLiveChild;
   tkaiTikTokLiveChild = null;
   tkaiTikTokLiveOwner = "";
+  tkaiTikTokLiveConnected = false;
   if (!child) return { ok: true, stopped: false };
   try { child.kill("SIGTERM"); } catch (_) { }
   return { ok: true, stopped: true };
@@ -535,17 +608,18 @@ function stopTikTokLiveBridge() {
 async function startTikTokLiveBridge(owner, sender) {
   const uniqueId = String(owner || "").trim().replace(/^@+/, "").split(/[/?#]/)[0];
   if (!/^[a-zA-Z0-9._-]{2,80}$/.test(uniqueId)) return { ok: false, error: "TikTok LIVE username nije pronađen u otvorenim tabovima." };
-  if (tkaiTikTokLiveChild && !tkaiTikTokLiveChild.killed && tkaiTikTokLiveOwner.toLowerCase() === uniqueId.toLowerCase()) return { ok: true, alreadyRunning: true, owner: uniqueId };
+  if (tkaiTikTokLiveChild && !tkaiTikTokLiveChild.killed && tkaiTikTokLiveConnected && tkaiTikTokLiveOwner.toLowerCase() === uniqueId.toLowerCase()) return { ok: true, alreadyRunning: true, owner: uniqueId };
   stopTikTokLiveBridge();
   const runtimeRoot = resolveTikTokLiveRuntimeRoot();
   const python = resolveTikTokLivePython(runtimeRoot);
   const sourceScript = path.join(app.getAppPath(), "live-chat-server", "tiktoklive_bridge.py");
   const script = path.join(runtimeRoot, "tiktoklive_bridge.py");
-  if (!fs.existsSync(python)) return { ok: false, error: "TikTokLive nije instaliran. Klikni Instaliraj TikTokLive u AI Live Chat postavkama." };
+  if (!fs.existsSync(python)) return { ok: false, errorType: "runtime_missing", error: "TikTokLive nije instaliran. Klikni Instaliraj TikTokLive u AI Live Chat postavkama." };
   try { fs.copyFileSync(sourceScript, script); } catch (error) { return { ok: false, error: "TikTokLive bridge skripta nije dostupna: " + String(error?.message || error) }; }
   const child = spawn(python, [script, uniqueId], { cwd: runtimeRoot, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   tkaiTikTokLiveChild = child;
   tkaiTikTokLiveOwner = uniqueId;
+  tkaiTikTokLiveConnected = false;
   let lineBuffer = "";
   let lastStderr = "";
   let startSettled = false;
@@ -571,10 +645,15 @@ async function startTikTokLiveBridge(owner, sender) {
       if (!line.trim()) return;
       try {
         const payload = JSON.parse(line);
+        if (tkaiTikTokLiveChild !== child) return;
         sender?.send?.("tiktoklive:event", payload);
         if (payload?.kind === "status" && payload?.status === "connected") {
+          if (tkaiTikTokLiveChild === child) tkaiTikTokLiveConnected = true;
           finishStart({ ok: true, owner: uniqueId, pid: child.pid, runtimeRoot, python });
+        } else if (payload?.kind === "status" && (payload?.status === "disconnected" || payload?.status === "stopped")) {
+          if (tkaiTikTokLiveChild === child) tkaiTikTokLiveConnected = false;
         } else if (payload?.kind === "error") {
+          if (tkaiTikTokLiveChild === child) tkaiTikTokLiveConnected = false;
           finishStart({
             ok: false,
             error: String(payload.error || "TikTokLive spajanje nije uspjelo").slice(0, 1000),
@@ -594,9 +673,11 @@ async function startTikTokLiveBridge(owner, sender) {
     }
   });
   child.once("error", (error) => {
+    if (tkaiTikTokLiveChild === child) tkaiTikTokLiveConnected = false;
     finishStart({ ok: false, error: String(error?.message || error || "TikTokLive proces se ne može pokrenuti").slice(0, 500) });
   });
   child.once("exit", (code, signal) => {
+    if (tkaiTikTokLiveChild === child) tkaiTikTokLiveConnected = false;
     finishStart({
       ok: false,
       error: lastStderr || `TikTokLive proces je zaustavljen prije spajanja (code ${code ?? "?"}${signal ? `, ${signal}` : ""}).`,
@@ -4748,6 +4829,7 @@ function setupIPC() {
   });
 
   ipcMain.handle("app:installTikTokLive", async () => installTikTokLive());
+  ipcMain.handle("app:getTikTokLiveStatus", async () => getTikTokLiveRuntimeStatus());
   ipcMain.handle("app:startTikTokLive", async (event, owner) => startTikTokLiveBridge(owner, event.sender));
   ipcMain.handle("app:stopTikTokLive", async () => stopTikTokLiveBridge());
 
@@ -5921,6 +6003,9 @@ function setupIPC() {
   );
   ipcMain.handle("db:getTikTokLiveData", () =>
     db ? db.getTikTokLiveData() : noDb(),
+  );
+  ipcMain.handle("db:clearTikTokLiveSessions", () =>
+    db ? db.clearTikTokLiveSessionsAndStats() : noDb(),
   );
   ipcMain.handle("db:getTikTokLiveStorageStatus", () =>
     db ? db.getTikTokLiveStorageStatus() : noDb(),

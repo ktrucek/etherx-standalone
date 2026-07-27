@@ -50,12 +50,14 @@ contextBridge.exposeInMainWorld('etherx', {
     install: () => ipcRenderer.invoke('db:installTikTokLiveStorage'),
     import: (data) => ipcRenderer.invoke('db:importTikTokLiveData', data),
     get: () => ipcRenderer.invoke('db:getTikTokLiveData'),
+    clearSessions: () => ipcRenderer.invoke('db:clearTikTokLiveSessions'),
     getStatus: () => ipcRenderer.invoke('db:getTikTokLiveStorageStatus'),
   },
 
   // TikTok Chat AI capture source (isaackogan/TikTokLive Python bridge).
   tiktokLiveBridge: {
     install: () => ipcRenderer.invoke('app:installTikTokLive'),
+    getStatus: () => ipcRenderer.invoke('app:getTikTokLiveStatus'),
     start: (owner) => ipcRenderer.invoke('app:startTikTokLive', owner),
     stop: () => ipcRenderer.invoke('app:stopTikTokLive'),
     onEvent: (callback) => {

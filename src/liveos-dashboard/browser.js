@@ -802,7 +802,7 @@ if (window.electronWebview) {
                                 if (originalFetch) {
                                     window.fetch = function(input, init) {
                                         const url = typeof input === 'string' ? input : (input && input.url) || '';
-                                        if (isTelemetryUrl(url)) return Promise.resolve(new Response('', { status: 204, statusText: 'No Content' }));
+                                        if (isTelemetryUrl(url)) return Promise.resolve(new Response(null, { status: 204, statusText: 'No Content' }));
                                         return originalFetch(input, init);
                                     };
                                 }
@@ -1965,7 +1965,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             ALL_DRAWERS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
             document.querySelectorAll('.tkai-settings-toggle').forEach(b => b.classList.remove('active'));
             if (!isOpen) { if (drawer) drawer.style.display = ''; btn.classList.add('active'); }
-            if (drawerId === 'tkaiDrawerSessions' && !isOpen) renderTkaiSessionHistory();
+            if (drawerId === 'tkaiDrawerSessions' && !isOpen) {
+                renderTkaiSessionHistory();
+                hydrateTkaiSessionsFromSqlite().then(renderTkaiSessionHistory).catch(() => { });
+            }
             if (drawerId === 'tkaiDrawerOperations' && !isOpen && typeof window.refreshTkaiOperationsPanel === 'function') {
                 window.refreshTkaiOperationsPanel(true);
             }
@@ -2129,7 +2132,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         showTkaiUserDBModal(null);
     });
     document.getElementById('btnInstallTkaiSqlite')?.addEventListener('click', installTkaiSqliteStorage);
-    setTimeout(refreshTkaiSqliteStatus, 0);
+    setTimeout(() => {
+        ensureTkaiLocalSessionArchive().catch(() => { });
+    }, 0);
     const openLiveDashboardSafely = () => {
         const openFn = (typeof openLiveDashboardPopout === 'function')
             ? openLiveDashboardPopout
@@ -2478,14 +2483,204 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     }
 
     // Session history + merge + stats
-    function getRecentTkaiSessions() {
+    let tkaiSqliteSessionCache = [];
+    function readStoredTkaiSessions() {
         try {
             const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-            return Array.isArray(sessions) ? sessions.slice(-10).reverse() : [];
+            return Array.isArray(sessions) ? sessions : [];
         } catch (_) {
             return [];
         }
     }
+    function tkaiSessionTimestamp(value, fallback = 0) {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        const parsed = Date.parse(String(value || ''));
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+    function tkaiSessionMessageKey(message) {
+        const row = normalizeTkaiImportedMessage(message);
+        if (!row) return '';
+        return [
+            Number(row.ts || 0),
+            String(row.user || '').toLowerCase(),
+            String(row.type || ''),
+            String(row.text || '').slice(0, 200),
+            String(row.giftName || ''),
+            Number(row.quantity || 0),
+            Number(row.coins || 0)
+        ].join('|');
+    }
+    function mergeTkaiSessionMessages(...sources) {
+        const seen = new Set();
+        const rows = [];
+        sources.flat().forEach((message) => {
+            const normalized = normalizeTkaiImportedMessage(message);
+            if (!normalized) return;
+            const key = tkaiSessionMessageKey(normalized);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            rows.push(normalized);
+        });
+        return rows.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+    }
+    function hashTkaiSessionIdentity(value) {
+        let hash = 2166136261;
+        const text = String(value || '');
+        for (let i = 0; i < text.length; i += 1) {
+            hash ^= text.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(36);
+    }
+    function normalizeTkaiSessionRecord(session, fallback = {}) {
+        if (!session || typeof session !== 'object') return null;
+        const messages = mergeTkaiSessionMessages(
+            Array.isArray(session.messages) ? session.messages : [],
+            Array.isArray(session.listeningMessages) ? session.listeningMessages.map((row) => ({ ...row, type: 'listening', user: row?.user || 'Slušanje' })) : []
+        );
+        if (!messages.length && !Number(session.messageCount || 0)) return null;
+        const firstTs = messages.length ? Number(messages[0].ts || 0) : 0;
+        const lastTs = messages.length ? Number(messages[messages.length - 1].ts || firstTs) : firstTs;
+        const sessionStartedAt = tkaiSessionTimestamp(session.sessionStartedAt, firstTs || tkaiSessionTimestamp(session.savedAt || session.exportedAt, Date.now()));
+        const savedAtMs = tkaiSessionTimestamp(session.savedAt || session.exportedAt || session.updatedAt, lastTs || Date.now());
+        const savedAt = new Date(savedAtMs || Date.now()).toISOString();
+        const owner = String(session.owner || session.streamOwner || fallback.owner || '').trim().replace(/^@+/, '');
+        const firstSignature = messages.length ? tkaiSessionMessageKey(messages[0]) : '';
+        const lastSignature = messages.length ? tkaiSessionMessageKey(messages[messages.length - 1]) : '';
+        const generatedId = 'tkai-session-' + hashTkaiSessionIdentity([sessionStartedAt, owner, firstSignature, lastSignature].join('|'));
+        const derivedCoins = messages.reduce((sum, message) => {
+            const type = String(message.type || '').toLowerCase();
+            return sum + (type === 'gift' || type === 'subscriber' ? Math.max(0, Number(message.coins || 0)) : 0);
+        }, 0);
+        const duration = sessionStartedAt && lastTs > sessionStartedAt
+            ? Math.max(1, Math.round((lastTs - sessionStartedAt) / 60000))
+            : 0;
+        return {
+            ...session,
+            id: String(session.id || generatedId),
+            savedAt,
+            sessionStartedAt,
+            owner,
+            messageCount: messages.length || Number(session.messageCount || 0),
+            listeningCount: messages.filter((message) => String(message.type || '').toLowerCase() === 'listening').length,
+            sessionMinutes: Math.max(Number(session.sessionMinutes || session.durationMinutes || 0), duration),
+            peakViewers: Math.max(0, Number(session.peakViewers || session.viewerCount || 0)),
+            totalCoins: Math.max(0, Number(session.totalCoins || 0), derivedCoins),
+            messages,
+            importedAt: session.importedAt || fallback.importedAt || '',
+            sourceFile: session.sourceFile || fallback.sourceFile || ''
+        };
+    }
+    function mergeTkaiSessionRecords(...sessionGroups) {
+        const merged = new Map();
+        sessionGroups.flatMap((group) => Array.isArray(group) ? group : [])
+            .forEach((session) => {
+                const normalized = normalizeTkaiSessionRecord(session);
+                if (!normalized) return;
+                const current = merged.get(normalized.id);
+                if (!current) {
+                    merged.set(normalized.id, normalized);
+                    return;
+                }
+                const messages = mergeTkaiSessionMessages(current.messages, normalized.messages);
+                const combined = normalizeTkaiSessionRecord({
+                    ...current,
+                    ...normalized,
+                    id: current.id,
+                    savedAt: new Date(Math.max(tkaiSessionTimestamp(current.savedAt), tkaiSessionTimestamp(normalized.savedAt))).toISOString(),
+                    sessionStartedAt: Math.min(
+                        Number(current.sessionStartedAt || Number.MAX_SAFE_INTEGER),
+                        Number(normalized.sessionStartedAt || Number.MAX_SAFE_INTEGER)
+                    ),
+                    peakViewers: Math.max(Number(current.peakViewers || 0), Number(normalized.peakViewers || 0)),
+                    totalCoins: Math.max(Number(current.totalCoins || 0), Number(normalized.totalCoins || 0)),
+                    sessionMinutes: Math.max(Number(current.sessionMinutes || 0), Number(normalized.sessionMinutes || 0)),
+                    questions: mergeTkaiSessionMessages(current.questions || [], normalized.questions || []),
+                    sessionUsers: Array.isArray(normalized.sessionUsers) && normalized.sessionUsers.length ? normalized.sessionUsers : current.sessionUsers,
+                    messages
+                });
+                if (combined) merged.set(current.id, combined);
+            });
+        return Array.from(merged.values())
+            .sort((a, b) => tkaiSessionTimestamp(a.savedAt) - tkaiSessionTimestamp(b.savedAt));
+    }
+    function writeStoredTkaiSessions(sessions) {
+        const normalized = mergeTkaiSessionRecords([], sessions);
+        try {
+            localStorage.setItem('ex_tkai_sessions', JSON.stringify(normalized));
+        } catch (error) {
+            console.warn('[TikTokAI] local session storage failed:', error?.message || error);
+        }
+        queueTkaiSqliteSync();
+        return normalized;
+    }
+    function getTkaiAutosaveSession() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('ex_tkai_live_autosave') || 'null');
+            if (!saved || typeof saved !== 'object') return null;
+            return normalizeTkaiSessionRecord({
+                ...saved,
+                id: saved.id || '',
+                savedAt: saved.updatedAt || saved.savedAt,
+                label: saved.reason === 'scan-stop' ? 'Lokalno spremljeno skeniranje' : 'Aktivno lokalno skeniranje',
+                isAutosave: saved.reason !== 'scan-stop',
+                messages: [
+                    ...(Array.isArray(saved.messages) ? saved.messages : []),
+                    ...(Array.isArray(saved.listeningMessages) ? saved.listeningMessages : [])
+                ]
+            });
+        } catch (_) {
+            return null;
+        }
+    }
+    function getRecentTkaiSessions() {
+        const autosave = getTkaiAutosaveSession();
+        return mergeTkaiSessionRecords(
+            readStoredTkaiSessions(),
+            tkaiSqliteSessionCache,
+            autosave ? [autosave] : []
+        ).reverse();
+    }
+    async function hydrateTkaiSessionsFromSqlite() {
+        if (!window.etherx?.tiktokLive?.get) return getRecentTkaiSessions();
+        try {
+            const archive = await window.etherx.tiktokLive.get();
+            if (archive?.ok && Array.isArray(archive.sessions) && archive.sessions.length) {
+                tkaiSqliteSessionCache = mergeTkaiSessionRecords([], archive.sessions);
+                writeStoredTkaiSessions(mergeTkaiSessionRecords(readStoredTkaiSessions(), tkaiSqliteSessionCache));
+            }
+            if (archive?.ok && Array.isArray(archive.stats) && archive.stats.length) {
+                const currentStats = getTkaiStatsStorage();
+                const byId = new Map();
+                [...currentStats, ...archive.stats].forEach((row) => {
+                    if (!row || typeof row !== 'object') return;
+                    const key = String(row.id || `${row.savedAt || ''}|${row.label || ''}|${row.messageCount || 0}`);
+                    byId.set(key, row);
+                });
+                saveTkaiStatsStorage(Array.from(byId.values()).sort((a, b) => tkaiSessionTimestamp(a.savedAt) - tkaiSessionTimestamp(b.savedAt)));
+            }
+        } catch (error) {
+            console.warn('[TikTokAI] SQLite session hydrate failed:', error?.message || error);
+        }
+        return getRecentTkaiSessions();
+    }
+    function persistTkaiSessionRecord(session, label = 'Lokalno spremljena sesija') {
+        const normalized = normalizeTkaiSessionRecord(session);
+        if (!normalized) return null;
+        tkaiSqliteSessionCache = mergeTkaiSessionRecords(tkaiSqliteSessionCache, [normalized]);
+        const allSessions = writeStoredTkaiSessions(mergeTkaiSessionRecords(readStoredTkaiSessions(), tkaiSqliteSessionCache));
+        const stored = allSessions.find((row) => row.id === normalized.id) || normalized;
+        const statsRecord = saveTkaiStatsSnapshot(stored, label);
+        if (window.etherx?.tiktokLive?.import) {
+            window.etherx.tiktokLive.import({
+                sessions: [stored],
+                stats: statsRecord ? [statsRecord] : []
+            }).catch(() => { });
+        }
+        return stored;
+    }
+    window.persistTkaiSessionRecord = persistTkaiSessionRecord;
+    window.hydrateTkaiSessionsFromSqlite = hydrateTkaiSessionsFromSqlite;
     function buildSongPerformanceFromDb(songTitles) {
         const db = getSongPerfDb();
         const wanted = new Set((Array.isArray(songTitles) ? songTitles : []).map((t) => normalizeSongTitleKey(t)).filter(Boolean));
@@ -2852,7 +3047,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         return { users, sessions, stats };
     }
     function queueTkaiSqliteSync() {
-        if (DB.getSettings()?.tkaiSqliteEnabled !== true || !window.etherx?.tiktokLive?.import) return;
+        if (!window.etherx?.tiktokLive?.import) return;
         clearTimeout(tkaiSqliteSyncTimer);
         tkaiSqliteSyncTimer = setTimeout(async () => {
             if (tkaiSqliteSyncInFlight) return;
@@ -2863,6 +3058,22 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             } catch (_) { }
             finally { tkaiSqliteSyncInFlight = false; }
         }, 900);
+    }
+
+    async function ensureTkaiLocalSessionArchive() {
+        if (!window.etherx?.tiktokLive?.install || !window.etherx?.tiktokLive?.import) {
+            await refreshTkaiSqliteStatus();
+            return;
+        }
+        try {
+            await window.etherx.tiktokLive.install();
+            DB.saveSetting('tkaiSqliteEnabled', true);
+            await hydrateTkaiSessionsFromSqlite();
+            await window.etherx.tiktokLive.import(getTkaiSqlitePayload());
+        } catch (error) {
+            console.warn('[TikTokAI] local archive initialization failed:', error?.message || error);
+        }
+        await refreshTkaiSqliteStatus();
     }
 
     function formatTkaiSqliteStatus(data) {
@@ -2931,8 +3142,14 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         try {
             const payload = buildTkaiSessionStatsPayload(session, label);
             const summary = payload.summary || {};
+            const sessionId = String(session?.id || '').trim();
             const rec = {
-                id: 'tkai-stats-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                id: sessionId ? 'tkai-stats-' + sessionId : 'tkai-stats-' + hashTkaiSessionIdentity([
+                    summary.savedAt || session?.savedAt || '',
+                    summary.messageCount || 0,
+                    label
+                ].join('|')),
+                sessionId,
                 savedAt: summary.savedAt || new Date().toISOString(),
                 label: label || '',
                 messageCount: Number(summary.messageCount || 0),
@@ -2944,9 +3161,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 summary,
             };
             const list = getTkaiStatsStorage();
-            list.push(rec);
-            if (list.length > 80) list.splice(0, list.length - 80);
-            saveTkaiStatsStorage(list);
+            const existingIndex = list.findIndex((row) => String(row?.id || '') === rec.id);
+            if (existingIndex >= 0) list[existingIndex] = rec;
+            else list.push(rec);
+            saveTkaiStatsStorage(list.sort((a, b) => tkaiSessionTimestamp(a.savedAt) - tkaiSessionTimestamp(b.savedAt)));
             return rec;
         } catch (_) {
             return null;
@@ -3332,7 +3550,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 const coins = s.totalCoins || 0;
                 const viewers = s.peakViewers || s.viewerCount || 0;
                 const gifts = (s.messages || []).filter(m => m.type === 'gift').length;
-                return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
+                return '<div class="tkai-session-row" data-si="' + i + '" style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer">'
                     + '<div style="display:flex;align-items:center;gap:6px">'
                     + '<input type="checkbox" class="tkai-session-chk" data-si="' + i + '" style="accent-color:#667eea;cursor:pointer">'
                     + '<div style="flex:1;min-width:0">'
@@ -3371,6 +3589,13 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                     setTimeout(() => URL.revokeObjectURL(a.href), 0);
                     return;
                 }
+                if (event.target.closest('.tkai-session-chk')) return;
+                const row = event.target.closest('.tkai-session-row');
+                if (row) {
+                    const index = Number(row.dataset.si);
+                    const session = getRecentTkaiSessions()[index];
+                    if (session) openTkaiSessionStatsPage(session, index + 1);
+                }
             };
             renderTkaiStatsStorageSummary();
         } catch (e) {
@@ -3403,10 +3628,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + '<div style="margin-top:6px;color:var(--text3)">Automatski snapshot statsa se sprema pri save sesije/merge.</div>';
     }
 
-    document.getElementById('btnTkaiSessionsClearAll')?.addEventListener('click', () => {
+    document.getElementById('btnTkaiSessionsClearAll')?.addEventListener('click', async () => {
         if (!confirm('Obriši sve spremljene sesije?')) return;
         localStorage.removeItem('ex_tkai_sessions');
         localStorage.removeItem(TKAI_STATS_STORAGE_KEY);
+        tkaiSqliteSessionCache = [];
+        try { await window.etherx?.tiktokLive?.clearSessions?.(); } catch (_) { }
         const mergeResult = document.getElementById('tkaiSessionMergeResult');
         if (mergeResult) mergeResult.style.display = 'none';
         renderTkaiSessionHistory();
@@ -3523,7 +3750,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function saveTkaiMergedImport(messages, label = 'Import & merge') {
         const merged = mergeTkaiImportedMessages(messages);
         if (!merged.length) return { imported: 0, skipped: Array.isArray(messages) ? messages.length : 0, session: null };
-        const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+        const sessions = getRecentTkaiSessions();
         const existingKeys = new Set();
         sessions.forEach((session) => {
             (Array.isArray(session?.messages) ? session.messages : []).forEach((message) => {
@@ -3543,7 +3770,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const lastTs = Number(newMessages[newMessages.length - 1]?.ts || firstTs);
         const totalCoins = newMessages.reduce((sum, message) => sum + Math.max(0, Number(message.coins || 0) || 0), 0);
         const sessionRecord = {
+            id: 'tkai-import-' + hashTkaiSessionIdentity([label, firstTs, lastTs, newMessages.length].join('|')),
             savedAt: new Date().toISOString(),
+            sessionStartedAt: firstTs,
             importedAt: new Date().toISOString(),
             importLabel: label,
             messageCount: newMessages.length,
@@ -3554,12 +3783,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             questions: newMessages.filter((message) => String(message.text || '').includes('?')).slice(-200),
             messages: newMessages
         };
-        sessions.push(sessionRecord);
-        if (sessions.length > 80) sessions.splice(0, sessions.length - 80);
-        localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
-        try { saveTkaiStatsSnapshot(sessionRecord, label); } catch (_) { }
+        const stored = persistTkaiSessionRecord(sessionRecord, label);
         renderTkaiSessionHistory();
-        return { imported: newMessages.length, skipped: merged.length - newMessages.length, session: sessionRecord };
+        return { imported: newMessages.length, skipped: merged.length - newMessages.length, session: stored };
     }
 
     async function importAndMergeTkaiJsonFiles(files) {
@@ -3603,22 +3829,27 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function importTkaiSessionJsonData(data) {
         let imported = 0;
         let skipped = 0;
-        const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-        const items = Array.isArray(data) ? data : [data];
+        const items = Array.isArray(data)
+            ? data
+            : (Array.isArray(data?.sessions) ? data.sessions : [data]);
         items.forEach(item => {
             if (!item || typeof item !== 'object') { skipped++; return; }
-            if (!item.messages && !item.messageCount) { skipped++; return; }
-            const alreadyExists = sessions.some(s => s.savedAt && s.savedAt === item.savedAt);
-            if (alreadyExists) { skipped++; return; }
-            item.importedAt = new Date().toISOString();
-            sessions.push(item);
-            if (Array.isArray(item.messages) && typeof updateTkaiUserDBFromMessages === 'function') {
-                updateTkaiUserDBFromMessages(item.messages.map((message) => normalizeTkaiImportedMessage(message, { sourceFile: 'session-import' })).filter(Boolean));
+            const extracted = extractTkaiImportMessages(item, 'session-import');
+            const candidate = normalizeTkaiSessionRecord({
+                ...item,
+                importedAt: new Date().toISOString(),
+                messages: Array.isArray(item.messages) && item.messages.length ? item.messages : extracted
+            }, { importedAt: new Date().toISOString(), sourceFile: 'session-import' });
+            if (!candidate) { skipped++; return; }
+            const before = getRecentTkaiSessions().find((session) => session.id === candidate.id);
+            const stored = persistTkaiSessionRecord(candidate, 'JSON import');
+            if (!stored) { skipped++; return; }
+            if (Array.isArray(stored.messages) && typeof updateTkaiUserDBFromMessages === 'function') {
+                updateTkaiUserDBFromMessages(stored.messages);
             }
-            imported++;
+            if (before && Number(stored.messageCount || 0) === Number(before.messageCount || 0)) skipped++;
+            else imported++;
         });
-        if (sessions.length > 50) sessions.splice(0, sessions.length - 50);
-        localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
         renderTkaiSessionHistory();
         const msg = imported
             ? '✅ Uvezeno ' + imported + ' sesija' + (skipped ? ', preskočeno ' + skipped : '')
@@ -3706,33 +3937,24 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const checked = [...listEl.querySelectorAll('.tkai-session-chk:checked')].map(c => +c.dataset.si);
         if (checked.length < 2) { showToast('Odaberi najmanje 2 sesije za spajanje'); return; }
         try {
-            const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
-            const recent = sessions.slice(-10).reverse();
+            const recent = getRecentTkaiSessions();
             const selected = checked.map(i => recent[i]).filter(Boolean);
-            // Merge messages, deduplicate by timestamp+user+text
-            const seen = new Set();
-            const merged = [];
-            selected.forEach(s => (s.messages || []).forEach(m => {
-                const key = (m.ts || '') + '|' + (m.user || '') + '|' + (m.text || '').slice(0, 30);
-                if (!seen.has(key)) { seen.add(key); merged.push(m); }
-            }));
-            merged.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            const merged = mergeTkaiSessionMessages(...selected.map((session) => session.messages || []));
             const totalCoins = selected.reduce((s, x) => s + (x.totalCoins || 0), 0);
             const peakViewers = Math.max(...selected.map(s => s.peakViewers || s.viewerCount || 0));
             const uniqueUsers = new Set(merged.map(m => m.user).filter(Boolean)).size;
             const gifts = merged.filter(m => m.type === 'gift').length;
             const totalMinutes = selected.reduce((s, x) => s + (x.sessionMinutes || 0), 0);
             const mergedSession = {
+                id: 'tkai-merged-' + Date.now() + '-' + hashTkaiSessionIdentity(selected.map((session) => session.id).sort().join('|')),
                 savedAt: new Date().toISOString(),
+                sessionStartedAt: Math.min(...selected.map((session) => Number(session.sessionStartedAt || tkaiSessionTimestamp(session.savedAt, Date.now())))),
                 mergedFrom: selected.length,
                 messageCount: merged.length,
                 messages: merged,
                 totalCoins, peakViewers, sessionMinutes: totalMinutes
             };
-            sessions.push(mergedSession);
-            if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
-            localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
-            saveTkaiStatsSnapshot(mergedSession, 'Merged ' + selected.length + ' sessions');
+            const storedMergedSession = persistTkaiSessionRecord(mergedSession, 'Merged ' + selected.length + ' sessions');
 
             const resultEl = document.getElementById('tkaiSessionMergeResult');
             if (resultEl) {
@@ -3748,8 +3970,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                     + '</div>';
             }
             renderTkaiSessionHistory();
-            const latest = getRecentTkaiSessions()[0];
-            if (latest) openTkaiSessionStatsPage(latest, 1);
+            if (storedMergedSession) openTkaiSessionStatsPage(storedMergedSession, 1);
         } catch (e) { showToast('Greška pri spajanju: ' + e.message); }
     });
 })();
@@ -6681,6 +6902,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let statsTimerInterval = null;
     let collectedMessages = [];
     let listeningMessages = [];
+    let tkaiSessionMessages = [];
+    let tkaiSessionMessageIds = new Set();
     // Cumulative per-session ledger for Top users detail. Keep this
     // independent from collectedMessages so user analytics survive any
     // frontend filtering/rendering, but do not trim the active live session
@@ -6752,6 +6975,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLiveServerSeq = 0;
     let tkaiLiveServerFlushTimer = null;
     let tkaiLiveServerReconnectTimer = null;
+    let tkaiLiveServerReconnectAttempt = 0;
     let tkaiLiveServerSummary = null;
     let tkaiLiveServerAlerts = [];
     const tkaiLiveServerSeenAlertIds = new Set();
@@ -6759,6 +6983,13 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     const tkaiLiveServerPageRequests = new Map();
     let tkaiTikTokLiveQueue = [];
     let tkaiTikTokLiveUnsubscribe = null;
+    let tkaiTikTokLiveReconnectTimer = null;
+    let tkaiTikTokLiveReconnectAttempt = 0;
+    let tkaiTikTokLiveReconnectInFlight = false;
+    let tkaiTikTokLiveIntentionalStop = false;
+    let tkaiTikTokLiveReconnectOwner = '';
+    let tkaiTikTokLiveLastError = '';
+    let tkaiTikTokLiveAutoRepairAttempted = false;
 
     function setTkaiTikTokLiveStatus(text, tone = '') {
         const el = document.getElementById('tkaiTikTokLiveStatus');
@@ -6810,21 +7041,32 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiTikTokLiveUnsubscribe = window.etherx.tiktokLiveBridge.onEvent((payload) => {
             if (!payload || payload.kind === 'status') {
                 if (payload?.status === 'connected') {
+                    tkaiTikTokLiveReconnectAttempt = 0;
+                    tkaiTikTokLiveReconnectInFlight = false;
+                    tkaiTikTokLiveLastError = '';
                     setTkaiTikTokLiveStatus('Spojeno · čita TikTokLive', 'ok');
                     if (scanActive) setStatus('<span class="tkai-scanning-dot"></span>TikTokLive skeniranje…');
                 } else if (payload?.status === 'stopped' || payload?.status === 'disconnected') {
-                    const stoppedDuringScan = scanActive;
-                    if (stoppedDuringScan) stopScanning();
-                    setTkaiTikTokLiveStatus(stoppedDuringScan ? 'Veza je prekinuta' : 'Zaustavljeno', stoppedDuringScan ? 'error' : '');
-                    if (stoppedDuringScan) setStatus('⚠️ TikTokLive veza je prekinuta');
+                    if (scanActive && !tkaiTikTokLiveIntentionalStop) {
+                        tkaiTikTokLiveLastError = payload?.status === 'disconnected'
+                            ? 'TikTokLive veza je prekinuta'
+                            : (tkaiTikTokLiveLastError || 'TikTokLive proces je zaustavljen');
+                        scheduleTkaiTikTokLiveReconnect(tkaiTikTokLiveLastError);
+                    } else {
+                        setTkaiTikTokLiveStatus('Zaustavljeno');
+                    }
                 }
                 return;
             }
             if (payload.kind === 'error') {
                 const errorText = String(payload.error || 'TikTokLive greška').slice(0, 120);
-                if (scanActive) stopScanning();
-                setTkaiTikTokLiveStatus('Greška: ' + errorText, 'error');
-                setStatus('⚠️ ' + errorText);
+                tkaiTikTokLiveLastError = errorText;
+                if (scanActive && !tkaiTikTokLiveIntentionalStop) {
+                    scheduleTkaiTikTokLiveReconnect(errorText);
+                } else {
+                    setTkaiTikTokLiveStatus('Greška: ' + errorText, 'error');
+                    setStatus('⚠️ ' + errorText);
+                }
                 return;
             }
             if (payload.kind === 'event' && scanActive) {
@@ -6984,7 +7226,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
     function getTkaiSessionMessages(options = {}) {
         const includeListening = options.includeListening !== false;
-        const rows = Array.isArray(collectedMessages) ? collectedMessages.slice() : [];
+        const rows = (tkaiSessionMessages.length ? tkaiSessionMessages : collectedMessages).slice();
         if (includeListening && Array.isArray(listeningMessages)) {
             const existing = new Set(rows.map((message) => String(message?.id || '')).filter(Boolean));
             listeningMessages.forEach((message) => {
@@ -6996,6 +7238,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             });
         }
         return rows.sort((a, b) => Number(a?.ts || 0) - Number(b?.ts || 0));
+    }
+
+    function appendTkaiSessionMessages(messages) {
+        (Array.isArray(messages) ? messages : []).forEach((message) => {
+            if (!message || !String(message.text || '').trim()) return;
+            const id = String(message.id || [
+                Number(message.ts || Date.now()),
+                String(message.user || '').toLowerCase(),
+                String(message.type || 'chat'),
+                String(message.text || '').slice(0, 160)
+            ].join('|'));
+            if (tkaiSessionMessageIds.has(id)) return;
+            tkaiSessionMessageIds.add(id);
+            tkaiSessionMessages.push(message);
+        });
     }
 
     function scheduleLiveOsSnapshotPublish() {
@@ -8204,6 +8461,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 ts: Date.now(),
             };
             collectedMessages.push(trackMsg);
+            appendTkaiSessionMessages([trackMsg]);
             const maxLen = Math.max(120, Number(DB.getSettings().tkaiMsgBuffer || 300));
             if (collectedMessages.length > maxLen) collectedMessages = collectedMessages.slice(-maxLen);
 
@@ -10005,6 +10263,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         });
         tkaiLiveServerPageRequests.clear();
         tkaiLiveServerReady = false;
+        if (options.resetReconnect === true) tkaiLiveServerReconnectAttempt = 0;
         const socket = tkaiLiveServerSocket;
         tkaiLiveServerSocket = null;
         if (socket) {
@@ -10156,7 +10415,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function flushTkaiLiveServerQueue() {
         const socket = tkaiLiveServerSocket;
         if (!tkaiLiveServerReady || !socket || socket.readyState !== WebSocket.OPEN) return;
-        if (!tkaiLiveServerQueue.length || tkaiLiveServerPending.size >= 4) return;
+        if (!tkaiLiveServerQueue.length || tkaiLiveServerPending.size >= 1) return;
         const events = tkaiLiveServerQueue.splice(0, 100);
         const seq = ++tkaiLiveServerSeq;
         tkaiLiveServerPending.set(seq, events);
@@ -10229,6 +10488,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             try { message = JSON.parse(String(event.data || '')); } catch (_) { return; }
             if (message.type === 'ready') {
                 tkaiLiveServerReady = true;
+                tkaiLiveServerReconnectAttempt = 0;
                 applyTkaiLiveServerSummary(message.summary);
                 setTkaiLiveServerStatus('Spojeno · server RAM aktivan', 'ok');
                 if (!tkaiLiveServerFlushTimer) {
@@ -10259,12 +10519,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (message.type === 'ack') {
                 tkaiLiveServerPending.delete(Number(message.seq || 0));
                 applyTkaiLiveServerSummary(message.summary);
-                setTkaiLiveServerStatus(
-                    'Spojeno · ' + formatNum(message.summary?.retainedEvents || 0) + ' događaja u RAM-u',
-                    'ok'
-                );
-                flushTkaiLiveServerQueue();
-                requestTkaiLiveServerSummary();
+                const now = Date.now();
+                if (now - Number(socket._tkaiStatusUpdatedAt || 0) >= 2000) {
+                    socket._tkaiStatusUpdatedAt = now;
+                    setTkaiLiveServerStatus(
+                        'Spojeno · ' + formatNum(message.summary?.retainedEvents || 0) + ' događaja u RAM-u',
+                        'ok'
+                    );
+                }
                 return;
             }
             if (message.type === 'summary' || message.type === 'session_ended') {
@@ -10299,10 +10561,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             setTkaiLiveServerStatus('Prekinuto (' + Number(event.code || 0) + ') · lokalni fallback', 'error');
             if (scanActive && isTkaiLiveServerEnabled()) {
                 if (tkaiLiveServerReconnectTimer) clearTimeout(tkaiLiveServerReconnectTimer);
+                const reconnectDelay = Math.min(30000, 5000 * Math.pow(2, Math.min(3, tkaiLiveServerReconnectAttempt)));
+                tkaiLiveServerReconnectAttempt += 1;
                 tkaiLiveServerReconnectTimer = setTimeout(() => {
                     tkaiLiveServerReconnectTimer = null;
                     connectTkaiLiveServer();
-                }, 5000);
+                }, reconnectDelay);
             }
         });
         socket.addEventListener('error', () => {
@@ -10335,7 +10599,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiLiveServerQueue.push(...outgoing);
         if (tkaiLiveServerQueue.length > 2000) tkaiLiveServerQueue = tkaiLiveServerQueue.slice(-2000);
         if (!tkaiLiveServerSocket) connectTkaiLiveServer();
-        flushTkaiLiveServerQueue();
     }
     function getTkaiEffectiveLocalBuffer() {
         const settings = DB.getSettings();
@@ -10435,13 +10698,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return false;
         }
     }
-    function stopScanning() {
+    function stopScanning(options = {}) {
+        tkaiTikTokLiveIntentionalStop = true;
+        if (tkaiTikTokLiveReconnectTimer) clearTimeout(tkaiTikTokLiveReconnectTimer);
+        tkaiTikTokLiveReconnectTimer = null;
+        tkaiTikTokLiveReconnectAttempt = 0;
+        tkaiTikTokLiveReconnectInFlight = false;
+        tkaiTikTokLiveReconnectOwner = '';
         saveSessionToHistory();
         scanActive = false;
-        stopTkaiLiveServerTransport({ endSession: true, reason: 'Skeniranje zaustavljeno' });
+        stopTkaiLiveServerTransport({ endSession: true, reason: 'Skeniranje zaustavljeno', resetReconnect: true });
         if (window.etherx?.tiktokLiveBridge?.stop) window.etherx.tiktokLiveBridge.stop().catch(() => { });
         tkaiTikTokLiveQueue = [];
-        setTkaiTikTokLiveStatus('Zaustavljeno');
+        setTkaiTikTokLiveStatus(options.statusText || 'Zaustavljeno', options.error === true ? 'error' : '');
         try { window.syncBpmDetectionWithTikTokScan?.(false); } catch (_) { }
         if (tkaiTikTokLiveFlushTimer) clearTimeout(tkaiTikTokLiveFlushTimer);
         tkaiTikTokLiveFlushTimer = null;
@@ -10460,9 +10729,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             toggleBtn.style.borderColor = '';
             toggleBtn.style.color = '';
         }
-        setStatus('');
+        setStatus(options.error === true ? ('⚠️ ' + String(options.statusText || 'TikTokLive skeniranje je zaustavljeno')) : '');
         persistTkaiAutosave('scan-stop');
-        showToast('⏹ Skeniranje zaustavljeno');
+        showToast(options.toastText || (options.error === true ? '⚠️ TikTokLive skeniranje je zaustavljeno' : '⏹ Skeniranje zaustavljeno'));
     }
     async function sendLKeyEvent(type) {
         const webview = getActiveTikTokWebview();
@@ -14962,6 +15231,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const id = 'ctx:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8);
         const pushedMessage = { user, text, id, ts: Date.now(), type: 'chat' };
         collectedMessages.push(pushedMessage);
+        appendTkaiSessionMessages([pushedMessage]);
         ingestTkaiSessionUserMessages([pushedMessage]);
         extractAndTrackQuestions([{ user, text, ts: Date.now() }]);
         if (collectedMessages.length > 80) collectedMessages = collectedMessages.slice(-80);
@@ -15011,7 +15281,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             meta: String(payload.meta || '').trim(),
         };
         listeningMessages.push(message);
-        if (listeningMessages.length > 500) listeningMessages = listeningMessages.slice(-500);
         markTkaiInsightsDirty();
         renderListenFeed();
         scheduleTkaiAutosave('whisperlive');
@@ -15527,6 +15796,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             });
             if (lastAddedGiftMessage) updateTkaiLastGiftDebug(lastAddedGiftMessage);
             if (incomingAddedMessages.length) {
+                appendTkaiSessionMessages(incomingAddedMessages);
                 ingestTkaiSessionUserMessages(incomingAddedMessages);
                 markTkaiInsightsDirty();
             }
@@ -15796,7 +16066,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             processTikTokLiveQueue()
                 .then((added) => { if (added > 0) trackActiveSongPerformance(); })
                 .catch(() => { });
-        }, 60);
+        }, 250);
     }
 
     async function generateReplies(messages, options = {}) {
@@ -15994,6 +16264,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     function clearConversation() {
         collectedMessages = [];
         listeningMessages = [];
+        tkaiSessionMessages = [];
+        tkaiSessionMessageIds = new Set();
         tkaiSessionUserStats = new Map();
         tkaiSessionUserEventIds = new Set();
         tkaiSessionUserStatsVersion += 1;
@@ -16119,9 +16391,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         if (!sessionMessages.length) return;
         try {
             const giftStats = computeGiftStats();
-            const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
             const sessionRecord = {
+                id: 'tkai-live-' + Number(sessionStartedAt || Date.now()),
                 savedAt: new Date().toISOString(),
+                sessionStartedAt: sessionStartedAt || Date.now(),
+                owner: String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, ''),
                 messageCount: sessionMessages.length,
                 listeningCount: sessionMessages.filter((message) => normalizeTkaiMessageType(message) === 'listening').length,
                 sessionMinutes: sessionStartedAt ? Math.floor((Date.now() - sessionStartedAt) / 60000) : 0,
@@ -16131,23 +16405,27 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 sessionUsers: serializeTkaiSessionUserStats(),
                 messages: sessionMessages.slice()
             };
-            sessions.push(sessionRecord);
-            if (sessions.length > 20) sessions.splice(0, sessions.length - 20);
-            localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
-            saveTkaiStatsSnapshot(sessionRecord, 'Auto-saved session');
+            if (typeof window.persistTkaiSessionRecord === 'function') {
+                window.persistTkaiSessionRecord(sessionRecord, 'Auto-saved session');
+            } else {
+                const sessions = JSON.parse(localStorage.getItem('ex_tkai_sessions') || '[]');
+                sessions.push(sessionRecord);
+                localStorage.setItem('ex_tkai_sessions', JSON.stringify(sessions));
+            }
         } catch (e) { }
     }
 
     function persistTkaiAutosave(reason = 'interval') {
+        let payload = null;
         try {
             const autosaveEnabledRaw = DB.getSettings().tkaiAutosaveEnabled;
             const autosaveEnabled = autosaveEnabledRaw !== false && autosaveEnabledRaw !== 'false';
             if (!autosaveEnabled) return;
             const sessionMessages = getTkaiSessionMessages();
             if (!sessionMessages.length) return;
-            const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
-            const payload = {
+            payload = {
                 version: 1,
+                id: 'tkai-live-' + Number(sessionStartedAt || Date.now()),
                 reason,
                 updatedAt: new Date().toISOString(),
                 sessionStartedAt: sessionStartedAt || Date.now(),
@@ -16157,13 +16435,21 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 viewerSamples: Array.isArray(viewerSamples) ? viewerSamples.slice(-200) : [],
                 viewerSamplePoints: Array.isArray(viewerSamplePoints) ? viewerSamplePoints.slice(-200) : [],
                 sessionUsers: serializeTkaiSessionUserStats(),
-                messages: sessionMessages.slice(-maxKeep),
-                listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice(-500) : [],
+                messages: (tkaiSessionMessages.length ? tkaiSessionMessages : collectedMessages).slice(),
+                listeningMessages: Array.isArray(listeningMessages) ? listeningMessages.slice() : [],
             };
+        } catch (e) {
+            console.warn('[TikTokAI] autosave payload failed', e);
+            return;
+        }
+        try {
             localStorage.setItem(TKAI_AUTOSAVE_KEY, JSON.stringify(payload));
         } catch (e) {
-            console.warn('[TikTokAI] autosave failed', e);
+            console.warn('[TikTokAI] browser autosave storage full; SQLite archive remains active', e);
         }
+        window.etherx?.tiktokLive?.import?.({ sessions: [payload] }).catch((error) => {
+            console.warn('[TikTokAI] SQLite autosave failed', error);
+        });
     }
 
     function scheduleTkaiAutosave(reason = 'new-data') {
@@ -16194,7 +16480,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
 
             const maxKeep = Number(DB.getSettings().tkaiMsgBuffer) || 300;
             collectedMessages = chatRows.slice(-maxKeep);
-            listeningMessages = listeningRows.slice(-500).map((message) => ({ ...message, type: 'listening', user: message.user || 'Slušanje' }));
+            listeningMessages = listeningRows.map((message) => ({ ...message, type: 'listening', user: message.user || 'Slušanje' }));
+            tkaiSessionMessages = [];
+            tkaiSessionMessageIds = new Set();
+            appendTkaiSessionMessages(chatRows);
             restoreTkaiSessionUserStats(saved?.sessionUsers, chatRows);
             markTkaiInsightsDirty();
             selectedMsgIds.clear();
@@ -16209,7 +16498,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             renderListenFeed();
             renderGiftGallery();
             updateSessionStatsUI();
-            const totalLoaded = collectedMessages.length + listeningMessages.length;
+            const totalLoaded = getTkaiSessionMessages().length;
             if (msgCountEl) msgCountEl.textContent = totalLoaded + ' događaja';
             showToast('💾 Autosave učitan (' + totalLoaded + ' događaja)');
         } catch (e) {
@@ -16382,13 +16671,100 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }, 0);
     });
 
+    async function refreshTkaiTikTokLiveRuntimeStatus(options = {}) {
+        const bridge = window.etherx?.tiktokLiveBridge;
+        const button = document.getElementById('tkaiTikTokLiveInstallBtn');
+        if (!bridge?.getStatus) return null;
+        try {
+            const result = await bridge.getStatus();
+            const versionLabel = result?.version ? (' v' + String(result.version).slice(0, 24)) : '';
+            if (button) {
+                button.textContent = result?.ready
+                    ? ('↻ Ažuriraj TikTokLive' + versionLabel)
+                    : '⬇ Instaliraj TikTokLive';
+                button.title = result?.ready
+                    ? 'Runtime je instaliran. Ažuriranje nije potrebno za ponovno spajanje.'
+                    : String(result?.error || 'TikTokLive runtime nije instaliran.');
+            }
+            if (!scanActive && options.quiet !== true) {
+                if (result?.connected) {
+                    setTkaiTikTokLiveStatus('Runtime radi · @' + String(result.owner || ''), 'ok');
+                } else if (result?.ready) {
+                    setTkaiTikTokLiveStatus('Instalirano' + versionLabel + ' · spremno za Skeniranje ON', 'ok');
+                } else {
+                    setTkaiTikTokLiveStatus(String(result?.error || 'TikTokLive nije instaliran').slice(0, 160), 'error');
+                }
+            }
+            return result;
+        } catch (error) {
+            if (!scanActive && options.quiet !== true) {
+                setTkaiTikTokLiveStatus('Status runtimea nije dostupan: ' + String(error?.message || error).slice(0, 120), 'error');
+            }
+            return null;
+        }
+    }
+
+    function scheduleTkaiTikTokLiveReconnect(reason = '') {
+        if (!scanActive || tkaiTikTokLiveIntentionalStop || tkaiTikTokLiveReconnectTimer || tkaiTikTokLiveReconnectInFlight) return;
+        if (tkaiTikTokLiveReconnectAttempt >= 3) {
+            const finalReason = String(reason || tkaiTikTokLiveLastError || 'veza nije dostupna').slice(0, 180);
+            stopScanning({
+                error: true,
+                statusText: 'Reconnect nije uspio nakon 3 pokušaja · ' + finalReason,
+                toastText: '⚠️ TikTokLive reconnect nije uspio. Runtime je ostao instaliran; pokušaj ponovno sa Skeniranje ON.'
+            });
+            refreshTkaiTikTokLiveRuntimeStatus({ quiet: true }).catch(() => { });
+            return;
+        }
+        tkaiTikTokLiveReconnectAttempt += 1;
+        const attempt = tkaiTikTokLiveReconnectAttempt;
+        const delay = [2000, 5000, 10000][attempt - 1] || 10000;
+        const detail = String(reason || tkaiTikTokLiveLastError || 'veza je prekinuta').slice(0, 120);
+        setTkaiTikTokLiveStatus(`Ponovno spajanje ${attempt}/3 za ${Math.ceil(delay / 1000)} s · ${detail}`, 'error');
+        setStatus(`<span class="tkai-scanning-dot"></span>TikTokLive reconnect ${attempt}/3…`);
+        tkaiTikTokLiveReconnectTimer = setTimeout(async () => {
+            tkaiTikTokLiveReconnectTimer = null;
+            if (!scanActive || tkaiTikTokLiveIntentionalStop) return;
+            tkaiTikTokLiveReconnectInFlight = true;
+            const tab = getTikTokSourceTab();
+            const owner = tkaiTikTokLiveReconnectOwner || getTkaiLiveOwnerFromTab(tab);
+            let result = null;
+            try {
+                result = owner
+                    ? await startTkaiTikTokLiveWithRepair(owner)
+                    : { ok: false, error: 'TikTok LIVE korisnik više nije pronađen u otvorenim tabovima.' };
+            } catch (error) {
+                result = { ok: false, error: String(error?.message || error) };
+            } finally {
+                tkaiTikTokLiveReconnectInFlight = false;
+            }
+            if (!scanActive || tkaiTikTokLiveIntentionalStop) return;
+            if (result?.ok) {
+                tkaiTikTokLiveReconnectAttempt = 0;
+                tkaiTikTokLiveLastError = '';
+                setTkaiTikTokLiveStatus('Ponovno spojeno · čita TikTokLive', 'ok');
+                setStatus('<span class="tkai-scanning-dot"></span>TikTokLive skeniranje…');
+                queueTkaiTikTokLiveFlush();
+                scheduleTkaiViewerCountRead(true);
+                if (isTkaiLiveServerEnabled()) connectTkaiLiveServer();
+                return;
+            }
+            tkaiTikTokLiveLastError = String(result?.error || 'TikTokLive reconnect nije uspio').slice(0, 240);
+            scheduleTkaiTikTokLiveReconnect(tkaiTikTokLiveLastError);
+        }, delay);
+    }
+
     document.getElementById('tkaiTikTokLiveInstallBtn')?.addEventListener('click', async () => {
         const button = document.getElementById('tkaiTikTokLiveInstallBtn');
         if (button) button.disabled = true;
         setTkaiTikTokLiveStatus('Instalacija traje…');
         try {
             const result = await window.etherx?.tiktokLiveBridge?.install?.();
-            if (result?.ok) setTkaiTikTokLiveStatus(result.source === 'pypi-fallback' ? 'Instalirano preko PyPI fallbacka · klikni Skeniranje ON' : 'Instalirano s GitHuba · klikni Skeniranje ON', 'ok');
+            if (result?.ok) {
+                tkaiTikTokLiveAutoRepairAttempted = false;
+                setTkaiTikTokLiveStatus(result.source === 'pypi-fallback' ? 'Instalirano preko PyPI fallbacka · klikni Skeniranje ON' : 'Instalirano s GitHuba · klikni Skeniranje ON', 'ok');
+                await refreshTkaiTikTokLiveRuntimeStatus();
+            }
             else setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(result?.error || 'nepoznata greška').slice(0, 120), 'error');
         } catch (error) {
             setTkaiTikTokLiveStatus('Instalacija nije uspjela: ' + String(error?.message || error).slice(0, 120), 'error');
@@ -16404,8 +16780,11 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             result = { ok: false, error: String(error?.message || error) };
         }
         const firstError = String(result?.error || '');
-        const repairable = /(?:typeerror|importerror|modulenotfounderror|cannot import name|unexpected keyword argument|not callable|nije instaliran|python 3\.10|unsupported operand type.*\|)/i.test(firstError);
-        if (result?.ok || !repairable || !bridge.install) return result;
+        const repairableType = ['runtime_missing', 'runtime_import', 'python_incompatible'].includes(String(result?.errorType || ''));
+        const repairableError = /(?:importerror|modulenotfounderror|cannot import name|nije instaliran|python 3\.10)/i.test(firstError);
+        const repairable = repairableType || repairableError;
+        if (result?.ok || !repairable || !bridge.install || tkaiTikTokLiveAutoRepairAttempted) return result;
+        tkaiTikTokLiveAutoRepairAttempted = true;
 
         setTkaiTikTokLiveStatus('Otkriven neusklađen TikTokLive runtime · automatski popravljam…');
         setStatus('🔧 Ažuriram TikTokLive nakon ' + firstError.slice(0, 120));
@@ -16424,6 +16803,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }
 
         setTkaiTikTokLiveStatus('Runtime ažuriran · ponavljam spajanje na @' + owner + '…');
+        await refreshTkaiTikTokLiveRuntimeStatus({ quiet: true });
         try {
             const retry = await bridge.start(owner);
             return retry?.ok ? { ...retry, repaired: true } : {
@@ -16460,6 +16840,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             showToast('⚠️ TikTokLive bridge nije dostupan u ovoj verziji aplikacije');
             return;
         }
+        tkaiTikTokLiveIntentionalStop = false;
+        tkaiTikTokLiveReconnectAttempt = 0;
+        tkaiTikTokLiveReconnectOwner = owner;
+        tkaiTikTokLiveLastError = '';
         toggleBtn.disabled = true;
         setTkaiTikTokLiveStatus('Spajanje na @' + owner + '…');
         let bridgeResult = null;
@@ -16471,6 +16855,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             toggleBtn.disabled = false;
         }
         if (!bridgeResult?.ok) {
+            tkaiTikTokLiveIntentionalStop = true;
             const fullError = String(bridgeResult?.error || 'TikTokLive nije pokrenut');
             const errorText = fullError.slice(0, 280);
             setTkaiTikTokLiveStatus(errorText, 'error');
@@ -16490,6 +16875,9 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             return;
         }
         scanActive = true;
+        tkaiTikTokLiveIntentionalStop = false;
+        tkaiTikTokLiveReconnectAttempt = 0;
+        tkaiTikTokLiveReconnectOwner = owner;
         try { window.syncBpmDetectionWithTikTokScan?.(true); } catch (_) { }
         if (!sessionStartedAt) sessionStartedAt = Date.now();
         toggleBtn.textContent = '⏹ Skeniranje OFF';
@@ -16512,6 +16900,10 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         }, 10000);
         updateSessionStatsUI();
     });
+
+    setTimeout(() => {
+        refreshTkaiTikTokLiveRuntimeStatus().catch(() => { });
+    }, 0);
 
     window.startTkaiScanShortcut = function () {
         if (scanActive) {

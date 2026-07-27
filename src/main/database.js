@@ -712,7 +712,8 @@ class DatabaseManager {
         });
       });
       (Array.isArray(sessions) ? sessions : []).forEach((row, index) => {
-        const savedAt = Number(row?.savedAt || row?.updatedAt || Date.now()) || Date.now();
+        const rawSavedAt = row?.savedAt || row?.updatedAt || Date.now();
+        const savedAt = (typeof rawSavedAt === 'number' ? rawSavedAt : Date.parse(String(rawSavedAt))) || Date.now();
         upsertSession.run(String(row?.id || `session:${savedAt}:${index}`), savedAt, String(row?.label || row?.name || ''), JSON.stringify(row || {}));
         sessionCount++;
       });
@@ -731,10 +732,19 @@ class DatabaseManager {
     this.db.prepare('SELECT username, data_json FROM tiktok_live_users').all().forEach((row) => {
       try { users[row.username] = JSON.parse(row.data_json); } catch (_) { }
     });
-    const parseRows = (table, limit) => this.db.prepare(`SELECT payload_json FROM ${table} ORDER BY saved_at DESC LIMIT ?`).all(limit).map((row) => {
+    const parseRows = (table) => this.db.prepare(`SELECT payload_json FROM ${table} ORDER BY saved_at DESC`).all().map((row) => {
       try { return JSON.parse(row.payload_json); } catch (_) { return null; }
     }).filter(Boolean).reverse();
-    return { ok: true, users, sessions: parseRows('tiktok_live_sessions', 500), stats: parseRows('tiktok_live_stats', 500), dbPath: this.dbPath };
+    return { ok: true, users, sessions: parseRows('tiktok_live_sessions'), stats: parseRows('tiktok_live_stats'), dbPath: this.dbPath };
+  }
+
+  clearTikTokLiveSessionsAndStats() {
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM tiktok_live_sessions').run();
+      this.db.prepare('DELETE FROM tiktok_live_stats').run();
+    });
+    tx();
+    return { ok: true, dbPath: this.dbPath };
   }
 
   getTikTokLiveStorageStatus() {
