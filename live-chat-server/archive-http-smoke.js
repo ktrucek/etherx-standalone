@@ -72,6 +72,13 @@ function sendTestEvent() {
         }));
       }
       if (message.type === "heartbeat_ack") {
+        socket.send(JSON.stringify({
+          type: "end_session",
+          sessionId,
+          metadata: { currentViewers: 24, peakViewers: 24 },
+        }));
+      }
+      if (message.type === "session_ended") {
         clearTimeout(timer);
         socket.close(1000, "Archive smoke complete");
         resolve();
@@ -89,13 +96,61 @@ async function api(pathname) {
   return response.json();
 }
 
+async function waitForSseUpdate() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`${apiBase}/v1/archive/stream`, {
+      headers: {
+        Authorization: `Bearer ${archiveToken}`,
+        Accept: "text/event-stream",
+      },
+      signal: controller.signal,
+    });
+    assert.equal(response.status, 200);
+    assert.match(String(response.headers.get("content-type") || ""), /^text\/event-stream/);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("SSE stream ended before archive_update");
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      let boundary;
+      while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        if (!frame.includes("event: archive_update")) continue;
+        const dataLine = frame.split("\n").find((line) => line.startsWith("data:"));
+        const payload = JSON.parse(String(dataLine || "").slice(5).trim());
+        assert.ok(payload.sessionIds.includes(sessionId));
+        assert.ok(payload.overview.events >= 1);
+        controller.abort();
+        return payload;
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 (async () => {
   const unauthorized = await fetch(`${apiBase}/v1/archive/status`);
   assert.equal(unauthorized.status, 401);
+  const sseUpdate = waitForSseUpdate();
+  await new Promise((resolve) => setTimeout(resolve, 100));
   await sendTestEvent();
+  await sseUpdate;
+  const liveState = await api(`/v1/archive/live-state?sessionId=${sessionId}`);
+  assert.equal(liveState.state.currentViewers, 24);
+  assert.equal(liveState.state.counts.gifts, 1);
   const detail = await api(`/v1/archive/sessions/${sessionId}`);
   assert.equal(detail.session.owner, "archive-smoke");
   assert.equal(detail.session.peakViewers, 24);
+  const dashboard = await api(`/v1/archive/sessions/${sessionId}/dashboard?points=60`);
+  assert.equal(dashboard.dashboard.session.id, sessionId);
+  assert.ok(dashboard.dashboard.meta.payloadRows <= 145);
+  assert.ok(dashboard.dashboard.meta.rawEvents >= 1);
   const events = await api(`/v1/archive/sessions/${sessionId}/events`);
   assert.equal(events.rows[0].giftName, "Rose");
   const users = await api(`/v1/archive/sessions/${sessionId}/users`);
@@ -103,7 +158,7 @@ async function api(pathname) {
   const viewers = await api(`/v1/archive/sessions/${sessionId}/viewers`);
   assert.ok(viewers.rows.length >= 1);
   assert.equal(viewers.rows.at(-1).viewers, 24);
-  console.log("LIVE WSS -> SQLite -> protected HTTP API smoke OK");
+  console.log("LIVE WSS -> SQLite -> protected SSE + HTTP API smoke OK");
 })().catch((error) => {
   console.error("ARCHIVE HTTP SMOKE FAIL:", error.message);
   process.exit(1);

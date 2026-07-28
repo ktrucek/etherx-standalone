@@ -7,6 +7,7 @@ const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
 const DetectorStore = require("./detector-store");
 const { inspectGiftRisk, normalizeAccountId } = require("./gift-detector");
+const LiveStateBuffer = require("./live-state-buffer");
 const LiveSessionStore = require("./session-store");
 
 require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
@@ -60,6 +61,16 @@ const SNAPSHOT_INTERVAL_MS = Math.max(
   10,
   Number(process.env.LIVE_SNAPSHOT_SECONDS || 30) || 30,
 ) * 1000;
+const ARCHIVE_FLUSH_INTERVAL_MS = Math.max(
+  2,
+  Number(process.env.LIVE_ARCHIVE_FLUSH_SECONDS || 10) || 10,
+) * 1000;
+const LIVE_REDIS_URL = String(process.env.LIVE_REDIS_URL || "").trim();
+const LIVE_REDIS_PREFIX = String(process.env.LIVE_REDIS_PREFIX || "etherx:live").trim();
+const LIVE_REDIS_TTL_SECONDS = Math.max(
+  300,
+  Number(process.env.LIVE_REDIS_TTL_SECONDS || 86400) || 86400,
+);
 const DATA_DIR = String(process.env.LIVE_DATA_DIR || "").trim()
   || path.join(__dirname, "data");
 const SNAPSHOT_FILE = path.join(DATA_DIR, "live-sessions.json");
@@ -114,7 +125,13 @@ if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
 
 const sessions = new Map();
 const authAttempts = new Map();
+const archiveSseClients = new Set();
+const archiveSsePendingSessions = new Set();
 let snapshotDirty = false;
+let archiveSseRevision = 0;
+let archiveSseFlushTimer = null;
+let archiveOverviewCache = null;
+let archiveOverviewCachedAt = 0;
 const detectorStore = new DetectorStore({
   dataDir: DATA_DIR,
   postgresUrl: process.env.DETECTOR_POSTGRES_URL,
@@ -126,6 +143,12 @@ const detectorStore = new DetectorStore({
 const archiveStore = new LiveSessionStore({
   dataDir: DATA_DIR,
   dbPath: ARCHIVE_DB_PATH,
+});
+const liveStateBuffer = new LiveStateBuffer({
+  redisUrl: LIVE_REDIS_URL,
+  prefix: LIVE_REDIS_PREFIX,
+  ttlSeconds: LIVE_REDIS_TTL_SECONDS,
+  writeThrottleMs: 250,
 });
 let archiveStatus;
 try {
@@ -150,6 +173,64 @@ function safeNumber(value, fallback = 0) {
 function safeId(value, fallbackPrefix = "id") {
   const cleaned = safeText(value, 160).replace(/[^a-zA-Z0-9._:@/-]/g, "_");
   return cleaned || `${fallbackPrefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
+function writeSseEvent(response, eventName, payload, id = "") {
+  if (response.destroyed || response.writableEnded) return false;
+  const lines = [];
+  if (id) lines.push(`id: ${id}`);
+  if (eventName) lines.push(`event: ${eventName}`);
+  lines.push(`data: ${JSON.stringify(payload)}`, "");
+  try {
+    response.write(`${lines.join("\n")}\n`);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function invalidateArchiveOverviewCache() {
+  archiveOverviewCache = null;
+  archiveOverviewCachedAt = 0;
+}
+
+function getArchiveOverviewCached(force = false) {
+  const fresh = archiveOverviewCache
+    && Date.now() - archiveOverviewCachedAt < ARCHIVE_FLUSH_INTERVAL_MS;
+  if (!force && fresh) return archiveOverviewCache;
+  archiveOverviewCache = archiveStore.getOverview();
+  archiveOverviewCachedAt = Date.now();
+  return archiveOverviewCache;
+}
+
+function flushArchiveSseUpdates(reason = "archive") {
+  archiveSseFlushTimer = null;
+  if (!archiveSseClients.size) {
+    archiveSsePendingSessions.clear();
+    return;
+  }
+  archiveSseRevision += 1;
+  const payload = {
+    revision: archiveSseRevision,
+    reason,
+    sessionIds: Array.from(archiveSsePendingSessions).slice(0, 100),
+    overview: getArchiveOverviewCached(),
+    live: liveStateBuffer.list({ limit: 100 }),
+    ts: Date.now(),
+  };
+  archiveSsePendingSessions.clear();
+  archiveSseClients.forEach((response) => {
+    if (!writeSseEvent(response, "archive_update", payload, archiveSseRevision)) {
+      archiveSseClients.delete(response);
+    }
+  });
+}
+
+function queueArchiveSseUpdate(sessionId = "", reason = "archive") {
+  if (sessionId) archiveSsePendingSessions.add(String(sessionId));
+  if (archiveSseFlushTimer) return;
+  archiveSseFlushTimer = setTimeout(() => flushArchiveSseUpdates(reason), 350);
+  archiveSseFlushTimer.unref();
 }
 
 function toAlertId(value) {
@@ -264,6 +345,7 @@ function createSession(id, metadata = {}) {
     endedAt: 0,
     createdAt: now,
     updatedAt: now,
+    telegramStartNotifiedAt: Math.max(0, safeNumber(metadata.telegramStartNotifiedAt, 0)),
     currentViewers: Math.max(0, safeNumber(metadata.currentViewers, 0)),
     peakViewers: Math.max(0, safeNumber(metadata.peakViewers, metadata.currentViewers || 0)),
     events: [],
@@ -294,6 +376,7 @@ function restoreSessionsFromSnapshot() {
       const session = createSession(id, row || {});
       session.createdAt = Math.max(0, safeNumber(row?.createdAt, Date.now()));
       session.updatedAt = Math.max(0, safeNumber(row?.updatedAt, session.createdAt));
+      session.telegramStartNotifiedAt = Math.max(0, safeNumber(row?.telegramStartNotifiedAt, 0));
       session.endedAt = Math.max(0, safeNumber(row?.endedAt, 0));
       session.currentViewers = Math.max(0, safeNumber(row?.currentViewers, 0));
       session.peakViewers = Math.max(session.currentViewers, safeNumber(row?.peakViewers, 0));
@@ -377,6 +460,7 @@ function persistSessionsSnapshot(force = false) {
         endedAt: session.endedAt || 0,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
+        telegramStartNotifiedAt: session.telegramStartNotifiedAt || 0,
         currentViewers: session.currentViewers || 0,
         peakViewers: session.peakViewers || 0,
         counts: session.counts,
@@ -418,13 +502,104 @@ function getSession(sessionId, metadata = {}) {
   return session;
 }
 
-function persistSessionArchive(session, events = [], metadata = {}) {
+function notifyTelegramSessionStarted(session, metadata = {}) {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID || !session) return;
+  if (String(session.id || "").startsWith("test-")) return;
+  if (metadata.telegramScanNotified === true || session.telegramStartNotifiedAt) return;
+  session.telegramStartNotifiedAt = Date.now();
+  snapshotDirty = true;
+  const owner = safeText(session.owner || metadata.owner, 80).replace(/^@+/, "");
+  const liveUrl = safeText(session.liveUrl || metadata.liveUrl, 1000);
+  const lines = [
+    "🔴 TikTok LIVE sesija je pokrenuta",
+    `Kreator: ${owner ? `@${owner}` : "-"}`,
+    `Vrijeme: ${new Date(session.startedAt || Date.now()).toLocaleString("hr-HR")}`,
+    `Session ID: ${session.id}`,
+    "Serversko spremanje i Telegram praćenje su aktivni.",
+  ];
+  if (/^https:\/\/(?:www\.|m\.)?tiktok\.com\//i.test(liveUrl)) lines.push(`LIVE: ${liveUrl}`);
+  telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, lines.join("\n")).catch((error) => {
+    session.telegramStartNotifiedAt = 0;
+    snapshotDirty = true;
+    console.warn("[telegram-live-start] Slanje nije uspjelo:", safeText(error?.message || error, 300));
+  });
+}
+
+function persistSessionArchive(session, events = [], metadata = {}, options = {}) {
   try {
-    return archiveStore.persistSession(session, { events, metadata });
+    const result = archiveStore.persistSession(session, {
+      events,
+      metadata,
+      skipSessionUpsert: options.skipSessionUpsert === true,
+    });
+    if (options.skipSessionUpsert !== true) invalidateArchiveOverviewCache();
+    return result;
   } catch (error) {
     console.warn("[live-archive] Spremanje nije uspjelo:", error.message);
     return null;
   }
+}
+
+function bufferSessionState(session, metadata = {}) {
+  return liveStateBuffer.update(session, metadata);
+}
+
+function flushBufferedSessionArchive(session, metadata = {}, reason = "interval") {
+  if (!session?.id) return null;
+  const buffered = liveStateBuffer.get(session.id);
+  const directMetadata = metadata && typeof metadata === "object" ? metadata : {};
+  const mergedMetadata = {
+    ...(buffered?.metadata || {}),
+    ...directMetadata,
+    currentViewers: Math.max(
+      0,
+      safeNumber(directMetadata.currentViewers, buffered?.currentViewers ?? session.currentViewers ?? 0),
+    ),
+    peakViewers: Math.max(
+      0,
+      safeNumber(directMetadata.peakViewers, buffered?.peakViewers ?? session.peakViewers ?? 0),
+    ),
+    aggregateFlushReason: reason,
+    aggregateFlushedAt: Date.now(),
+  };
+  const result = persistSessionArchive(session, [], mergedMetadata);
+  if (result) queueArchiveSseUpdate(session.id, `aggregate_${reason}`);
+  return result;
+}
+
+function flushAllBufferedSessions(reason = "interval") {
+  let flushed = 0;
+  sessions.forEach((session) => {
+    if (flushBufferedSessionArchive(session, {}, reason)) flushed += 1;
+  });
+  return flushed;
+}
+
+function hydrateSessionFromBufferedState(state) {
+  if (!state?.id) return null;
+  let session = sessions.get(String(state.id));
+  if (!session) {
+    session = createSession(String(state.id), state);
+    sessions.set(session.id, session);
+  }
+  session.owner = safeText(state.owner || session.owner, 80);
+  session.liveUrl = safeText(state.liveUrl || session.liveUrl, 1000);
+  session.startedAt = Math.min(
+    safeNumber(session.startedAt, state.startedAt || Date.now()),
+    safeNumber(state.startedAt, session.startedAt || Date.now()),
+  );
+  session.endedAt = Math.max(safeNumber(session.endedAt, 0), safeNumber(state.endedAt, 0));
+  session.updatedAt = Math.max(safeNumber(session.updatedAt, 0), safeNumber(state.updatedAt, 0));
+  session.currentViewers = Math.max(0, safeNumber(state.currentViewers, session.currentViewers || 0));
+  session.peakViewers = Math.max(
+    session.currentViewers,
+    safeNumber(state.peakViewers, session.peakViewers || 0),
+  );
+  Object.entries(state.counts || {}).forEach(([key, value]) => {
+    if (!Object.prototype.hasOwnProperty.call(session.counts, key)) return;
+    session.counts[key] = Math.max(safeNumber(session.counts[key], 0), safeNumber(value, 0));
+  });
+  return session;
 }
 
 function applyEvent(session, rawEvent) {
@@ -745,7 +920,7 @@ function readHttpJson(request, maxBytes = 256 * 1024) {
 
 function archiveApiSessionRoute(pathname) {
   const match = pathname.match(
-    /^\/v1\/archive\/sessions\/([^/]+)(?:\/(events|users|alerts|viewers))?$/,
+    /^\/v1\/archive\/sessions\/([^/]+)(?:\/(dashboard|events|users|alerts|viewers))?$/,
   );
   if (!match) return null;
   try {
@@ -840,6 +1015,7 @@ const server = http.createServer((request, response) => {
       ok: true,
       service: "etherx-live-chat",
       archive: true,
+      liveBuffer: liveStateBuffer.getStatus().mode,
     };
     if (HEALTH_DETAILS) {
       health.uptimeSeconds = Math.floor(process.uptime());
@@ -848,6 +1024,7 @@ const server = http.createServer((request, response) => {
       const status = archiveStore.getStatus();
       health.archivedSessions = status.sessions;
       health.archivedEvents = status.events;
+      health.buffer = liveStateBuffer.getStatus();
       health.now = new Date().toISOString();
     }
     sendHttpJson(response, 200, health);
@@ -895,6 +1072,8 @@ const server = http.createServer((request, response) => {
         if (requestUrl.pathname === "/v1/archive/admin/delete-user") {
           const backup = archiveStore.createBackup();
           const result = archiveStore.deleteUserArchive(body.user);
+          invalidateArchiveOverviewCache();
+          queueArchiveSseUpdate("", "delete_user");
           archiveStore.addTelegramAudit({
             chatId: body.chatId,
             telegramUser: body.telegramUser,
@@ -933,13 +1112,55 @@ const server = http.createServer((request, response) => {
       return;
     }
     try {
+      if (requestUrl.pathname === "/v1/archive/stream") {
+        if (archiveSseClients.size >= 100) {
+          sendHttpJson(response, 503, { ok: false, error: "Too many SSE clients" });
+          return;
+        }
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-store, no-transform",
+          connection: "keep-alive",
+          "x-accel-buffering": "no",
+          "x-content-type-options": "nosniff",
+        });
+        response.flushHeaders?.();
+        archiveSseClients.add(response);
+        writeSseEvent(response, "ready", {
+          revision: archiveSseRevision,
+          overview: getArchiveOverviewCached(),
+          live: liveStateBuffer.list({ limit: 100 }),
+          retryMs: 3000,
+          ts: Date.now(),
+        }, archiveSseRevision);
+        const close = () => archiveSseClients.delete(response);
+        request.once("close", close);
+        response.once("close", close);
+        return;
+      }
       if (requestUrl.pathname === "/v1/archive/status") {
         const { dbPath, ...status } = archiveStore.getStatus();
-        sendHttpJson(response, 200, status);
+        sendHttpJson(response, 200, { ...status, buffer: liveStateBuffer.getStatus() });
         return;
       }
       if (requestUrl.pathname === "/v1/archive/overview") {
-        sendHttpJson(response, 200, { ok: true, overview: archiveStore.getOverview() });
+        sendHttpJson(response, 200, {
+          ok: true,
+          overview: getArchiveOverviewCached(),
+          live: liveStateBuffer.list({ limit: 100 }),
+        });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/live-state") {
+        const sessionId = safeText(requestUrl.searchParams.get("sessionId"), 160);
+        sendHttpJson(response, 200, {
+          ok: true,
+          state: sessionId ? liveStateBuffer.get(sessionId) : null,
+          sessions: sessionId ? undefined : liveStateBuffer.list({
+            limit: requestUrl.searchParams.get("limit"),
+          }),
+          buffer: liveStateBuffer.getStatus(),
+        });
         return;
       }
       if (requestUrl.pathname === "/v1/archive/reports") {
@@ -1100,6 +1321,15 @@ const server = http.createServer((request, response) => {
           });
           return;
         }
+        if (route.resource === "dashboard") {
+          sendHttpJson(response, 200, {
+            ok: true,
+            dashboard: archiveStore.getDashboardAggregate(route.sessionId, {
+              points: requestUrl.searchParams.get("points"),
+            }),
+          });
+          return;
+        }
         const options = {
           limit: requestUrl.searchParams.get("limit"),
           offset: requestUrl.searchParams.get("offset"),
@@ -1139,6 +1369,18 @@ try {
 } catch (error) {
   console.warn("[live-archive] Uvoz postojećeg snapshota nije uspio:", error.message);
 }
+liveStateBuffer.init().then((status) => {
+  const restored = liveStateBuffer.list({ limit: MAX_SESSIONS });
+  restored.forEach((state) => {
+    const session = hydrateSessionFromBufferedState(state);
+    if (session) persistSessionArchive(session, [], state.metadata || {});
+  });
+  console.log(
+    `[live-buffer] mode=${status.mode} redis=${status.redisReady ? "ready" : "off"} restored=${restored.length}`,
+  );
+}).catch((error) => {
+  console.warn("[live-buffer] Init warning:", safeText(error?.message || error, 240));
+});
 detectorStore.init().then(() => {
   console.log(`[detector] Watchlist učitana: ${detectorStore.size()} računa.`);
 }).catch((error) => {
@@ -1244,6 +1486,9 @@ wss.on("connection", (socket, request) => {
       clearTimeout(authTimer);
       const session = getSession(socket.sessionId, message.metadata || {});
       persistSessionArchive(session, [], message.metadata || {});
+      bufferSessionState(session, message.metadata || {});
+      queueArchiveSseUpdate(session.id, "session_ready");
+      notifyTelegramSessionStarted(session, message.metadata || {});
       sendJson(socket, {
         type: "ready",
         protocol: 1,
@@ -1271,7 +1516,15 @@ wss.on("connection", (socket, request) => {
           acceptedEvents.push(event);
         }
       });
-      persistSessionArchive(session, acceptedEvents, message.metadata || {});
+      // Raw events/users stay durable immediately. Frequently changing session
+      // aggregates are buffered in Redis/RAM and flushed on an interval/end.
+      persistSessionArchive(session, acceptedEvents, message.metadata || {}, {
+        skipSessionUpsert: true,
+      });
+      bufferSessionState(session, message.metadata || {});
+      if (accepted > 0 || message.metadata) {
+        queueArchiveSseUpdate(session.id, accepted > 0 ? "events_buffered" : "metadata_buffered");
+      }
       sendJson(socket, {
         type: "ack",
         seq: Math.max(0, safeNumber(message.seq, 0)),
@@ -1289,7 +1542,8 @@ wss.on("connection", (socket, request) => {
         return;
       }
       const session = getSession(sessionId, message.metadata || {});
-      persistSessionArchive(session, [], message.metadata || {});
+      bufferSessionState(session, message.metadata || {});
+      queueArchiveSseUpdate(session.id, "heartbeat_buffered");
       sendJson(socket, {
         type: "heartbeat_ack",
         sessionId,
@@ -1384,6 +1638,9 @@ wss.on("connection", (socket, request) => {
       const session = getSession(socket.sessionId);
       try {
         archiveStore.endSession(session, message.metadata || {});
+        invalidateArchiveOverviewCache();
+        bufferSessionState(session, message.metadata || {});
+        queueArchiveSseUpdate(session.id, "session_ended");
       } catch (error) {
         console.warn("[live-archive] Završetak sesije nije spremljen:", error.message);
       }
@@ -1412,6 +1669,19 @@ const heartbeatTimer = setInterval(() => {
   });
 }, 30000);
 
+const archiveSseKeepaliveTimer = setInterval(() => {
+  const line = `: keepalive ${Date.now()}\n\n`;
+  archiveSseClients.forEach((response) => {
+    try {
+      if (response.destroyed || response.writableEnded) archiveSseClients.delete(response);
+      else response.write(line);
+    } catch (_) {
+      archiveSseClients.delete(response);
+    }
+  });
+}, 20000);
+archiveSseKeepaliveTimer.unref();
+
 const cleanupTimer = setInterval(() => {
   const now = Date.now();
   const cutoff = Date.now() - SESSION_TTL_MS;
@@ -1420,7 +1690,11 @@ const cleanupTimer = setInterval(() => {
       (socket) => socket.isAuthenticated && socket.sessionId === sessionId,
     );
     if (!inUse && session.updatedAt < cutoff) {
+      flushBufferedSessionArchive(session, {}, "cleanup");
       sessions.delete(sessionId);
+      void liveStateBuffer.remove(sessionId).catch((error) => {
+        console.warn("[live-buffer] Cleanup warning:", safeText(error?.message || error, 200));
+      });
       snapshotDirty = true;
     }
   }
@@ -1433,8 +1707,12 @@ const cleanupTimer = setInterval(() => {
 
 const snapshotTimer = setInterval(() => {
   persistSessionsSnapshot();
-  sessions.forEach((session) => persistSessionArchive(session));
 }, SNAPSHOT_INTERVAL_MS);
+
+const archiveFlushTimer = setInterval(() => {
+  flushAllBufferedSessions("interval");
+}, ARCHIVE_FLUSH_INTERVAL_MS);
+archiveFlushTimer.unref();
 
 const telegramScheduleTimer = setInterval(() => {
   if (!telegramBot || !process.env.TELEGRAM_CHAT_ID) return;
@@ -1494,12 +1772,17 @@ server.on("error", (error) => {
 function shutdown(signal) {
   console.log(`[live] ${signal}: gasim servis.`);
   clearInterval(heartbeatTimer);
+  clearInterval(archiveSseKeepaliveTimer);
   clearInterval(cleanupTimer);
   clearInterval(snapshotTimer);
+  clearInterval(archiveFlushTimer);
   clearInterval(telegramScheduleTimer);
   persistSessionsSnapshot(true);
-  sessions.forEach((session) => persistSessionArchive(session));
+  flushAllBufferedSessions("shutdown");
+  void liveStateBuffer.close();
   wss.clients.forEach((socket) => socket.close(1001, "Server shutdown"));
+  archiveSseClients.forEach((response) => response.end());
+  archiveSseClients.clear();
   server.close(() => {
     archiveStore.close();
     process.exit(0);

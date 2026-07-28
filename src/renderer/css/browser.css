@@ -5456,7 +5456,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.tkai-spark svg {
+.tkai-spark canvas {
   width: 100%;
   height: 100%;
   display: block;
@@ -5805,7 +5805,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
   height: 92px;
 }
 
-.tkai-area-chart svg {
+.tkai-area-chart canvas {
   width: 100%;
   height: 100%;
   display: block;
@@ -5890,7 +5890,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
   display: block;
 }
 
-.tkai-sentiment-wave svg {
+.tkai-sentiment-wave canvas {
   width: 100%;
   height: 100%;
   overflow: visible;

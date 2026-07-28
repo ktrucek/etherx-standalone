@@ -281,6 +281,7 @@ class LiveSessionStore {
     if (!this.db || !session?.id) return { events: 0, users: 0, alerts: 0 };
     const metadata = options.metadata && typeof options.metadata === "object" ? options.metadata : {};
     const events = Array.isArray(options.events) ? options.events : [];
+    const skipSessionUpsert = options.skipSessionUpsert === true;
     const counts = session.counts || {};
     const currentViewers = Math.max(0, safeNumber(metadata.currentViewers, session.currentViewers || 0));
     const peakViewers = Math.max(currentViewers, safeNumber(metadata.peakViewers, session.peakViewers || 0));
@@ -293,27 +294,29 @@ class LiveSessionStore {
     );
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.statements.upsertSession.run(
-        session.id,
-        session.owner || "",
-        session.liveUrl || "",
-        safeNumber(session.startedAt, 0),
-        safeNumber(session.endedAt, 0),
-        safeNumber(session.createdAt, Date.now()),
-        safeNumber(session.updatedAt, Date.now()),
-        currentViewers,
-        peakViewers,
-        safeNumber(counts.total, 0),
-        safeNumber(counts.chat, 0),
-        safeNumber(counts.gifts, 0),
-        safeNumber(counts.subscribers, 0),
-        safeNumber(counts.joins, 0),
-        safeNumber(counts.shares, 0),
-        safeNumber(counts.likes, 0),
-        safeNumber(counts.coins, 0),
-        session.users instanceof Map ? session.users.size : 0,
-        JSON.stringify(metadata),
-      );
+      if (!skipSessionUpsert) {
+        this.statements.upsertSession.run(
+          session.id,
+          session.owner || "",
+          session.liveUrl || "",
+          safeNumber(session.startedAt, 0),
+          safeNumber(session.endedAt, 0),
+          safeNumber(session.createdAt, Date.now()),
+          safeNumber(session.updatedAt, Date.now()),
+          currentViewers,
+          peakViewers,
+          safeNumber(counts.total, 0),
+          safeNumber(counts.chat, 0),
+          safeNumber(counts.gifts, 0),
+          safeNumber(counts.subscribers, 0),
+          safeNumber(counts.joins, 0),
+          safeNumber(counts.shares, 0),
+          safeNumber(counts.likes, 0),
+          safeNumber(counts.coins, 0),
+          session.users instanceof Map ? session.users.size : 0,
+          JSON.stringify(metadata),
+        );
+      }
       events.forEach((event) => {
         this.statements.insertEvent.run(
           session.id,
@@ -385,7 +388,7 @@ class LiveSessionStore {
           JSON.stringify(alert),
         );
       });
-      if (Object.prototype.hasOwnProperty.call(metadata, "currentViewers")) {
+      if (!skipSessionUpsert && Object.prototype.hasOwnProperty.call(metadata, "currentViewers")) {
         const sampledAt = Math.floor(Date.now() / 5000) * 5000;
         this.statements.upsertViewer.run(session.id, sampledAt, currentViewers, peakViewers);
       }
@@ -1132,6 +1135,120 @@ class LiveSessionStore {
       LIMIT 100
     `).all(sessionId);
     return { ...this._sessionRow(row), typeCounts, topGifts };
+  }
+
+  getDashboardAggregate(sessionId, options = {}) {
+    const session = this.getSession(sessionId);
+    if (!session) return null;
+    const points = normalizeLimit(options.points, 120, 240);
+    const eventStats = this.db.prepare(`
+      SELECT
+        MIN(event_at) AS firstEventAt,
+        MAX(event_at) AS lastEventAt,
+        COUNT(*) AS events,
+        SUM(CASE WHEN event_type IN ('chat','caption') THEN 1 ELSE 0 END) AS messages,
+        SUM(CASE WHEN event_type IN ('gift','subscriber') THEN quantity ELSE 0 END) AS gifts,
+        SUM(CASE WHEN event_type = 'gift' THEN 1 ELSE 0 END) AS giftEvents,
+        SUM(coins) AS coins,
+        COUNT(DISTINCT CASE WHEN user_handle <> '' THEN lower(user_handle) ELSE lower(user_name) END) AS users
+      FROM live_events WHERE session_id = ?
+    `).get(sessionId);
+    const viewerStats = this.db.prepare(`
+      SELECT COUNT(*) AS samples, ROUND(AVG(current_viewers), 2) AS average,
+        MIN(current_viewers) AS minimum, MAX(current_viewers) AS maximum,
+        MAX(peak_viewers) AS peak
+      FROM live_viewer_samples WHERE session_id = ?
+    `).get(sessionId);
+    const viewerSeries = this.db.prepare(`
+      WITH ordered AS (
+        SELECT sampled_at AS ts, current_viewers AS viewers, peak_viewers AS peakViewers,
+          ROW_NUMBER() OVER (ORDER BY sampled_at ASC) AS rn,
+          COUNT(*) OVER () AS total
+        FROM live_viewer_samples WHERE session_id = ?
+      ),
+      bucketed AS (
+        SELECT CAST(((rn - 1) * ?) / MAX(total, 1) AS INTEGER) AS bucket,
+          MIN(ts) AS ts, ROUND(AVG(viewers), 2) AS viewers, MAX(peakViewers) AS peakViewers
+        FROM ordered GROUP BY bucket
+      )
+      SELECT ts, viewers, peakViewers FROM bucketed ORDER BY bucket ASC
+    `).all(sessionId, points);
+    const activityTrend = this.db.prepare(`
+      WITH bounds AS (
+        SELECT MIN(event_at) AS minTs, MAX(event_at) AS maxTs
+        FROM live_events WHERE session_id = ?
+      ),
+      bucketed AS (
+        SELECT
+          CAST(((e.event_at - b.minTs) * ?) / MAX((b.maxTs - b.minTs) + 1, 1) AS INTEGER) AS bucket,
+          b.minTs AS minTs, b.maxTs AS maxTs, e.*
+        FROM live_events e CROSS JOIN bounds b
+        WHERE e.session_id = ?
+      )
+      SELECT MIN(event_at) AS ts, COUNT(*) AS events,
+        SUM(CASE WHEN event_type IN ('chat','caption') THEN 1 ELSE 0 END) AS messages,
+        SUM(CASE WHEN event_type IN ('gift','subscriber') THEN quantity ELSE 0 END) AS gifts,
+        SUM(coins) AS coins,
+        COUNT(DISTINCT CASE WHEN user_handle <> '' THEN lower(user_handle) ELSE lower(user_name) END) AS users
+      FROM bucketed GROUP BY bucket ORDER BY bucket ASC
+    `).all(sessionId, points, sessionId);
+    const topUsers = this.db.prepare(`
+      SELECT user_name AS user, user_handle AS userHandle, messages, gifts,
+        gift_events AS giftEvents, likes, coins, appearances,
+        user_level AS userLevel, last_seen_at AS lastSeenAt
+      FROM live_session_users WHERE session_id = ?
+      ORDER BY coins DESC, appearances DESC, last_seen_at DESC
+      LIMIT 25
+    `).all(sessionId);
+    const alertSummary = this.db.prepare(`
+      SELECT COUNT(*) AS total, MAX(risk_score) AS maxRisk,
+        SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical,
+        SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END) AS high,
+        SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END) AS medium,
+        MAX(alert_at) AS lastAlertAt
+      FROM live_alerts WHERE session_id = ?
+    `).get(sessionId);
+    const firstTs = safeNumber(eventStats.firstEventAt, session.startedAt);
+    const lastTs = safeNumber(eventStats.lastEventAt, session.endedAt || session.updatedAt);
+    const durationMinutes = Math.max(0, (lastTs - firstTs) / 60000);
+    const gifts = safeNumber(eventStats.gifts, 0);
+    const giftEvents = safeNumber(eventStats.giftEvents, 0);
+    const coins = safeNumber(eventStats.coins, 0);
+    const perMinute = (value) => durationMinutes > 0
+      ? Math.round((safeNumber(value, 0) / durationMinutes) * 100) / 100
+      : 0;
+    return {
+      session,
+      kpis: {
+        durationMinutes: Math.round(durationMinutes * 100) / 100,
+        messagesPerMinute: perMinute(eventStats.messages),
+        eventsPerMinute: perMinute(eventStats.events),
+        coinsPerMinute: perMinute(coins),
+        averageCoinsPerGift: giftEvents > 0 ? Math.round((coins / giftEvents) * 100) / 100 : 0,
+        averageGiftQuantity: giftEvents > 0 ? Math.round((gifts / giftEvents) * 100) / 100 : 0,
+      },
+      viewerStats: {
+        samples: safeNumber(viewerStats.samples, 0),
+        average: safeNumber(viewerStats.average, session.currentViewers),
+        minimum: safeNumber(viewerStats.minimum, session.currentViewers),
+        maximum: safeNumber(viewerStats.maximum, session.peakViewers),
+        peak: safeNumber(viewerStats.peak, session.peakViewers),
+      },
+      viewerSeries,
+      activityTrend,
+      activityScale: {
+        maxEvents: Math.max(0, ...activityTrend.map((row) => safeNumber(row.events, 0))),
+        maxCoins: Math.max(0, ...activityTrend.map((row) => safeNumber(row.coins, 0))),
+      },
+      topUsers,
+      alertSummary,
+      meta: {
+        points,
+        rawEvents: safeNumber(eventStats.events, 0),
+        rawViewerSamples: safeNumber(viewerStats.samples, 0),
+        payloadRows: viewerSeries.length + activityTrend.length + topUsers.length,
+      },
+    };
   }
 
   listEvents(sessionId, options = {}) {

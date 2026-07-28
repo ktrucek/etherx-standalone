@@ -8,6 +8,7 @@
     "smoke": "node smoke-test.js",
     "smoke:archive": "node archive-http-smoke.js",
     "test:archive": "node archive-test.js",
+    "test:buffer": "node live-state-buffer-test.js",
     "detect:import": "node ../scripts/tiktok-detect-import.js"
   },
   "engines": {

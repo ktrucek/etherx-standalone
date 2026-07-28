@@ -12,6 +12,9 @@ ProxyPassReverse "/health" "http://127.0.0.1:8791/health"
 ProxyPass "/dashboard" "http://127.0.0.1:8791/dashboard" connectiontimeout=3 timeout=30 retry=0
 ProxyPassReverse "/dashboard" "http://127.0.0.1:8791/dashboard"
 
+ProxyPass "/v1/archive/stream" "http://127.0.0.1:8791/v1/archive/stream" connectiontimeout=3 timeout=3600 retry=0 flushpackets=on
+ProxyPassReverse "/v1/archive/stream" "http://127.0.0.1:8791/v1/archive/stream"
+
 ProxyPass "/v1/archive" "http://127.0.0.1:8791/v1/archive" connectiontimeout=3 timeout=30 retry=0
 ProxyPassReverse "/v1/archive" "http://127.0.0.1:8791/v1/archive"
 

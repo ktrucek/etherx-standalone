@@ -1393,6 +1393,175 @@ class SimpleVirtualList {
     }
 }
 
+// Variable-height virtual list for chat rows. Only the visible window and a
+// small overscan stay in the DOM; ResizeObserver corrects the initial height
+// estimate without truncating long messages.
+class VariableVirtualList {
+    constructor(container, items, renderItem, options = {}) {
+        this.container = container;
+        this.items = Array.isArray(items) ? items : [];
+        this.renderItem = renderItem;
+        this.estimate = Math.max(28, Number(options.estimate || 76));
+        this.overscan = Math.max(2, Number(options.overscan || 6));
+        this.gap = Math.max(0, Number(options.gap || 0));
+        this.heights = [];
+        this.offsets = [0];
+        this.renderedStart = -1;
+        this.renderedEnd = -1;
+        this.raf = 0;
+        this.destroyed = false;
+        this.onScroll = () => this.scheduleRender();
+        this.container.innerHTML = '';
+        this.container.style.position = 'relative';
+        this.container.style.overflowAnchor = 'none';
+        this.phantom = document.createElement('div');
+        this.phantom.className = 'tkai-virtual-phantom';
+        this.phantom.style.cssText = 'width:1px;opacity:0;pointer-events:none;flex:0 0 auto;';
+        this.content = document.createElement('div');
+        this.content.className = 'tkai-virtual-content';
+        this.content.style.cssText = `position:absolute;left:0;right:0;top:0;display:flex;flex-direction:column;gap:${this.gap}px;`;
+        this.container.append(this.phantom, this.content);
+        this.container.addEventListener('scroll', this.onScroll, { passive: true });
+        this.resizeObserver = typeof ResizeObserver === 'function'
+            ? new ResizeObserver((entries) => this.measure(entries))
+            : null;
+        this.viewportResizeObserver = typeof ResizeObserver === 'function'
+            ? new ResizeObserver(() => {
+                this.renderedStart = -1;
+                this.scheduleRender();
+            })
+            : null;
+        this.viewportResizeObserver?.observe(this.container);
+        this.rebuildOffsets();
+        this.render(true);
+    }
+
+    rebuildOffsets() {
+        const next = new Array(this.items.length + 1);
+        next[0] = 0;
+        for (let index = 0; index < this.items.length; index += 1) {
+            next[index + 1] = next[index] + Math.max(1, Number(this.heights[index] || this.estimate)) + this.gap;
+        }
+        this.offsets = next;
+        this.phantom.style.height = `${Math.max(0, next[next.length - 1] || 0)}px`;
+    }
+
+    indexAt(offset) {
+        let low = 0;
+        let high = Math.max(0, this.items.length - 1);
+        while (low < high) {
+            const mid = Math.floor((low + high + 1) / 2);
+            if (this.offsets[mid] <= offset) low = mid;
+            else high = mid - 1;
+        }
+        return low;
+    }
+
+    scheduleRender() {
+        if (this.destroyed || this.raf) return;
+        this.raf = requestAnimationFrame(() => {
+            this.raf = 0;
+            this.render();
+        });
+    }
+
+    render(force = false) {
+        if (this.destroyed) return;
+        const viewportTop = Math.max(0, this.container.scrollTop);
+        const viewportBottom = viewportTop + Math.max(1, this.container.clientHeight);
+        const start = Math.max(0, this.indexAt(viewportTop) - this.overscan);
+        const end = Math.min(this.items.length, this.indexAt(viewportBottom) + this.overscan + 1);
+        if (!force && start === this.renderedStart && end === this.renderedEnd) return;
+        this.renderedStart = start;
+        this.renderedEnd = end;
+        this.resizeObserver?.disconnect();
+        const fragment = document.createDocumentFragment();
+        for (let index = start; index < end; index += 1) {
+            const row = this.renderItem(this.items[index], index);
+            if (!row) continue;
+            row.dataset.virtualIndex = String(index);
+            fragment.appendChild(row);
+        }
+        this.content.replaceChildren(fragment);
+        this.content.style.transform = `translateY(${this.offsets[start] || 0}px)`;
+        this.content.querySelectorAll('[data-virtual-index]').forEach((row) => this.resizeObserver?.observe(row));
+    }
+
+    measure(entries) {
+        const stickToBottom = this.isNearBottom(48);
+        let changed = false;
+        for (const entry of entries) {
+            const index = Number(entry.target?.dataset?.virtualIndex);
+            const height = Math.ceil(entry.borderBoxSize?.[0]?.blockSize || entry.contentRect?.height || 0);
+            if (!Number.isInteger(index) || index < 0 || height <= 0) continue;
+            if (Math.abs(Number(this.heights[index] || this.estimate) - height) < 1) continue;
+            this.heights[index] = height;
+            changed = true;
+        }
+        if (!changed) return;
+        this.rebuildOffsets();
+        this.renderedStart = -1;
+        this.scheduleRender();
+        if (stickToBottom) requestAnimationFrame(() => this.scrollToBottom());
+    }
+
+    isNearBottom(distance = 44) {
+        return this.container.scrollTop + this.container.clientHeight >= this.container.scrollHeight - distance;
+    }
+
+    update(items, renderItem = this.renderItem, options = {}) {
+        const stickToBottom = options.stickToBottom === true;
+        const previousLength = this.items.length;
+        const previousFirst = this.items[0];
+        const nextItems = Array.isArray(items) ? items : [];
+        const nextFirst = nextItems[0];
+        this.items = nextItems;
+        this.renderItem = renderItem;
+        // Once the rolling chat window drops its first item, indices shift and
+        // old measurements no longer belong to the same rows.
+        if (previousFirst && nextFirst && previousFirst !== nextFirst) this.heights = [];
+        else if (this.items.length < previousLength) this.heights.length = this.items.length;
+        this.rebuildOffsets();
+        this.renderedStart = -1;
+        this.render(true);
+        if (stickToBottom) this.scrollToBottom();
+    }
+
+    scrollToIndex(index, align = 'start') {
+        const safeIndex = Math.max(0, Math.min(this.items.length - 1, Number(index) || 0));
+        let top = this.offsets[safeIndex] || 0;
+        if (align === 'center') {
+            const rowHeight = Number(this.heights[safeIndex] || this.estimate);
+            top = Math.max(0, top - (this.container.clientHeight - rowHeight) / 2);
+        }
+        this.container.scrollTop = top;
+        this.render(true);
+    }
+
+    scrollToBottom() {
+        this.container.scrollTop = Math.max(0, this.container.scrollHeight - this.container.clientHeight);
+        this.render(true);
+    }
+
+    getStats() {
+        return {
+            total: this.items.length,
+            rendered: this.content.childElementCount,
+            start: this.renderedStart,
+            end: this.renderedEnd
+        };
+    }
+
+    destroy(options = {}) {
+        this.destroyed = true;
+        if (this.raf) cancelAnimationFrame(this.raf);
+        this.resizeObserver?.disconnect();
+        this.viewportResizeObserver?.disconnect();
+        this.container.removeEventListener('scroll', this.onScroll);
+        if (options.clear !== false) this.container.innerHTML = '';
+    }
+}
+
 const origGetElementById = document.getElementById;
 const MISSING_DOM_FALLBACK_IDS = new Set();
 
@@ -2911,11 +3080,43 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             listening
         };
     }
-    function renderTkaiSessionTimelineSvg(timeline) {
+    function prepareTkaiCanvas(container, fallbackWidth, fallbackHeight, key) {
+        if (!container) return null;
+        const canvasKey = String(key || 'chart');
+        let canvas = container.querySelector(`:scope > canvas[data-tkai-canvas="${canvasKey}"]`);
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.dataset.tkaiCanvas = canvasKey;
+            canvas.setAttribute('role', 'img');
+            canvas.style.cssText = 'display:block;width:100%;height:100%;';
+            container.replaceChildren(canvas);
+        }
+        const rect = container.getBoundingClientRect();
+        const width = Math.max(1, Math.round(rect.width || fallbackWidth || 320));
+        const height = Math.max(1, Math.round(rect.height || fallbackHeight || 100));
+        const dpr = Math.max(1, Math.min(2, Number(window.devicePixelRatio || 1)));
+        const pixelWidth = Math.max(1, Math.round(width * dpr));
+        const pixelHeight = Math.max(1, Math.round(height * dpr));
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+            canvas.width = pixelWidth;
+            canvas.height = pixelHeight;
+        }
+        const context = canvas.getContext('2d', { alpha: true });
+        if (!context) return null;
+        context.setTransform(dpr, 0, 0, dpr, 0, 0);
+        context.clearRect(0, 0, width, height);
+        return { canvas, context, width, height };
+    }
+    function drawTkaiSessionTimelineCanvas(container, timeline) {
         const points = Array.isArray(timeline) ? timeline.slice() : [];
-        if (!points.length) return '';
-        const width = 780;
-        const height = 160;
+        if (!container || !points.length) {
+            if (container) container.replaceChildren();
+            return;
+        }
+        const surface = prepareTkaiCanvas(container, 780, 160, 'session-timeline');
+        if (!surface) return;
+        const { canvas, context, width, height } = surface;
+        canvas.setAttribute('aria-label', 'Poruke kroz vrijeme');
         const padX = 10;
         const padTop = 12;
         const padBottom = 20;
@@ -2923,22 +3124,44 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const maxV = Math.max(1, ...vals);
         const minV = Math.min(...vals);
         const range = Math.max(1, maxV - minV);
-        const coords = vals.map((v, i) => {
-            const x = points.length === 1 ? width / 2 : padX + (i / (points.length - 1)) * (width - padX * 2);
-            const y = padTop + ((maxV - v) / range) * (height - padTop - padBottom);
+        const coords = vals.map((value, index) => {
+            const x = points.length === 1 ? width / 2 : padX + (index / (points.length - 1)) * (width - padX * 2);
+            const y = padTop + ((maxV - value) / range) * (height - padTop - padBottom);
             return { x, y };
         });
-        const line = coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-        const area = `${line} ${coords[coords.length - 1].x.toFixed(1)},${(height - padBottom).toFixed(1)} ${coords[0].x.toFixed(1)},${(height - padBottom).toFixed(1)}`;
-        const dots = coords.map((p) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="rgba(167,243,208,.95)" stroke="rgba(6,95,70,.65)" stroke-width="0.8"></circle>`
-        ).join('');
-        return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">`
-            + `<polyline fill="none" stroke="rgba(148,163,184,.45)" stroke-width="1" points="${padX},${(height - padBottom).toFixed(1)} ${(width - padX).toFixed(1)},${(height - padBottom).toFixed(1)}"/>`
-            + `<polygon points="${area}" fill="rgba(45,212,191,.2)"></polygon>`
-            + `<polyline fill="none" stroke="rgba(45,212,191,.96)" stroke-width="2.2" points="${line}"></polyline>`
-            + dots
-            + `</svg>`;
+        const baseline = height - padBottom;
+        context.strokeStyle = 'rgba(148,163,184,.45)';
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(padX, baseline);
+        context.lineTo(width - padX, baseline);
+        context.stroke();
+        context.beginPath();
+        context.moveTo(coords[0].x, baseline);
+        coords.forEach((point) => context.lineTo(point.x, point.y));
+        context.lineTo(coords[coords.length - 1].x, baseline);
+        context.closePath();
+        context.fillStyle = 'rgba(45,212,191,.2)';
+        context.fill();
+        context.beginPath();
+        coords.forEach((point, index) => {
+            if (index === 0) context.moveTo(point.x, point.y);
+            else context.lineTo(point.x, point.y);
+        });
+        context.strokeStyle = 'rgba(45,212,191,.96)';
+        context.lineWidth = 2.2;
+        context.lineJoin = 'round';
+        context.lineCap = 'round';
+        context.stroke();
+        coords.forEach((point) => {
+            context.beginPath();
+            context.arc(point.x, point.y, 2.2, 0, Math.PI * 2);
+            context.fillStyle = 'rgba(167,243,208,.95)';
+            context.fill();
+            context.strokeStyle = 'rgba(6,95,70,.65)';
+            context.lineWidth = 0.8;
+            context.stroke();
+        });
     }
     function buildGiftExportBreakdowns(users, perUserLimit = 12, overallLimit = 150) {
         const list = Array.isArray(users) ? users.slice() : [];
@@ -3364,31 +3587,9 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             acc.push(`${row.color} ${a}% ${b}%`);
             return acc;
         }, []).join(', ')})`;
-        // Show all users (no arbitrary slice) so the user can click and inspect every participant
-        const topUsersHtml = analytics.usersByMessages.map((u, idx) => {
-            const detailRows = (Array.isArray(u.giftDetails) ? u.giftDetails : []).slice(0, 18);
-            const details = detailRows.length
-                ? detailRows.map((g) =>
-                    `<div style="padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.06)">`
-                    + `<span style="color:#fcd34d">${escHtml(g.name || '-')}</span>`
-                    + ` • qty ${formatNum(g.quantity)} • events ${formatNum(g.events)} • coins ${formatNum(g.coins)}`
-                    + `</div>`
-                ).join('')
-                : '<div style="color:#94a3b8">Nema gift detalja za ovog korisnika.</div>';
-            return `<tr class="tkai-user-row" data-user-row="u-${idx}" style="cursor:pointer">`
-                + `<td style="padding:4px 6px;color:#9ec6ff">#${idx + 1} @${escHtml(u.user)}</td>`
-                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.total)}</td>`
-                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.chat)}</td>`
-                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.gifts)}</td>`
-                + `<td style="padding:4px 6px;text-align:right;color:#fbbf24">${formatNum(u.coins)}</td>`
-                + `<td style="padding:4px 6px;text-align:right">${formatNum(u.joins)}</td>`
-                + `</tr>`
-                + `<tr class="tkai-user-details" data-user-details="u-${idx}" style="display:none;background:rgba(148,163,184,.08)">`
-                + `<td colspan="6" style="padding:6px 8px;font-size:10px">`
-                + `<div style="font-weight:600;color:#cbd5e1;margin-bottom:4px">Gift breakdown za @${escHtml(u.user)}</div>`
-                + details
-                + `</td></tr>`;
-        }).join('');
+        // The complete participant set stays in memory/export, while the UI
+        // renders only the visible rows through VariableVirtualList.
+        const sessionUserRows = Array.isArray(analytics.usersByMessages) ? analytics.usersByMessages : [];
         const questionsHtml = analytics.questions.slice(-50).reverse().map((q) =>
             `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="color:#a5b4fc">@${escHtml(q.user)}</span>: ${escHtml(q.text)}</div>`
         ).join('') || '<div style="color:#94a3b8">Nema pitanja u sesiji.</div>';
@@ -3427,8 +3628,6 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 : '';
             return `<div style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)"><div style="font-size:9px;color:#5eead4">🎙 WhisperLive · ${escHtml(time)} · ${escHtml(message.task || 'transcribe')}</div><div style="color:#e2e8f0">${escHtml(message.text)}</div>${original}${translation}</div>`;
         }).join('') || '<div style="color:#94a3b8">Nema WhisperLive transkripata u ovoj sesiji.</div>';
-        const timelineSvg = renderTkaiSessionTimelineSvg(analytics.timeline);
-
         modal.innerHTML =
             `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:linear-gradient(135deg,#0f766e,#0b5d67)">`
             + `<div><div style="font-weight:700;font-size:14px">AI Live Chat - Session Dashboard ${indexLabel ? '#' + indexLabel : ''}</div><div style="font-size:11px;color:rgba(255,255,255,.8)">${new Date(sessionData.savedAt || sessionData.exportedAt || Date.now()).toLocaleString('hr-HR')}</div></div>`
@@ -3464,8 +3663,8 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:8px"><div style="font-size:10px;color:#c4b5fd">Join level</div><div style="font-size:12px;color:#e2e8f0;margin-top:4px">aktivnost ${escHtml(joinLevelStats.activityLabel || 'nema')} • ${formatNum(joinLevelStats.ratePerMin || 0)} / min</div><div style="font-size:10px;color:#cbd5e1;margin-top:3px">poznat level ${formatNum(joinLevelStats.withLevel || 0)} / ${formatNum(joinLevelStats.total || 0)}</div></div>`
             + `<div style="background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.2);border-radius:8px;padding:8px"><div style="font-size:10px;color:#f9a8d4">Share events</div><div style="font-size:12px;color:#e2e8f0;margin-top:4px">ukupno ${formatNum(shareStats.total || 0)} • ${formatNum(shareStats.ratePerMin || 0)} / min</div><div style="font-size:10px;color:#cbd5e1;margin-top:3px">zadnjih spremljeno ${formatNum((shareStats.events || []).length)}</div></div>`
             + `</div>`
-            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Poruke kroz vrijeme (scan timeline)</div><div style="height:160px">${timelineSvg}</div></div>`
-            + `<div id="tkaiSessUsers" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan)</div><div style="max-height:260px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="position:sticky;top:0;background:#111827"><th style="text-align:left;padding:5px 6px">User</th><th style="padding:5px 6px;text-align:right">Ukupno</th><th style="padding:5px 6px;text-align:right">Chat</th><th style="padding:5px 6px;text-align:right">Gifts</th><th style="padding:5px 6px;text-align:right">Coini</th><th style="padding:5px 6px;text-align:right">Join</th></tr></thead><tbody>${topUsersHtml || ''}</tbody></table></div></div>`
+            + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Poruke kroz vrijeme (Canvas timeline)</div><div id="tkaiSessionTimelineCanvas" style="height:160px"></div></div>`
+            + `<div id="tkaiSessUsers" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Korisnici (kompletan scan · ${formatNum(sessionUserRows.length)})</div><div style="display:grid;grid-template-columns:minmax(180px,1fr) repeat(5,minmax(58px,.35fr));background:#111827;font-size:11px;font-weight:600"><span style="padding:5px 6px">User</span><span style="padding:5px 6px;text-align:right">Ukupno</span><span style="padding:5px 6px;text-align:right">Chat</span><span style="padding:5px 6px;text-align:right">Gifts</span><span style="padding:5px 6px;text-align:right">Coini</span><span style="padding:5px 6px;text-align:right">Join</span></div><div id="tkaiSessionUsersVirtual" style="height:260px;overflow:auto;position:relative"></div></div>`
             + `</div>`
             + `<div style="display:flex;flex-direction:column;gap:10px;overflow:auto">`
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:8px">Raspodjela tipova poruka</div><div style="display:flex;gap:12px;align-items:center"><div style="width:130px;height:130px;border-radius:50%;background:${donut};position:relative"><div style="position:absolute;inset:27px;border-radius:50%;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:11px;color:#cbd5e1">${formatNum(total)}<br>total</div></div><div style="display:flex;flex-direction:column;gap:5px;font-size:11px">${typeRows.map((r) => `<div style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${r.color}"></span>${r.label}: <b>${formatNum(r.value)}</b></div>`).join('')}</div></div></div>`
@@ -3479,17 +3678,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             + `<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px"><div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">Odgovori (system/AI)</div><div style="max-height:220px;overflow:auto;font-size:11px">${answersHtml}</div></div>`
             + `</div>`
             + `</div>`;
-        const close = () => { modal.remove(); };
+        let sessionUsersVirtualList = null;
+        const close = () => {
+            sessionUsersVirtualList?.destroy();
+            modal.remove();
+        };
         modal.querySelector('#tkaiSessionStatsClose')?.addEventListener('click', close);
-        modal.querySelectorAll('.tkai-user-row').forEach((row) => {
-            row.addEventListener('click', () => {
-                const key = row.getAttribute('data-user-row') || '';
-                const details = key ? modal.querySelector(`[data-user-details="${key}"]`) : null;
-                if (!details) return;
-                const isOpen = details.style.display !== 'none';
-                details.style.display = isOpen ? 'none' : '';
-            });
-        });
         modal.querySelectorAll('.tkai-sess-nav').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const targetId = btn.getAttribute('data-target');
@@ -3527,6 +3721,41 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         });
         modal.addEventListener('click', (ev) => { if (ev.target === modal) close(); });
         document.body.appendChild(modal);
+        drawTkaiSessionTimelineCanvas(modal.querySelector('#tkaiSessionTimelineCanvas'), analytics.timeline);
+        const sessionUsersHost = modal.querySelector('#tkaiSessionUsersVirtual');
+        if (sessionUsersHost) {
+            const expandedSessionUsers = new Set();
+            sessionUsersVirtualList = new VariableVirtualList(sessionUsersHost, sessionUserRows, (user, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'tkai-user-row';
+                wrapper.style.cssText = 'border-bottom:1px solid rgba(255,255,255,.055);font-size:11px';
+                const main = document.createElement('button');
+                main.type = 'button';
+                main.style.cssText = 'display:grid;grid-template-columns:minmax(180px,1fr) repeat(5,minmax(58px,.35fr));align-items:center;width:100%;padding:0;border:0;background:transparent;color:inherit;cursor:pointer;text-align:left';
+                main.innerHTML = `<span style="padding:5px 6px;color:#9ec6ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">#${index + 1} @${escHtml(user.user)}</span>`
+                    + `<span style="padding:5px 6px;text-align:right">${formatNum(user.total)}</span>`
+                    + `<span style="padding:5px 6px;text-align:right">${formatNum(user.chat)}</span>`
+                    + `<span style="padding:5px 6px;text-align:right">${formatNum(user.gifts)}</span>`
+                    + `<span style="padding:5px 6px;text-align:right;color:#fbbf24">${formatNum(user.coins)}</span>`
+                    + `<span style="padding:5px 6px;text-align:right">${formatNum(user.joins)}</span>`;
+                const details = document.createElement('div');
+                details.hidden = !expandedSessionUsers.has(index);
+                details.style.cssText = 'padding:6px 8px;background:rgba(148,163,184,.08);font-size:10px';
+                const giftRows = (Array.isArray(user.giftDetails) ? user.giftDetails : []).slice(0, 18);
+                details.innerHTML = `<div style="font-weight:600;color:#cbd5e1;margin-bottom:4px">Gift breakdown za @${escHtml(user.user)}</div>`
+                    + (giftRows.length
+                        ? giftRows.map((gift) => `<div style="padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.06)"><span style="color:#fcd34d">${escHtml(gift.name || '-')}</span> • qty ${formatNum(gift.quantity)} • events ${formatNum(gift.events)} • coins ${formatNum(gift.coins)}</div>`).join('')
+                        : '<div style="color:#94a3b8">Nema gift detalja za ovog korisnika.</div>');
+                main.addEventListener('click', () => {
+                    if (expandedSessionUsers.has(index)) expandedSessionUsers.delete(index);
+                    else expandedSessionUsers.add(index);
+                    details.hidden = !expandedSessionUsers.has(index);
+                    requestAnimationFrame(() => sessionUsersVirtualList?.scheduleRender());
+                });
+                wrapper.append(main, details);
+                return wrapper;
+            }, { estimate: 34, overscan: 7 });
+        }
     }
     function renderTkaiSessionHistory() {
         const listEl = document.getElementById('tkaiSessionHistoryList');
@@ -6949,6 +7178,12 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiInsightsDirty = true;
     let tkaiInsightsLastRenderedAt = 0;
     let tkaiInsightsRenderTimer = null;
+    const TKAI_CHART_THROTTLE_MS = 320;
+    let tkaiChartRenderTimer = null;
+    let tkaiChartLastRenderedAt = 0;
+    let tkaiChartPendingInsights = null;
+    let tkaiChartViewerPending = false;
+    let tkaiChartRenderCount = 0;
     let lastCaptionSpeakKey = '';
     let lastCaptionSpeakAt = 0;
     let lastCaptionMirrorKey = '';
@@ -6971,6 +7206,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLiveServerReconnectAttempt = 0;
     let tkaiLiveServerSummary = null;
     let tkaiLiveServerAlerts = [];
+    let tkaiTelegramScanNotified = false;
     const tkaiLiveServerSeenAlertIds = new Set();
     let tkaiFeedHrTranslateInFlight = false;
     const tkaiLiveServerPageRequests = new Map();
@@ -7628,6 +7864,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     ];
 
     const messagesEl = document.getElementById('tkaiMessages');
+    let tkaiChatVirtualList = null;
+    window.getTkaiVirtualRenderStats = () => ({
+        chat: tkaiChatVirtualList?.getStats() || { total: 0, rendered: 0, start: 0, end: 0 }
+    });
     const listenFeedEl = document.getElementById('tkaiWhisperTranscript');
     const listenFeedCountEl = document.getElementById('tkaiListenFeedCount');
     const repliesEl = document.getElementById('tkaiReplies');
@@ -9309,8 +9549,18 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         html += `<div style="border-top:1px solid rgba(255,255,255,.08);padding-top:10px">`;
         html += `<div style="font-size:11px;font-weight:600;color:#9ca3af;margin-bottom:8px">💬 Kompletna povijest poruka i eventova (${formatNum(visibleMsgs.length)})</div>`;
         if (visibleMsgs.length) {
-            html += `<div style="display:flex;flex-direction:column;gap:4px">`;
-            visibleMsgs.slice(-500).forEach((m) => {
+            html += `<div id="tkaiUserMessageVirtual" style="height:min(420px,52vh);overflow:auto;position:relative"></div>`;
+        } else {
+            html += `<div style="color:#6b7280;padding:8px 0">Nema spremljenih poruka za ovog korisnika.</div>`;
+        }
+        html += `</div>`;
+        card.innerHTML = html;
+        modal.appendChild(card);
+        document.body.appendChild(modal);
+        let userMessageVirtualList = null;
+        const userMessageHost = card.querySelector('#tkaiUserMessageVirtual');
+        if (userMessageHost) {
+            userMessageVirtualList = new VariableVirtualList(userMessageHost, visibleMsgs, (m) => {
                 const time = new Date(Number(m.ts || Date.now())).toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 const date = new Date(Number(m.ts || Date.now())).toLocaleDateString('hr-HR');
                 const type = normalizeTkaiMessageType(m);
@@ -9319,32 +9569,31 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 const displayText = (m.translatedText && m.translatedText !== m.text)
                     ? `${escHtml(m.text)} <span style="color:#818cf8;font-size:10px">[${escHtml(m.translatedText)}]</span>`
                     : escHtml(m.text || '');
-                html += `<div style="background:rgba(255,255,255,.03);border-radius:5px;padding:5px 8px;font-size:11px">`;
-                html += `<span style="color:#4b5563;font-size:10px;margin-right:6px">${date} ${time}</span>`;
-                html += `<span style="margin-right:4px">${typeIcon}</span>`;
-                html += `<span style="color:${textColor}">${displayText}</span>`;
-                if ((type === 'gift' || type === 'subscriber') && m.giftName) html += ` <span style="color:#fcd34d;font-size:10px">(${escHtml(m.giftName)} x${formatNum(m.quantity || 1)})</span>`;
-                if (Number(m.coins || 0) > 0) html += ` <span style="color:#fcd34d;font-size:10px">+${formatNum(m.coins)}🪙</span>`;
-                html += `</div>`;
-            });
-            html += `</div>`;
-        } else {
-            html += `<div style="color:#6b7280;padding:8px 0">Nema spremljenih poruka za ovog korisnika.</div>`;
+                const row = document.createElement('div');
+                row.style.cssText = 'background:rgba(255,255,255,.03);border-radius:5px;padding:5px 8px;font-size:11px';
+                row.innerHTML = `<span style="color:#4b5563;font-size:10px;margin-right:6px">${date} ${time}</span>`
+                    + `<span style="margin-right:4px">${typeIcon}</span>`
+                    + `<span style="color:${textColor}">${displayText}</span>`
+                    + (((type === 'gift' || type === 'subscriber') && m.giftName) ? ` <span style="color:#fcd34d;font-size:10px">(${escHtml(m.giftName)} x${formatNum(m.quantity || 1)})</span>` : '')
+                    + (Number(m.coins || 0) > 0 ? ` <span style="color:#fcd34d;font-size:10px">+${formatNum(m.coins)}🪙</span>` : '');
+                return row;
+            }, { estimate: 42, overscan: 7, gap: 4 });
+            userMessageVirtualList.scrollToBottom();
         }
-        html += `</div>`;
-        card.innerHTML = html;
-        modal.appendChild(card);
-        document.body.appendChild(modal);
-        card.querySelector('#tkaiMsgModalClose')?.addEventListener('click', () => modal.remove());
+        const closeModal = () => {
+            userMessageVirtualList?.destroy();
+            modal.remove();
+        };
+        card.querySelector('#tkaiMsgModalClose')?.addEventListener('click', closeModal);
         card.querySelector('#tkaiMsgModalProfile')?.addEventListener('click', () => {
             openTikTokProfileTab(clean);
-            modal.remove();
+            closeModal();
         });
         card.querySelector('#tkaiMsgModalGifts')?.addEventListener('click', () => {
-            modal.remove();
+            closeModal();
             showTkaiUserGiftsModal(clean);
         });
-        modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) closeModal(); });
     }
 
     // ── Persistent TikTok live user database ───────────────────────────────
@@ -9681,21 +9930,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return html;
         };
         const focusUser = targetUser ? allUsers.find((u) => String(u.user || '').toLowerCase() === targetUser.toLowerCase()) : null;
-        let bodyHtml = '';
-        if (focusUser) {
-            bodyHtml = renderUser(focusUser);
-            const others = allUsers.filter((u) => String(u.user || '').toLowerCase() !== targetUser.toLowerCase());
-            if (others.length) {
-                bodyHtml += `<div style="margin:12px 0 8px;font-size:11px;color:#6b7280;font-weight:600">── Ostali korisnici (${formatNum(others.length)}) ──</div>`;
-                others.forEach((u) => { bodyHtml += renderUser(u); });
-            }
-        } else {
-            if (!allUsers.length) {
-                bodyHtml = '<div style="color:#6b7280;padding:16px 0;text-align:center">Baza korisnika je prazna. Podaci se prikupljaju automatski za svaku sesiju.</div>';
-            } else {
-                allUsers.forEach((u) => { bodyHtml += renderUser(u); });
-            }
-        }
+        const orderedUsers = focusUser
+            ? [focusUser, ...allUsers.filter((u) => String(u.user || '').toLowerCase() !== targetUser.toLowerCase())]
+            : allUsers;
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
                 <div>
@@ -9707,56 +9944,81 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                     <button id="tkaiUserDBClose" style="background:transparent;border:none;color:#9ca3af;cursor:pointer;font-size:16px;padding:4px 8px">✕</button>
                 </div>
             </div>
-            <div id="tkaiUserDBList">${bodyHtml}</div>`;
+            <div id="tkaiUserDBList" style="height:min(620px,68vh);overflow:auto;position:relative"></div>`;
         modal.appendChild(card);
         document.body.appendChild(modal);
-        card.querySelector('#tkaiUserDBClose')?.addEventListener('click', () => modal.remove());
-        modal.addEventListener('click', (ev) => { if (ev.target === modal) modal.remove(); });
+        const listEl = card.querySelector('#tkaiUserDBList');
+        let userDbVirtualList = null;
+        const renderUserElement = (user) => {
+            const template = document.createElement('template');
+            template.innerHTML = renderUser(user).trim();
+            const row = template.content.firstElementChild;
+            if (row) row.style.marginBottom = '0';
+            return row;
+        };
+        const updateUserList = (users) => {
+            const rows = Array.isArray(users) ? users : [];
+            if (!rows.length) {
+                userDbVirtualList?.destroy();
+                userDbVirtualList = null;
+                listEl.innerHTML = '<div style="color:#6b7280;padding:16px 0;text-align:center">Nema rezultata. Baza se automatski puni kroz spremljene sesije.</div>';
+                return;
+            }
+            if (!userDbVirtualList) {
+                userDbVirtualList = new VariableVirtualList(listEl, rows, renderUserElement, { estimate: 172, overscan: 3, gap: 8 });
+            } else {
+                userDbVirtualList.update(rows, renderUserElement);
+            }
+        };
+        const closeUserDb = () => {
+            userDbVirtualList?.destroy();
+            modal.remove();
+        };
+        card.querySelector('#tkaiUserDBClose')?.addEventListener('click', closeUserDb);
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) closeUserDb(); });
+        updateUserList(orderedUsers);
         // Search
         card.querySelector('#tkaiUserDBSearch')?.addEventListener('input', (ev) => {
             const q = String(ev.target.value || '').trim().toLowerCase();
-            const listEl = card.querySelector('#tkaiUserDBList');
-            if (!listEl) return;
             const filtered = q ? allUsers.filter((u) => String(u.user || '').toLowerCase().includes(q)) : allUsers;
-            listEl.innerHTML = filtered.length ? filtered.map(renderUser).join('') : '<div style="color:#6b7280;padding:8px">Nema rezultata.</div>';
-            bindUserDBActions(listEl);
+            updateUserList(filtered);
         });
-        // Profile open buttons & note save
-        function bindUserDBActions(container) {
-            container.querySelectorAll('[data-show-msgs]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const user = btn.dataset.showMsgs;
-                    modal.remove();
-                    showTkaiUserMessagesModal(user);
-                });
-            });
-            container.querySelectorAll('[data-show-gifts]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const user = btn.dataset.showGifts;
-                    modal.remove();
-                    showTkaiUserGiftsModal(user);
-                });
-            });
-            container.querySelectorAll('[data-open-profile]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const user = btn.dataset.openProfile;
-                    openTikTokProfileTab(user);
-                    modal.remove();
-                });
-            });
-            container.querySelectorAll('[data-save-note]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const user = btn.dataset.saveNote;
-                    const input = container.querySelector(`[data-note-user="${CSS.escape(user)}"]`);
-                    if (!input) return;
-                    const db2 = getTkaiUserDB();
-                    const key = String(user).toLowerCase();
-                    if (db2[key]) { db2[key].note = String(input.value || '').slice(0, 200); saveTkaiUserDB(db2); }
-                    showToast('💾 Bilješka spremljena za @' + user);
-                });
-            });
-        }
-        bindUserDBActions(card.querySelector('#tkaiUserDBList'));
+        // Delegation keeps actions working as virtual rows enter and leave DOM.
+        listEl.addEventListener('click', (event) => {
+            const messageButton = event.target.closest('[data-show-msgs]');
+            if (messageButton) {
+                const user = messageButton.dataset.showMsgs;
+                closeUserDb();
+                showTkaiUserMessagesModal(user);
+                return;
+            }
+            const giftButton = event.target.closest('[data-show-gifts]');
+            if (giftButton) {
+                const user = giftButton.dataset.showGifts;
+                closeUserDb();
+                showTkaiUserGiftsModal(user);
+                return;
+            }
+            const profileButton = event.target.closest('[data-open-profile]');
+            if (profileButton) {
+                openTikTokProfileTab(profileButton.dataset.openProfile);
+                closeUserDb();
+                return;
+            }
+            const saveButton = event.target.closest('[data-save-note]');
+            if (!saveButton) return;
+            const user = saveButton.dataset.saveNote;
+            const row = saveButton.closest('[data-virtual-index]');
+            const input = row?.querySelector(`[data-note-user="${CSS.escape(user)}"]`);
+            if (!input) return;
+            const db2 = getTkaiUserDB();
+            const key = String(user).toLowerCase();
+            if (db2[key]) {
+                db2[key].note = String(input.value || '').slice(0, 200);
+                saveTkaiUserDB(db2);
+            }
+            showToast('💾 Bilješka spremljena za @' + user);
+        });
     }
 
     function openTkaiMsgContextMenu(x, y, message) {
@@ -10075,7 +10337,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 + '</div>';
         }).join('');
     }
-    function renderViewerSparkline() {
+    function renderViewerSparklineNow() {
         if (!viewerSparkEl) return;
         if (!viewerSamples.length) {
             viewerSparkEl.innerHTML = '';
@@ -10086,22 +10348,26 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const maxV = Math.max(1, ...samples);
         const minV = Math.min(...samples);
         const range = Math.max(1, maxV - minV);
-        const width = 120;
-        const height = 26;
-        const points = samples
-            .map((v, i) => {
-                const x = samples.length === 1 ? 1 : (i / (samples.length - 1)) * (width - 2) + 1;
-                const y = height - 2 - ((v - minV) / range) * (height - 4);
-                return `${x.toFixed(1)},${y.toFixed(1)}`;
-            })
-            .join(' ');
+        const surface = prepareTkaiCanvas(viewerSparkEl, 120, 26, 'viewer-spark');
+        if (!surface) return;
+        const { canvas, context, width, height } = surface;
+        canvas.setAttribute('aria-label', 'Trend broja gledatelja');
+        const points = samples.map((value, index) => ({
+            x: samples.length === 1 ? 1 : (index / (samples.length - 1)) * (width - 2) + 1,
+            y: height - 2 - ((value - minV) / range) * (height - 4)
+        }));
+        context.beginPath();
+        points.forEach((point, index) => {
+            if (index === 0) context.moveTo(point.x, point.y);
+            else context.lineTo(point.x, point.y);
+        });
+        context.strokeStyle = 'rgba(102,126,234,.95)';
+        context.lineWidth = 2;
+        context.lineJoin = 'round';
+        context.lineCap = 'round';
+        context.stroke();
         const delta = (samples[samples.length - 1] || 0) - (samples[0] || 0);
         const trendText = delta > 0 ? `+${formatNum(delta)}` : formatNum(delta);
-        viewerSparkEl.innerHTML = `
-          <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
-            <polyline fill="none" stroke="rgba(102,126,234,.95)" stroke-width="2" points="${points}" />
-          </svg>
-        `;
         if (viewerTrendLabelEl) viewerTrendLabelEl.textContent = trendText;
     }
     function getActiveTikTokWebview() {
@@ -10239,7 +10505,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             liveUrl: String(tab?.url || ''),
             startedAt: Number(sessionStartedAt || Date.now()),
             currentViewers: Math.max(0, Number(liveViewerCount || 0)),
-            peakViewers: Math.max(0, Number(peakViewerCount || 0))
+            peakViewers: Math.max(0, Number(peakViewerCount || 0)),
+            telegramScanNotified: tkaiTelegramScanNotified === true
         };
     }
     function restoreTkaiLiveServerPendingQueue() {
@@ -10717,6 +10984,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiTikTokLiveReconnectAttempt = 0;
         tkaiTikTokLiveReconnectInFlight = false;
         tkaiTikTokLiveReconnectOwner = '';
+        tkaiTelegramScanNotified = false;
         saveSessionToHistory();
         scanActive = false;
         stopTkaiLiveServerTransport({ endSession: true, reason: 'Skeniranje zaustavljeno', resetReconnect: true });
@@ -11623,8 +11891,10 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (engagementAreaMetaEl) engagementAreaMetaEl.textContent = 'Trend: -';
             return;
         }
-        const width = 320;
-        const height = 92;
+        const surface = prepareTkaiCanvas(engagementAreaEl, 320, 92, 'engagement-area');
+        if (!surface) return;
+        const { canvas, context, width, height } = surface;
+        canvas.setAttribute('aria-label', 'Trend aktivnosti po minuti');
         const padX = 8;
         const padTop = 6;
         const padBottom = 12;
@@ -11643,22 +11913,43 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             const y = padTop + ((maxV - v) / range) * (height - padTop - padBottom);
             return { x, y };
         });
-        const line = coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-        const area = `${coords.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')} ${coords[coords.length - 1].x.toFixed(1)},${(height - padBottom).toFixed(1)} ${coords[0].x.toFixed(1)},${(height - padBottom).toFixed(1)}`;
-        const dots = coords.map((p) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="rgba(167,243,208,.95)" stroke="rgba(6,95,70,.65)" stroke-width="0.8"></circle>`
-        ).join('');
         const first = vals[0] || 0;
         const last = vals[vals.length - 1] || 0;
         const delta = last - first;
         const dir = delta > 0 ? '↗' : delta < 0 ? '↘' : '→';
-        engagementAreaEl.innerHTML =
-            `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">` +
-            `<polyline fill="none" stroke="rgba(148,163,184,.35)" stroke-width="1" points="${padX},${(height - padBottom).toFixed(1)} ${(width - padX).toFixed(1)},${(height - padBottom).toFixed(1)}"/>` +
-            `<polygon points="${area}" fill="rgba(45,212,191,.22)"></polygon>` +
-            `<polyline fill="none" stroke="rgba(94,234,212,.96)" stroke-width="2.1" points="${line}"></polyline>` +
-            dots +
-            `</svg>`;
+        const baseline = height - padBottom;
+        context.strokeStyle = 'rgba(148,163,184,.35)';
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(padX, baseline);
+        context.lineTo(width - padX, baseline);
+        context.stroke();
+        context.beginPath();
+        context.moveTo(coords[0].x, baseline);
+        coords.forEach((point) => context.lineTo(point.x, point.y));
+        context.lineTo(coords[coords.length - 1].x, baseline);
+        context.closePath();
+        context.fillStyle = 'rgba(45,212,191,.22)';
+        context.fill();
+        context.beginPath();
+        coords.forEach((point, index) => {
+            if (index === 0) context.moveTo(point.x, point.y);
+            else context.lineTo(point.x, point.y);
+        });
+        context.strokeStyle = 'rgba(94,234,212,.96)';
+        context.lineWidth = 2.1;
+        context.lineJoin = 'round';
+        context.lineCap = 'round';
+        context.stroke();
+        coords.forEach((point) => {
+            context.beginPath();
+            context.arc(point.x, point.y, 2.2, 0, Math.PI * 2);
+            context.fillStyle = 'rgba(167,243,208,.95)';
+            context.fill();
+            context.strokeStyle = 'rgba(6,95,70,.65)';
+            context.lineWidth = 0.8;
+            context.stroke();
+        });
         if (engagementAreaMetaEl) {
             engagementAreaMetaEl.textContent = `Trend ${dir} ${delta > 0 ? '+' : ''}${formatNum(delta)} • zadnje ${formatNum(last)}/min`;
         }
@@ -11670,7 +11961,11 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
 
         const getChart = (el, previous) => {
             if (!el) return null;
-            return previous || echartsApi.getInstanceByDom(el) || echartsApi.init(el, null, { renderer: 'canvas' });
+            return previous || echartsApi.getInstanceByDom(el) || echartsApi.init(el, null, {
+                renderer: 'canvas',
+                useDirtyRect: true,
+                devicePixelRatio: Math.max(1, Math.min(2, Number(window.devicePixelRatio || 1)))
+            });
         };
         giftEchartsInstance = getChart(giftEchartsEl, giftEchartsInstance);
         sentimentAqiEchartsInstance = getChart(sentimentAqiChartEl, sentimentAqiEchartsInstance);
@@ -12203,18 +12498,35 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         sentimentTrendEl.style.display = mode === 'bars' ? '' : 'none';
 
         if (sentimentWaveEl) {
-            const midY = hWave / 2;
-            const wavePts = scores.map((v, i) => {
-                const x = scores.length === 1 ? width / 2 : pad + (i / (scores.length - 1)) * (width - pad * 2);
-                const y = midY - ((v / maxAbs) * (hWave / 2 - 8));
-                return `${x.toFixed(1)},${y.toFixed(1)}`;
-            }).join(' ');
-            sentimentWaveEl.innerHTML =
-                `<svg viewBox="0 0 ${width} ${hWave}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
-                `<defs><linearGradient id="tkaiSentWaveGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#22d3ee"/><stop offset="50%" stop-color="#a78bfa"/><stop offset="100%" stop-color="#f472b6"/></linearGradient></defs>` +
-                `<line x1="${pad}" y1="${midY.toFixed(1)}" x2="${(width - pad).toFixed(1)}" y2="${midY.toFixed(1)}" stroke="rgba(148,163,184,.26)" stroke-width="1" />` +
-                `<polyline fill="none" stroke="url(#tkaiSentWaveGrad)" stroke-width="2" points="${wavePts}"></polyline>` +
-                `</svg>`;
+            const surface = prepareTkaiCanvas(sentimentWaveEl, width, hWave, 'sentiment-wave');
+            if (!surface) return;
+            const { canvas, context, width: canvasWidth, height: canvasHeight } = surface;
+            canvas.setAttribute('aria-label', 'Val sentimenta kroz vrijeme');
+            const midY = canvasHeight / 2;
+            const wavePoints = scores.map((value, index) => ({
+                x: scores.length === 1 ? canvasWidth / 2 : pad + (index / (scores.length - 1)) * (canvasWidth - pad * 2),
+                y: midY - ((value / maxAbs) * (canvasHeight / 2 - 8))
+            }));
+            context.strokeStyle = 'rgba(148,163,184,.26)';
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(pad, midY);
+            context.lineTo(canvasWidth - pad, midY);
+            context.stroke();
+            const gradient = context.createLinearGradient(pad, 0, canvasWidth - pad, 0);
+            gradient.addColorStop(0, '#22d3ee');
+            gradient.addColorStop(0.5, '#a78bfa');
+            gradient.addColorStop(1, '#f472b6');
+            context.beginPath();
+            wavePoints.forEach((point, index) => {
+                if (index === 0) context.moveTo(point.x, point.y);
+                else context.lineTo(point.x, point.y);
+            });
+            context.strokeStyle = gradient;
+            context.lineWidth = 2;
+            context.lineJoin = 'round';
+            context.lineCap = 'round';
+            context.stroke();
             sentimentWaveEl.style.display = mode === 'wave' ? '' : 'none';
         }
 
@@ -12502,6 +12814,39 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             : formatNum(users.length) + ' users • cijela skenirana sesija';
     }
 
+    function flushTkaiChartRender() {
+        tkaiChartRenderTimer = null;
+        const insights = tkaiChartPendingInsights;
+        const renderViewer = tkaiChartViewerPending;
+        tkaiChartPendingInsights = null;
+        tkaiChartViewerPending = false;
+        tkaiChartLastRenderedAt = Date.now();
+        tkaiChartRenderCount += 1;
+        if (renderViewer) renderViewerSparklineNow();
+        if (insights) {
+            renderEngagementAreaChart(insights.engagement);
+            renderSentimentDualCharts(insights);
+            renderTkaiEcharts(insights);
+        }
+    }
+    function scheduleTkaiChartRender(insights = null, options = {}) {
+        if (insights) tkaiChartPendingInsights = insights;
+        if (options.viewer === true) tkaiChartViewerPending = true;
+        const hasPending = !!tkaiChartPendingInsights || tkaiChartViewerPending;
+        if (!hasPending || tkaiChartRenderTimer) return;
+        const elapsed = Date.now() - tkaiChartLastRenderedAt;
+        const waitMs = options.force === true
+            ? 0
+            : Math.max(0, TKAI_CHART_THROTTLE_MS - elapsed);
+        tkaiChartRenderTimer = setTimeout(flushTkaiChartRender, waitMs);
+    }
+    window.getTkaiChartThrottleStats = () => ({
+        intervalMs: TKAI_CHART_THROTTLE_MS,
+        lastRenderedAt: tkaiChartLastRenderedAt,
+        renderCount: tkaiChartRenderCount,
+        pending: !!tkaiChartPendingInsights || tkaiChartViewerPending
+    });
+
     function updateInsightsUI() {
         if (!insightsListEl || !engagementBarsEl || !spikeListEl || !recommendationsEl) return;
         if (tkaiInsightsRenderTimer) {
@@ -12535,7 +12880,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             bar.title = `${e.minute}m: ${e.count} (${e.percent || 0}%)`;
             engagementBarsEl.appendChild(bar);
         });
-        renderEngagementAreaChart(insights.engagement);
+        scheduleTkaiChartRender(insights);
         if (engagementTopEl) {
             engagementTopEl.textContent =
                 `${formatNum(insights.engagementAvgPerMin || 0)}/min • Peak ${formatNum(insights.engagementPeak?.count || 0)}/min`;
@@ -12548,9 +12893,6 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             engagementSummaryEl.textContent =
                 `Najviši engagement u ${peakMinute}. minuti • trajanje ${elapsedMin}m • range ${dashboardRangeMinutes > 0 ? dashboardRangeMinutes + 'm' : 'all'}`;
         }
-
-        renderSentimentDualCharts(insights);
-        renderTkaiEcharts(insights);
 
         if (sentimentTopEl) {
             const sc = insights.sentimentCounts || {};
@@ -14587,7 +14929,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         });
         const mergedSupporters = Array.from(supporterMap.values()).sort((a, b) => b.coins - a.coins || b.events - a.events);
         updateTopSupportersUI(mergedSupporters, Math.max(giftStats.supportersCount || 0, mergedSupporters.length));
-        renderViewerSparkline();
+        scheduleTkaiChartRender(null, { viewer: true });
         scheduleTkaiInsightsUIUpdate();
         scheduleLiveOsSnapshotPublish();
     }
@@ -14914,6 +15256,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             return message && ['gift', 'subscriber', 'share', 'join', 'like'].includes(type);
         });
         if (!collectedMessages.length) {
+            tkaiChatVirtualList?.destroy();
+            tkaiChatVirtualList = null;
             messagesEl.innerHTML = '<div class="tkai-empty">Nema poruka.<br>Klikni "Skeniranje ON" dok si<br>na TikTok Live.</div>';
             if (giftFeedEl) giftFeedEl.innerHTML = '<div class="tkai-empty">Giftovi, share i sub događaji će se pojaviti ovdje.</div>';
             if (msgCountEl) msgCountEl.textContent = '';
@@ -14925,13 +15269,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         const prevTop = messagesEl.scrollTop;
         const prevHeight = messagesEl.scrollHeight;
-        const nearBottom = _tkaiForceScrollBottom || (prevTop + messagesEl.clientHeight >= prevHeight - 36);
+        const nearBottom = _tkaiForceScrollBottom
+            || tkaiChatVirtualList?.isNearBottom(44)
+            || (prevTop + messagesEl.clientHeight >= prevHeight - 36);
         _tkaiForceScrollBottom = false;
         const giftPrevTop = giftFeedEl ? giftFeedEl.scrollTop : 0;
         const giftPrevHeight = giftFeedEl ? giftFeedEl.scrollHeight : 0;
         const giftNearBottom = giftFeedEl ? (giftPrevTop + giftFeedEl.clientHeight >= giftPrevHeight - 36) : true;
         if (!incremental) {
-            messagesEl.innerHTML = '';
             if (giftFeedEl) giftFeedEl.innerHTML = '';
         }
         const targetLang = getTranslateTargetLang();
@@ -15100,7 +15445,8 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                 openTkaiMsgContextMenu(event.clientX, event.clientY, message);
             });
             if (beforeNode && beforeNode.parentNode === container) container.insertBefore(div, beforeNode);
-            else container.appendChild(div);
+            else if (container) container.appendChild(div);
+            return div;
         };
         const incrementalChatMessages = incrementalMessages.filter((message) => {
             const type = normalizeTkaiMessageType(message);
@@ -15134,17 +15480,28 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             rows.slice(0, Math.max(0, rows.length - maxRows)).forEach((row) => row.remove());
         };
 
-        if (incremental) {
-            if (showTextInFeed && incrementalChatMessages.length) {
-                renderIncrementalRows(messagesEl, incrementalChatMessages);
-                trimRenderedRows(messagesEl, 300);
+        if (showTextInFeed) {
+            const virtualRows = chatMessages.slice(-1000);
+            const renderVirtualRow = (message) => renderRow(message, null);
+            if (!tkaiChatVirtualList) {
+                tkaiChatVirtualList = new VariableVirtualList(
+                    messagesEl,
+                    virtualRows,
+                    renderVirtualRow,
+                    { estimate: 76, overscan: 6, gap: 6 },
+                );
+                if (nearBottom) tkaiChatVirtualList.scrollToBottom();
+            } else {
+                tkaiChatVirtualList.update(virtualRows, renderVirtualRow, { stickToBottom: nearBottom });
             }
-        } else if (showTextInFeed) {
-            chatMessages.slice(-300).forEach((message) => renderRow(message, messagesEl));
         } else {
+            tkaiChatVirtualList?.destroy();
+            tkaiChatVirtualList = null;
             messagesEl.innerHTML = '<div class="tkai-empty">Tekst feed je sakriven filterom.</div>';
         }
         if (!incremental && showTextInFeed && !chatMessages.length && collectedMessages.length) {
+            tkaiChatVirtualList?.destroy();
+            tkaiChatVirtualList = null;
             const nonChatCount = collectedMessages.length;
             const types = [...new Set(collectedMessages.map(m => m.type).filter(Boolean))].join(', ');
             messagesEl.innerHTML = '<div class="tkai-empty" style="font-size:11px;opacity:.75">Chat poruke nisu pronađene.<br>'
@@ -15168,18 +15525,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             trimRenderedRows(giftFeedEl, 20);
         }
         if (targetedChatUser) {
-            const targetedRows = messagesEl.querySelectorAll('.tkai-msg.targeted');
-            const lastTargeted = targetedRows[targetedRows.length - 1];
-            if (lastTargeted) {
-                lastTargeted.scrollIntoView({ block: 'center', behavior: 'smooth' });
-            }
+            const virtualRows = chatMessages.slice(-1000);
+            let targetedIndex = -1;
+            virtualRows.forEach((message, index) => {
+                if (isTargetedTkaiUser(message?.user)) targetedIndex = index;
+            });
+            if (targetedIndex >= 0) tkaiChatVirtualList?.scrollToIndex(targetedIndex, 'center');
         } else {
-            if (nearBottom) {
-                messagesEl.scrollTop = messagesEl.scrollHeight;
-            } else {
-                const delta = messagesEl.scrollHeight - prevHeight;
-                messagesEl.scrollTop = Math.max(0, prevTop + delta);
-            }
+            if (nearBottom) tkaiChatVirtualList?.scrollToBottom();
         }
         if (giftFeedEl && giftMessages.length) {
             if (giftNearBottom) {
@@ -16893,6 +17246,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         tkaiTikTokLiveReconnectOwner = owner;
         try { window.syncBpmDetectionWithTikTokScan?.(true); } catch (_) { }
         if (!sessionStartedAt) sessionStartedAt = Date.now();
+        toggleBtn.disabled = true;
         toggleBtn.textContent = '⏹ Skeniranje OFF';
         toggleBtn.className = 'tkai-scan-btn stop';
         toggleBtn.style.background = 'linear-gradient(135deg,#16a34a,#22c55e)';
@@ -16901,7 +17255,26 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         toggleBtn.style.boxShadow = '0 0 0 1px rgba(34,197,94,.45) inset, 0 0 10px rgba(34,197,94,.35)';
         setStatus('<span class="tkai-scanning-dot"></span>TikTokLive skeniranje…');
         setTkaiTikTokLiveStatus('Pokrenuto · čeka TikTokLive događaje', 'ok');
-        showToast(bridgeResult.repaired ? '▶ TikTokLive popravljen i skeniranje uključeno' : '▶ TikTokLive skeniranje uključeno');
+        let telegramNotice = { ok: false, skipped: true };
+        if (typeof window.etherx?.tkaiOperations?.notifyScanStarted === 'function') {
+            try {
+                telegramNotice = await window.etherx.tkaiOperations.notifyScanStarted({
+                    owner,
+                    liveUrl: String(tab?.url || ''),
+                    startedAt: sessionStartedAt,
+                    sessionId: getTkaiLiveServerSessionId()
+                });
+            } catch (error) {
+                telegramNotice = { ok: false, error: String(error?.message || error) };
+            }
+        }
+        toggleBtn.disabled = false;
+        tkaiTelegramScanNotified = telegramNotice?.ok === true;
+        if (telegramNotice && telegramNotice.ok === false && telegramNotice.skipped !== true) {
+            console.warn('[TikTokAI] Telegram poruka za početak skeniranja nije poslana:', telegramNotice.error || 'nepoznata greška');
+        }
+        const telegramToast = telegramNotice?.ok === true ? ' · Telegram obavijest poslana' : '';
+        showToast((bridgeResult.repaired ? '▶ TikTokLive popravljen i skeniranje uključeno' : '▶ TikTokLive skeniranje uključeno') + telegramToast);
         if (isTkaiLiveServerEnabled()) connectTkaiLiveServer();
         queueTkaiTikTokLiveFlush();
         scheduleTkaiViewerCountRead(true);

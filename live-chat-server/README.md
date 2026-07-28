@@ -99,9 +99,14 @@ prvo treba prijeći na zajednički PostgreSQL session store.
 Svi arhivski endpointi traže zaglavlje `Authorization: Bearer <token>`:
 
 - `GET /v1/archive/status`
+- `GET /v1/archive/stream` — autorizirani SSE kanal za promjene arhive
 - `GET /v1/archive/overview`
+- `GET /v1/archive/live-state?sessionId=` — trenutno Redis/RAM stanje aktivne
+  sesije (vieweri, peak, gift/coin counteri i ostali agregati)
 - `GET /v1/archive/sessions?limit=100&offset=0&search=creator`
 - `GET /v1/archive/sessions/:id`
+- `GET /v1/archive/sessions/:id/dashboard?points=120` — gotovi KPI-jevi i
+  SQL-agregirane/downsampled krivulje bez sirovih nizova
 - `GET /v1/archive/sessions/:id/events`
 - `GET /v1/archive/sessions/:id/users`
 - `GET /v1/archive/sessions/:id/alerts`
@@ -111,6 +116,33 @@ Svi arhivski endpointi traže zaglavlje `Authorization: Bearer <token>`:
 - `GET /v1/archive/search`
 - `GET /v1/archive/creators/:owner/audience`
 - `GET /v1/archive/audience/compare`
+
+Dashboard otvara jedan `text/event-stream` kanal pomoću streaming `fetch`
+zahtjeva s Bearer tokenom. Token se ne stavlja u URL. Server spaja brze izmjene
+u batch poruke, šalje keepalive svakih 20 sekundi i dashboard učitava detalje
+samo za promijenjenu odabranu sesiju. Ako se SSE prekine, automatski se ponovno
+spaja uz eksponencijalni backoff, uz privremeni fallback refresh svakih 30
+sekundi.
+
+Početno otvaranje sesije koristi samo `/dashboard`: server u SQL-u računa
+zbrojeve, prosjeke, stope po minuti, top giftove, top 25 korisnika, sažetak
+alarma i bucketirane activity/viewer trendove. Broj točaka po krivulji ograničen
+je na 240 (dashboard standardno traži 120), neovisno o broju sirovih redaka.
+Sirovi događaji i alarmi ne ulaze u početni payload; učitavaju se tek otvaranjem
+njihove kartice, u stranicama od najviše 100 zapisa.
+
+## Redis live buffer
+
+`LIVE_REDIS_URL` uključuje Redis sloj za često promjenjivo stanje aktivnog
+LIVE-a. Server u Redis sprema trenutne viewere, peak, gift/coin countere,
+brojeve događaja i broj korisnika. Redis zapisi se grupiraju u kratke batcheve,
+a agregati se u SQLite zapisuju svakih `LIVE_ARCHIVE_FLUSH_SECONDS` (zadano 10
+sekundi) te obavezno na `end_session`, cleanup i shutdown.
+
+Sirovi eventovi i promijenjeni korisnički redovi i dalje se odmah zapisuju u
+SQLite radi trajnosti. Ako Redis nije konfiguriran ili privremeno nije dostupan,
+server automatski koristi lokalni RAM buffer i nastavlja raditi. Ključevi imaju
+TTL `LIVE_REDIS_TTL_SECONDS`, a namespace se mijenja kroz `LIVE_REDIS_PREFIX`.
 
 Admin POST endpointi dodatno traže `x-archive-admin-token`:
 

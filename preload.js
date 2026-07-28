@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('etherx', {
     startTelegram: () => ipcRenderer.invoke('tkaiOps:startTelegram'),
     stopTelegram: () => ipcRenderer.invoke('tkaiOps:stopTelegram'),
     testTelegram: () => ipcRenderer.invoke('tkaiOps:testTelegram'),
+    notifyScanStarted: (payload) => ipcRenderer.invoke('tkaiOps:notifyScanStarted', payload),
   },
 
   // ── Downloads ───────────────────────────────────────────────────────────────

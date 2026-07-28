@@ -59,7 +59,7 @@
   </main>
   <script>
     "use strict";
-    const state={token:sessionStorage.getItem("etherxArchiveToken")||"",selected:"",searchTimer:0};
+    const state={token:sessionStorage.getItem("etherxArchiveToken")||"",selected:"",searchTimer:0,sseAbort:null,sseRetry:0,sseRefreshTimer:0,fallbackTimer:0,loadedTabs:new Set()};
     const $=(id)=>document.getElementById(id);
     const esc=(v)=>String(v??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
     const num=(v)=>new Intl.NumberFormat("hr-HR").format(Number(v)||0);
@@ -78,10 +78,14 @@
       $("login").classList.add("hidden");$("app").classList.remove("hidden");
       setConnected(true,`${num(data.sessions)} sesija u bazi`);
       await loadAll();
+      connectArchiveStream();
     }
     async function loadAll(){await Promise.all([loadOverview(),loadSessions()])}
     async function loadOverview(){
       const {overview:o}=await api("/v1/archive/overview");
+      renderOverview(o);
+    }
+    function renderOverview(o){
       const cards=[
         ["Sesije",o.sessions],["Događaji",o.events],["Pokloni",o.gifts],
         ["Poruke",o.chats],["Coini",o.coins],["Jedinstveni računi",o.uniqueAccounts],
@@ -100,43 +104,143 @@
       $("sessionsFoot").innerHTML=`<span>Prikazano ${num(data.rows.length)} od ${num(data.total)}</span><span>Trajna SQLite arhiva</span>`;
       document.querySelectorAll("tr[data-id]").forEach((row)=>row.addEventListener("click",()=>selectSession(row.dataset.id)));
     }
-    async function selectSession(id){
-      state.selected=id;await loadSessions();
+    async function selectSession(id,options={}){
+      state.selected=id;
+      if(!options.skipSessions)await loadSessions();
       $("detailEmpty").classList.add("hidden");
       const key=encodeURIComponent(id);
-      const [detail,events,users,alerts,viewers]=await Promise.all([
-        api(`/v1/archive/sessions/${key}`),api(`/v1/archive/sessions/${key}/events?limit=1000`),
-        api(`/v1/archive/sessions/${key}/users?limit=1000`),api(`/v1/archive/sessions/${key}/alerts?limit=500`),
-        api(`/v1/archive/sessions/${key}/viewers?limit=10000`)
-      ]);
-      renderSession(detail.session,events.rows,users.rows,alerts.rows,viewers.rows);
+      const {dashboard}=await api(`/v1/archive/sessions/${key}/dashboard?points=120`);
+      state.loadedTabs=new Set(["summary","users","viewers"]);
+      renderSession(dashboard);
+      const active=document.querySelector(".tab.active")?.dataset.view;
+      if(active==="events"||active==="alerts")await loadDetailTab(active);
     }
-    function renderSession(s,events,users,alerts,viewers){
+    function startFallbackPolling(){
+      if(state.fallbackTimer)return;
+      state.fallbackTimer=setInterval(()=>{
+        if(document.hidden||state.sseAbort)return;
+        loadAll().catch(()=>setConnected(false,"API nije dostupan"));
+      },30000);
+    }
+    function stopFallbackPolling(){
+      clearInterval(state.fallbackTimer);state.fallbackTimer=0;
+    }
+    function scheduleSseRefresh(payload){
+      if(payload?.overview)renderOverview(payload.overview);
+      clearTimeout(state.sseRefreshTimer);
+      state.sseRefreshTimer=setTimeout(async()=>{
+        try{
+          const changed=Array.isArray(payload?.sessionIds)?payload.sessionIds:[];
+          await loadSessions();
+          if(state.selected&&(!changed.length||changed.includes(state.selected))){
+            await selectSession(state.selected,{skipSessions:true});
+          }
+        }catch(_){setConnected(false,"Live veza: obnavljanje…")}
+      },180);
+    }
+    async function connectArchiveStream(){
+      state.sseAbort?.abort();
+      const controller=new AbortController();
+      state.sseAbort=controller;
+      stopFallbackPolling();
+      try{
+        const res=await fetch("/v1/archive/stream",{
+          headers:{Authorization:`Bearer ${state.token}`,Accept:"text/event-stream"},
+          cache:"no-store",signal:controller.signal,
+        });
+        if(res.status===401)throw new Error("Token nije ispravan.");
+        if(!res.ok||!res.body)throw new Error(`SSE greška ${res.status}`);
+        setConnected(true,"LIVE SSE spojeno");
+        state.sseRetry=0;
+        const reader=res.body.getReader();
+        const decoder=new TextDecoder();
+        let buffer="";
+        while(true){
+          const {value,done}=await reader.read();
+          if(done)break;
+          buffer+=decoder.decode(value,{stream:true}).replace(/\r\n/g,"\n");
+          let boundary;
+          while((boundary=buffer.indexOf("\n\n"))>=0){
+            const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);
+            let eventName="message",data="";
+            frame.split("\n").forEach((line)=>{
+              if(line.startsWith("event:"))eventName=line.slice(6).trim();
+              if(line.startsWith("data:"))data+=line.slice(5).trim();
+            });
+            if(!data)continue;
+            const payload=JSON.parse(data);
+            if(eventName==="ready"){
+              if(payload.overview)renderOverview(payload.overview);
+              setConnected(true,"LIVE SSE spojeno");
+            }else if(eventName==="archive_update")scheduleSseRefresh(payload);
+          }
+        }
+        throw new Error("SSE veza zatvorena.");
+      }catch(error){
+        if(controller.signal.aborted)return;
+        state.sseAbort=null;
+        setConnected(false,"SSE se ponovno spaja…");
+        startFallbackPolling();
+        const wait=Math.min(30000,3000*Math.pow(2,state.sseRetry++));
+        setTimeout(()=>{if(state.token&&!document.hidden)connectArchiveStream()},wait);
+      }
+    }
+    function renderSession(d){
+      const s=d.session,users=d.topUsers||[],alerts=d.alertSummary||{},viewers=d.viewerSeries||[];
       $("detailTitle").textContent=s.owner||"Nepoznat kreator";$("detailSub").textContent=`${s.id} · ${date(s.startedAt)}`;
       const link=$("liveLink");if(/^https:\/\/(?:www\.|m\.)?tiktok\.com\//i.test(s.liveUrl||"")){link.href=s.liveUrl;link.classList.remove("hidden")}else link.classList.add("hidden");
-      const m=[["Događaji",s.counts.total],["Poruke",s.counts.chat],["Pokloni",s.counts.gifts],["Coini",s.counts.coins],["Korisnici",s.uniqueUsers],["Lajkovi",s.counts.likes],["Peak gledatelji",s.peakViewers],["Dijeljenja",s.counts.shares]];
+      const m=[["Događaji",s.counts.total],["Poruke/min",d.kpis.messagesPerMinute],["Coini/gift",d.kpis.averageCoinsPerGift],["Coini/min",d.kpis.coinsPerMinute],["Korisnici",s.uniqueUsers],["Prosjek gledatelja",d.viewerStats.average],["Peak gledatelji",d.viewerStats.peak],["Trajanje (min)",d.kpis.durationMinutes]];
       $("summary").innerHTML=`<div class="metrics">${m.map(([k,v])=>`<div class="metric"><span>${esc(k)}</span><b>${num(v)}</b></div>`).join("")}</div>
+        <div class="section"><h4>Agregirani trend aktivnosti</h4>${trendChart(d.activityTrend||[],d.activityScale||{})}</div>
         <div class="section"><h4>Pokloni po vrsti</h4><div class="chips">${s.topGifts.length?s.topGifts.map(g=>`<span class="chip">${esc(g.giftName||"Poklon")} · ${num(g.quantity)} · <b>${num(g.coins)} coin</b></span>`).join(""):"Nema gift događaja."}</div></div>
-        <div class="section"><h4>Vrste događaja</h4><div class="chips">${s.typeCounts.map(t=>`<span class="chip">${esc(t.type)} · ${num(t.events)}</span>`).join("")}</div></div>`;
-      $("events").innerHTML=table(["Vrijeme","Vrsta","Korisnik","Sadržaj / poklon","Količina","Coini"],events.map(e=>[date(e.ts),e.type,e.userHandle?`@${e.userHandle}`:e.user,e.giftName||e.text,e.quantity,e.coins]),[4,5]);
+        <div class="section"><h4>Vrste događaja</h4><div class="chips">${s.typeCounts.map(t=>`<span class="chip">${esc(t.type)} · ${num(t.events)}</span>`).join("")}</div></div>
+        <div class="foot"><span>SQL agregacija: ${num(d.meta.rawEvents)} događaja → ${num(d.meta.payloadRows)} redaka payload-a</span><span>${num(d.meta.points)} točaka po krivulji</span></div>`;
+      $("events").innerHTML=`<div class="empty">Otvorite karticu za zadnjih 100 događaja. Sirovi događaji ne ulaze u početni payload.</div>`;
       $("users").innerHTML=table(["Korisnik","Poruke","Pokloni","Coini","Lajkovi","Pojavljivanja","Zadnja aktivnost"],users.map(u=>[u.userHandle?`@${u.userHandle}`:u.user,u.messages,u.gifts,u.coins,u.likes,u.appearances,date(u.lastSeenAt)]),[1,2,3,4,5]);
-      $("alerts").innerHTML=alerts.length?alerts.map(a=>`<div class="alert"><b>${esc(a.title||a.type||"Alarm")}</b><div>${esc(a.text||"")}</div><small>${date(a.ts)} · rizik ${num(a.riskScore)} · ${esc(a.userHandle||a.user||"")}</small></div>`).join(""):`<div class="empty">Nema detektorskih alarma.</div>`;
-      $("viewers").innerHTML=viewerChart(viewers,s);
+      $("alerts").innerHTML=`<div class="metrics"><div class="metric"><span>Ukupno alarma</span><b>${num(alerts.total)}</b></div><div class="metric"><span>Najviši rizik</span><b>${num(alerts.maxRisk)}</b></div><div class="metric"><span>Critical / high</span><b>${num((alerts.critical||0)+(alerts.high||0))}</b></div><div class="metric"><span>Zadnji alarm</span><b style="font-size:12px">${date(alerts.lastAlertAt)}</b></div></div><div class="empty">Otvorite karticu za zadnjih 100 alarma.</div>`;
+      $("viewers").innerHTML=viewerChart(viewers,d.viewerStats,s);
+    }
+    async function loadDetailTab(view){
+      if(!state.selected||state.loadedTabs.has(view))return;
+      state.loadedTabs.add(view);
+      const key=encodeURIComponent(state.selected);
+      try{
+        if(view==="events"){
+          const data=await api(`/v1/archive/sessions/${key}/events?limit=100`);
+          $("events").innerHTML=table(["Vrijeme","Vrsta","Korisnik","Sadržaj / poklon","Količina","Coini"],data.rows.map(e=>[date(e.ts),e.type,e.userHandle?`@${e.userHandle}`:e.user,e.giftName||e.text,e.quantity,e.coins]),[4,5])+`<div class="foot"><span>Zadnjih ${num(data.rows.length)} od ${num(data.total)}</span><span>Serverska paginacija</span></div>`;
+        }
+        if(view==="alerts"){
+          const data=await api(`/v1/archive/sessions/${key}/alerts?limit=100`);
+          $("alerts").innerHTML=data.rows.length?data.rows.map(a=>`<div class="alert"><b>${esc(a.title||a.type||"Alarm")}</b><div>${esc(a.text||"")}</div><small>${date(a.ts)} · rizik ${num(a.riskScore)} · ${esc(a.userHandle||a.user||"")}</small></div>`).join("")+`<div class="foot"><span>Zadnjih ${num(data.rows.length)} od ${num(data.total)}</span><span>Serverska paginacija</span></div>`:`<div class="empty">Nema detektorskih alarma.</div>`;
+        }
+      }catch(error){
+        state.loadedTabs.delete(view);
+        $(view).innerHTML=`<div class="empty">${esc(error.message)}</div>`;
+      }
     }
     function table(headers,rows,numeric=[]){
       return `<table><thead><tr>${headers.map((h,i)=>`<th class="${numeric.includes(i)?"num":""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map((v,i)=>`<td class="${numeric.includes(i)?"num":""}">${esc(v)}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${headers.length}" class="empty">Nema podataka.</td></tr>`}</tbody></table>`;
     }
-    function viewerChart(rows,s){
+    function trendChart(rows,scale){
+      if(!rows.length)return `<div class="empty">Nema događaja za krivulju.</div>`;
+      const w=900,h=190,p=12,max=Math.max(1,Number(scale.maxEvents)||1);
+      const points=rows.map((r,i)=>`${p+(i/Math.max(1,rows.length-1))*(w-p*2)},${h-p-(Number(r.events)||0)/max*(h-p*2)}`).join(" ");
+      return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="#39a8ff" stroke-width="3" points="${points}"/></svg><div class="foot"><span>${num(rows.length)} SQL bucket točaka</span><span>Max ${num(scale.maxEvents)} događaja/bucket</span></div>`;
+    }
+    function viewerChart(rows,stats,s){
       if(!rows.length)return `<div class="metrics"><div class="metric"><span>Trenutno</span><b>${num(s.currentViewers)}</b></div><div class="metric"><span>Najviše</span><b>${num(s.peakViewers)}</b></div></div><div class="empty">Uzorci gledatelja stižu s novim verzijama desktop klijenta.</div>`;
-      const w=900,h=180,p=12,max=Math.max(1,...rows.map(r=>Number(r.viewers)||0));
+      const w=900,h=180,p=12,max=Math.max(1,Number(stats.maximum)||1);
       const points=rows.map((r,i)=>`${p+(i/Math.max(1,rows.length-1))*(w-p*2)},${h-p-(Number(r.viewers)||0)/(max)*(h-p*2)}`).join(" ");
-      return `<div class="metrics"><div class="metric"><span>Zadnji uzorak</span><b>${num(rows.at(-1).viewers)}</b></div><div class="metric"><span>Najviše</span><b>${num(max)}</b></div><div class="metric"><span>Uzorci</span><b>${num(rows.length)}</b></div></div><div class="section"><svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="#45e1d0" stroke-width="3" points="${points}"/></svg></div>`;
+      return `<div class="metrics"><div class="metric"><span>Prosjek</span><b>${num(stats.average)}</b></div><div class="metric"><span>Najviše</span><b>${num(stats.maximum)}</b></div><div class="metric"><span>SQL bucketi / sirovi</span><b>${num(rows.length)} / ${num(stats.samples)}</b></div></div><div class="section"><svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline fill="none" stroke="#45e1d0" stroke-width="3" points="${points}"/></svg></div>`;
     }
     $("loginForm").addEventListener("submit",async(e)=>{e.preventDefault();$("loginError").textContent="";try{await login($("token").value)}catch(err){$("loginError").textContent=err.message;state.token=""}});
-    $("logout").addEventListener("click",()=>{sessionStorage.removeItem("etherxArchiveToken");location.reload()});
+    $("logout").addEventListener("click",()=>{state.sseAbort?.abort();stopFallbackPolling();sessionStorage.removeItem("etherxArchiveToken");location.reload()});
     $("refresh").addEventListener("click",()=>loadAll().catch(()=>setConnected(false,"API nije dostupan")));
     $("search").addEventListener("input",()=>{clearTimeout(state.searchTimer);state.searchTimer=setTimeout(()=>loadSessions().catch(()=>{}),250)});
-    document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".view").forEach(x=>x.classList.toggle("active",x.id===b.dataset.view))}));
+    document.addEventListener("visibilitychange",()=>{
+      if(!document.hidden&&state.token&&!state.sseAbort)connectArchiveStream();
+    });
+    document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".view").forEach(x=>x.classList.toggle("active",x.id===b.dataset.view));loadDetailTab(b.dataset.view)}));
     if(state.token)login(state.token).catch(()=>{sessionStorage.removeItem("etherxArchiveToken");state.token=""});
   </script>
 </body>

@@ -88,6 +88,7 @@ function loadNotifyState() {
         watchUsers: [],
         last: {
           sessionId: "",
+          scanStartKey: "",
           alertKey: "",
           viewerThresholdHitAt: 0,
           giftKey: "",
@@ -113,6 +114,7 @@ function loadNotifyState() {
         : [],
       last: {
         sessionId: String(parsed?.last?.sessionId || ""),
+        scanStartKey: String(parsed?.last?.scanStartKey || ""),
         alertKey: String(parsed?.last?.alertKey || ""),
         viewerThresholdHitAt: Number(parsed?.last?.viewerThresholdHitAt || 0) || 0,
         giftKey: String(parsed?.last?.giftKey || ""),
@@ -134,7 +136,7 @@ function loadNotifyState() {
       whaleCoins: 10000,
       spikeThreshold: 150,
       watchUsers: [],
-      last: { sessionId: "", alertKey: "", viewerThresholdHitAt: 0, giftKey: "", whaleKey: "", watchUserKey: "", spikeKey: "" },
+      last: { sessionId: "", scanStartKey: "", alertKey: "", viewerThresholdHitAt: 0, giftKey: "", whaleKey: "", watchUserKey: "", spikeKey: "" },
     };
   }
 }
@@ -1718,6 +1720,7 @@ function startNotifyMonitor() {
 
 async function sendStartupMessage() {
   notifyState = loadNotifyState();
+  if (process.env.TKAI_SKIP_STARTUP_MESSAGE === "1") return;
   if (notifyState.startupEnabled === false) return;
   if (!ALLOWED_CHAT_ID) return;
   const lines = [
@@ -1905,15 +1908,18 @@ async function pollLoop() {
 
 if (require.main === module) {
   (async () => {
+    // Keep the lightweight monitor alive even while alerts are disabled.
+    // It reloads the persisted switch on every tick, so enabling tracking
+    // from the desktop scan button takes effect without restarting the bot.
+    startNotifyMonitor();
     const webhookInfo = await getTelegramWebhookInfo().catch(() => null);
     if (webhookInfo?.url && process.env.TKAI_FORCE_POLLING !== "1") {
-      console.log(`[tkai-telegram-bot] server webhook je aktivan; lokalni polling nije pokrenut.`);
+      console.log(`[tkai-telegram-bot] server webhook je aktivan; lokalno praćenje alarma ostaje uključeno.`);
       return;
     }
     console.log(
       `[tkai-telegram-bot] polling Telegram; desktop=${DEFAULT_API_URL}; archive=${ARCHIVE_API_URL}`,
     );
-    if (notifyState.enabled) startNotifyMonitor();
     await Promise.allSettled([configureTelegramCommands(), sendStartupMessage()]);
     await pollLoop();
   })().catch((error) => {

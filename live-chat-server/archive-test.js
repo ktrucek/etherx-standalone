@@ -87,6 +87,14 @@ assert.equal(store.getUserArchive("testuser", { sessionId: session.id }).streams
 assert.equal(store.getUserArchive("testuser", { fromTs: now - 1, toTs: now + 1 }).days.length, 1);
 assert.equal(store.getUserArchive("testuser", { creator: "missing" }), null);
 assert.equal(store.getArchiveReport({ creator: "creator" }).summary.events, 1);
+const dashboard = store.getDashboardAggregate(session.id, { points: 60 });
+assert.equal(dashboard.session.id, session.id);
+assert.equal(dashboard.kpis.averageCoinsPerGift, 3);
+assert.equal(dashboard.viewerStats.samples, 1);
+assert.equal(dashboard.viewerSeries.length, 1);
+assert.equal(dashboard.activityTrend.length, 1);
+assert.equal(dashboard.topUsers.length, 1);
+assert.ok(dashboard.meta.payloadRows <= 62, "dashboard payload mora ostati ograničen");
 assert.equal(store.searchArchiveEvents({ query: "Rose" }).total, 1);
 assert.equal(store.getCreatorAudience("creator").total, 1);
 assert.equal(store.compareCreatorAudiences("creator", "creator").sharedUsers, 1);
@@ -109,6 +117,31 @@ assert.equal(store.getBackupStatus().count, 1);
 assert.equal(store.deleteUserArchive("@testuser").deletedEvents, 1);
 assert.equal(store.getStatus().events, 0);
 store.close();
+
+const bufferedDbPath = path.join(testDir, "buffered-archive.sqlite");
+const bufferedSession = {
+  ...session,
+  id: "buffered-session",
+  counts: { ...session.counts, total: 0, gifts: 0, coins: 0 },
+  users: new Map(),
+  alerts: [],
+};
+const bufferedEvent = { ...event, id: "buffered-event" };
+const bufferedStore = new LiveSessionStore({ dataDir: testDir, dbPath: bufferedDbPath });
+bufferedStore.init();
+bufferedStore.persistSession(bufferedSession);
+bufferedSession.counts.total = 1;
+bufferedSession.counts.gifts = 1;
+bufferedSession.counts.coins = 3;
+bufferedStore.persistSession(bufferedSession, {
+  events: [bufferedEvent],
+  skipSessionUpsert: true,
+});
+assert.equal(bufferedStore.getStatus().events, 1, "raw event mora odmah biti trajan");
+assert.equal(bufferedStore.getSession(bufferedSession.id).counts.total, 0, "agregat čeka flush");
+bufferedStore.persistSession(bufferedSession);
+assert.equal(bufferedStore.getSession(bufferedSession.id).counts.total, 1, "agregat se zapisuje na flush");
+bufferedStore.close();
 
 fs.rmSync(testDir, { recursive: true, force: true });
 console.log("LIVE archive test OK");

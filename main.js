@@ -1219,6 +1219,7 @@ function defaultTkaiTelegramNotifyState(chatId = "") {
     watchUsers: [],
     last: {
       sessionId: "",
+      scanStartKey: "",
       alertKey: "",
       viewerThresholdHitAt: 0,
       giftKey: "",
@@ -1277,7 +1278,10 @@ function writeTkaiTelegramNotifyState(values = {}) {
       .map((value) => safeTkaiText(value, 80).replace(/^@+/, "").toLowerCase())
       .filter(Boolean)
       .slice(0, 50),
-    last: current.last || defaultTkaiTelegramNotifyState().last,
+    last: {
+      ...(current.last || defaultTkaiTelegramNotifyState().last),
+      ...((values.last && typeof values.last === "object") ? values.last : {}),
+    },
   };
   const filePath = resolveTkaiTelegramNotifyPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -1325,7 +1329,7 @@ function stopTkaiTelegramBot() {
   return { ok: true, stopped: true, status: getTkaiTelegramBotStatus() };
 }
 
-function startTkaiTelegramBot() {
+function startTkaiTelegramBot(options = {}) {
   if (tkaiTelegramBotChild && !tkaiTelegramBotChild.killed) {
     return { ok: true, alreadyRunning: true, status: getTkaiTelegramBotStatus() };
   }
@@ -1358,6 +1362,7 @@ function startTkaiTelegramBot() {
       TKAI_ARCHIVE_API_URL: config.archiveUrl,
       TKAI_ARCHIVE_TOKEN: config.archiveToken,
       TKAI_NOTIFY_STORE_PATH: resolveTkaiTelegramNotifyPath(),
+      TKAI_SKIP_STARTUP_MESSAGE: options.skipStartupMessage === true ? "1" : "",
     },
   });
   tkaiTelegramBotChild = child;
@@ -1389,6 +1394,78 @@ async function testTkaiTelegramBot() {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data?.ok) return { ok: false, error: safeTkaiText(data?.description || `Telegram HTTP ${response.status}`, 400) };
   return { ok: true, chatIdMasked: getTkaiTelegramBotStatus().chatIdMasked };
+}
+
+async function notifyTkaiScanStarted(payload = {}) {
+  const config = getTkaiTelegramConfig();
+  if (config.token.length < 20 || !config.chatId) {
+    return { ok: false, skipped: true, error: "Telegram Bot Token ili Chat ID nije postavljen." };
+  }
+  const owner = safeTkaiText(payload.owner, 80).replace(/^@+/, "");
+  const sessionId = safeTkaiText(payload.sessionId, 160) || `live-${Date.now()}`;
+  const liveUrl = safeTkaiText(payload.liveUrl, 1000);
+  const startedAt = Math.max(0, safeTkaiNumber(payload.startedAt, Date.now())) || Date.now();
+  const scanStartKey = `${sessionId}:${owner.toLowerCase()}`;
+  const notify = readTkaiTelegramNotifyState();
+  if (safeTkaiText(notify?.last?.scanStartKey, 300) === scanStartKey) {
+    writeTkaiTelegramNotifyState({ ...notify, enabled: true, chatId: config.chatId });
+    if (!tkaiTelegramBotChild || tkaiTelegramBotChild.killed) {
+      startTkaiTelegramBot({ skipStartupMessage: true });
+    }
+    return { ok: true, duplicate: true, sessionId };
+  }
+
+  const lines = [
+    "🔴 TikTok LIVE skeniranje je pokrenuto",
+    `Kreator: ${owner ? `@${owner}` : "-"}`,
+    `Vrijeme: ${new Date(startedAt).toLocaleString("hr-HR")}`,
+    `Session ID: ${sessionId}`,
+    "Telegram praćenje je aktivno; šalju se alarmi uključeni u postavkama.",
+  ];
+  if (/^https:\/\/(?:www\.|m\.)?tiktok\.com\//i.test(liveUrl)) lines.push(`LIVE: ${liveUrl}`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${config.token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: config.chatId,
+        text: lines.join("\n").slice(0, 3900),
+        disable_web_page_preview: true,
+      }),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) {
+      return { ok: false, error: safeTkaiText(data?.description || `Telegram HTTP ${response.status}`, 400) };
+    }
+    writeTkaiTelegramNotifyState({
+      ...notify,
+      enabled: true,
+      chatId: config.chatId,
+      last: {
+        ...(notify.last || {}),
+        sessionId,
+        scanStartKey,
+        alertKey: "",
+        viewerThresholdHitAt: 0,
+        giftKey: "",
+        whaleKey: "",
+        watchUserKey: "",
+        spikeKey: "",
+      },
+    });
+    if (!tkaiTelegramBotChild || tkaiTelegramBotChild.killed) {
+      startTkaiTelegramBot({ skipStartupMessage: true });
+    }
+    return { ok: true, sessionId, tracking: true };
+  } catch (error) {
+    return { ok: false, error: safeTkaiText(error?.name === "AbortError" ? "Telegram timeout" : (error?.message || error), 400) };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getTkaiOperationsStatus() {
@@ -4520,6 +4597,7 @@ function setupIPC() {
   ipcMain.handle("tkaiOps:startTelegram", () => startTkaiTelegramBot());
   ipcMain.handle("tkaiOps:stopTelegram", () => stopTkaiTelegramBot());
   ipcMain.handle("tkaiOps:testTelegram", () => testTkaiTelegramBot());
+  ipcMain.handle("tkaiOps:notifyScanStarted", (_event, payload = {}) => notifyTkaiScanStarted(payload));
   ipcMain.handle("liveos:command", (event, action) => {
     const allowed = new Set(["start-scan", "stop-scan", "open-ai-live-chat", "songrec-now"]);
     const normalized = String(action || "");
