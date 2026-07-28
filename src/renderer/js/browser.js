@@ -731,68 +731,42 @@ if (window.electronWebview) {
               setTimeout(tryDismiss, 2500);
             })()`).catch(() => { });
             } catch (_) { }
-            // TikTok occasionally leaves its newly inserted video element paused
-            // after a renderer navigation. Retry once the player has media data;
-            // do not force mute or replace the user's audio preference.
+            // Restored/background pages must not start music or video before the
+            // user interacts with that page. Chromium enforces the same rule at
+            // process level; this guard also pauses sites that try to bypass it.
             try {
                 wv.executeJavaScript(`(() => {
-                  if (!/(^|\\.)tiktok\\.com$/i.test(location.hostname || '') || window.__etherxTikTokPlaybackInstalled) return;
-                  window.__etherxTikTokPlaybackInstalled = true;
-                  let playbackObserver = null;
-                                    let startupRetry = null;
-                  const start = video => {
-                    if (!video || video.dataset.etherxPlaybackBound) return;
-                    video.dataset.etherxPlaybackBound = '1';
-                    video.playsInline = true;
-                                        let initialStartTs = 0;
-                                        const tryPlay = () => {
-                                            if (!video.paused) return;
-                                            const source = String(
-                                                video.currentSrc
-                                                || video.getAttribute('src')
-                                                || video.querySelector?.('source[src]')?.getAttribute('src')
-                                                || ''
-                                            ).trim();
-                                            // TikTok first inserts an empty player shell and assigns
-                                            // its media URL later. Calling play() on that shell causes
-                                            // PlayerError: "empty src is invalid" in TikTok's preloader.
-                                            if (!source) return;
-                                            if (!initialStartTs) initialStartTs = Date.now();
-                                            video.play().catch(() => {});
-                                        };
-                                        video.addEventListener('loadedmetadata', tryPlay, { once: true });
-                                        video.addEventListener('loadeddata', tryPlay, { once: true });
-                                        video.addEventListener('canplay', tryPlay, { once: true });
-                                        setTimeout(tryPlay, 350);
-                                        // Single delayed recovery only if the same element remains paused.
-                                        startupRetry = setTimeout(() => {
-                                            if (video.isConnected && video.paused) tryPlay();
-                                        }, 1400);
-                    // Once the first player is bound, observing TikTok's entire
-                    // dynamic page gives no playback benefit and is expensive.
-                    playbackObserver?.disconnect();
-                    playbackObserver = null;
-                  };
-                  const existing = document.querySelector('video');
-                  if (existing) { start(existing); return; }
-                  // A player can be added after TikTok's initial skeleton. Watch
-                  // only during that short startup window, then release it.
-                  playbackObserver = new MutationObserver(records => {
-                    for (const record of records) for (const node of record.addedNodes) {
-                      if (node.nodeType !== 1) continue;
-                      const video = node.tagName === 'VIDEO' ? node : node.querySelector?.('video');
-                      if (video) { start(video); return; }
+                  if (window.__etherxMediaGestureGuardInstalled) return;
+                  window.__etherxMediaGestureGuardInstalled = true;
+                  let activated = navigator.userActivation?.hasBeenActive === true;
+                  const stopUnrequestedMedia = event => {
+                    if (activated) return;
+                    const media = event?.target;
+                    if (media instanceof HTMLMediaElement && !media.paused) {
+                      try { media.pause(); } catch (_) {}
                     }
-                  });
-                  playbackObserver.observe(document.documentElement, { childList: true, subtree: true });
-                                    setTimeout(() => {
-                                        playbackObserver?.disconnect();
-                                        playbackObserver = null;
-                                        if (startupRetry) {
-                                            clearTimeout(startupRetry);
-                                            startupRetry = null;
-                                        }
-                                    }, 12000);
+                  };
+                  const pauseExisting = () => {
+                    if (activated) return;
+                    document.querySelectorAll('audio,video').forEach(media => {
+                      if (!media.paused) {
+                        try { media.pause(); } catch (_) {}
+                      }
+                    });
+                  };
+                  const activate = () => {
+                    activated = true;
+                    document.removeEventListener('play', stopUnrequestedMedia, true);
+                    document.removeEventListener('playing', stopUnrequestedMedia, true);
+                  };
+                  document.addEventListener('play', stopUnrequestedMedia, true);
+                  document.addEventListener('playing', stopUnrequestedMedia, true);
+                  document.addEventListener('pointerdown', activate, { capture: true, once: true });
+                  document.addEventListener('keydown', activate, { capture: true, once: true });
+                  document.addEventListener('touchstart', activate, { capture: true, once: true });
+                  pauseExisting();
+                  setTimeout(pauseExisting, 250);
+                  setTimeout(pauseExisting, 1200);
                 })()`).catch(() => { });
             } catch (_) { }
             try {
@@ -7973,6 +7947,33 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let sentimentDonutEchartsInstance = null;
     let echartsResizeBound = false;
     let echartsResizeObserver = null;
+    function prepareTkaiDashboardCanvas(container, fallbackWidth, fallbackHeight, key) {
+        if (!container) return null;
+        const canvasKey = String(key || 'chart');
+        let canvas = container.querySelector(`:scope > canvas[data-tkai-canvas="${canvasKey}"]`);
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.dataset.tkaiCanvas = canvasKey;
+            canvas.setAttribute('role', 'img');
+            canvas.style.cssText = 'display:block;width:100%;height:100%;';
+            container.replaceChildren(canvas);
+        }
+        const rect = container.getBoundingClientRect();
+        const width = Math.max(1, Math.round(rect.width || fallbackWidth || 320));
+        const height = Math.max(1, Math.round(rect.height || fallbackHeight || 100));
+        const dpr = Math.max(1, Math.min(2, Number(window.devicePixelRatio || 1)));
+        const pixelWidth = Math.max(1, Math.round(width * dpr));
+        const pixelHeight = Math.max(1, Math.round(height * dpr));
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+            canvas.width = pixelWidth;
+            canvas.height = pixelHeight;
+        }
+        const context = canvas.getContext('2d', { alpha: true });
+        if (!context) return null;
+        context.setTransform(dpr, 0, 0, dpr, 0, 0);
+        context.clearRect(0, 0, width, height);
+        return { canvas, context, width, height };
+    }
     try {
         const eventDefaultsMigrationKey = 'ex_tkai_event_defaults_v2';
         if (localStorage.getItem(eventDefaultsMigrationKey) !== '1') {
@@ -10351,7 +10352,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         const maxV = Math.max(1, ...samples);
         const minV = Math.min(...samples);
         const range = Math.max(1, maxV - minV);
-        const surface = prepareTkaiCanvas(viewerSparkEl, 120, 26, 'viewer-spark');
+        const surface = prepareTkaiDashboardCanvas(viewerSparkEl, 120, 26, 'viewer-spark');
         if (!surface) return;
         const { canvas, context, width, height } = surface;
         canvas.setAttribute('aria-label', 'Trend broja gledatelja');
@@ -11984,7 +11985,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             if (engagementAreaMetaEl) engagementAreaMetaEl.textContent = 'Trend: -';
             return;
         }
-        const surface = prepareTkaiCanvas(engagementAreaEl, 320, 92, 'engagement-area');
+        const surface = prepareTkaiDashboardCanvas(engagementAreaEl, 320, 92, 'engagement-area');
         if (!surface) return;
         const { canvas, context, width, height } = surface;
         canvas.setAttribute('aria-label', 'Trend aktivnosti po minuti');
@@ -12591,7 +12592,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         sentimentTrendEl.style.display = mode === 'bars' ? '' : 'none';
 
         if (sentimentWaveEl) {
-            const surface = prepareTkaiCanvas(sentimentWaveEl, width, hWave, 'sentiment-wave');
+            const surface = prepareTkaiDashboardCanvas(sentimentWaveEl, width, hWave, 'sentiment-wave');
             if (!surface) return;
             const { canvas, context, width: canvasWidth, height: canvasHeight } = surface;
             canvas.setAttribute('aria-label', 'Val sentimenta kroz vrijeme');
@@ -14274,6 +14275,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     // ── Chat pop-out floating window ─────────────────────────────────────
     const expandChatBtn = document.getElementById('tkaiExpandChatBtn');
     const expandLiveBtn = document.getElementById('tkaiExpandLiveBtn');
+    const showChartsBtn = document.getElementById('tkaiShowChartsBtn');
     let chatPopout = null;
     let chatPopoutMirrorTimer = null;
     let chatPopoutFilters = { chat: true, gifts: true, likes: true };
@@ -17519,7 +17521,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         // Restore every analytics graph after older saved modular layouts hid
         // or collapsed chart cards. This migration deliberately affects only
         // graph cards and their parent Insights section.
-        const analyticsMigrationKey = 'ex_tkai_analytics_cards_visible_v2';
+        const analyticsMigrationKey = 'ex_tkai_analytics_cards_visible_v5';
         if (localStorage.getItem(analyticsMigrationKey) !== '1') {
             const chartSelector = [
                 '#tkaiEngagementArea',
@@ -17535,15 +17537,30 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
                 '#tkaiSentimentDonutEcharts',
                 '#tkaiPieChart'
             ].join(', ');
-            getTkaiDashboardCards()
+            const chartCards = getTkaiDashboardCards()
                 .filter((card) => card.querySelector(chartSelector))
-                .forEach((card, index) => {
+            chartCards.forEach((card, index) => {
                     if (!card.id) card.id = 'tkaiDashboardCard-' + index;
                     localStorage.removeItem('ex_tkai_dashboard_hidden_' + card.id);
                     localStorage.removeItem('ex_tkai_collapsed_' + card.id);
                     card.dataset.tkaiLayoutHidden = '0';
                     card.style.removeProperty('display');
+                    card.style.removeProperty('height');
+                    card.style.removeProperty('min-height');
+                    card.style.removeProperty('max-height');
                     card.removeAttribute('hidden');
+                    card.parentElement?.style.removeProperty('display');
+                    card.parentElement?.removeAttribute('hidden');
+                    const head = card.querySelector(':scope > .tkai-card-head');
+                    const collapseButton = head?.querySelector('.tkai-collapse-btn:not(.popout)');
+                    if (collapseButton) collapseButton.textContent = '▾';
+                    Array.from(card.children).forEach((child) => {
+                        if (child !== head) child.style.removeProperty('display');
+                    });
+                    card.querySelectorAll(chartSelector).forEach((chart) => {
+                        chart.style.removeProperty('display');
+                        chart.removeAttribute('hidden');
+                    });
                 });
             [
                 'tkaiGiftEchartsCard',
@@ -17571,15 +17588,33 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (insightsSection) {
                 insightsSection.style.removeProperty('display');
                 insightsSection.classList.remove('tkai-section-collapsed');
+                insightsSection.removeAttribute('hidden');
                 const collapseButton = insightsSection.querySelector(':scope > .tkai-section-tools .tkai-section-collapse');
                 if (collapseButton) collapseButton.textContent = '▾';
+                Array.from(insightsSection.children).forEach((child) => {
+                    if (!child.classList.contains('tkai-section-tools')) child.style.removeProperty('display');
+                });
+                const statsSection = document.getElementById('tkaiStatsStrip');
+                const sessionRoot = document.querySelector('#tiktokAIPanel .tkai-main-wrap');
+                if (statsSection?.parentElement === sessionRoot) {
+                    statsSection.after(insightsSection);
+                    const savedOrder = Array.from(sessionRoot.children)
+                        .map((node) => node.dataset?.tkaiLayoutKey || node.id)
+                        .filter(Boolean);
+                    localStorage.setItem(TKAI_SESSION_LAYOUT_KEY, JSON.stringify(savedOrder));
+                }
             }
             localStorage.setItem(analyticsMigrationKey, '1');
             setTimeout(() => {
                 markTkaiInsightsDirty();
                 scheduleTkaiInsightsUIUpdate(true);
+                scheduleTkaiChartRender(computeInsightsSnapshot(getDashboardRangeFilteredMessages()), {
+                    viewer: true,
+                    force: true
+                });
                 window.dispatchEvent(new Event('resize'));
-            }, 80);
+                setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+            }, 120);
         }
         // Gift Gallery used to be easy to hide in saved layouts and was then
         // rendered below the oversized chat area. Restore it once so existing
@@ -17715,6 +17750,42 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     applyTkaiFeatureToggles();
     applyTkaiButtonTheme();
     initInsightCardControls();
+
+    showChartsBtn?.addEventListener('click', () => {
+        DB.saveSetting('tkaiShowInsights', true);
+        const insightsSection = document.getElementById('tkaiInsights');
+        if (!insightsSection) {
+            showToast('⚠️ Grafovi nisu učitani.');
+            return;
+        }
+        insightsSection.style.removeProperty('display');
+        insightsSection.classList.remove('tkai-section-collapsed');
+        insightsSection.removeAttribute('hidden');
+        localStorage.removeItem(TKAI_SESSION_COLLAPSED_PREFIX + 'tkaiInsights');
+        getTkaiDashboardCards().forEach((card) => {
+            if (!card.querySelector('#tkaiEngagementArea, #tkaiSentimentTrend, #tkaiSentimentWave, #tkaiGiftEcharts, #tkaiSentimentAqiChart, #tkaiViewerTrendEcharts, #tkaiTopGiftersEcharts, #tkaiGiftHeatmapEcharts, #tkaiGifterRaceEcharts, #tkaiChatGiftComboEcharts, #tkaiSentimentDonutEcharts, #tkaiPieChart')) return;
+            if (card.id) {
+                localStorage.removeItem('ex_tkai_dashboard_hidden_' + card.id);
+                localStorage.removeItem('ex_tkai_collapsed_' + card.id);
+            }
+            card.dataset.tkaiLayoutHidden = '0';
+            card.style.removeProperty('display');
+            card.style.removeProperty('height');
+            card.removeAttribute('hidden');
+            Array.from(card.children).forEach((child) => {
+                if (!child.classList.contains('tkai-card-head')) child.style.removeProperty('display');
+            });
+        });
+        markTkaiInsightsDirty();
+        scheduleTkaiInsightsUIUpdate(true);
+        scheduleTkaiChartRender(computeInsightsSnapshot(getDashboardRangeFilteredMessages()), {
+            viewer: true,
+            force: true
+        });
+        insightsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 180);
+        showToast('📊 Grafovi su otvoreni.');
+    });
 
     // ── Gift gallery Sakrij/Prikaži ──────────────────────────────────────
     let giftGalleryVisible = true;

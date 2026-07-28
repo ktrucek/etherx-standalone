@@ -5540,6 +5540,7 @@ html.etherx-screen-share-privacy #tkaiListenFeedPopout {
 
 .tkai-insights {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 8px;
   padding: 8px;

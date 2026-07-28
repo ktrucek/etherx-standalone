@@ -89,8 +89,9 @@ if (isCI || isHeadless || forceDisableGpuSandbox) {
   app.commandLine.appendSwitch("disable-gpu-sandbox");
 }
 
-// Allow video autoplay without user gesture (required for YouTube, TikTok, Twitch, etc.)
-app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+// Never let restored/background pages start audio or video on their own.
+// A real interaction inside the page is required before Chromium permits play().
+app.commandLine.appendSwitch("autoplay-policy", "document-user-activation-required");
 
 // IMPORTANT: DO NOT set enable-features here — it will be set later in DoH config
 // to avoid OVERWRITING by second call (Chromium bug: last appendSwitch wins)
