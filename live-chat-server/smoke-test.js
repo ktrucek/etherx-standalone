@@ -38,7 +38,7 @@ function connectAndAuthenticate(token, expected) {
         type: "auth",
         token,
         clientId: "server-smoke-test",
-        sessionId: "server-smoke-validation",
+        sessionId: "test-server-smoke-validation",
         metadata: { owner: "smoke-test", startedAt: Date.now() },
       }));
     });

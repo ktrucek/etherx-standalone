@@ -1323,6 +1323,13 @@ class LiveSessionStore {
     return { rows, total: rows.length, limit };
   }
 
+  deleteTestSession(sessionId) {
+    const id = String(sessionId || "");
+    if (!id.startsWith("test-")) return { deleted: false };
+    const result = this.db.prepare("DELETE FROM live_sessions WHERE id = ?").run(id);
+    return { deleted: Number(result.changes || 0) > 0 };
+  }
+
   _sessionRow(row) {
     return {
       id: row.id,

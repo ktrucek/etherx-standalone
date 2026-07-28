@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { spawn } = require("child_process");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
@@ -101,6 +102,26 @@ const LIVE_WSS_ALERT_MAX_SESSION_AGE_MS = Math.max(
   10,
   Number(process.env.LIVE_WSS_ALERT_MAX_SESSION_AGE_MINUTES || 120) || 120,
 ) * 60 * 1000;
+const LIVE_NETWORK_PING_INTERVAL_MS = Math.max(
+  5,
+  Number(process.env.LIVE_NETWORK_PING_INTERVAL_SECONDS || 10) || 10,
+) * 1000;
+const LIVE_NETWORK_MAX_LATENCY_MS = Math.max(
+  50,
+  Number(process.env.LIVE_NETWORK_MAX_LATENCY_MS || 300) || 300,
+);
+const LIVE_NETWORK_MAX_JITTER_MS = Math.max(
+  20,
+  Number(process.env.LIVE_NETWORK_MAX_JITTER_MS || 120) || 120,
+);
+const LIVE_NETWORK_CONSECUTIVE_FAILURES = Math.max(
+  2,
+  Math.min(10, Number(process.env.LIVE_NETWORK_CONSECUTIVE_FAILURES || 3) || 3),
+);
+const LIVE_NETWORK_RECOVERY_SAMPLES = Math.max(
+  2,
+  Math.min(10, Number(process.env.LIVE_NETWORK_RECOVERY_SAMPLES || 3) || 3),
+);
 const ALLOWED_ORIGINS = new Set(
   String(process.env.LIVE_ALLOWED_ORIGINS || "")
     .split(",")
@@ -134,6 +155,9 @@ if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
 const sessions = new Map();
 const authAttempts = new Map();
 const liveWssOutages = new Map();
+const liveNetworkStates = new Map();
+const creatorTargetNetworkStates = new Map();
+const creatorTargetProbeInFlight = new Set();
 const archiveSseClients = new Set();
 const archiveSsePendingSessions = new Set();
 let snapshotDirty = false;
@@ -532,6 +556,332 @@ function notifyTelegramSessionStarted(session, metadata = {}) {
     snapshotDirty = true;
     console.warn("[telegram-live-start] Slanje nije uspjelo:", safeText(error?.message || error, 300));
   });
+}
+
+function getLiveNetworkState(socket) {
+  const rawSessionId = safeText(socket?.sessionId, 160);
+  if (!rawSessionId) return null;
+  const sessionId = safeId(rawSessionId, "session");
+  if (!sessionId) return null;
+  let state = liveNetworkStates.get(sessionId);
+  if (!state) {
+    state = {
+      sessionId,
+      samples: [],
+      rttMs: 0,
+      jitterMs: 0,
+      badSamples: 0,
+      healthySamples: 0,
+      missedPongs: 0,
+      alerting: false,
+      alertSending: false,
+      recoverySending: false,
+      alertedAt: 0,
+      updatedAt: 0,
+      remoteAddress: "",
+    };
+    liveNetworkStates.set(sessionId, state);
+  }
+  state.remoteAddress = safeText(socket?.remoteAddress, 80);
+  return state;
+}
+
+function sendLiveNetworkAlert(socket, state, reason) {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID || !state || state.alerting || state.alertSending) return;
+  if (String(state.sessionId || "").startsWith("test-")) return;
+  state.alertSending = true;
+  const session = sessions.get(state.sessionId);
+  const owner = safeText(session?.owner, 80).replace(/^@+/, "");
+  const message = [
+    "⚠️ DETEKTIRANA MREŽNA NESTABILNOST",
+    `Kreator: ${owner ? `@${owner}` : "-"}`,
+    `Session ID: ${state.sessionId}`,
+    `Desktop IP: ${state.remoteAddress || "-"}`,
+    `WSS odaziv: ${Math.round(state.rttMs || 0)} ms`,
+    `Jitter: ${Math.round(state.jitterMs || 0)} ms`,
+    `Uzastopna loša mjerenja: ${state.badSamples}`,
+    `Razlog: ${reason}`,
+    "Ovo potvrđuje problem na mrežnoj putanji desktop → LIVE server, ali samo po sebi ne dokazuje uzrok niti bot napad.",
+    "Provjera: /sessioncheck",
+  ].join("\n");
+  telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).then(() => {
+    state.alertSending = false;
+    state.alerting = true;
+    state.alertedAt = Date.now();
+  }).catch((error) => {
+    state.alertSending = false;
+    console.warn("[telegram-network-alert] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+  });
+}
+
+function sendLiveNetworkRecovery(state) {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID || !state?.alerting || state.recoverySending) return;
+  if (String(state.sessionId || "").startsWith("test-")) return;
+  state.recoverySending = true;
+  const session = sessions.get(state.sessionId);
+  const owner = safeText(session?.owner, 80).replace(/^@+/, "");
+  const message = [
+    "🟢 MREŽA PREMA LIVE SERVERU JE STABILIZIRANA",
+    `Kreator: ${owner ? `@${owner}` : "-"}`,
+    `Session ID: ${state.sessionId}`,
+    `Desktop IP: ${state.remoteAddress || "-"}`,
+    `WSS odaziv: ${Math.round(state.rttMs || 0)} ms`,
+    `Jitter: ${Math.round(state.jitterMs || 0)} ms`,
+    `Trajanje alarma: ${Math.max(1, Math.round((Date.now() - state.alertedAt) / 1000))} s`,
+    "Provjera: /sessioncheck",
+  ].join("\n");
+  telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).then(() => {
+    state.recoverySending = false;
+    state.alerting = false;
+    state.alertedAt = 0;
+    state.badSamples = 0;
+  }).catch((error) => {
+    state.recoverySending = false;
+    console.warn("[telegram-network-recovery] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+  });
+}
+
+function recordLiveNetworkPong(socket) {
+  const state = getLiveNetworkState(socket);
+  if (!state || !socket?._livePingSentAt) return;
+  const now = Date.now();
+  const rttMs = Math.max(0, now - Number(socket._livePingSentAt));
+  socket._livePingSentAt = 0;
+  socket._liveMissedPongs = 0;
+  state.samples.push(rttMs);
+  if (state.samples.length > 12) state.samples.shift();
+  let jitterTotal = 0;
+  for (let index = 1; index < state.samples.length; index += 1) {
+    jitterTotal += Math.abs(state.samples[index] - state.samples[index - 1]);
+  }
+  state.rttMs = rttMs;
+  state.jitterMs = state.samples.length > 1 ? jitterTotal / (state.samples.length - 1) : 0;
+  state.missedPongs = 0;
+  state.updatedAt = now;
+  const unstable = rttMs > LIVE_NETWORK_MAX_LATENCY_MS || state.jitterMs > LIVE_NETWORK_MAX_JITTER_MS;
+  if (unstable) {
+    state.badSamples += 1;
+    state.healthySamples = 0;
+    if (state.badSamples >= LIVE_NETWORK_CONSECUTIVE_FAILURES) {
+      const reason = rttMs > LIVE_NETWORK_MAX_LATENCY_MS
+        ? `odaziv je iznad ${LIVE_NETWORK_MAX_LATENCY_MS} ms`
+        : `jitter je iznad ${LIVE_NETWORK_MAX_JITTER_MS} ms`;
+      sendLiveNetworkAlert(socket, state, reason);
+    }
+    return;
+  }
+  state.badSamples = 0;
+  state.healthySamples += 1;
+  if (state.alerting && state.healthySamples >= LIVE_NETWORK_RECOVERY_SAMPLES) {
+    sendLiveNetworkRecovery(state);
+  }
+}
+
+function recordLiveNetworkMiss(socket) {
+  const state = getLiveNetworkState(socket);
+  if (!state) return;
+  state.missedPongs = Math.max(state.missedPongs, Number(socket?._liveMissedPongs || 0));
+  state.badSamples += 1;
+  state.healthySamples = 0;
+  state.updatedAt = Date.now();
+  if (state.badSamples >= LIVE_NETWORK_CONSECUTIVE_FAILURES) {
+    sendLiveNetworkAlert(socket, state, "WebSocket pong nije stigao");
+  }
+}
+
+function normalizeCreatorNetworkKey(value) {
+  return safeText(value, 80).trim().replace(/^@+/, "").toLowerCase();
+}
+
+function isPublicIpv4(value) {
+  const parts = String(value || "").trim().split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) return false;
+  const octets = parts.map(Number);
+  if (octets.some((part) => part < 0 || part > 255)) return false;
+  const [first, second] = octets;
+  if (
+    first === 0
+    || first === 10
+    || first === 127
+    || first >= 224
+    || (first === 100 && second >= 64 && second <= 127)
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+  ) return false;
+  return true;
+}
+
+function getConfiguredCreatorTarget(owner) {
+  const ownerKey = normalizeCreatorNetworkKey(owner);
+  if (!ownerKey) return null;
+  const targets = archiveStore.getTelegramSetting("creator_network_targets", {});
+  const entry = targets && typeof targets === "object" ? targets[ownerKey] : null;
+  const ip = safeText(typeof entry === "string" ? entry : entry?.ip, 45);
+  if (!isPublicIpv4(ip)) return null;
+  return {
+    owner: safeText(typeof entry === "object" ? entry.owner : owner, 80).replace(/^@+/, "") || ownerKey,
+    ownerKey,
+    ip,
+    updatedAt: Math.max(0, Number(typeof entry === "object" ? entry.updatedAt : 0)),
+  };
+}
+
+function probeCreatorTargetIp(ip) {
+  return new Promise((resolve) => {
+    const child = spawn("ping", ["-n", "-c", "1", "-W", "2", ip], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    let finished = false;
+    const complete = (result) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      try { child.kill("SIGKILL"); } catch (_) { }
+      complete({ ok: false, latencyMs: 0, error: "timeout" });
+    }, 3500);
+    child.stdout.on("data", (chunk) => {
+      output = (output + chunk.toString("utf8")).slice(-5000);
+    });
+    child.stderr.on("data", (chunk) => {
+      output = (output + chunk.toString("utf8")).slice(-5000);
+    });
+    child.once("error", (error) => {
+      complete({ ok: false, latencyMs: 0, error: safeText(error?.message || error, 120) });
+    });
+    child.once("close", (code) => {
+      const latencyMatch = output.match(/time[=<]\s*([\d.]+)\s*ms/i);
+      const latencyMs = latencyMatch ? Math.max(0, Number(latencyMatch[1]) || 0) : 0;
+      complete({
+        ok: Number(code) === 0 && latencyMs > 0,
+        latencyMs,
+        error: Number(code) === 0 ? "" : "packet_loss_or_icmp_unavailable",
+      });
+    });
+  });
+}
+
+function getCreatorTargetNetworkState(target) {
+  let state = creatorTargetNetworkStates.get(target.ownerKey);
+  if (!state || state.ip !== target.ip) {
+    state = {
+      owner: target.owner,
+      ownerKey: target.ownerKey,
+      ip: target.ip,
+      samples: [],
+      latencyMs: 0,
+      jitterMs: 0,
+      badSamples: 0,
+      healthySamples: 0,
+      failures: 0,
+      alerting: false,
+      alertSending: false,
+      recoverySending: false,
+      alertedAt: 0,
+      checkedAt: 0,
+      lastError: "",
+      alertsEnabled: target.alertsEnabled !== false,
+    };
+    creatorTargetNetworkStates.set(target.ownerKey, state);
+  }
+  state.owner = target.owner;
+  state.alertsEnabled = target.alertsEnabled !== false;
+  return state;
+}
+
+function sendCreatorTargetNetworkAlert(state, reason) {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID || state.alerting || state.alertSending) return;
+  if (state.alertsEnabled === false) return;
+  state.alertSending = true;
+  const message = [
+    "⚠️ CILJNA IP MREŽA JE NESTABILNA",
+    `Kreator: @${state.owner || state.ownerKey}`,
+    `Ciljna IP: ${state.ip}`,
+    `ICMP odaziv: ${state.latencyMs ? `${Math.round(state.latencyMs)} ms` : "nema odgovora"}`,
+    `Jitter: ${Math.round(state.jitterMs || 0)} ms`,
+    `Uzastopna loša mjerenja: ${state.badSamples}`,
+    `Razlog: ${reason}`,
+    "ICMP gubitak može značiti zagušenje ili blokiran ping; nije sam po sebi dokaz bot napada.",
+    "Provjera: /sessioncheck",
+  ].join("\n");
+  telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).then(() => {
+    state.alertSending = false;
+    state.alerting = true;
+    state.alertedAt = Date.now();
+  }).catch((error) => {
+    state.alertSending = false;
+    console.warn("[telegram-target-network-alert] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+  });
+}
+
+function sendCreatorTargetNetworkRecovery(state) {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID || !state.alerting || state.recoverySending) return;
+  state.recoverySending = true;
+  const message = [
+    "🟢 CILJNA IP MREŽA JE STABILIZIRANA",
+    `Kreator: @${state.owner || state.ownerKey}`,
+    `Ciljna IP: ${state.ip}`,
+    `ICMP odaziv: ${Math.round(state.latencyMs || 0)} ms`,
+    `Jitter: ${Math.round(state.jitterMs || 0)} ms`,
+    `Trajanje alarma: ${Math.max(1, Math.round((Date.now() - state.alertedAt) / 1000))} s`,
+    "Provjera: /sessioncheck",
+  ].join("\n");
+  telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).then(() => {
+    state.recoverySending = false;
+    state.alerting = false;
+    state.alertedAt = 0;
+    state.badSamples = 0;
+  }).catch((error) => {
+    state.recoverySending = false;
+    console.warn("[telegram-target-network-recovery] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+  });
+}
+
+function recordCreatorTargetProbe(target, result) {
+  const state = getCreatorTargetNetworkState(target);
+  state.checkedAt = Date.now();
+  if (!result.ok) {
+    state.failures += 1;
+    state.badSamples += 1;
+    state.healthySamples = 0;
+    state.lastError = result.error || "ping_failed";
+    if (state.badSamples >= LIVE_NETWORK_CONSECUTIVE_FAILURES) {
+      sendCreatorTargetNetworkAlert(state, "ICMP paket nije vraćen");
+    }
+    return;
+  }
+  state.failures = 0;
+  state.lastError = "";
+  state.latencyMs = Math.max(0, Number(result.latencyMs || 0));
+  state.samples.push(state.latencyMs);
+  if (state.samples.length > 12) state.samples.shift();
+  let jitterTotal = 0;
+  for (let index = 1; index < state.samples.length; index += 1) {
+    jitterTotal += Math.abs(state.samples[index] - state.samples[index - 1]);
+  }
+  state.jitterMs = state.samples.length > 1 ? jitterTotal / (state.samples.length - 1) : 0;
+  const unstable = state.latencyMs > LIVE_NETWORK_MAX_LATENCY_MS
+    || state.jitterMs > LIVE_NETWORK_MAX_JITTER_MS;
+  if (unstable) {
+    state.badSamples += 1;
+    state.healthySamples = 0;
+    if (state.badSamples >= LIVE_NETWORK_CONSECUTIVE_FAILURES) {
+      const reason = state.latencyMs > LIVE_NETWORK_MAX_LATENCY_MS
+        ? `odaziv je iznad ${LIVE_NETWORK_MAX_LATENCY_MS} ms`
+        : `jitter je iznad ${LIVE_NETWORK_MAX_JITTER_MS} ms`;
+      sendCreatorTargetNetworkAlert(state, reason);
+    }
+    return;
+  }
+  state.badSamples = 0;
+  state.healthySamples += 1;
+  if (state.alerting && state.healthySamples >= LIVE_NETWORK_RECOVERY_SAMPLES) {
+    sendCreatorTargetNetworkRecovery(state);
+  }
 }
 
 function persistSessionArchive(session, events = [], metadata = {}, options = {}) {
@@ -1162,6 +1512,9 @@ const server = http.createServer((request, response) => {
       }
       if (requestUrl.pathname === "/v1/archive/live-state") {
         const sessionId = safeText(requestUrl.searchParams.get("sessionId"), 160);
+        const bufferedSessions = sessionId
+          ? [liveStateBuffer.get(sessionId)].filter(Boolean)
+          : liveStateBuffer.list({ limit: requestUrl.searchParams.get("limit") });
         const authenticatedClients = Array.from(wss.clients)
           .filter((client) => client.readyState === WebSocket.OPEN && client.isAuthenticated);
         const activeSessionIds = Array.from(new Set(
@@ -1169,16 +1522,48 @@ const server = http.createServer((request, response) => {
         ));
         sendHttpJson(response, 200, {
           ok: true,
-          state: sessionId ? liveStateBuffer.get(sessionId) : null,
-          sessions: sessionId ? undefined : liveStateBuffer.list({
-            limit: requestUrl.searchParams.get("limit"),
-          }),
+          state: sessionId ? bufferedSessions[0] || null : null,
+          sessions: sessionId ? undefined : bufferedSessions,
+          targetNetwork: bufferedSessions.map((state) => {
+            const target = getConfiguredCreatorTarget(state?.owner);
+            if (!target) return null;
+            const metric = creatorTargetNetworkStates.get(target.ownerKey);
+            return {
+              owner: target.owner,
+              ip: target.ip,
+              latencyMs: Math.max(0, Math.round(Number(metric?.latencyMs || 0))),
+              jitterMs: Math.max(0, Math.round(Number(metric?.jitterMs || 0))),
+              failures: Math.max(0, Number(metric?.failures || 0)),
+              badSamples: Math.max(0, Number(metric?.badSamples || 0)),
+              alerting: metric?.alerting === true,
+              checkedAt: Math.max(0, Number(metric?.checkedAt || 0)),
+              lastError: safeText(metric?.lastError, 120),
+            };
+          }).filter(Boolean),
           connections: {
             open: wss.clients.size,
             authenticated: authenticatedClients.length,
             activeSessionIds: sessionId
               ? activeSessionIds.filter((id) => id === sessionId)
               : activeSessionIds.slice(0, 100),
+            network: authenticatedClients.map((client) => {
+              const state = liveNetworkStates.get(String(client.sessionId || ""));
+              return {
+                sessionId: String(client.sessionId || ""),
+                remoteAddress: safeText(client.remoteAddress, 80),
+                rttMs: Math.max(0, Math.round(Number(state?.rttMs || 0))),
+                jitterMs: Math.max(0, Math.round(Number(state?.jitterMs || 0))),
+                missedPongs: Math.max(0, Number(client._liveMissedPongs || state?.missedPongs || 0)),
+                badSamples: Math.max(0, Number(state?.badSamples || 0)),
+                alerting: state?.alerting === true,
+                updatedAt: Math.max(0, Number(state?.updatedAt || 0)),
+              };
+            }).filter((row) => !sessionId || row.sessionId === sessionId),
+            networkThresholds: {
+              maxLatencyMs: LIVE_NETWORK_MAX_LATENCY_MS,
+              maxJitterMs: LIVE_NETWORK_MAX_JITTER_MS,
+              consecutiveFailures: LIVE_NETWORK_CONSECUTIVE_FAILURES,
+            },
           },
           buffer: liveStateBuffer.getStatus(),
         });
@@ -1452,6 +1837,8 @@ wss.on("connection", (socket, request) => {
   socket.remoteAddress = safeText(request.liveRemoteAddress || getRemoteAddress(request), 80);
   socket.messageWindowStartedAt = Date.now();
   socket.messageCountInWindow = 0;
+  socket._livePingSentAt = 0;
+  socket._liveMissedPongs = 0;
 
   const authTimer = setTimeout(() => {
     if (!socket.isAuthenticated) {
@@ -1462,6 +1849,7 @@ wss.on("connection", (socket, request) => {
 
   socket.on("pong", () => {
     socket.isAlive = true;
+    recordLiveNetworkPong(socket);
   });
 
   socket.on("message", (raw) => {
@@ -1666,6 +2054,16 @@ wss.on("connection", (socket, request) => {
         console.warn("[live-archive] Završetak sesije nije spremljen:", error.message);
       }
       sendJson(socket, { type: "session_ended", summary: buildSummary(session) });
+      if (String(session.id || "").startsWith("test-")) {
+        archiveStore.deleteTestSession(session.id);
+        sessions.delete(session.id);
+        liveWssOutages.delete(session.id);
+        liveNetworkStates.delete(session.id);
+        void liveStateBuffer.remove(session.id).catch((error) => {
+          console.warn("[live-buffer] Test cleanup warning:", safeText(error?.message || error, 200));
+        });
+        snapshotDirty = true;
+      }
       socket.close(1000, "Session ended");
       return;
     }
@@ -1682,13 +2080,56 @@ wss.on("connection", (socket, request) => {
 const heartbeatTimer = setInterval(() => {
   wss.clients.forEach((socket) => {
     if (socket.isAlive === false) {
-      socket.terminate();
-      return;
+      socket._liveMissedPongs = Math.max(0, Number(socket._liveMissedPongs || 0)) + 1;
+      recordLiveNetworkMiss(socket);
+      if (socket._liveMissedPongs >= LIVE_NETWORK_CONSECUTIVE_FAILURES) {
+        socket.terminate();
+        return;
+      }
     }
     socket.isAlive = false;
+    socket._livePingSentAt = Date.now();
     socket.ping();
   });
-}, 30000);
+}, LIVE_NETWORK_PING_INTERVAL_MS);
+
+function runCreatorTargetNetworkProbes() {
+  const activeTargets = new Map();
+  wss.clients.forEach((socket) => {
+    if (!socket.isAuthenticated || socket.readyState !== WebSocket.OPEN) return;
+    const session = sessions.get(String(socket.sessionId || ""));
+    const target = getConfiguredCreatorTarget(session?.owner);
+    if (target) {
+      const existing = activeTargets.get(target.ownerKey);
+      activeTargets.set(target.ownerKey, {
+        ...target,
+        alertsEnabled: existing?.alertsEnabled === true
+          || !String(session?.id || "").startsWith("test-"),
+      });
+    }
+  });
+  activeTargets.forEach((target) => {
+    if (creatorTargetProbeInFlight.has(target.ownerKey)) return;
+    creatorTargetProbeInFlight.add(target.ownerKey);
+    probeCreatorTargetIp(target.ip).then((result) => {
+      recordCreatorTargetProbe(target, result);
+    }).catch((error) => {
+      recordCreatorTargetProbe(target, {
+        ok: false,
+        latencyMs: 0,
+        error: safeText(error?.message || error, 120),
+      });
+    }).finally(() => {
+      creatorTargetProbeInFlight.delete(target.ownerKey);
+    });
+  });
+}
+
+const creatorTargetNetworkTimer = setInterval(
+  runCreatorTargetNetworkProbes,
+  LIVE_NETWORK_PING_INTERVAL_MS,
+);
+creatorTargetNetworkTimer.unref();
 
 const liveWssWatchdogTimer = setInterval(() => {
   if (!telegramBot || !process.env.TELEGRAM_CHAT_ID) return;
@@ -1775,6 +2216,8 @@ const cleanupTimer = setInterval(() => {
     if (!inUse && session.updatedAt < cutoff) {
       flushBufferedSessionArchive(session, {}, "cleanup");
       sessions.delete(sessionId);
+      liveWssOutages.delete(sessionId);
+      liveNetworkStates.delete(sessionId);
       void liveStateBuffer.remove(sessionId).catch((error) => {
         console.warn("[live-buffer] Cleanup warning:", safeText(error?.message || error, 200));
       });
@@ -1855,6 +2298,7 @@ server.on("error", (error) => {
 function shutdown(signal) {
   console.log(`[live] ${signal}: gasim servis.`);
   clearInterval(heartbeatTimer);
+  clearInterval(creatorTargetNetworkTimer);
   clearInterval(liveWssWatchdogTimer);
   clearInterval(archiveSseKeepaliveTimer);
   clearInterval(cleanupTimer);

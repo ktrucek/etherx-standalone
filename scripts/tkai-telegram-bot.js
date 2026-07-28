@@ -186,6 +186,9 @@ async function configureTelegramCommands() {
       { command: "watchlist", description: "Praćeni korisnici" },
       { command: "serverstatus", description: "Stanje servera i baze" },
       { command: "sessioncheck", description: "Provjeri radi li aktivna LIVE sesija" },
+      { command: "setip", description: "Postavi ciljnu IP kreatora" },
+      { command: "creatorip", description: "Prikaži ciljne IP adrese" },
+      { command: "removeip", description: "Ukloni ciljnu IP kreatora" },
       { command: "backupstatus", description: "Stanje backup kopija" },
       { command: "status", description: "Status aktivnog desktop LIVE-a" },
       { command: "viewer", description: "Gledatelji aktivnog LIVE-a" },
@@ -330,6 +333,26 @@ function normalizeUserArg(value) {
   return String(value || "").trim().replace(/^@+/, "").toLowerCase();
 }
 
+function normalizePublicIpv4(value) {
+  const ip = String(value || "").trim();
+  const parts = ip.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) return "";
+  const octets = parts.map(Number);
+  if (octets.some((part) => part < 0 || part > 255)) return "";
+  const [first, second] = octets;
+  if (
+    first === 0
+    || first === 10
+    || first === 127
+    || first >= 224
+    || (first === 100 && second >= 64 && second <= 127)
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+  ) return "";
+  return octets.join(".");
+}
+
 function tokenizeCommand(text) {
   const parts = [];
   String(text || "").replace(/"([^"]*)"|'([^']*)'|(\S+)/g, (_match, doubleQuoted, singleQuoted, bare) => {
@@ -360,6 +383,9 @@ function mainMenuMarkup() {
       [
         { text: "🚨 Alarmi", callback_data: "cmd:/alerts" },
         { text: "🗄 Baza", callback_data: "cmd:/db" },
+      ],
+      [
+        { text: "🌐 Ciljne IP adrese", callback_data: "cmd:/creatorip" },
       ],
       [
         { text: "🩺 Server", callback_data: "cmd:/serverstatus" },
@@ -543,6 +569,13 @@ async function buildLiveSessionCheckMessage() {
     ? liveData.connections.activeSessionIds.map(String)
     : [];
   const wssConnected = sessionId ? activeSessionIds.includes(sessionId) : false;
+  const networkRows = Array.isArray(liveData?.connections?.network) ? liveData.connections.network : [];
+  const network = networkRows.find((row) => String(row?.sessionId || "") === sessionId) || null;
+  const networkThresholds = liveData?.connections?.networkThresholds || {};
+  const targetNetworkRows = Array.isArray(liveData?.targetNetwork) ? liveData.targetNetwork : [];
+  const targetNetwork = targetNetworkRows.find(
+    (row) => normalizeUserArg(row?.owner) === normalizeUserArg(state?.owner),
+  ) || null;
   const previous = sessionId ? sessionCheckPrevious.get(sessionId) : null;
   const deltaEvents = previous ? total - Number(previous.total || 0) : null;
   const deltaSeconds = previous ? Math.max(1, Math.round((checkedAt - Number(previous.checkedAt || checkedAt)) / 1000)) : null;
@@ -579,6 +612,34 @@ async function buildLiveSessionCheckMessage() {
       `Događaji: ${fmtNum(total)} | chat ${fmtNum(counts.chat)} | gift ${fmtNum(counts.gifts)} | join ${fmtNum(counts.joins)}`,
       `Viewers: ${fmtNum(state.currentViewers)} | peak ${fmtNum(state.peakViewers)} | korisnici ${fmtNum(state.uniqueUsers)}`,
     );
+    if (network) {
+      const hasMeasurement = Number(network.updatedAt || 0) > 0;
+      const unstable = network.alerting === true
+        || Number(network.rttMs || 0) > Number(networkThresholds.maxLatencyMs || 300)
+        || Number(network.jitterMs || 0) > Number(networkThresholds.maxJitterMs || 120)
+        || Number(network.missedPongs || 0) > 0;
+      lines.push(
+        `Mreža desktop → server: ${hasMeasurement ? (unstable ? "🟡 nestabilna" : "🟢 stabilna") : "⚪ čeka prvo mjerenje"}`,
+        `Desktop IP: ${network.remoteAddress || "-"}`,
+        `WSS RTT: ${fmtNum(network.rttMs)} ms | jitter ${fmtNum(network.jitterMs)} ms | izgubljeni pong ${fmtNum(network.missedPongs)}`,
+      );
+    }
+    if (targetNetwork) {
+      const measured = Number(targetNetwork.checkedAt || 0) > 0;
+      const targetActive = wssConnected
+        && measured
+        && Date.now() - Number(targetNetwork.checkedAt || 0) <= 30000;
+      const unstable = targetNetwork.alerting === true
+        || Number(targetNetwork.failures || 0) > 0
+        || Number(targetNetwork.latencyMs || 0) > Number(networkThresholds.maxLatencyMs || 300)
+        || Number(targetNetwork.jitterMs || 0) > Number(networkThresholds.maxJitterMs || 120);
+      lines.push(
+        `Ciljna IP kreatora: ${targetNetwork.ip}`,
+        `ICMP mreža: ${targetActive ? (unstable ? "🟡 nestabilna" : "🟢 stabilna") : "⚪ pauzirana dok nema aktivne WSS sesije"}`,
+        `ICMP RTT: ${fmtNum(targetNetwork.latencyMs)} ms | jitter ${fmtNum(targetNetwork.jitterMs)} ms | prekidi ${fmtNum(targetNetwork.failures)}`,
+        `Zadnje ICMP mjerenje: ${measured ? `${fmtDate(targetNetwork.checkedAt)} (${fmtAge(targetNetwork.checkedAt)})` : "-"}`,
+      );
+    }
     if (deltaEvents != null) {
       lines.push(`Od zadnje provjere: ${deltaEvents > 0 ? "🟢" : "🟡"} ${deltaEvents >= 0 ? "+" : ""}${fmtNum(deltaEvents)} događaja u ${fmtNum(deltaSeconds)} s`);
     } else {
@@ -1364,6 +1425,7 @@ async function handleCommand(text) {
       "Analitika: /gifts [@kreator] · /gifters [@kreator] · /search [@kreator] pojam · /questions [@kreator] · /keywords [@kreator] · /sentiment [@kreator]",
       "Izvoz: /viewers @kreator all · /viewers all · /export creator @ime · /export user @ime · /export stream ID · /chart growth @ime",
       "Server: /sessioncheck · /serverstatus · /dbstatus · /backupstatus · /backup · /scanstatus · /startscan · /stopscan",
+      "Mreža kreatora: /setip @kreator IP · /creatorip [@kreator] · /removeip @kreator",
       "Alarmi: /notify ... (desktop) · /alert status|gift 500|viewer 500|whale 10000|keyword riječ|daily on",
       "",
       controlApiReady()
@@ -1380,6 +1442,67 @@ async function handleCommand(text) {
   if (command === "/creator") {
     if (!parts[1]) return "Primjer: /creator @kreator";
     return buildCreatorProfile(parts[1]);
+  }
+  if (command === "/setip") {
+    if (!parts[1] || !parts[2]) return "Primjer: /setip @djkitty.lynn 103.28.114.41";
+    const creator = await resolveArchiveCreator(parts[1]);
+    if (!creator) return `Kreator "${parts[1]}" nije pronađen u LIVE arhivi.`;
+    const ip = normalizePublicIpv4(parts[2]);
+    if (!ip) return "IP adresa nije valjana javna IPv4 adresa.";
+    const current = (await callArchiveApi("/v1/archive/settings/creator_network_targets")).value || {};
+    const owner = String(creator.owner || parts[1]).replace(/^@+/, "");
+    const ownerKey = normalizeUserArg(owner);
+    const next = {
+      ...current,
+      [ownerKey]: {
+        owner,
+        ip,
+        updatedAt: Date.now(),
+      },
+    };
+    await callArchiveAdminApi("/v1/archive/admin/settings/creator_network_targets", {
+      body: { value: next },
+    });
+    return [
+      "✅ Ciljna IP spremljena",
+      `Kreator: @${owner}`,
+      `IP: ${ip}`,
+      "Praćenje ICMP latencije i jittera automatski se uključuje dok je kreatorova WSS sesija aktivna.",
+      "Provjera: /sessioncheck",
+    ].join("\n");
+  }
+  if (command === "/creatorip") {
+    const targets = (await callArchiveApi("/v1/archive/settings/creator_network_targets")).value || {};
+    if (parts[1]) {
+      const ownerKey = normalizeUserArg(parts[1]);
+      const entry = targets[ownerKey];
+      if (!entry) return `Za @${ownerKey} nije spremljena ciljna IP adresa.`;
+      return [
+        `Ciljna mreža @${entry.owner || ownerKey}`,
+        `IP: ${entry.ip || "-"}`,
+        `Ažurirano: ${fmtDate(entry.updatedAt)}`,
+        "Promjena: /setip @kreator IP",
+        "Brisanje: /removeip @kreator",
+      ].join("\n");
+    }
+    const rows = Object.values(targets).filter((entry) => entry?.ip);
+    if (!rows.length) return "Nema spremljenih ciljnih IP adresa. Primjer: /setip @kreator 203.0.113.10";
+    return [
+      "Ciljne IP adrese kreatora",
+      ...rows.slice(0, 50).map((entry, index) => `${index + 1}. @${entry.owner || "-"} → ${entry.ip}`),
+    ].join("\n");
+  }
+  if (command === "/removeip") {
+    if (!parts[1]) return "Primjer: /removeip @djkitty.lynn";
+    const ownerKey = normalizeUserArg(parts[1]);
+    const current = (await callArchiveApi("/v1/archive/settings/creator_network_targets")).value || {};
+    if (!current[ownerKey]) return `Za @${ownerKey} nije spremljena ciljna IP adresa.`;
+    const next = { ...current };
+    delete next[ownerKey];
+    await callArchiveAdminApi("/v1/archive/admin/settings/creator_network_targets", {
+      body: { value: next },
+    });
+    return `✅ Ciljna IP za @${ownerKey} je uklonjena.`;
   }
   if (["/creatorstreams", "/creatorgrowth", "/beststream", "/worststream", "/besttime", "/retention"].includes(command)) {
     if (!parts[1]) return `Primjer: ${command} @kreator`;
