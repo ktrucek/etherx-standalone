@@ -63,6 +63,7 @@ let updateOffset = 0;
 let notifyState = loadNotifyState();
 let notifyMonitorStarted = false;
 const pendingForgetActions = new Map();
+const sessionCheckPrevious = new Map();
 
 function controlApiReady() {
   return !!CONTROL_TOKEN && CONTROL_TOKEN.length >= 24;
@@ -184,6 +185,7 @@ async function configureTelegramCommands() {
       { command: "search", description: "Pretraga LIVE arhive" },
       { command: "watchlist", description: "Praćeni korisnici" },
       { command: "serverstatus", description: "Stanje servera i baze" },
+      { command: "sessioncheck", description: "Provjeri radi li aktivna LIVE sesija" },
       { command: "backupstatus", description: "Stanje backup kopija" },
       { command: "status", description: "Status aktivnog desktop LIVE-a" },
       { command: "viewer", description: "Gledatelji aktivnog LIVE-a" },
@@ -341,6 +343,9 @@ function mainMenuMarkup() {
   return {
     inline_keyboard: [
       [
+        { text: "🩺 Provjeri LIVE sesiju", callback_data: "cmd:/sessioncheck" },
+      ],
+      [
         { text: "👤 Kreatori", callback_data: "cmd:/creators" },
         { text: "🎬 Sesije", callback_data: "cmd:/sessions 8" },
       ],
@@ -368,6 +373,18 @@ async function commandMarkup(commandText) {
   const parts = tokenizeCommand(commandText);
   const command = String(parts[0] || "").toLowerCase().split("@")[0];
   if (command === "/start" || command === "/menu") return mainMenuMarkup();
+  if (command === "/sessioncheck" || command === "/scanstatus") {
+    return {
+      inline_keyboard: [
+        [{ text: "🔄 Ponovno provjeri", callback_data: "cmd:/sessioncheck" }],
+        [
+          { text: "🩺 Server", callback_data: "cmd:/serverstatus" },
+          { text: "🚨 Postavke alarma", callback_data: "cmd:/alert status" },
+        ],
+        [{ text: "⬅️ Glavni izbornik", callback_data: "cmd:/menu" }],
+      ],
+    };
+  }
   if ((command === "/creators" || command === "/viewers") && !parts[1]) {
     try {
       const data = await callArchiveApi("/v1/archive/creators?limit=12");
@@ -455,6 +472,142 @@ function buildStatusMessage(data) {
   ];
   if (data?.database?.ok) {
     lines.push(`Baza: ${fmtNum(data.database.events)} events | ${fmtNum(data.database.sessions)} sessions | ${fmtNum(data.database.users)} users`);
+  }
+  return lines.join("\n");
+}
+
+function fmtAge(value) {
+  const ts = Number(value || 0);
+  if (!ts) return "-";
+  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (seconds < 60) return `${seconds} s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+  return `${Math.floor(seconds / 3600)} h ${Math.floor((seconds % 3600) / 60)} min`;
+}
+
+function liveStateHealth(state) {
+  if (Number(state?.endedAt || 0) > 0) {
+    return { icon: "⚪", label: "sesija je završena", ageMs: Math.max(0, Date.now() - Number(state.endedAt)) };
+  }
+  const updatedAt = Number(state?.updatedAt || 0);
+  if (!updatedAt) return { icon: "🔴", label: "nema signala", ageMs: Infinity };
+  const ageMs = Math.max(0, Date.now() - updatedAt);
+  if (ageMs <= 30000) return { icon: "🟢", label: "prima podatke", ageMs };
+  if (ageMs <= 120000) return { icon: "🟡", label: "signal kasni", ageMs };
+  return { icon: "🔴", label: "signal je zastario", ageMs };
+}
+
+async function buildLiveSessionCheckMessage() {
+  const checkedAt = Date.now();
+  let desktop = null;
+  let desktopError = "";
+  if (controlApiReady()) {
+    try {
+      desktop = await callControlApi("/api/tkai/status?limit=3");
+    } catch (error) {
+      desktopError = String(error?.message || error || "Control API nije dostupan");
+    }
+  }
+
+  let liveData = null;
+  let serverStatus = null;
+  let alertSettings = null;
+  let archiveError = "";
+  if (archiveApiReady()) {
+    const results = await Promise.allSettled([
+      callArchiveApi("/v1/archive/live-state?limit=8"),
+      callArchiveApi("/v1/archive/status"),
+      callArchiveApi("/v1/archive/settings/alerts"),
+    ]);
+    liveData = results[0].status === "fulfilled" ? results[0].value : null;
+    serverStatus = results[1].status === "fulfilled" ? results[1].value : null;
+    alertSettings = results[2].status === "fulfilled" ? results[2].value?.value : null;
+    archiveError = results
+      .filter((result) => result.status === "rejected")
+      .map((result) => String(result.reason?.message || result.reason || "Serverska provjera nije uspjela"))
+      .join(" | ");
+  }
+
+  const states = Array.isArray(liveData?.sessions) ? liveData.sessions : [];
+  const state = states
+    .slice()
+    .sort((a, b) => {
+      const endedOrder = Number(Boolean(a?.endedAt)) - Number(Boolean(b?.endedAt));
+      return endedOrder || Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0);
+    })[0] || null;
+  const health = liveStateHealth(state);
+  const counts = state?.counts || {};
+  const total = Number(counts.total || 0);
+  const sessionId = String(state?.id || "");
+  const activeSessionIds = Array.isArray(liveData?.connections?.activeSessionIds)
+    ? liveData.connections.activeSessionIds.map(String)
+    : [];
+  const wssConnected = sessionId ? activeSessionIds.includes(sessionId) : false;
+  const previous = sessionId ? sessionCheckPrevious.get(sessionId) : null;
+  const deltaEvents = previous ? total - Number(previous.total || 0) : null;
+  const deltaSeconds = previous ? Math.max(1, Math.round((checkedAt - Number(previous.checkedAt || checkedAt)) / 1000)) : null;
+  if (sessionId) sessionCheckPrevious.set(sessionId, { total, checkedAt });
+
+  const desktopState = String(desktop?.connection?.state || "").toLowerCase();
+  const desktopScanning = desktopState === "scanning";
+  const lines = [
+    "🩺 PROVJERA LIVE SESIJE",
+    `Provjereno: ${fmtDate(checkedAt)}`,
+    "",
+  ];
+
+  if (desktop) {
+    lines.push(
+      `Desktop skeniranje: ${desktopScanning ? "🟢 ON" : `🟡 ${desktopState || "idle"}`}`,
+      `Desktop kreator: ${desktop.connection?.owner ? `@${String(desktop.connection.owner).replace(/^@+/, "")}` : "-"}`,
+      `Desktop zadnji event: ${fmtDate(desktop.connection?.lastEventAt || desktop.latestEvent?.ts)} (${fmtAge(desktop.connection?.lastEventAt || desktop.latestEvent?.ts)})`,
+    );
+  } else if (controlApiReady()) {
+    lines.push(`Desktop Control API: 🔴 ${desktopError || "nije dostupan"}`);
+  } else {
+    lines.push("Desktop Control API: ⚪ nije direktno spojen na 24/7 server");
+  }
+
+  lines.push("");
+  if (state) {
+    lines.push(
+      `LIVE server: ${wssConnected ? "🟢 WSS spojen" : `${health.icon} ${health.label}`}`,
+      `Kreator: ${state.owner ? `@${String(state.owner).replace(/^@+/, "")}` : "-"}`,
+      `Session ID: ${sessionId}`,
+      `WSS veze: ${fmtNum(liveData?.connections?.authenticated)} autentificiranih`,
+      `Zadnji serverski signal: ${fmtDate(state.updatedAt)} (${fmtAge(state.updatedAt)})`,
+      `Događaji: ${fmtNum(total)} | chat ${fmtNum(counts.chat)} | gift ${fmtNum(counts.gifts)} | join ${fmtNum(counts.joins)}`,
+      `Viewers: ${fmtNum(state.currentViewers)} | peak ${fmtNum(state.peakViewers)} | korisnici ${fmtNum(state.uniqueUsers)}`,
+    );
+    if (deltaEvents != null) {
+      lines.push(`Od zadnje provjere: ${deltaEvents > 0 ? "🟢" : "🟡"} ${deltaEvents >= 0 ? "+" : ""}${fmtNum(deltaEvents)} događaja u ${fmtNum(deltaSeconds)} s`);
+    } else {
+      lines.push("Od zadnje provjere: pritisni „Ponovno provjeri” za mjerenje promjene");
+    }
+  } else {
+    lines.push("LIVE server: 🔴 nema aktivne/bufferirane sesije");
+  }
+
+  const buffer = serverStatus?.buffer || liveData?.buffer || {};
+  lines.push(
+    "",
+    `Redis buffer: ${buffer.redisReady === true || buffer.mode === "redis" ? "🟢 spreman" : `🟡 ${buffer.mode || "nepoznato"}`}`,
+    `Telegram webhook: 🟢 radi (ova provjera je stigla)`,
+    `Telegram alarmi: ${alertSettings ? "🟢 postavke učitane" : "🟡 postavke nisu učitane"}`,
+  );
+
+  if (desktopScanning && !state) {
+    lines.push("", "⚠️ Desktop skenira, ali server nema sesiju. Provjeri LIVE server gumb, URL/token i WSS reconnect.");
+  } else if (state && !wssConnected && Number(state.endedAt || 0) === 0) {
+    lines.push("", `⚠️ Server pamti sesiju, ali trenutno nema aktivne WSS veze. Zadnji signal je bio prije ${fmtAge(state.updatedAt)}. Pritisni LIVE server reconnect ili ponovno pokreni skeniranje.`);
+  } else if (state && wssConnected && health.ageMs > 120000) {
+    lines.push("", "ℹ️ WSS veza je aktivna, ali TikTok duže od 2 minute nije dao novi događaj. Desktop i server su i dalje povezani.");
+  } else if (state && health.ageMs <= 30000 && total === 0) {
+    lines.push("", "ℹ️ Veza sa serverom radi, ali TikTok još nije poslao chat/gift/join događaj.");
+  } else if (state && health.ageMs <= 30000) {
+    lines.push("", "✅ Skeniranje → server → baza rade. Ako nema Telegram alarma, provjeri pragove u „Postavke alarma”.");
+  } else if (archiveError) {
+    lines.push("", `⚠️ Serverska provjera: ${archiveError.slice(0, 400)}`);
   }
   return lines.join("\n");
 }
@@ -1210,7 +1363,7 @@ async function handleCommand(text) {
       "Izvještaji: /daily [@kreator] [datum] · /weekly [@kreator] · /monthly [@kreator] · /summary [@kreator] · /recommend [@kreator]",
       "Analitika: /gifts [@kreator] · /gifters [@kreator] · /search [@kreator] pojam · /questions [@kreator] · /keywords [@kreator] · /sentiment [@kreator]",
       "Izvoz: /viewers @kreator all · /viewers all · /export creator @ime · /export user @ime · /export stream ID · /chart growth @ime",
-      "Server: /serverstatus · /dbstatus · /backupstatus · /backup · /scanstatus · /startscan · /stopscan",
+      "Server: /sessioncheck · /serverstatus · /dbstatus · /backupstatus · /backup · /scanstatus · /startscan · /stopscan",
       "Alarmi: /notify ... (desktop) · /alert status|gift 500|viewer 500|whale 10000|keyword riječ|daily on",
       "",
       controlApiReady()
@@ -1293,6 +1446,9 @@ async function handleCommand(text) {
   }
   if (command === "/status") {
     return buildStatusMessage(await callControlApi(`/api/tkai/status?limit=${maybeLimit}`));
+  }
+  if (command === "/sessioncheck") {
+    return buildLiveSessionCheckMessage();
   }
   if (command === "/viewer") {
     return buildViewerMessage(await callControlApi("/api/tkai/session"));
@@ -1567,9 +1723,7 @@ async function handleCommand(text) {
     return `Backup baze je izrađen.\nDatoteka: ${data.backup?.filename || "-"}\nVeličina: ${fmtNum(data.backup?.size)} B`;
   }
   if (command === "/scanstatus") {
-    if (controlApiReady()) return buildStatusMessage(await callControlApi("/api/tkai/status?limit=5"));
-    const overview = await callArchiveApi("/v1/archive/overview");
-    return `Serverska arhiva radi i prima podatke.\nZadnji zapis: ${fmtDate(overview.overview?.lastActivityAt)}\nDesktop skeniranje se pokreće iz lokalnog browsera; server nema pristup gumbu ako desktop Control API nije spojen.`;
+    return buildLiveSessionCheckMessage();
   }
   if (command === "/alert") {
     const current = (await callArchiveApi("/v1/archive/settings/alerts")).value || {};

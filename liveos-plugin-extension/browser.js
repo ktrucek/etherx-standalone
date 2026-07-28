@@ -7204,6 +7204,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     let tkaiLiveServerFlushTimer = null;
     let tkaiLiveServerReconnectTimer = null;
     let tkaiLiveServerReconnectAttempt = 0;
+    let tkaiLiveServerWatchdogTimer = null;
+    const TKAI_LIVE_SERVER_CONNECT_TIMEOUT_MS = 20000;
+    const TKAI_LIVE_SERVER_STALE_MS = 45000;
     let tkaiLiveServerSummary = null;
     let tkaiLiveServerAlerts = [];
     let tkaiTelegramScanNotified = false;
@@ -10515,17 +10518,82 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         tkaiLiveServerPending.clear();
         tkaiLiveServerQueue = [...pending, ...tkaiLiveServerQueue].slice(-2000);
     }
+    function clearTkaiLiveServerWatchdog() {
+        if (tkaiLiveServerWatchdogTimer) clearInterval(tkaiLiveServerWatchdogTimer);
+        tkaiLiveServerWatchdogTimer = null;
+    }
+    function rejectTkaiLiveServerPageRequests(message = 'Live server veza je prekinuta.') {
+        tkaiLiveServerPageRequests.forEach((request) => {
+            clearTimeout(request.timer);
+            request.reject(new Error(message));
+        });
+        tkaiLiveServerPageRequests.clear();
+    }
+    function scheduleTkaiLiveServerReconnect(reason = 'Veza je prekinuta', options = {}) {
+        if (!scanActive || !isTkaiLiveServerEnabled()) return false;
+        if (tkaiLiveServerReconnectTimer) return true;
+        const reconnectDelays = [1000, 2000, 5000, 10000, 15000];
+        const reconnectDelay = options.immediate === true
+            ? 0
+            : reconnectDelays[Math.min(reconnectDelays.length - 1, tkaiLiveServerReconnectAttempt)];
+        tkaiLiveServerReconnectAttempt += 1;
+        setTkaiLiveServerStatus(
+            reason + (reconnectDelay ? ` · novi pokušaj za ${Math.ceil(reconnectDelay / 1000)} s` : ' · ponovno spajanje…'),
+            'wait'
+        );
+        tkaiLiveServerReconnectTimer = setTimeout(() => {
+            tkaiLiveServerReconnectTimer = null;
+            if (!scanActive || !isTkaiLiveServerEnabled()) return;
+            const socket = tkaiLiveServerSocket;
+            const usable = socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState);
+            if (usable && (socket.readyState === WebSocket.CONNECTING || tkaiLiveServerReady)) return;
+            connectTkaiLiveServer({ reconnect: true });
+        }, reconnectDelay);
+        return true;
+    }
+    function recycleTkaiLiveServerSocket(socket, reason) {
+        if (!socket || tkaiLiveServerSocket !== socket) return;
+        restoreTkaiLiveServerPendingQueue();
+        rejectTkaiLiveServerPageRequests('Live server se automatski ponovno spaja.');
+        tkaiLiveServerReady = false;
+        if (tkaiLiveServerFlushTimer) clearInterval(tkaiLiveServerFlushTimer);
+        tkaiLiveServerFlushTimer = null;
+        clearTkaiLiveServerWatchdog();
+        tkaiLiveServerSocket = null;
+        socket._tkaiIntentionalClose = true;
+        try { socket.close(4000, 'Connection watchdog'); } catch (_) { }
+        scheduleTkaiLiveServerReconnect(reason, { immediate: true });
+    }
+    function startTkaiLiveServerWatchdog(socket) {
+        clearTkaiLiveServerWatchdog();
+        tkaiLiveServerWatchdogTimer = setInterval(() => {
+            if (tkaiLiveServerSocket !== socket) {
+                clearTkaiLiveServerWatchdog();
+                return;
+            }
+            if (!scanActive || !isTkaiLiveServerEnabled()) return;
+            const now = Date.now();
+            if (!tkaiLiveServerReady
+                && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)
+                && now - Number(socket._tkaiCreatedAt || now) >= TKAI_LIVE_SERVER_CONNECT_TIMEOUT_MS) {
+                recycleTkaiLiveServerSocket(socket, 'LIVE server nije odgovorio');
+                return;
+            }
+            if (tkaiLiveServerReady
+                && socket.readyState === WebSocket.OPEN
+                && now - Number(socket._tkaiLastResponseAt || now) >= TKAI_LIVE_SERVER_STALE_MS) {
+                recycleTkaiLiveServerSocket(socket, 'LIVE server signal je zastao');
+            }
+        }, 5000);
+    }
     function stopTkaiLiveServerTransport(options = {}) {
         if (tkaiLiveServerReconnectTimer) clearTimeout(tkaiLiveServerReconnectTimer);
         tkaiLiveServerReconnectTimer = null;
         if (tkaiLiveServerFlushTimer) clearInterval(tkaiLiveServerFlushTimer);
         tkaiLiveServerFlushTimer = null;
+        clearTkaiLiveServerWatchdog();
         restoreTkaiLiveServerPendingQueue();
-        tkaiLiveServerPageRequests.forEach((request) => {
-            clearTimeout(request.timer);
-            request.reject(new Error('Live server veza je prekinuta.'));
-        });
-        tkaiLiveServerPageRequests.clear();
+        rejectTkaiLiveServerPageRequests();
         tkaiLiveServerReady = false;
         if (options.resetReconnect === true) tkaiLiveServerReconnectAttempt = 0;
         const socket = tkaiLiveServerSocket;
@@ -10747,21 +10815,36 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         socket._tkaiSessionId = sessionId;
         socket._tkaiManual = manual;
+        socket._tkaiCreatedAt = Date.now();
+        socket._tkaiLastResponseAt = Date.now();
         tkaiLiveServerSocket = socket;
+        startTkaiLiveServerWatchdog(socket);
 
         socket.addEventListener('open', () => {
-            if (tkaiLiveServerSocket !== socket) return;
+            if (tkaiLiveServerSocket !== socket) {
+                socket._tkaiIntentionalClose = true;
+                try { socket.close(4001, 'Stale client connection'); } catch (_) { }
+                return;
+            }
             setTkaiLiveServerStatus('Autentikacija…', 'wait');
-            socket.send(JSON.stringify({
-                type: 'auth',
-                token,
-                clientId: getTkaiLiveServerClientId(),
-                sessionId,
-                metadata: getTkaiLiveServerMetadata()
-            }));
+            try {
+                socket.send(JSON.stringify({
+                    type: 'auth',
+                    token,
+                    clientId: getTkaiLiveServerClientId(),
+                    sessionId,
+                    metadata: getTkaiLiveServerMetadata()
+                }));
+            } catch (error) {
+                recycleTkaiLiveServerSocket(
+                    socket,
+                    'LIVE server autentikacija nije poslana: ' + String(error?.message || error)
+                );
+            }
         });
         socket.addEventListener('message', (event) => {
             if (tkaiLiveServerSocket !== socket) return;
+            socket._tkaiLastResponseAt = Date.now();
             let message;
             try { message = JSON.parse(String(event.data || '')); } catch (_) { return; }
             if (message.type === 'ready') {
@@ -10788,6 +10871,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
                         syncTkaiLiveServerUsers().catch(() => { });
                     }
                 }, 2000);
+                return;
+            }
+            if (message.type === 'heartbeat_ack') {
+                const now = Date.now();
+                if (now - Number(socket._tkaiStatusUpdatedAt || 0) >= 10000) {
+                    socket._tkaiStatusUpdatedAt = now;
+                    setTkaiLiveServerStatus('Spojeno · signal uredan', 'ok');
+                }
                 return;
             }
             if (message.type === 'detector_alert') {
@@ -10828,25 +10919,14 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         socket.addEventListener('close', (event) => {
             if (tkaiLiveServerSocket === socket) tkaiLiveServerSocket = null;
             restoreTkaiLiveServerPendingQueue();
-            tkaiLiveServerPageRequests.forEach((request) => {
-                clearTimeout(request.timer);
-                request.reject(new Error('Live server veza je prekinuta.'));
-            });
-            tkaiLiveServerPageRequests.clear();
+            rejectTkaiLiveServerPageRequests();
             tkaiLiveServerReady = false;
             if (tkaiLiveServerFlushTimer) clearInterval(tkaiLiveServerFlushTimer);
             tkaiLiveServerFlushTimer = null;
+            clearTkaiLiveServerWatchdog();
             if (socket._tkaiIntentionalClose) return;
             setTkaiLiveServerStatus('Prekinuto (' + Number(event.code || 0) + ') · lokalni fallback', 'error');
-            if (scanActive && isTkaiLiveServerEnabled()) {
-                if (tkaiLiveServerReconnectTimer) clearTimeout(tkaiLiveServerReconnectTimer);
-                const reconnectDelay = Math.min(30000, 5000 * Math.pow(2, Math.min(3, tkaiLiveServerReconnectAttempt)));
-                tkaiLiveServerReconnectAttempt += 1;
-                tkaiLiveServerReconnectTimer = setTimeout(() => {
-                    tkaiLiveServerReconnectTimer = null;
-                    connectTkaiLiveServer();
-                }, reconnectDelay);
-            }
+            scheduleTkaiLiveServerReconnect('LIVE server veza je prekinuta');
         });
         socket.addEventListener('error', () => {
             if (tkaiLiveServerSocket === socket) {
@@ -10855,6 +10935,19 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         });
         return true;
     }
+    window.addEventListener('online', () => {
+        if (scanActive && isTkaiLiveServerEnabled() && !tkaiLiveServerReady) {
+            scheduleTkaiLiveServerReconnect('Internet je ponovno dostupan', { immediate: true });
+        }
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible'
+            && scanActive
+            && isTkaiLiveServerEnabled()
+            && !tkaiLiveServerReady) {
+            scheduleTkaiLiveServerReconnect('Provjera LIVE server veze', { immediate: true });
+        }
+    });
     function queueTkaiLiveServerEvents(messages) {
         if (!isTkaiLiveServerEnabled() || !Array.isArray(messages) || !messages.length) return;
         const outgoing = messages.map((message) => ({
@@ -17423,28 +17516,70 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
     // ── Apply feature toggles from settings ──────────────────────────────
     function applyTkaiFeatureToggles() {
         const s = DB.getSettings();
-        // Older saved layouts can hide the whole Insights section or cards that
-        // did not exist when that layout was first saved. Reveal these new cards
-        // once without resetting the user's other positions or hidden cards.
-        const analyticsMigrationKey = 'ex_tkai_analytics_cards_visible_v1';
+        // Restore every analytics graph after older saved modular layouts hid
+        // or collapsed chart cards. This migration deliberately affects only
+        // graph cards and their parent Insights section.
+        const analyticsMigrationKey = 'ex_tkai_analytics_cards_visible_v2';
         if (localStorage.getItem(analyticsMigrationKey) !== '1') {
+            const chartSelector = [
+                '#tkaiEngagementArea',
+                '#tkaiSentimentTrend',
+                '#tkaiSentimentWave',
+                '#tkaiGiftEcharts',
+                '#tkaiSentimentAqiChart',
+                '#tkaiViewerTrendEcharts',
+                '#tkaiTopGiftersEcharts',
+                '#tkaiGiftHeatmapEcharts',
+                '#tkaiGifterRaceEcharts',
+                '#tkaiChatGiftComboEcharts',
+                '#tkaiSentimentDonutEcharts',
+                '#tkaiPieChart'
+            ].join(', ');
+            getTkaiDashboardCards()
+                .filter((card) => card.querySelector(chartSelector))
+                .forEach((card, index) => {
+                    if (!card.id) card.id = 'tkaiDashboardCard-' + index;
+                    localStorage.removeItem('ex_tkai_dashboard_hidden_' + card.id);
+                    localStorage.removeItem('ex_tkai_collapsed_' + card.id);
+                    card.dataset.tkaiLayoutHidden = '0';
+                    card.style.removeProperty('display');
+                    card.removeAttribute('hidden');
+                });
             [
+                'tkaiGiftEchartsCard',
+                'tkaiSentimentAqiCard',
+                'tkaiViewerTrendEchartsCard',
+                'tkaiTopGiftersEchartsCard',
                 'tkaiGiftHeatmapCard',
                 'tkaiGifterRaceCard',
                 'tkaiChatGiftComboCard',
-                'tkaiSentimentDonutCard'
+                'tkaiSentimentDonutCard',
+                'tkaiSentimentLabCard',
+                'tkaiPieCard'
             ].forEach((id) => {
                 localStorage.removeItem('ex_tkai_dashboard_hidden_' + id);
-                const card = document.getElementById(id);
-                if (card) card.style.removeProperty('display');
+                localStorage.removeItem('ex_tkai_collapsed_' + id);
             });
-            // The user explicitly asked for the analytics charts, so unhide
-            // their parent section as part of this one-time migration.
-            if (s.tkaiShowInsights === false || s.tkaiShowInsights === 'false') {
-                s.tkaiShowInsights = true;
-                try { DB.saveSetting('tkaiShowInsights', true); } catch (_) { }
+            s.tkaiShowInsights = true;
+            s.tkaiShowPieBreakdown = true;
+            try {
+                DB.saveSetting('tkaiShowInsights', true);
+                DB.saveSetting('tkaiShowPieBreakdown', true);
+            } catch (_) { }
+            localStorage.removeItem(TKAI_SESSION_COLLAPSED_PREFIX + 'tkaiInsights');
+            const insightsSection = document.getElementById('tkaiInsights');
+            if (insightsSection) {
+                insightsSection.style.removeProperty('display');
+                insightsSection.classList.remove('tkai-section-collapsed');
+                const collapseButton = insightsSection.querySelector(':scope > .tkai-section-tools .tkai-section-collapse');
+                if (collapseButton) collapseButton.textContent = '▾';
             }
             localStorage.setItem(analyticsMigrationKey, '1');
+            setTimeout(() => {
+                markTkaiInsightsDirty();
+                scheduleTkaiInsightsUIUpdate(true);
+                window.dispatchEvent(new Event('resize'));
+            }, 80);
         }
         // Gift Gallery used to be easy to hide in saved layouts and was then
         // rendered below the oversized chat area. Restore it once so existing

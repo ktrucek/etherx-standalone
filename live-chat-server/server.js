@@ -93,6 +93,14 @@ const TELEGRAM_WEBHOOK_SECRET = String(
 const TELEGRAM_WEBHOOK_AUTO_CONFIGURE = String(
   process.env.TELEGRAM_WEBHOOK_AUTO_CONFIGURE || "true",
 ).toLowerCase() !== "false";
+const LIVE_WSS_ALERT_AFTER_MS = Math.max(
+  30,
+  Number(process.env.LIVE_WSS_ALERT_AFTER_SECONDS || 90) || 90,
+) * 1000;
+const LIVE_WSS_ALERT_MAX_SESSION_AGE_MS = Math.max(
+  10,
+  Number(process.env.LIVE_WSS_ALERT_MAX_SESSION_AGE_MINUTES || 120) || 120,
+) * 60 * 1000;
 const ALLOWED_ORIGINS = new Set(
   String(process.env.LIVE_ALLOWED_ORIGINS || "")
     .split(",")
@@ -125,6 +133,7 @@ if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
 
 const sessions = new Map();
 const authAttempts = new Map();
+const liveWssOutages = new Map();
 const archiveSseClients = new Set();
 const archiveSsePendingSessions = new Set();
 let snapshotDirty = false;
@@ -1153,12 +1162,24 @@ const server = http.createServer((request, response) => {
       }
       if (requestUrl.pathname === "/v1/archive/live-state") {
         const sessionId = safeText(requestUrl.searchParams.get("sessionId"), 160);
+        const authenticatedClients = Array.from(wss.clients)
+          .filter((client) => client.readyState === WebSocket.OPEN && client.isAuthenticated);
+        const activeSessionIds = Array.from(new Set(
+          authenticatedClients.map((client) => String(client.sessionId || "")).filter(Boolean),
+        ));
         sendHttpJson(response, 200, {
           ok: true,
           state: sessionId ? liveStateBuffer.get(sessionId) : null,
           sessions: sessionId ? undefined : liveStateBuffer.list({
             limit: requestUrl.searchParams.get("limit"),
           }),
+          connections: {
+            open: wss.clients.size,
+            authenticated: authenticatedClients.length,
+            activeSessionIds: sessionId
+              ? activeSessionIds.filter((id) => id === sessionId)
+              : activeSessionIds.slice(0, 100),
+          },
           buffer: liveStateBuffer.getStatus(),
         });
         return;
@@ -1669,6 +1690,68 @@ const heartbeatTimer = setInterval(() => {
   });
 }, 30000);
 
+const liveWssWatchdogTimer = setInterval(() => {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID) return;
+  const now = Date.now();
+  const connectedSessionIds = new Set();
+  wss.clients.forEach((socket) => {
+    if (socket.isAuthenticated && socket.readyState === WebSocket.OPEN && socket.sessionId) {
+      connectedSessionIds.add(String(socket.sessionId));
+    }
+  });
+
+  liveStateBuffer.list({ limit: MAX_SESSIONS }).forEach((state) => {
+    const sessionId = String(state?.id || "");
+    if (!sessionId || sessionId.startsWith("test-") || Number(state?.endedAt || 0) > 0) {
+      liveWssOutages.delete(sessionId);
+      return;
+    }
+    const signalAge = Math.max(0, now - Number(state?.updatedAt || now));
+    if (signalAge > LIVE_WSS_ALERT_MAX_SESSION_AGE_MS) {
+      liveWssOutages.delete(sessionId);
+      return;
+    }
+    const outage = liveWssOutages.get(sessionId);
+    if (connectedSessionIds.has(sessionId)) {
+      if (!outage || outage.recoverySending) return;
+      outage.recoverySending = true;
+      const owner = safeText(state.owner, 80).replace(/^@+/, "");
+      const message = [
+        "✅ LIVE server veza je obnovljena",
+        `Kreator: ${owner ? `@${owner}` : "-"}`,
+        `Session ID: ${sessionId}`,
+        `Prekid: ${Math.max(1, Math.round((now - outage.alertedAt) / 1000))} s od upozorenja`,
+        "Skeniranje i serversko spremanje ponovno šalju podatke.",
+        "Provjera: /sessioncheck",
+      ].join("\n");
+      telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).then(() => {
+        liveWssOutages.delete(sessionId);
+      }).catch((error) => {
+        outage.recoverySending = false;
+        console.warn("[telegram-wss-recovery] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+      });
+      return;
+    }
+    if (signalAge < LIVE_WSS_ALERT_AFTER_MS || outage) return;
+    const alertState = { alertedAt: now, recoverySending: false };
+    liveWssOutages.set(sessionId, alertState);
+    const owner = safeText(state.owner, 80).replace(/^@+/, "");
+    const message = [
+      "⚠️ LIVE server više ne prima podatke s desktop skeniranja",
+      `Kreator: ${owner ? `@${owner}` : "-"}`,
+      `Session ID: ${sessionId}`,
+      `Zadnji signal: prije ${Math.max(1, Math.round(signalAge / 1000))} s`,
+      "Desktop će se automatski pokušati ponovno spojiti. Lokalno skeniranje i dalje čuva događaje za naknadno slanje.",
+      "Provjera: /sessioncheck",
+    ].join("\n");
+    telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).catch((error) => {
+      liveWssOutages.delete(sessionId);
+      console.warn("[telegram-wss-alert] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+    });
+  });
+}, 30000);
+liveWssWatchdogTimer.unref();
+
 const archiveSseKeepaliveTimer = setInterval(() => {
   const line = `: keepalive ${Date.now()}\n\n`;
   archiveSseClients.forEach((response) => {
@@ -1772,6 +1855,7 @@ server.on("error", (error) => {
 function shutdown(signal) {
   console.log(`[live] ${signal}: gasim servis.`);
   clearInterval(heartbeatTimer);
+  clearInterval(liveWssWatchdogTimer);
   clearInterval(archiveSseKeepaliveTimer);
   clearInterval(cleanupTimer);
   clearInterval(snapshotTimer);
