@@ -7,6 +7,7 @@ const path = require("path");
 const { WebSocketServer, WebSocket } = require("ws");
 const DetectorStore = require("./detector-store");
 const { inspectGiftRisk, normalizeAccountId } = require("./gift-detector");
+const LiveSessionStore = require("./session-store");
 
 require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
 
@@ -62,6 +63,25 @@ const SNAPSHOT_INTERVAL_MS = Math.max(
 const DATA_DIR = String(process.env.LIVE_DATA_DIR || "").trim()
   || path.join(__dirname, "data");
 const SNAPSHOT_FILE = path.join(DATA_DIR, "live-sessions.json");
+const ARCHIVE_DB_PATH = String(process.env.LIVE_ARCHIVE_DB_PATH || "").trim()
+  || path.join(DATA_DIR, "live-archive.sqlite");
+const ARCHIVE_API_TOKEN = String(process.env.LIVE_ARCHIVE_API_TOKEN || AUTH_TOKEN);
+const ARCHIVE_ADMIN_TOKEN = String(
+  process.env.LIVE_ARCHIVE_ADMIN_TOKEN
+  || crypto.createHmac("sha256", AUTH_TOKEN).update("etherx-archive-admin").digest("hex"),
+);
+const DASHBOARD_FILE = path.join(__dirname, "dashboard.html");
+const TELEGRAM_WEBHOOK_URL = String(
+  process.env.TELEGRAM_WEBHOOK_URL
+  || "https://live.kriptoentuzijasti.io/v1/telegram/webhook",
+).trim();
+const TELEGRAM_WEBHOOK_SECRET = String(
+  process.env.TELEGRAM_WEBHOOK_SECRET
+  || crypto.createHmac("sha256", AUTH_TOKEN).update("etherx-telegram-webhook").digest("hex"),
+).trim();
+const TELEGRAM_WEBHOOK_AUTO_CONFIGURE = String(
+  process.env.TELEGRAM_WEBHOOK_AUTO_CONFIGURE || "true",
+).toLowerCase() !== "false";
 const ALLOWED_ORIGINS = new Set(
   String(process.env.LIVE_ALLOWED_ORIGINS || "")
     .split(",")
@@ -79,6 +99,19 @@ if (AUTH_TOKEN.length < 32) {
   process.exit(1);
 }
 
+let telegramBot = null;
+if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+  process.env.TKAI_ARCHIVE_API_URL ||= `http://${HOST}:${PORT}`;
+  process.env.TKAI_ARCHIVE_TOKEN ||= ARCHIVE_API_TOKEN;
+  process.env.TKAI_ARCHIVE_ADMIN_TOKEN ||= ARCHIVE_ADMIN_TOKEN;
+  process.env.TKAI_NOTIFY_STORE_PATH ||= path.join(DATA_DIR, "tkai-bot-notify.json");
+  try {
+    telegramBot = require("../scripts/tkai-telegram-bot");
+  } catch (error) {
+    console.warn("[telegram-webhook] Bot modul nije učitan:", error.message);
+  }
+}
+
 const sessions = new Map();
 const authAttempts = new Map();
 let snapshotDirty = false;
@@ -90,6 +123,20 @@ const detectorStore = new DetectorStore({
   telegramChatId: process.env.TELEGRAM_CHAT_ID,
   maxRecentAlerts: DETECTOR_ALERTS_PER_SESSION,
 });
+const archiveStore = new LiveSessionStore({
+  dataDir: DATA_DIR,
+  dbPath: ARCHIVE_DB_PATH,
+});
+let archiveStatus;
+try {
+  archiveStatus = archiveStore.init();
+  console.log(
+    `[live-archive] SQLite spremna: sesije=${archiveStatus.sessions} događaji=${archiveStatus.events}`,
+  );
+} catch (error) {
+  console.error("[live-archive] Baza se ne može otvoriti:", error.message);
+  process.exit(1);
+}
 
 function safeText(value, max = 500) {
   return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").slice(0, max);
@@ -110,9 +157,26 @@ function toAlertId(value) {
 }
 
 function tokenMatches(candidate) {
-  const actual = Buffer.from(AUTH_TOKEN);
+  return secureTokenMatches(AUTH_TOKEN, candidate);
+}
+
+function secureTokenMatches(expected, candidate) {
+  const actual = Buffer.from(String(expected || ""));
   const supplied = Buffer.from(String(candidate || ""));
   return actual.length === supplied.length && crypto.timingSafeEqual(actual, supplied);
+}
+
+function archiveTokenMatches(request) {
+  const authorization = String(request?.headers?.authorization || "");
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+  return secureTokenMatches(ARCHIVE_API_TOKEN, bearer || request?.headers?.["x-live-token"]);
+}
+
+function archiveAdminTokenMatches(request) {
+  return secureTokenMatches(
+    ARCHIVE_ADMIN_TOKEN,
+    request?.headers?.["x-archive-admin-token"],
+  );
 }
 
 function getRemoteAddress(request) {
@@ -197,8 +261,11 @@ function createSession(id, metadata = {}) {
     owner: safeText(metadata.owner, 80),
     liveUrl: safeText(metadata.liveUrl, 1000),
     startedAt: Math.max(0, safeNumber(metadata.startedAt, now)),
+    endedAt: 0,
     createdAt: now,
     updatedAt: now,
+    currentViewers: Math.max(0, safeNumber(metadata.currentViewers, 0)),
+    peakViewers: Math.max(0, safeNumber(metadata.peakViewers, metadata.currentViewers || 0)),
     events: [],
     eventIds: new Set(),
     users: new Map(),
@@ -227,6 +294,9 @@ function restoreSessionsFromSnapshot() {
       const session = createSession(id, row || {});
       session.createdAt = Math.max(0, safeNumber(row?.createdAt, Date.now()));
       session.updatedAt = Math.max(0, safeNumber(row?.updatedAt, session.createdAt));
+      session.endedAt = Math.max(0, safeNumber(row?.endedAt, 0));
+      session.currentViewers = Math.max(0, safeNumber(row?.currentViewers, 0));
+      session.peakViewers = Math.max(session.currentViewers, safeNumber(row?.peakViewers, 0));
       session.events = Array.isArray(row?.events)
         ? row.events.slice(-MAX_EVENTS_PER_SESSION).map(sanitizeEvent)
         : [];
@@ -304,8 +374,11 @@ function persistSessionsSnapshot(force = false) {
         owner: session.owner,
         liveUrl: session.liveUrl,
         startedAt: session.startedAt,
+        endedAt: session.endedAt || 0,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
+        currentViewers: session.currentViewers || 0,
+        peakViewers: session.peakViewers || 0,
         counts: session.counts,
         users: Array.from(session.users.entries()),
         alerts: session.alerts,
@@ -332,8 +405,26 @@ function getSession(sessionId, metadata = {}) {
     if (metadata.owner) session.owner = safeText(metadata.owner, 80);
     if (metadata.liveUrl) session.liveUrl = safeText(metadata.liveUrl, 1000);
   }
+  if (Object.prototype.hasOwnProperty.call(metadata, "currentViewers")) {
+    session.currentViewers = Math.max(0, safeNumber(metadata.currentViewers, session.currentViewers || 0));
+  }
+  if (Object.prototype.hasOwnProperty.call(metadata, "peakViewers")) {
+    session.peakViewers = Math.max(
+      session.currentViewers || 0,
+      safeNumber(metadata.peakViewers, session.peakViewers || 0),
+    );
+  }
   session.updatedAt = Date.now();
   return session;
+}
+
+function persistSessionArchive(session, events = [], metadata = {}) {
+  try {
+    return archiveStore.persistSession(session, { events, metadata });
+  } catch (error) {
+    console.warn("[live-archive] Spremanje nije uspjelo:", error.message);
+    return null;
+  }
 }
 
 function applyEvent(session, rawEvent) {
@@ -584,6 +675,8 @@ function buildSummary(session, options = {}) {
     liveUrl: session.liveUrl,
     startedAt: session.startedAt,
     updatedAt: session.updatedAt,
+    currentViewers: session.currentViewers || 0,
+    peakViewers: session.peakViewers || 0,
     retainedEvents: session.events.length,
     uniqueUsers: users.length,
     counts: { ...session.counts },
@@ -616,28 +709,421 @@ function broadcastSessionMessage(sessionId, payload) {
   });
 }
 
+function sendHttpJson(response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  });
+  response.end(JSON.stringify(payload));
+}
+
+function readHttpJson(request, maxBytes = 256 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    request.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error("Payload too large"), { statusCode: 413 }));
+        request.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
+      } catch (_) {
+        reject(Object.assign(new Error("Invalid JSON"), { statusCode: 400 }));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function archiveApiSessionRoute(pathname) {
+  const match = pathname.match(
+    /^\/v1\/archive\/sessions\/([^/]+)(?:\/(events|users|alerts|viewers))?$/,
+  );
+  if (!match) return null;
+  try {
+    return { sessionId: decodeURIComponent(match[1]), resource: match[2] || "detail" };
+  } catch (_) {
+    return null;
+  }
+}
+
+function archiveApiCreatorRoute(pathname) {
+  const match = pathname.match(/^\/v1\/archive\/creators\/([^/]+)\/viewers$/);
+  if (!match) return null;
+  try {
+    return { owner: decodeURIComponent(match[1]) };
+  } catch (_) {
+    return null;
+  }
+}
+
+function archiveApiUserRoute(pathname) {
+  const match = pathname.match(/^\/v1\/archive\/users\/([^/]+)$/);
+  if (!match) return null;
+  try {
+    return { user: decodeURIComponent(match[1]) };
+  } catch (_) {
+    return null;
+  }
+}
+
+function parseArchiveDay(dayValue) {
+  const match = String(dayValue || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const start = new Date(year, month - 1, day);
+  if (
+    start.getFullYear() !== year
+    || start.getMonth() !== month - 1
+    || start.getDate() !== day
+  ) return null;
+  const end = new Date(year, month - 1, day + 1);
+  return { fromTs: start.getTime(), toTs: end.getTime() };
+}
+
+function parseArchiveReportRange(requestUrl) {
+  const fromDay = requestUrl.searchParams.get("from");
+  const toDay = requestUrl.searchParams.get("to");
+  const fromRange = fromDay ? parseArchiveDay(fromDay) : null;
+  const toRange = toDay ? parseArchiveDay(toDay) : null;
+  return {
+    invalid: Boolean((fromDay && !fromRange) || (toDay && !toRange)),
+    fromTs: fromRange?.fromTs || 0,
+    toTs: toRange?.toTs || 0,
+  };
+}
+
 const server = http.createServer((request, response) => {
   const requestUrl = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
-  if (request.method === "GET" && requestUrl.pathname === "/health") {
-    response.writeHead(200, {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
+  if (request.method === "POST" && requestUrl.pathname === "/v1/telegram/webhook") {
+    const suppliedSecret = String(request.headers["x-telegram-bot-api-secret-token"] || "");
+    if (!secureTokenMatches(TELEGRAM_WEBHOOK_SECRET, suppliedSecret)) {
+      recordAuthFailure(getRemoteAddress(request), "telegram_webhook_secret");
+      sendHttpJson(response, 401, { ok: false, error: "Unauthorized" });
+      return;
+    }
+    if (!telegramBot) {
+      sendHttpJson(response, 503, { ok: false, error: "Telegram bot unavailable" });
+      return;
+    }
+    readHttpJson(request).then((update) => {
+      sendHttpJson(response, 200, { ok: true });
+      setImmediate(() => {
+        Promise.resolve(telegramBot.processUpdate(update)).catch((error) => {
+          console.warn("[telegram-webhook] Update nije obrađen:", safeText(error?.message || error, 300));
+        });
+      });
+    }).catch((error) => {
+      if (!response.headersSent) {
+        sendHttpJson(response, error?.statusCode || 400, { ok: false, error: error.message });
+      }
     });
+    return;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/") {
+    response.writeHead(302, { location: "/dashboard", "cache-control": "no-store" });
+    response.end();
+    return;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/health") {
     const health = {
       ok: true,
       service: "etherx-live-chat",
+      archive: true,
     };
     if (HEALTH_DETAILS) {
       health.uptimeSeconds = Math.floor(process.uptime());
       health.sessions = sessions.size;
       health.clients = wss.clients.size;
+      const status = archiveStore.getStatus();
+      health.archivedSessions = status.sessions;
+      health.archivedEvents = status.events;
       health.now = new Date().toISOString();
     }
-    response.end(JSON.stringify(health));
+    sendHttpJson(response, 200, health);
     return;
   }
-  response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-  response.end(JSON.stringify({ ok: false, error: "Not found" }));
+  if (request.method === "GET" && requestUrl.pathname === "/dashboard") {
+    try {
+      const dashboard = fs.readFileSync(DASHBOARD_FILE);
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "no-referrer",
+        "x-frame-options": "SAMEORIGIN",
+      });
+      response.end(dashboard);
+    } catch (error) {
+      sendHttpJson(response, 503, { ok: false, error: "Dashboard unavailable" });
+    }
+    return;
+  }
+  if (["GET", "POST"].includes(request.method) && requestUrl.pathname.startsWith("/v1/archive/")) {
+    const remoteAddress = getRemoteAddress(request);
+    if (isAuthBlocked(remoteAddress)) {
+      sendHttpJson(response, 429, { ok: false, error: "Temporarily blocked" });
+      return;
+    }
+    if (!archiveTokenMatches(request)) {
+      recordAuthFailure(remoteAddress, "archive_invalid_token");
+      sendHttpJson(response, 401, { ok: false, error: "Unauthorized" });
+      return;
+    }
+    clearAuthFailures(remoteAddress);
+    if (request.method === "POST") {
+      if (!archiveAdminTokenMatches(request)) {
+        sendHttpJson(response, 403, { ok: false, error: "Admin token required" });
+        return;
+      }
+      readHttpJson(request).then((body) => {
+        if (requestUrl.pathname === "/v1/archive/admin/backup") {
+          sendHttpJson(response, 200, { ok: true, backup: archiveStore.createBackup() });
+          return;
+        }
+        if (requestUrl.pathname === "/v1/archive/admin/delete-user") {
+          const backup = archiveStore.createBackup();
+          const result = archiveStore.deleteUserArchive(body.user);
+          archiveStore.addTelegramAudit({
+            chatId: body.chatId,
+            telegramUser: body.telegramUser,
+            command: "/forgetuser",
+            status: "deleted",
+            detail: JSON.stringify({ user: String(body.user || "").slice(0, 100), ...result }),
+          });
+          sendHttpJson(response, 200, { ok: true, backup, result });
+          return;
+        }
+        if (requestUrl.pathname.startsWith("/v1/archive/admin/settings/")) {
+          const key = decodeURIComponent(requestUrl.pathname.slice("/v1/archive/admin/settings/".length));
+          sendHttpJson(response, 200, {
+            ok: true,
+            key,
+            value: archiveStore.setTelegramSetting(key, body.value || {}),
+          });
+          return;
+        }
+        if (requestUrl.pathname === "/v1/archive/admin/watch-users") {
+          const enabled = archiveStore.setWatchUser(body.user, body.enabled !== false);
+          sendHttpJson(response, 200, { ok: true, enabled, users: archiveStore.listWatchUsers() });
+          return;
+        }
+        if (requestUrl.pathname === "/v1/archive/admin/audit") {
+          archiveStore.addTelegramAudit(body);
+          sendHttpJson(response, 200, { ok: true });
+          return;
+        }
+        sendHttpJson(response, 404, { ok: false, error: "Not found" });
+      }).catch((error) => {
+        if (!response.headersSent) {
+          sendHttpJson(response, error?.statusCode || 400, { ok: false, error: error.message });
+        }
+      });
+      return;
+    }
+    try {
+      if (requestUrl.pathname === "/v1/archive/status") {
+        const { dbPath, ...status } = archiveStore.getStatus();
+        sendHttpJson(response, 200, status);
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/overview") {
+        sendHttpJson(response, 200, { ok: true, overview: archiveStore.getOverview() });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/reports") {
+        const range = parseArchiveReportRange(requestUrl);
+        if (range.invalid) {
+          sendHttpJson(response, 400, { ok: false, error: "Invalid date; use YYYY-MM-DD" });
+          return;
+        }
+        sendHttpJson(response, 200, {
+          ok: true,
+          report: archiveStore.getArchiveReport({
+            creator: requestUrl.searchParams.get("creator"),
+            fromTs: range.fromTs,
+            toTs: range.toTs,
+          }),
+        });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/search") {
+        const range = parseArchiveReportRange(requestUrl);
+        if (range.invalid) {
+          sendHttpJson(response, 400, { ok: false, error: "Invalid date; use YYYY-MM-DD" });
+          return;
+        }
+        sendHttpJson(response, 200, {
+          ok: true,
+          ...archiveStore.searchArchiveEvents({
+            query: requestUrl.searchParams.get("q"),
+            creator: requestUrl.searchParams.get("creator"),
+            type: requestUrl.searchParams.get("type"),
+            fromTs: range.fromTs,
+            toTs: range.toTs,
+            limit: requestUrl.searchParams.get("limit"),
+            offset: requestUrl.searchParams.get("offset"),
+          }),
+        });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/audience/compare") {
+        sendHttpJson(response, 200, {
+          ok: true,
+          comparison: archiveStore.compareCreatorAudiences(
+            requestUrl.searchParams.get("first"),
+            requestUrl.searchParams.get("second"),
+          ),
+        });
+        return;
+      }
+      const creatorAudienceMatch = requestUrl.pathname.match(
+        /^\/v1\/archive\/creators\/([^/]+)\/audience$/,
+      );
+      if (creatorAudienceMatch) {
+        const owner = decodeURIComponent(creatorAudienceMatch[1]);
+        sendHttpJson(response, 200, {
+          ok: true,
+          audience: archiveStore.getCreatorAudience(owner, {
+            inactiveDays: requestUrl.searchParams.get("inactiveDays"),
+            whaleCoins: requestUrl.searchParams.get("whaleCoins"),
+          }),
+        });
+        return;
+      }
+      if (requestUrl.pathname.startsWith("/v1/archive/settings/")) {
+        const key = decodeURIComponent(requestUrl.pathname.slice("/v1/archive/settings/".length));
+        sendHttpJson(response, 200, {
+          ok: true,
+          key,
+          value: archiveStore.getTelegramSetting(key, {}),
+        });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/watch-users") {
+        sendHttpJson(response, 200, { ok: true, rows: archiveStore.listWatchUsers() });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/audit") {
+        sendHttpJson(response, 200, {
+          ok: true,
+          rows: archiveStore.listTelegramAudit(requestUrl.searchParams.get("limit")),
+        });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/admin/backup-status") {
+        sendHttpJson(response, 200, { ok: true, backup: archiveStore.getBackupStatus() });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/sessions") {
+        sendHttpJson(response, 200, {
+          ok: true,
+          ...archiveStore.listSessions({
+            limit: requestUrl.searchParams.get("limit"),
+            offset: requestUrl.searchParams.get("offset"),
+            search: requestUrl.searchParams.get("search"),
+          }),
+        });
+        return;
+      }
+      if (requestUrl.pathname === "/v1/archive/creators") {
+        sendHttpJson(response, 200, {
+          ok: true,
+          ...archiveStore.listCreators({
+            limit: requestUrl.searchParams.get("limit"),
+            offset: requestUrl.searchParams.get("offset"),
+            search: requestUrl.searchParams.get("search"),
+          }),
+        });
+        return;
+      }
+      const creatorRoute = archiveApiCreatorRoute(requestUrl.pathname);
+      if (creatorRoute) {
+        const result = archiveStore.listCreatorViewers(creatorRoute.owner, {
+          limit: requestUrl.searchParams.get("limit"),
+          offset: requestUrl.searchParams.get("offset"),
+          search: requestUrl.searchParams.get("search"),
+        });
+        if (!result.creatorSessions) {
+          sendHttpJson(response, 404, { ok: false, error: "Creator not found" });
+          return;
+        }
+        sendHttpJson(response, 200, { ok: true, ...result });
+        return;
+      }
+      const userRoute = archiveApiUserRoute(requestUrl.pathname);
+      if (userRoute) {
+        const requestedDay = requestUrl.searchParams.get("date");
+        const dayRange = requestedDay ? parseArchiveDay(requestedDay) : null;
+        if (requestedDay && !dayRange) {
+          sendHttpJson(response, 400, { ok: false, error: "Invalid date; use YYYY-MM-DD" });
+          return;
+        }
+        const result = archiveStore.getUserArchive(userRoute.user, {
+          creator: requestUrl.searchParams.get("creator"),
+          sessionId: requestUrl.searchParams.get("sessionId"),
+          fromTs: dayRange?.fromTs,
+          toTs: dayRange?.toTs,
+        });
+        if (!result) {
+          sendHttpJson(response, 404, { ok: false, error: "User not found" });
+          return;
+        }
+        sendHttpJson(response, 200, {
+          ok: true,
+          date: requestedDay || "",
+          ...result,
+        });
+        return;
+      }
+      const route = archiveApiSessionRoute(requestUrl.pathname);
+      if (route) {
+        if (!archiveStore.getSession(route.sessionId)) {
+          sendHttpJson(response, 404, { ok: false, error: "Session not found" });
+          return;
+        }
+        if (route.resource === "detail") {
+          sendHttpJson(response, 200, {
+            ok: true,
+            session: archiveStore.getSession(route.sessionId),
+          });
+          return;
+        }
+        const options = {
+          limit: requestUrl.searchParams.get("limit"),
+          offset: requestUrl.searchParams.get("offset"),
+          search: requestUrl.searchParams.get("search"),
+          type: requestUrl.searchParams.get("type"),
+        };
+        const readers = {
+          events: () => archiveStore.listEvents(route.sessionId, options),
+          users: () => archiveStore.listUsers(route.sessionId, options),
+          alerts: () => archiveStore.listAlerts(route.sessionId, options),
+          viewers: () => archiveStore.listViewerSamples(route.sessionId, options),
+        };
+        sendHttpJson(response, 200, { ok: true, ...readers[route.resource]() });
+        return;
+      }
+    } catch (error) {
+      console.warn("[live-archive] API greška:", error.message);
+      sendHttpJson(response, 500, { ok: false, error: "Archive query failed" });
+      return;
+    }
+    sendHttpJson(response, 404, { ok: false, error: "Not found" });
+    return;
+  }
+  sendHttpJson(response, 404, { ok: false, error: "Not found" });
 });
 
 const wss = new WebSocketServer({
@@ -648,6 +1134,11 @@ const wss = new WebSocketServer({
 });
 
 restoreSessionsFromSnapshot();
+try {
+  archiveStore.importSessions(Array.from(sessions.values()));
+} catch (error) {
+  console.warn("[live-archive] Uvoz postojećeg snapshota nije uspio:", error.message);
+}
 detectorStore.init().then(() => {
   console.log(`[detector] Watchlist učitana: ${detectorStore.size()} računa.`);
 }).catch((error) => {
@@ -752,6 +1243,7 @@ wss.on("connection", (socket, request) => {
       socket.sessionId = requestedSessionId;
       clearTimeout(authTimer);
       const session = getSession(socket.sessionId, message.metadata || {});
+      persistSessionArchive(session, [], message.metadata || {});
       sendJson(socket, {
         type: "ready",
         protocol: 1,
@@ -771,15 +1263,37 @@ wss.on("connection", (socket, request) => {
       const session = getSession(sessionId, message.metadata || {});
       const incoming = Array.isArray(message.events) ? message.events.slice(0, 250) : [];
       let accepted = 0;
-      incoming.forEach((event) => {
-        if (applyEvent(session, event)) accepted += 1;
+      const acceptedEvents = [];
+      incoming.forEach((rawEvent) => {
+        const event = sanitizeEvent(rawEvent);
+        if (applyEvent(session, event)) {
+          accepted += 1;
+          acceptedEvents.push(event);
+        }
       });
+      persistSessionArchive(session, acceptedEvents, message.metadata || {});
       sendJson(socket, {
         type: "ack",
         seq: Math.max(0, safeNumber(message.seq, 0)),
         accepted,
         received: incoming.length,
         summary: buildSummary(session),
+      });
+      return;
+    }
+
+    if (message?.type === "heartbeat") {
+      const sessionId = safeId(message.sessionId || socket.sessionId, "session");
+      if (sessionId !== socket.sessionId) {
+        sendJson(socket, { type: "error", code: "session_mismatch" });
+        return;
+      }
+      const session = getSession(sessionId, message.metadata || {});
+      persistSessionArchive(session, [], message.metadata || {});
+      sendJson(socket, {
+        type: "heartbeat_ack",
+        sessionId,
+        updatedAt: session.updatedAt,
       });
       return;
     }
@@ -868,6 +1382,11 @@ wss.on("connection", (socket, request) => {
 
     if (message?.type === "end_session") {
       const session = getSession(socket.sessionId);
+      try {
+        archiveStore.endSession(session, message.metadata || {});
+      } catch (error) {
+        console.warn("[live-archive] Završetak sesije nije spremljen:", error.message);
+      }
       sendJson(socket, { type: "session_ended", summary: buildSummary(session) });
       socket.close(1000, "Session ended");
       return;
@@ -914,10 +1433,59 @@ const cleanupTimer = setInterval(() => {
 
 const snapshotTimer = setInterval(() => {
   persistSessionsSnapshot();
+  sessions.forEach((session) => persistSessionArchive(session));
 }, SNAPSHOT_INTERVAL_MS);
+
+const telegramScheduleTimer = setInterval(() => {
+  if (!telegramBot || !process.env.TELEGRAM_CHAT_ID) return;
+  const now = new Date();
+  const alerts = archiveStore.getTelegramSetting("alerts", {});
+  const reportHour = Math.max(0, Math.min(23, Number(alerts.reportHour ?? 9) || 9));
+  if (now.getHours() !== reportHour || now.getMinutes() > 4) return;
+  const dayKey = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  const weekly = alerts.weekly === true && now.getDay() === 1;
+  const daily = alerts.daily === true;
+  const stateKey = `${weekly ? "weekly" : "daily"}:${dayKey}`;
+  const scheduleState = archiveStore.getTelegramSetting("report_schedule_state", {});
+  if ((!weekly && !daily) || scheduleState.lastKey === stateKey) return;
+  const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (weekly ? 6 : 0));
+  const report = archiveStore.getArchiveReport({
+    fromTs: fromDate.getTime(),
+    toTs: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime(),
+  });
+  const summary = report.summary || {};
+  const number = (value) => Number(value || 0).toLocaleString("hr-HR");
+  const message = [
+    weekly ? "Automatski tjedni LIVE izvještaj" : "Automatski dnevni LIVE izvještaj",
+    `Streamovi: ${number(summary.sessions)}`,
+    `Događaji: ${number(summary.events)} | korisnici: ${number(summary.users)}`,
+    `Poruke: ${number(summary.messages)} | giftovi: ${number(summary.gifts)}`,
+    `Coins: ${number(summary.coins)} | peak: ${number(summary.peakViewers)}`,
+    weekly ? "/weekly" : "/daily",
+  ].join("\n");
+  archiveStore.setTelegramSetting("report_schedule_state", { lastKey: stateKey, sentAt: Date.now() });
+  telegramBot.sendTelegramMessage(process.env.TELEGRAM_CHAT_ID, message).catch((error) => {
+    console.warn("[telegram-schedule] Slanje nije uspjelo:", safeText(error?.message || error, 200));
+  });
+}, 60000);
+telegramScheduleTimer.unref();
 
 server.listen(PORT, HOST, () => {
   console.log(`[live] EtherX LIVE chat server sluša na http://${HOST}:${PORT}`);
+  if (telegramBot && TELEGRAM_WEBHOOK_AUTO_CONFIGURE) {
+    Promise.all([
+      telegramBot.configureTelegramCommands(),
+      telegramBot.configureTelegramWebhook(TELEGRAM_WEBHOOK_URL, TELEGRAM_WEBHOOK_SECRET),
+    ]).then(() => {
+      console.log("[telegram-webhook] 24/7 webhook i izbornik komandi su aktivni.");
+    }).catch((error) => {
+      console.warn("[telegram-webhook] Konfiguracija nije uspjela:", safeText(error?.message || error, 300));
+    });
+  }
 });
 server.on("error", (error) => {
   console.error("[live] HTTP server error:", error.message);
@@ -928,9 +1496,14 @@ function shutdown(signal) {
   clearInterval(heartbeatTimer);
   clearInterval(cleanupTimer);
   clearInterval(snapshotTimer);
+  clearInterval(telegramScheduleTimer);
   persistSessionsSnapshot(true);
+  sessions.forEach((session) => persistSessionArchive(session));
   wss.clients.forEach((socket) => socket.close(1001, "Server shutdown"));
-  server.close(() => process.exit(0));
+  server.close(() => {
+    archiveStore.close();
+    process.exit(0);
+  });
   setTimeout(() => process.exit(1), 9000).unref();
 }
 

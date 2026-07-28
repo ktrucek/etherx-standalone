@@ -1189,6 +1189,18 @@ function getTkaiTelegramConfig() {
   return {
     token: safeTkaiText(process.env.TELEGRAM_BOT_TOKEN || secrets.tkaiTelegramBotToken || "", 1000),
     chatId: safeTkaiText(process.env.TELEGRAM_CHAT_ID || secrets.tkaiTelegramChatId || "", 120),
+    archiveToken: safeTkaiText(
+      process.env.TKAI_ARCHIVE_TOKEN
+      || process.env.LIVE_ARCHIVE_API_TOKEN
+      || process.env.LIVE_AUTH_TOKEN
+      || secrets.tkaiLiveServerToken
+      || "",
+      1000,
+    ),
+    archiveUrl: safeTkaiText(
+      process.env.TKAI_ARCHIVE_API_URL || "https://live.kriptoentuzijasti.io",
+      1000,
+    ).replace(/\/+$/, ""),
     autoStart: secrets.tkaiTelegramAutoStart === true,
   };
 }
@@ -1291,6 +1303,7 @@ function getTkaiTelegramBotStatus() {
     tokenConfigured: config.token.length >= 20,
     chatIdConfigured: !!config.chatId,
     chatIdMasked: config.chatId ? `${config.chatId.slice(0, 4)}…${config.chatId.slice(-3)}` : "",
+    archiveConfigured: config.archiveToken.length >= 32,
     autoStart: config.autoStart,
     logs: tkaiTelegramBotLogs.slice(-8),
   };
@@ -1342,6 +1355,8 @@ function startTkaiTelegramBot() {
       TELEGRAM_CHAT_ID: config.chatId,
       TKAI_BOT_CONTROL_URL: `http://${control.host}:${control.port}`,
       TKAI_BOT_CONTROL_TOKEN: controlToken,
+      TKAI_ARCHIVE_API_URL: config.archiveUrl,
+      TKAI_ARCHIVE_TOKEN: config.archiveToken,
       TKAI_NOTIFY_STORE_PATH: resolveTkaiTelegramNotifyPath(),
     },
   });

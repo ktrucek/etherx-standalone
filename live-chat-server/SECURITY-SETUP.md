@@ -8,16 +8,24 @@ Ovaj dokument je kontrolna lista za privatni EtherX LIVE servis na
 - Endpoint nije tajna i smije biti u javnom kodu:
   `wss://live.kriptoentuzijasti.io/v1/live`.
 - Health endpoint je `https://live.kriptoentuzijasti.io/health`.
+- Dashboard je `https://live.kriptoentuzijasti.io/dashboard`, a podaci iza
+  `/v1/archive/` uvijek traže Bearer token.
 - Stvarni `LIVE_AUTH_TOKEN` nikada ne ide u GitHub, distribucijski paket ni
   dokumentaciju.
+- `LIVE_ARCHIVE_API_TOKEN` također je tajna i preporučeno mora biti odvojen od
+  WebSocket tokena.
+- `LIVE_ARCHIVE_ADMIN_TOKEN` štiti backup, postavke, watchlistu i brisanje
+  korisnika; ne smije biti jednak javnom API tokenu.
+- Telegram webhook prihvaća zahtjev samo uz
+  `x-telegram-bot-api-secret-token`; `TELEGRAM_WEBHOOK_SECRET` ostaje u `.env`.
 - Javni browser release dolazi s praznim poljem **Pristupni token**.
 - Samo vlasnik servera upisuje token u svoju lokalnu instalaciju.
 - Browser token sprema u EtherX `SecretStore`, a ne u obični renderer
   `localStorage`.
 - Produkcija koristi isključivo `wss://`; obični `ws://` dopušten je samo za
   lokalni `localhost` test.
-- Jedna PM2 `fork` instanca je obavezna dok su sesije u RAM-u. Za više instanci
-  prvo treba uvesti Redis ili drugi zajednički session store.
+- Jedna PM2 `fork` instanca je obavezna dok proces koristi lokalnu SQLite
+  arhivu. Za više instanci prvo treba uvesti zajednički PostgreSQL store.
 
 Poznavanje endpointa ne daje pristup. Server mora odbiti svaku vezu bez valjanog
 tokena.
@@ -38,7 +46,7 @@ Ne smije se commitati:
 - `live-chat-server/.env` ili bilo koji stvarni environment file
 - stvarni `LIVE_AUTH_TOKEN`
 - TLS privatni ključevi i certifikati
-- `data/live-sessions.json` i drugi snapshoti razgovora
+- `data/live-sessions.json`, `data/live-archive.sqlite*` i drugi podaci razgovora
 - PM2 ili aplikacijski logovi
 - datoteke naziva `token`, `secret`, `private` ili njihove kopije
 - snimke zaslona i upute koje prikazuju token
@@ -84,6 +92,9 @@ ili terminalsku naredbu koja se sprema u shell history. Upisuje se samo u:
 
 ```dotenv
 LIVE_AUTH_TOKEN=OVDJE_IDE_STVARNA_PRIVATNA_VRIJEDNOST
+LIVE_ARCHIVE_API_TOKEN=OVDJE_IDE_DRUGA_PRIVATNA_VRIJEDNOST
+LIVE_ARCHIVE_ADMIN_TOKEN=OVDJE_IDE_TRECA_PRIVATNA_VRIJEDNOST
+TELEGRAM_WEBHOOK_SECRET=OVDJE_IDE_WEBHOOK_TAJNA
 ```
 
 Preporučene dozvole:
@@ -111,6 +122,7 @@ LIVE_MAX_MESSAGES_PER_WINDOW=120
 LIVE_MAX_TIMELINE_BUCKETS=360
 LIVE_SNAPSHOT_SECONDS=30
 LIVE_DATA_DIR=
+LIVE_ARCHIVE_DB_PATH=
 LIVE_ALLOWED_ORIGINS=
 LIVE_HEALTH_DETAILS=false
 ```
@@ -137,12 +149,12 @@ Pleskom/Apacheom i ne kopira se u repozitorij.
 
 ## PM2 postupak
 
-Proces je postavljen pod korisnikom `kriptoen`:
+Prije naredbi provjerite vlasnika aktualnog PM2 procesa. Restartajte samo
+`etherx-live-chat`, ne sve PM2 procese:
 
 ```bash
 cd "/var/www/vhosts/kriptoentuzijasti.io/AI projekt/browser/standalone-browser/live-chat-server"
 npm install --omit=dev
-export PM2_HOME=/var/www/vhosts/kriptoentuzijasti.io/.pm2
 pm2 start ecosystem.config.cjs --only etherx-live-chat
 pm2 save
 pm2 status etherx-live-chat
@@ -161,9 +173,11 @@ ovlasti. `.env`, `data/` i logovi moraju ostati izvan Git repozitorija.
 5. Veza s ispravnim tokenom mora dobiti `ready`.
 6. Prevelika poruka mora biti odbijena.
 7. Nakon prekida browser mora prijeći na lokalni fallback.
-8. Nakon PM2 restarta snapshot se mora vratiti bez izlaganja preko HTTP-a.
-9. U logovima ne smiju biti tokeni ni cijeli sadržaji privatnog chata.
-10. Git status ne smije prikazati `.env`, `data/`, logove ili certifikate kao
+8. Nakon PM2 restarta sesije i događaji moraju ostati u SQLite arhivi.
+9. Arhivski API bez Bearer tokena mora vratiti `401`, a dashboard ne smije
+   spremati token u URL ni `localStorage`.
+10. U logovima ne smiju biti tokeni ni cijeli sadržaji privatnog chata.
+11. Git status ne smije prikazati `.env`, `data/`, logove ili certifikate kao
     datoteke za commit.
 
 Već je implementirano:

@@ -2,14 +2,16 @@
   "name": "etherx-live-chat-server",
   "version": "1.0.0",
   "private": true,
-  "description": "RAM-backed WebSocket aggregation service for EtherX TikTok LIVE chat",
+  "description": "Persistent WebSocket and SQLite archive service for EtherX TikTok LIVE chat",
   "main": "server.js",
   "scripts": {
     "smoke": "node smoke-test.js",
+    "smoke:archive": "node archive-http-smoke.js",
+    "test:archive": "node archive-test.js",
     "detect:import": "node ../scripts/tiktok-detect-import.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.5.0"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

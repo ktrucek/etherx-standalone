@@ -1,32 +1,36 @@
 # EtherX LIVE chat server
 
-Odvojeni PM2 servis za `live.kriptoentuzijasti.io`. Browser lokalno čita samo
-nove TikTok LIVE retke, a servis u svojem RAM-u drži sesiju i računa sažetke.
-Svakih 30 sekundi radi lokalni snapshot za oporavak nakon PM2 restarta; aktivna
-obrada i dalje ostaje u RAM-u.
+Odvojeni PM2 servis za `live.kriptoentuzijasti.io`. Browser lokalno čita nove
+TikTok LIVE događaje, a servis ih trajno sprema u privatnu SQLite bazu u WAL
+načinu. RAM ostaje brzi radni sloj za aktivnu sesiju, dok arhiva zadržava
+sesije, događaje, korisničke statistike, giftove, coinse, detektorske alarme i
+uzorke gledatelja i nakon restarta ili RAM TTL čišćenja.
 
-Dashboard od servera dohvaća kompaktne minutne sažetke, pa za grafove ne mora
-držati cijeli chat u rendereru. Cijela zadržana sesija dohvaća se stranicama
-samo kada korisnik pokrene Detailed dashboard JSON export.
+Zaštićeni dashboard podatke dohvaća stranicama iz arhive i ne mora držati
+cijeli chat u rendereru. API token ostaje u `sessionStorage` pregledničke
+kartice; ne sprema se u URL ni trajni browser storage.
 
-Produkcijski servis postavljen je 25. srpnja 2026. PM2 i Apache/WSS proxy rade
-na serveru `135.181.51.25`. Javni DNS još mora biti prebačen s IONOS parking
-adresa na taj A zapis. Prije održavanja obavezno pročitati
+Prije svakog produkcijskog održavanja provjerite aktualni PM2 proces, privatni
+health endpoint i javni TLS/WSS endpoint te pročitajte
 [SECURITY-SETUP.md](./SECURITY-SETUP.md).
 
 ## Mrežni raspored
 
+- dashboard: `https://live.kriptoentuzijasti.io/dashboard`
+- arhivski API: `https://live.kriptoentuzijasti.io/v1/archive/...`
 - javni WebSocket: `wss://live.kriptoentuzijasti.io/v1/live`
 - javni health check: `https://live.kriptoentuzijasti.io/health`
 - privatni Node listener: `127.0.0.1:8791`
 - PM2 proces: `etherx-live-chat`
-- PM2 način: jedna `fork` instanca jer je stanje trenutačno u RAM-u
+- baza: `LIVE_DATA_DIR/live-archive.sqlite` uz `-wal` i `-shm` datoteke
+- PM2 način: jedna `fork` instanca
 
 ## Obavezna varijabla
 
 `LIVE_AUTH_TOKEN` u privatnom `.env` mora biti slučajna vrijednost od najmanje
-32 znaka. `server.js` tu datoteku učitava pri pokretanju. Token se ne stavlja u
-URL, nego se šalje u prvoj WebSocket poruci nakon TLS spajanja.
+32 znaka. `LIVE_ARCHIVE_API_TOKEN` treba biti drugi slučajni token za dashboard
+i read-only arhivski API. Ako arhivski token nije postavljen, servis radi
+kompatibilnosti koristi `LIVE_AUTH_TOKEN`. Token se nikada ne stavlja u URL.
 
 Stvarni token smije postojati samo u serverskoj datoteci `.env` i u šifriranoj
 lokalnoj pohrani vlasnikove instalacije EtherX browsera. Nikada se ne upisuje u
@@ -35,24 +39,92 @@ ili GitHub Actions log.
 
 ## PM2 održavanje
 
-Servis radi pod korisnikom `kriptoen` i njegovim postojećim PM2 daemon procesom:
+Najprije provjerite koji PM2 daemon stvarno posjeduje proces; nemojte pretpostaviti
+korisnika samo iz putanje projekta:
 
 ```bash
-export PM2_HOME=/var/www/vhosts/kriptoentuzijasti.io/.pm2
 pm2 status etherx-live-chat
 pm2 logs etherx-live-chat --lines 50 --nostream
 pm2 restart etherx-live-chat
 pm2 save
 ```
 
-Ove naredbe izvršavaju se kao `kriptoen`, ne kao root. Privatni health check:
+Restartajte samo `etherx-live-chat`, nikada sve PM2 procese. Privatni health check:
 
 ```bash
 curl http://127.0.0.1:8791/health
 ```
 
-Nemoj pokretati više PM2 instanci ovog procesa dok se sesije drže samo u RAM-u.
-Za cluster način prvo treba dodati Redis ili drugi zajednički session store.
+Telegram komande za trajnu bazu:
+
+- `/menu` — glavni izbornik s Telegram gumbima
+- `/db` — ukupna serverska statistika
+- `/creators`, `/creator @kreator` — popis i profil kreatora
+- `/creatorstreams`, `/creatorgrowth`, `/beststream`, `/worststream`, `/besttime`, `/retention`
+- `/sessions [broj]` — zadnje spremljene sesije
+- `/session <broj|id>` — detalji jedne sesije
+- `/events <broj|id> [broj]` — zadnji događaji sesije
+- `/users <broj|id> [broj]` — korisnici i njihove statistike
+- `/viewers` — kreatori i broj njihove spremljene publike
+- `/viewers @kreator [stranica]` — publika jednog kreatora kroz sve sesije
+- `/viewers @kreator all` — CSV sa svim spremljenim viewers tog kreatora
+- `/viewers all` — jedan CSV sa svim viewers, odvojeno po kreatorima
+- `/viweres ...` — podržani alias za istu naredbu
+- `/userdata @user` — cijela spremljena povijest korisnika
+- `/userdata @user @kreator 2026-07-28` — korisnik kod kreatora određenog dana
+- `/userdata @user stream:live-...` — korisnik u točno određenom streamu
+- `/userdata "Ime s razmakom" @kreator` — pretraga po prikazanom imenu
+- `/userstreams @user @kreator` — streamovi korisnika kod kreatora
+- `/newviewers`, `/returning`, `/loyal`, `/inactive`, `/whales` — segmenti publike
+- `/crossviewers @kreator1 @kreator2` — preklapanje publike
+- `/daily`, `/weekly`, `/monthly` — izvještaji po periodu i kreatoru
+- `/search`, `/questions`, `/keywords`, `/sentiment` — pretraga i analiza razgovora
+- `/gifts`, `/gifters` — arhivska gift statistika
+- `/watchuser`, `/unwatchuser`, `/watchlist` — serverska watchlista
+- `/export creator|user|stream`, `/chart growth` — CSV i SVG dokumenti
+- `/serverstatus`, `/dbstatus`, `/backupstatus`, `/backup` — stanje i sigurnosna kopija
+- `/forgetuser @user` — privatnost; zahtijeva dodatnu potvrdu i prvo radi backup
+- `/alert ...` — pragovi i automatski dnevni/tjedni izvještaji
+
+Produkcijski server koristi HTTPS webhook `/v1/telegram/webhook`, pa radi 24/7
+bez pokrenutog desktop browsera. Telegram dopušta samo jedan webhook ili jednu
+`getUpdates` polling instancu po bot tokenu; dok je produkcijski webhook aktivan
+ne pokretati drugi PM2/desktop polling bot.
+
+Nemoj pokretati više PM2 instanci nad istom SQLite datotekom. Za cluster način
+prvo treba prijeći na zajednički PostgreSQL session store.
+
+## Arhivski API
+
+Svi arhivski endpointi traže zaglavlje `Authorization: Bearer <token>`:
+
+- `GET /v1/archive/status`
+- `GET /v1/archive/overview`
+- `GET /v1/archive/sessions?limit=100&offset=0&search=creator`
+- `GET /v1/archive/sessions/:id`
+- `GET /v1/archive/sessions/:id/events`
+- `GET /v1/archive/sessions/:id/users`
+- `GET /v1/archive/sessions/:id/alerts`
+- `GET /v1/archive/sessions/:id/viewers`
+- `GET /v1/archive/creators`
+- `GET /v1/archive/reports`
+- `GET /v1/archive/search`
+- `GET /v1/archive/creators/:owner/audience`
+- `GET /v1/archive/audience/compare`
+
+Admin POST endpointi dodatno traže `x-archive-admin-token`:
+
+- `POST /v1/archive/admin/backup`
+- `POST /v1/archive/admin/delete-user`
+- `POST /v1/archive/admin/settings/:key`
+- `POST /v1/archive/admin/watch-users`
+- `POST /v1/archive/admin/audit`
+- `GET /v1/archive/creators/:owner/viewers`
+- `GET /v1/archive/users/:user?creator=&date=YYYY-MM-DD&sessionId=`
+
+Baza i njezine WAL/SHM datoteke moraju ostati izvan javnog web root direktorija
+i imati pristup samo servisnom korisniku. Za dosljedan backup koristi se SQLite
+online backup ili se servis kratko zaustavi prije kopiranja sva tri fajla.
 
 ## Plesk proxy
 

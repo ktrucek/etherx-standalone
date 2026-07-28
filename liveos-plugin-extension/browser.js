@@ -747,9 +747,20 @@ if (window.electronWebview) {
                                         let initialStartTs = 0;
                                         const tryPlay = () => {
                                             if (!video.paused) return;
+                                            const source = String(
+                                                video.currentSrc
+                                                || video.getAttribute('src')
+                                                || video.querySelector?.('source[src]')?.getAttribute('src')
+                                                || ''
+                                            ).trim();
+                                            // TikTok first inserts an empty player shell and assigns
+                                            // its media URL later. Calling play() on that shell causes
+                                            // PlayerError: "empty src is invalid" in TikTok's preloader.
+                                            if (!source) return;
                                             if (!initialStartTs) initialStartTs = Date.now();
                                             video.play().catch(() => {});
                                         };
+                                        video.addEventListener('loadedmetadata', tryPlay, { once: true });
                                         video.addEventListener('loadeddata', tryPlay, { once: true });
                                         video.addEventListener('canplay', tryPlay, { once: true });
                                         setTimeout(tryPlay, 350);
@@ -788,69 +799,6 @@ if (window.electronWebview) {
                 await wv.executeJavaScript(`(() => {
               if (window.__etherxPwdWatcherInstalled) return true;
               window.__etherxPwdWatcherInstalled = true;
-                            if (/(^|\.)tiktok\.com$/i.test(location.hostname || '') && !window.__etherxTikTokTelemetrySilenced) {
-                                window.__etherxTikTokTelemetrySilenced = true;
-                                const isTelemetryUrl = (value) => {
-                                    const url = String(value || '');
-                                    const isMonitorBatch = url.includes('/monitor_browser/collect/batch/')
-                                        && ['biz_id=tiktok_webapp_live', 'biz_id=webmssdk', 'biz_id=ucenter_tiktok_zti_sdk', 'bid=tiktok_pns_web_runtime']
-                                            .some((token) => url.includes(token));
-                                    const isMcsList = /mcs\d+-normal-[^.]+\.tiktokw\.eu/i.test(url) && url.includes('/v1/list');
-                                    return isMonitorBatch || isMcsList;
-                                };
-                                const originalFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;
-                                if (originalFetch) {
-                                    window.fetch = function(input, init) {
-                                        const url = typeof input === 'string' ? input : (input && input.url) || '';
-                                        if (isTelemetryUrl(url)) return Promise.resolve(new Response(null, { status: 204, statusText: 'No Content' }));
-                                        return originalFetch(input, init);
-                                    };
-                                }
-                                const originalBeacon = typeof navigator.sendBeacon === 'function' ? navigator.sendBeacon.bind(navigator) : null;
-                                if (originalBeacon) {
-                                    navigator.sendBeacon = function(url, data) {
-                                        if (isTelemetryUrl(url)) return true;
-                                        return originalBeacon(url, data);
-                                    };
-                                }
-                                const XhrProto = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
-                                if (XhrProto && !XhrProto.__etherxTelemetryPatched) {
-                                    XhrProto.__etherxTelemetryPatched = true;
-                                    const originalOpen = XhrProto.open;
-                                    const originalSend = XhrProto.send;
-                                    const dispatchSilentLoad = (xhr) => {
-                                        const define = (key, value) => {
-                                            try { Object.defineProperty(xhr, key, { configurable: true, get: () => value }); } catch (_) { }
-                                        };
-                                        define('readyState', 4);
-                                        define('status', 204);
-                                        define('statusText', 'No Content');
-                                        define('response', '');
-                                        define('responseText', '');
-                                        define('responseURL', String(xhr.__etherxTelemetryUrl || ''));
-                                        setTimeout(() => {
-                                            try { xhr.onreadystatechange && xhr.onreadystatechange(new Event('readystatechange')); } catch (_) { }
-                                            try { xhr.dispatchEvent(new Event('readystatechange')); } catch (_) { }
-                                            try { xhr.onload && xhr.onload(new Event('load')); } catch (_) { }
-                                            try { xhr.dispatchEvent(new Event('load')); } catch (_) { }
-                                            try { xhr.onloadend && xhr.onloadend(new Event('loadend')); } catch (_) { }
-                                            try { xhr.dispatchEvent(new Event('loadend')); } catch (_) { }
-                                        }, 0);
-                                    };
-                                    XhrProto.open = function(method, url) {
-                                        this.__etherxSilentTelemetry = isTelemetryUrl(url);
-                                        this.__etherxTelemetryUrl = String(url || '');
-                                        return originalOpen.apply(this, arguments);
-                                    };
-                                    XhrProto.send = function(body) {
-                                        if (this.__etherxSilentTelemetry) {
-                                            dispatchSilentLoad(this);
-                                            return;
-                                        }
-                                        return originalSend.apply(this, arguments);
-                                    };
-                                }
-                            }
               const visible = el => !!el && !el.disabled && el.type !== 'hidden' && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed');
               const getCandidate = () => {
                 const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
@@ -2731,6 +2679,43 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         if (typeof normalizeGiftKey === 'function') return normalizeGiftKey(value);
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     }
+    function resolveTkaiSessionGiftSafe(message) {
+        const sharedResolver = globalThis.__etherxResolveTkaiGiftImpl;
+        if (typeof sharedResolver === 'function') {
+            try { return sharedResolver(message); } catch (_) { }
+        }
+        const row = message && typeof message === 'object' ? message : { text: message };
+        const quantity = Math.max(1, Number(row.quantity || row.qty || 1) || 1);
+        const explicitCoins = Math.max(0, Number(row.coins || row.coin || row.diamonds || 0) || 0);
+        const unitCoins = Math.max(0, Number(row.unitCoins || 0) || (explicitCoins ? Math.round(explicitCoins / quantity) : 0));
+        const giftName = String(row.giftName || row.gift || row.text || 'Unknown gift').trim();
+        const type = String(row.type || '').trim().toLowerCase();
+        return {
+            giftName,
+            quantity,
+            unitCoins,
+            coins: Math.max(explicitCoins, unitCoins * quantity),
+            catalogMatches: 0,
+            isGiftLike: type === 'gift' || type === 'subscriber' || explicitCoins > 0
+        };
+    }
+    function normalizeTkaiSessionMessageTypeSafe(message) {
+        const sharedNormalizer = globalThis.__etherxNormalizeTkaiMessageTypeImpl;
+        if (typeof sharedNormalizer === 'function') {
+            try { return sharedNormalizer(message); } catch (_) { }
+        }
+        const known = new Set(['chat', 'gift', 'subscriber', 'caption', 'listening', 'song', 'join', 'share', 'like']);
+        const explicit = String(message?.type || message?.eventType || 'chat').trim().toLowerCase();
+        return known.has(explicit) ? explicit : 'chat';
+    }
+    function extractTkaiSessionJoinLevelSafe(message) {
+        const sharedExtractor = globalThis.__etherxExtractTkaiJoinLevelImpl;
+        if (typeof sharedExtractor === 'function') {
+            try { return sharedExtractor(message); } catch (_) { }
+        }
+        const direct = Number(message?.userLevel || message?.level || message?.joinLevel || message?.badgeLevel || 0);
+        return Number.isFinite(direct) && direct > 0 && direct < 500 ? direct : null;
+    }
     function buildTkaiSessionAnalytics(session) {
         const nowTs = Date.now();
         const messages = Array.isArray(session?.messages) ? session.messages.slice() : [];
@@ -2757,14 +2742,14 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         let derivedCoinsTotal = 0;
         let joinsTotal = 0;
         sorted.forEach((m) => {
-            const type = (typeof normalizeTkaiMessageType === 'function' ? normalizeTkaiMessageType(m) : String(m?.type || 'chat').toLowerCase()) || 'chat';
+            const type = normalizeTkaiSessionMessageTypeSafe(m);
             if (typeCounts[type] !== undefined) typeCounts[type] += 1;
             else typeCounts.other += 1;
             if (type === 'join') joinsTotal += 1;
             const text = String(m?.text || '').replace(/\s+/g, ' ').trim();
             const user = String(m?.user || '').trim() || 'Unknown';
             const userKey = user.toLowerCase();
-            const resolvedGift = (type === 'gift' || type === 'subscriber') ? resolveTkaiGift(m) : null;
+            const resolvedGift = (type === 'gift' || type === 'subscriber') ? resolveTkaiSessionGiftSafe(m) : null;
             const quantity = resolvedGift ? Math.max(1, Number(resolvedGift.quantity || 1)) : 0;
             const unitCoins = resolvedGift ? Math.max(0, Number(resolvedGift.unitCoins || 0)) : 0;
             const coins = resolvedGift ? Math.max(0, Number(resolvedGift.coins || 0)) : Math.max(0, Number(m?.coins || 0));
@@ -2802,7 +2787,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 giftTypeMap.set(giftKey, overallGiftRow);
             } else if (type === 'join') {
                 row.joins += 1;
-                const level = typeof extractJoinLevel === 'function' ? extractJoinLevel({ ...m, type }) : null;
+                const level = extractTkaiSessionJoinLevelSafe({ ...m, type });
                 joinEvents.push({ user, text, ts: normalizeTs(m) || nowTs, level });
             }
             else if (type === 'share') {
@@ -2894,7 +2879,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             .slice(0, 80);
         const coinsTotal = derivedCoinsTotal > 0 ? derivedCoinsTotal : sessionCoinsTotal;
         const listening = sorted
-            .filter((message) => (typeof normalizeTkaiMessageType === 'function' ? normalizeTkaiMessageType(message) : String(message?.type || '')) === 'listening')
+            .filter((message) => normalizeTkaiSessionMessageTypeSafe(message) === 'listening')
             .map((message) => ({
                 text: String(message?.text || '').trim(),
                 originalText: String(message?.originalText || '').trim(),
@@ -3172,7 +3157,13 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     }
     function openTkaiSessionStatsPage(session, indexLabel) {
         // Keep dashboard in-app to avoid popup blockers and ensure nav/export always work.
-        openTkaiSessionStatsDashboard(session, indexLabel);
+        try {
+            document.getElementById('tkaiSessionStatsDashboard')?.remove();
+            openTkaiSessionStatsDashboard(session, indexLabel);
+        } catch (error) {
+            console.error('[TikTokAI] Session statistics failed to open:', error);
+            showToast('⚠️ Statistika se nije mogla otvoriti: ' + String(error?.message || error).slice(0, 160));
+        }
     }
     function openTkaiSessionStatsDashboard(session, indexLabel) {
         const sessionData = session || {};
@@ -3342,8 +3333,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         };
         const modal = document.createElement('div');
         modal.id = 'tkaiSessionStatsDashboard';
+        modal.className = 'modal tkai-session-stats-dashboard';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', 'AI Live Chat statistika sesije');
         modal.style.cssText =
-            'position:fixed;inset:34px 2vw 2vh 2vw;z-index:100004;background:#0b1220;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden;';
+            'position:fixed;inset:34px 2vw 2vh 2vw;z-index:1000000;background:#0b1220;border:1px solid rgba(148,163,184,.35);border-radius:14px;color:#e2e8f0;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden;';
         const type = analytics.typeCounts;
         const giftEventTotal = Number(type.gift || 0) + Number(type.subscriber || 0);
         const giftQuantityTotal = (analytics.topGiftTypes || []).reduce((sum, gift) => sum + Number(gift.quantity || 0), 0);
@@ -3647,12 +3642,10 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const rawTs = message.ts || message.timestamp || message.time || message.createdAt || message.date || fallback.ts || Date.now();
         const parsedTs = typeof rawTs === 'number' ? rawTs : Date.parse(String(rawTs));
         const ts = Number.isFinite(parsedTs) ? parsedTs : Date.now();
-        const type = typeof normalizeTkaiMessageType === 'function'
-            ? normalizeTkaiMessageType({ ...message, text, type: message.type || fallback.type || 'chat' })
-            : String(message.type || fallback.type || 'chat').toLowerCase();
+        const type = normalizeTkaiSessionMessageTypeSafe({ ...message, text, type: message.type || fallback.type || 'chat' });
         if (!user && !text && !translatedText) return null;
-        const meta = (type === 'gift' || type === 'subscriber') && typeof resolveTkaiGift === 'function'
-            ? resolveTkaiGift({ ...message, text, ts, type })
+        const meta = (type === 'gift' || type === 'subscriber')
+            ? resolveTkaiSessionGiftSafe({ ...message, text, ts, type })
             : null;
         const giftName = String(message.giftName || message.gift || meta?.giftName || '').trim();
         const quantity = Math.max(0, Number(message.quantity || message.qty || meta?.quantity || 0) || 0);
@@ -3776,7 +3769,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             importedAt: new Date().toISOString(),
             importLabel: label,
             messageCount: newMessages.length,
-            listeningCount: newMessages.filter((message) => normalizeTkaiMessageType(message) === 'listening').length,
+            listeningCount: newMessages.filter((message) => normalizeTkaiSessionMessageTypeSafe(message) === 'listening').length,
             sessionMinutes: firstTs && lastTs && lastTs > firstTs ? Math.max(1, Math.round((lastTs - firstTs) / 60000)) : 0,
             peakViewers: 0,
             totalCoins,
@@ -9803,6 +9796,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         return null;
     }
+    globalThis.__etherxExtractTkaiJoinLevelImpl = extractJoinLevel;
     function normalizeGiftKey(value) {
         return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     }
@@ -10000,6 +9994,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             isGiftLike,
         };
     }
+    globalThis.__etherxResolveTkaiGiftImpl = resolveTkaiGift;
 
     function downloadTextFile(fileName, content, mime = 'text/plain;charset=utf-8') {
         const blob = new Blob([String(content || '')], { type: mime });
@@ -10242,7 +10237,9 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         return {
             owner: String(streamOwnerEl?.textContent || '').trim().replace(/^@+/, ''),
             liveUrl: String(tab?.url || ''),
-            startedAt: Number(sessionStartedAt || Date.now())
+            startedAt: Number(sessionStartedAt || Date.now()),
+            currentViewers: Math.max(0, Number(liveViewerCount || 0)),
+            peakViewers: Math.max(0, Number(peakViewerCount || 0))
         };
     }
     function restoreTkaiLiveServerPendingQueue() {
@@ -10415,7 +10412,21 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
     function flushTkaiLiveServerQueue() {
         const socket = tkaiLiveServerSocket;
         if (!tkaiLiveServerReady || !socket || socket.readyState !== WebSocket.OPEN) return;
-        if (!tkaiLiveServerQueue.length || tkaiLiveServerPending.size >= 1) return;
+        if (!tkaiLiveServerQueue.length) {
+            const now = Date.now();
+            if (now - Number(socket._tkaiMetadataSentAt || 0) >= 15000) {
+                socket._tkaiMetadataSentAt = now;
+                try {
+                    socket.send(JSON.stringify({
+                        type: 'heartbeat',
+                        sessionId: socket._tkaiSessionId,
+                        metadata: getTkaiLiveServerMetadata()
+                    }));
+                } catch (_) { }
+            }
+            return;
+        }
+        if (tkaiLiveServerPending.size >= 1) return;
         const events = tkaiLiveServerQueue.splice(0, 100);
         const seq = ++tkaiLiveServerSeq;
         tkaiLiveServerPending.set(seq, events);
@@ -10488,6 +10499,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
             try { message = JSON.parse(String(event.data || '')); } catch (_) { return; }
             if (message.type === 'ready') {
                 tkaiLiveServerReady = true;
+                socket._tkaiMetadataSentAt = Date.now();
                 tkaiLiveServerReconnectAttempt = 0;
                 applyTkaiLiveServerSummary(message.summary);
                 setTkaiLiveServerStatus('Spojeno · server RAM aktivan', 'ok');
@@ -10882,6 +10894,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (/\b(now\s*playing|np|song|track|dj|pjesma|sada\s+ide|trenutno\s+svira)\b/i.test(text)) return 'song';
         return explicit || 'chat';
     }
+    globalThis.__etherxNormalizeTkaiMessageTypeImpl = normalizeTkaiMessageType;
     function updateTopSupportersUI(list, supportersCount) {
         if (!topSupportersEl) return;
         if (!Array.isArray(list) || list.length === 0) {
