@@ -4388,6 +4388,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     let connectionTimer = null;
     let lastWhisperErrorAt = 0;
     let transcriptLines = [];
+    let whisperPartialText = '';
     const MAX_LINES = 200;
 
     function getCfg() {
@@ -4572,9 +4573,14 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         const cfg = getCfg();
         if (isPartial) {
             whisperPartialText = String(text || '').trim();
-            renderListenFeed();
+            if (typeof window.renderTkaiWhisperPartial === 'function') {
+                window.renderTkaiWhisperPartial(whisperPartialText);
+            } else if (typeof window.renderTkaiListenFeed === 'function') {
+                window.renderTkaiListenFeed();
+            }
         } else {
             whisperPartialText = '';
+            window.renderTkaiWhisperPartial?.('');
             if (text.trim()) {
                 const time = new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 let translatedText = '';
@@ -5077,7 +5083,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function init() {
         try {
             updateSection();
-            try { if (typeof renderListenFeed === 'function') renderListenFeed(); } catch (_) { }
+            try { window.renderTkaiListenFeed?.(); } catch (_) { }
 
             document.getElementById('tkaiWhisperToggleBtn')?.addEventListener('click', () => {
                 if (active) stop(); else start();
@@ -14892,7 +14898,32 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         renderShadowbanUserStats();
     });
 
+    let tkaiSessionStatsUiTimer = null;
+    let tkaiSessionStatsUiLastRenderedAt = 0;
+    const TKAI_SESSION_STATS_UI_MIN_INTERVAL_MS = 1200;
+    function scheduleSessionStatsUI() {
+        const elapsed = Date.now() - tkaiSessionStatsUiLastRenderedAt;
+        const interacting = document.body.classList.contains('tkai-panel-interacting');
+        const waitMs = Math.max(
+            interacting ? 120 : 0,
+            TKAI_SESSION_STATS_UI_MIN_INTERVAL_MS - elapsed
+        );
+        if (tkaiSessionStatsUiTimer) return;
+        tkaiSessionStatsUiTimer = setTimeout(() => {
+            tkaiSessionStatsUiTimer = null;
+            if (document.body.classList.contains('tkai-panel-interacting')) {
+                scheduleSessionStatsUI();
+                return;
+            }
+            updateSessionStatsUI();
+        }, Math.max(0, waitMs));
+    }
     function updateSessionStatsUI() {
+        if (tkaiSessionStatsUiTimer) {
+            clearTimeout(tkaiSessionStatsUiTimer);
+            tkaiSessionStatsUiTimer = null;
+        }
+        tkaiSessionStatsUiLastRenderedAt = Date.now();
         const elapsedMin = sessionStartedAt ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 60000)) : 0;
         const giftStats = computeGiftStats();
         const remoteSummary = tkaiLiveServerReady && tkaiLiveServerSummary ? tkaiLiveServerSummary : null;
@@ -15036,7 +15067,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (!giftEvents.length) {
             giftGalleryEl.innerHTML = '<div class="tkai-empty">Gift/sub događaji će se pojaviti ovdje.</div>';
             if (giftCountEl) giftCountEl.textContent = '';
-            updateSessionStatsUI();
+            scheduleSessionStatsUI();
             return;
         }
         const aggregated = [];
@@ -15095,7 +15126,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         }
         if (coinTotalEl) coinTotalEl.textContent = formatNum(totalCoins);
         if (supporterCountEl) supporterCountEl.textContent = formatNum(supporterSet.size);
-        updateSessionStatsUI();
+        scheduleSessionStatsUI();
     }
     function isTkaiViewerNoiseText(text) {
         const t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -15197,6 +15228,25 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         syncListenFeedPopout();
     }
     window.clearTkaiListenFeed = clearTkaiListenFeed;
+    function renderTkaiWhisperPartial(text = whisperPartialText) {
+        if (!listenFeedEl) return;
+        whisperPartialText = String(text || '').trim();
+        listenFeedEl.querySelector(':scope > .tkai-empty')?.remove();
+        let partial = listenFeedEl.querySelector(':scope > .whisper-partial');
+        if (!whisperPartialText) {
+            partial?.remove();
+            return;
+        }
+        if (!partial) {
+            partial = document.createElement('div');
+            partial.className = 'whisper-partial';
+            partial.style.cssText = 'color:#94a3b8;font-style:italic;font-size:11px;line-height:1.4;padding:2px 0';
+            listenFeedEl.appendChild(partial);
+        }
+        partial.textContent = whisperPartialText;
+        listenFeedEl.scrollTop = listenFeedEl.scrollHeight;
+    }
+    window.renderTkaiWhisperPartial = renderTkaiWhisperPartial;
     function renderListenFeed() {
         if (!listenFeedEl) return;
         const rows = Array.isArray(listeningMessages) ? listeningMessages.slice(-200) : [];
@@ -15234,6 +15284,7 @@ document.getElementById('etherxReload')?.addEventListener('click', () => {
         if (nearBottom || whisperPartialText) listenFeedEl.scrollTop = listenFeedEl.scrollHeight;
         if (listenFeedPopoutEl && document.body.contains(listenFeedPopoutEl)) syncListenFeedPopout();
     }
+    window.renderTkaiListenFeed = renderListenFeed;
     function getTkaiChatUserLevel(message) {
         const direct = Number(message?.userLevel || message?.level || message?.joinLevel || 0);
         if (Number.isFinite(direct) && direct > 0 && direct < 500) return Math.round(direct);
@@ -16149,7 +16200,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             filteredMessages = await filterTkaiLowConfidenceRowsWithMoritz(filteredMessages);
 
             if (!filteredMessages.length) {
-                updateSessionStatsUI();
+                scheduleSessionStatsUI();
                 setStatus(`📭 TikTokLive događaji: ${messages.length} • nakon filtera: 0`);
                 return 0;
             }
@@ -16297,7 +16348,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (incomingAddedMessages.length) {
                 renderMessages({ incrementalMessages: incomingAddedMessages });
             }
-            updateSessionStatsUI();
+            scheduleSessionStatsUI();
             setStatus(scanActive ? '<span class="tkai-scanning-dot"></span>Skeniranje…' : (added ? '✅ Dodano ' + added : '✓ Sinkronizirano'));
             // Auto-suggest: trigger generateReplies after N new messages
             if (added > 0 && !isGenerating) {
@@ -16460,7 +16511,7 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             liveViewerCount = value;
             peakViewerCount = Math.max(peakViewerCount, value);
             trackViewerSample(value);
-            updateSessionStatsUI();
+            scheduleSessionStatsUI();
         } catch (_) {
             // The LIVE webview may be navigating; retry on the next sample.
         } finally {
@@ -17832,6 +17883,8 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
         const DEFAULT_W = 460;
         const DEFAULT_H = 580;
         let activeOp = null;
+        let pendingPointerPoint = null;
+        let pointerMoveFrame = null;
 
         function getBounds(width, height) {
             const topBoundary = getPanelTopBoundary();
@@ -17920,14 +17973,13 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             event.stopPropagation();
         }
 
-        function movePointerOp(event) {
+        function applyPointerMove(point) {
             if (!activeOp) return;
-            const dx = event.clientX - activeOp.startX;
-            const dy = event.clientY - activeOp.startY;
+            const dx = point.clientX - activeOp.startX;
+            const dy = point.clientY - activeOp.startY;
             const s = activeOp.start;
             if (activeOp.mode === 'move') {
                 applyLayout(s.left + dx, s.top + dy, s.width, s.height);
-                event.preventDefault();
                 return;
             }
 
@@ -17950,12 +18002,32 @@ Odgovori SAMO s ${count} prijedloga odgovora, svaki u zasebnom redu. Bez numerac
             if (activeOp.dir.includes('w') && bounds.width === MIN_W) left = s.left + s.width - MIN_W;
             if (activeOp.dir.includes('n') && bounds.height === MIN_H) top = s.top + s.height - MIN_H;
             applyLayout(left, top, bounds.width, bounds.height);
+        }
+
+        function movePointerOp(event) {
+            if (!activeOp) return;
+            pendingPointerPoint = { clientX: event.clientX, clientY: event.clientY };
             event.preventDefault();
+            if (pointerMoveFrame) return;
+            pointerMoveFrame = requestAnimationFrame(() => {
+                pointerMoveFrame = null;
+                const point = pendingPointerPoint;
+                pendingPointerPoint = null;
+                if (point) applyPointerMove(point);
+            });
         }
 
         function endPointerOp(event) {
             if (!activeOp) return;
             if (event?.pointerId != null && activeOp.pointerId !== event.pointerId) return;
+            if (pointerMoveFrame) {
+                cancelAnimationFrame(pointerMoveFrame);
+                pointerMoveFrame = null;
+            }
+            if (pendingPointerPoint) {
+                applyPointerMove(pendingPointerPoint);
+                pendingPointerPoint = null;
+            }
             panel.classList.remove('tkai-panel-moving', 'tkai-panel-resizing');
             document.body.classList.remove('tkai-panel-interacting');
             activeOp = null;

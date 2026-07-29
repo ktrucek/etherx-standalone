@@ -35,6 +35,7 @@ function loadEnvFile(filePath) {
   path.join(process.cwd(), ".env.local"),
   path.join(process.cwd(), "live-chat-server", ".env"),
   path.join(process.cwd(), "live-chat-server", ".env.local"),
+  path.join(__dirname, "..", ".env.local"),
 ].forEach(loadEnvFile);
 
 const DEFAULT_API_URL = String(process.env.TKAI_BOT_CONTROL_URL || "http://127.0.0.1:8793").replace(/\/+$/, "");
