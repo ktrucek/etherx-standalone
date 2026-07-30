@@ -4385,8 +4385,15 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     let processorNode = null;
     let active = false;
     let connecting = false;
+    let serverReady = false;
     let connectionTimer = null;
     let lastWhisperErrorAt = 0;
+    let lastAudioStatusAt = 0;
+    let audioPacketsSent = 0;
+    let segmentsReceived = 0;
+    let serverFailureText = '';
+    let transcriptQueue = Promise.resolve();
+    const publishedSegmentKeys = new Set();
     let transcriptLines = [];
     let whisperPartialText = '';
     const MAX_LINES = 200;
@@ -4597,6 +4604,54 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
         }
     }
 
+    function queueTranscript(text, isPartial) {
+        const clean = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!clean && !isPartial) return;
+        transcriptQueue = transcriptQueue
+            .then(() => appendTranscript(clean, isPartial))
+            .catch((error) => {
+                console.error('[WhisperLive] transcript publish failed:', error);
+                setStatus('⚠️ Transkript je primljen, ali upis u Listen Feed nije uspio', '#fbbf24');
+            });
+    }
+
+    function getSegmentKey(segment, text) {
+        const start = String(segment?.start ?? '').trim();
+        const end = String(segment?.end ?? '').trim();
+        return [start, end, String(text || '').replace(/\s+/g, ' ').trim().toLowerCase()].join('|');
+    }
+
+    function processWhisperSegments(segments) {
+        if (!Array.isArray(segments) || !segments.length) return false;
+        let newestPartial = '';
+        let receivedText = false;
+        segments.forEach((segment) => {
+            const text = String(segment?.text || '').replace(/\s+/g, ' ').trim();
+            if (!text) return;
+            receivedText = true;
+            const completed = segment?.completed === true || segment?.completed === 1 || segment?.completed === 'true';
+            if (!completed) {
+                newestPartial = text;
+                return;
+            }
+            const key = getSegmentKey(segment, text);
+            if (publishedSegmentKeys.has(key)) return;
+            publishedSegmentKeys.add(key);
+            if (publishedSegmentKeys.size > 1000) {
+                const oldest = publishedSegmentKeys.values().next().value;
+                publishedSegmentKeys.delete(oldest);
+            }
+            segmentsReceived += 1;
+            queueTranscript(text, false);
+        });
+        if (newestPartial) {
+            queueTranscript(newestPartial, true);
+        } else if (receivedText) {
+            queueTranscript('', true);
+        }
+        return receivedText;
+    }
+
     function setStatus(text, color) {
         const el = document.getElementById('tkaiWhisperStatus');
         if (!el) return;
@@ -4667,6 +4722,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
     function stop() {
         active = false;
         connecting = false;
+        serverReady = false;
         clearConnectionTimer();
         setToggleBtn(false);
         stopAudio();
@@ -4680,6 +4736,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             if (active || connecting) return;
             const cfg = getCfg();
             connecting = true;
+            serverReady = false;
+            serverFailureText = '';
+            audioPacketsSent = 0;
+            segmentsReceived = 0;
+            lastAudioStatusAt = 0;
+            publishedSegmentKeys.clear();
             setConnectingBtn(true);
             setStatus('⏳ Spajanje na ' + cfg.host + ':' + cfg.port + '…', '#fbbf24');
 
@@ -4723,10 +4785,12 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                     word_timestamps: cfg.wordTs,
                     hotwords: cfg.hotwords || null,
                     initial_prompt: cfg.initialPrompt || null,
+                    enable_diarization: cfg.diarize,
                     diarization: cfg.diarize,
                     max_speakers: cfg.maxSpeakers,
                 };
                 ws.send(JSON.stringify(config));
+                setStatus('⏳ Veza otvorena — čekam da WhisperLive učita model…', '#fbbf24');
 
                 // Capture microphone
                 try {
@@ -4734,27 +4798,50 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                         ? { deviceId: { exact: cfg.inputDeviceId }, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
                         : { channelCount: 1 };
                     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+                    if (wsRef !== ws || ws.readyState !== WebSocket.OPEN || serverFailureText) {
+                        mediaStream.getTracks().forEach((track) => track.stop());
+                        mediaStream = null;
+                        return;
+                    }
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioCtx.state === 'suspended') {
+                        await audioCtx.resume();
+                    }
                     const source = audioCtx.createMediaStreamSource(mediaStream);
                     const bufferSize = 4096;
                     processorNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
                     const silentGain = audioCtx.createGain();
                     silentGain.gain.value = 0;
                     processorNode.onaudioprocess = (e) => {
-                        if (!active || ws.readyState !== WebSocket.OPEN) return;
+                        if (!active || !serverReady || ws.readyState !== WebSocket.OPEN) return;
                         const input = e.inputBuffer.getChannelData(0);
                         const resampled = resampleBuffer(input, audioCtx.sampleRate);
                         // Copy to avoid detached buffer issues
                         const copy = new Float32Array(resampled.length);
                         copy.set(resampled);
-                        ws.send(copy.buffer);
+                        try {
+                            ws.send(copy.buffer);
+                            audioPacketsSent += 1;
+                            const now = Date.now();
+                            if (now - lastAudioStatusAt >= 1200) {
+                                lastAudioStatusAt = now;
+                                let sumSquares = 0;
+                                for (let i = 0; i < input.length; i += 1) sumSquares += input[i] * input[i];
+                                const level = Math.min(100, Math.round(Math.sqrt(sumSquares / Math.max(1, input.length)) * 500));
+                                setStatus('🔴 Sluša… audio ' + level + '% · paketi ' + audioPacketsSent + ' · segmenti ' + segmentsReceived, '#4ade80');
+                            }
+                        } catch (sendError) {
+                            console.error('[WhisperLive] audio send failed:', sendError);
+                        }
                     };
                     source.connect(processorNode);
                     processorNode.connect(silentGain);
                     silentGain.connect(audioCtx.destination);
                     active = true;
                     setToggleBtn(true);
-                    setStatus('🔴 Sluša…', '#4ade80');
+                    if (serverReady) {
+                        setStatus('🔴 Sluša… audio 0% · paketi 0 · segmenti 0', '#4ade80');
+                    }
                 } catch (micErr) {
                     setStatus('❌ Mikrofon: ' + micErr.message, '#f87171');
                     ws.close();
@@ -4767,24 +4854,50 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
             ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    if (data.message === 'WAIT') { setStatus('⏳ Server zauzet…', '#fbbf24'); return; }
-                    if (data.message === 'SERVER_READY') { setStatus('🔴 Sluša…', '#4ade80'); return; }
+                    if (data.status === 'WAIT' || data.message === 'WAIT') {
+                        serverReady = false;
+                        const waitMessage = data.status === 'WAIT' ? data.message : '';
+                        setStatus('⏳ WhisperLive je zauzet' + (waitMessage ? ' · čekanje oko ' + waitMessage + ' min' : '') + '…', '#fbbf24');
+                        return;
+                    }
+                    if (data.status === 'ERROR') {
+                        serverReady = false;
+                        serverFailureText = String(data.message || 'WhisperLive server je prijavio grešku');
+                        lastWhisperErrorAt = Date.now();
+                        setStatus('❌ WhisperLive: ' + serverFailureText, '#f87171');
+                        if (typeof showToast === 'function') showToast('❌ WhisperLive: ' + serverFailureText);
+                        active = false;
+                        stopAudio();
+                        setToggleBtn(false);
+                        try { ws.close(); } catch (_) { }
+                        return;
+                    }
+                    if (data.status === 'WARNING') {
+                        setStatus('⚠️ WhisperLive: ' + String(data.message || 'upozorenje servera'), '#fbbf24');
+                        return;
+                    }
+                    if (data.message === 'SERVER_READY') {
+                        serverReady = true;
+                        if (audioCtx?.state === 'suspended') {
+                            audioCtx.resume().catch(() => { });
+                        }
+                        setStatus('🔴 Sluša… audio 0% · paketi ' + audioPacketsSent + ' · segmenti ' + segmentsReceived, '#4ade80');
+                        return;
+                    }
                     if (data.message === 'DISCONNECT') { stop(); if (typeof showToast === 'function') showToast('⚠️ WhisperLive prekinuo vezu'); return; }
 
                     // WhisperLive sends { segments: [{text, completed, ...}, ...] }
-                    if (Array.isArray(data.segments)) {
-                        data.segments.forEach(seg => {
-                            const t = String(seg.text || '').trim();
-                            if (!t) return;
-                            appendTranscript(t, !seg.completed);
-                        });
-                        return;
-                    }
+                    if (processWhisperSegments(data.segments)) return;
                     // Fallback: { text, is_partial }
                     if (data.text !== undefined) {
-                        appendTranscript(String(data.text || '').trim(), data.is_partial === true);
+                        const isPartial = data.is_partial === true || data.partial === true || data.completed === false;
+                        if (!isPartial) segmentsReceived += 1;
+                        queueTranscript(String(data.text || '').trim(), isPartial);
                     }
-                } catch (_) { }
+                } catch (error) {
+                    console.error('[WhisperLive] invalid server message:', error, event.data);
+                    setStatus('⚠️ WhisperLive je poslao neprepoznat odgovor', '#fbbf24');
+                }
             };
 
             ws.onerror = () => {
@@ -4792,6 +4905,7 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 if (wsRef === ws) wsRef = null;
                 connecting = false;
                 active = false;
+                serverReady = false;
                 lastWhisperErrorAt = Date.now();
                 clearConnectionTimer();
                 stopAudio();
@@ -4804,8 +4918,13 @@ setTimeout(() => { hydrateSettingsFromSqlite().catch(() => { }); }, 0);
                 clearConnectionTimer();
                 if (wsRef === ws) wsRef = null;
                 connecting = false;
+                serverReady = false;
                 stopAudio();
-                if (active) {
+                if (serverFailureText) {
+                    active = false;
+                    setToggleBtn(false);
+                    setStatus('❌ WhisperLive: ' + serverFailureText, '#f87171');
+                } else if (active) {
                     active = false;
                     setToggleBtn(false);
                     setStatus('⏸ Veza prekinuta', '#94a3b8');
